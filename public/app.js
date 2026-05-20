@@ -123,6 +123,58 @@ function parseAndRenderTranscript(response) {
   flush();
 }
 
+// ── Streaming ─────────────────────────────────────────────────────────────────
+
+// Opens a streaming POST, yields chunks to onChunk, returns the done payload.
+async function streamPost(url, body, onChunk) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`Server error ${res.status}`);
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '';
+  let donePayload = null;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    let idx;
+    while ((idx = buf.indexOf('\n\n')) !== -1) {
+      const raw = buf.slice(0, idx).trim();
+      buf = buf.slice(idx + 2);
+      if (!raw.startsWith('data: ')) continue;
+      const data = JSON.parse(raw.slice(6));
+      if (data.error) throw new Error(data.error);
+      if (data.done) { donePayload = data; }
+      else if (data.text) { onChunk(data.text); }
+    }
+  }
+  return donePayload;
+}
+
+// Attaches a live-streaming div to the transcript; returns { append, finalize }.
+function startStreamEntry() {
+  const c = document.getElementById('transcript-content');
+  const live = document.createElement('div');
+  live.className = 'transcript-stream-live';
+  c.appendChild(live);
+  return {
+    append(chunk) {
+      live.textContent += chunk;
+      c.scrollTop = c.scrollHeight;
+    },
+    finalize(fullText) {
+      live.remove();
+      parseAndRenderTranscript(fullText);
+    },
+  };
+}
+
 // ── Day One ───────────────────────────────────────────────────────────────────
 
 function handleSourceChange() {
@@ -184,38 +236,37 @@ async function convene() {
   const roundLabels = ['First Movement', 'The Room Responds', 'Final Embers'];
 
   try {
-    // Round 1 — POST /api/convene
+    // Round 1 — POST /api/convene (streaming)
     currentRound = 1;
     updatePips();
     setStatus('First Movement... the room is speaking.', true);
     addRoundHeader('First Movement');
 
-    const r1 = await fetch('/api/convene', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ entry, members: [...activeMembers] }),
+    let accumulated = '';
+    const s1 = startStreamEntry();
+    const d1 = await streamPost('/api/convene', { entry, members: [...activeMembers] }, chunk => {
+      accumulated += chunk;
+      s1.append(chunk);
     });
-    if (!r1.ok) throw new Error(`Server error ${r1.status}`);
-    const d1 = await r1.json();
+    s1.finalize(accumulated);
     currentSessionId = d1.sessionId;
-    parseAndRenderTranscript(d1.text);
+    accumulated = '';
 
     // Rounds 2 and 3
     for (let i = 1; i < roundLabels.length; i++) {
       currentRound = i + 1;
       updatePips();
       setStatus(`${roundLabels[i]}... the room is speaking.`, true);
-      await new Promise(r => setTimeout(r, 400));
+      await new Promise(r => setTimeout(r, 300));
       addRoundHeader(roundLabels[i]);
 
-      const rn = await fetch('/api/round', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId: currentSessionId }),
+      const sn = startStreamEntry();
+      await streamPost('/api/round', { sessionId: currentSessionId }, chunk => {
+        accumulated += chunk;
+        sn.append(chunk);
       });
-      if (!rn.ok) throw new Error(`Server error ${rn.status}`);
-      const dn = await rn.json();
-      parseAndRenderTranscript(dn.text);
+      sn.finalize(accumulated);
+      accumulated = '';
     }
 
     document.getElementById('interject-panel').className = 'interject-panel visible';
@@ -244,14 +295,13 @@ async function addRound() {
   addRoundHeader('One More Turn');
 
   try {
-    const res = await fetch('/api/round', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sessionId: currentSessionId }),
+    let accumulated = '';
+    const s = startStreamEntry();
+    await streamPost('/api/round', { sessionId: currentSessionId }, chunk => {
+      accumulated += chunk;
+      s.append(chunk);
     });
-    if (!res.ok) throw new Error(`Server error ${res.status}`);
-    const data = await res.json();
-    parseAndRenderTranscript(data.text);
+    s.finalize(accumulated);
     setStatus('The embers hold a while longer.', false);
   } catch (err) {
     console.error(err);
@@ -275,14 +325,13 @@ async function interject() {
   setStatus('The room notices...', true);
 
   try {
-    const res = await fetch('/api/interject', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sessionId: currentSessionId, text }),
+    let accumulated = '';
+    const s = startStreamEntry();
+    await streamPost('/api/interject', { sessionId: currentSessionId, text }, chunk => {
+      accumulated += chunk;
+      s.append(chunk);
     });
-    if (!res.ok) throw new Error(`Server error ${res.status}`);
-    const data = await res.json();
-    parseAndRenderTranscript(data.response);
+    s.finalize(accumulated);
     setStatus('The presence withdraws. The room continues.', false);
   } catch (err) {
     console.error(err);
