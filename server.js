@@ -34,9 +34,9 @@ const ROSTER = [
   { id: 'levi',     name: 'Lévi',             file: 'levi.md',          guest: false },
   { id: 'teresa',   name: 'Teresa of Ávila',  file: 'teresa.md',        guest: false },
   { id: 'arabi',    name: 'Ibn Arabi',        file: 'ibn-arabi.md',     guest: false },
-  { id: 'llull',    name: 'Llull',            file: null,               guest: true  },
-  { id: 'khaldun',  name: 'Ibn Khaldun',      file: null,               guest: true  },
-  { id: 'dee',      name: 'John Dee',         file: null,               guest: true  },
+  { id: 'llull',    name: 'Llull',            file: 'llull.md',         guest: true  },
+  { id: 'khaldun',  name: 'Ibn Khaldun',      file: 'ibn-khaldun.md',   guest: true  },
+  { id: 'dee',      name: 'John Dee',         file: 'john-dee.md',      guest: true  },
 ];
 
 const lodgeContext = fs.readFileSync(path.join(PROMPTS_DIR, 'lodge-context.md'), 'utf8');
@@ -72,14 +72,16 @@ function buildSystemPrompt(memberIds) {
     .map(id => ROSTER.find(m => m.id === id))
     .filter(Boolean);
 
-  const regularMembers = present.filter(m => !m.guest);
   const guests = present.filter(m => m.guest);
+  // Guests with full character files are treated identically to core members
+  const fullMembers = present.filter(m => m.file);
+  const sketchOnlyGuests = guests.filter(m => !m.file);
 
   const presentNames = present.map(m => m.name).join(', ');
   const guestLine = guests.length ? `\nOCCASIONAL GUESTS PRESENT TONIGHT: ${guests.map(m => m.name).join(', ')}` : '';
 
-  // Build character sections from full character files
-  const characterSections = regularMembers
+  // Build character sections — all members with files get full treatment
+  const characterSections = fullMembers
     .map(m => {
       const text = loadMemberFile(m.file);
       return text ? `---\n${text}` : '';
@@ -87,13 +89,9 @@ function buildSystemPrompt(memberIds) {
     .filter(Boolean)
     .join('\n\n');
 
-  // Guest sketches (no full files yet)
-  const guestSketches = guests.map(m => {
-    const sketches = {
-      llull: 'Llull: Catalan combinatorialist and proto-computational mystic. Arrived mid-conversation having caught enough to orient himself. His Ars Generativa — the wheels within wheels — gives him a particular way of seeing combinatorial patterns in everything.',
-      khaldun: 'Ibn Khaldun: North African historian and sociologist of civilizations. Has watched societies construct exactly this kind of esoteric architecture and has thoughts about the sociological function of it. Epistemological cold water when warranted.',
-      dee: 'John Dee: Elizabethan mathematician, astrologer, and Enochian channeler. His presence makes everyone perform for an ancestor. His own reception of angelic language (through Kelley) gives him standing to speak on transmission and mediation.',
-    };
+  // Fallback sketches for guests without files (future-proofing)
+  const guestSketches = sketchOnlyGuests.map(m => {
+    const sketches = {};
     return sketches[m.id] ? `---\n**${m.name}** (occasional guest)\n${sketches[m.id]}` : '';
   }).filter(Boolean).join('\n\n');
 
@@ -116,25 +114,51 @@ ${guestSketches}
 Generate a salon transcript. Each speaker's name appears alone on a line, followed by their speech on the next line(s). 3-5 members speak per round — not every member speaks every round. Silences are valid. Members may address each other by name, quote each other, disagree, complete each other's sentences, let something drop. Be specific: cite real texts, real historical tensions. Do not address the user or acknowledge any observer. The conversation proceeds as if no one is watching.`;
 }
 
-// ─── Anthropic call helper ────────────────────────────────────────────────────
+// ─── Anthropic call helpers ───────────────────────────────────────────────────
 
+// Non-streaming call (Day One MCP routes only)
 async function callClaude(systemPrompt, conversationHistory, userMessage, useDayOneMCP = false) {
   const messages = [...conversationHistory, { role: 'user', content: userMessage }];
-
   const params = {
     model: 'claude-sonnet-4-6',
     max_tokens: 1200,
     system: systemPrompt,
     messages,
   };
-
-  // Day One remote MCP (used for journal fetch/export)
   if (useDayOneMCP) {
     params.mcp_servers = [{ type: 'url', url: 'https://mcp.day-one.app/mcp', name: 'day-one' }];
   }
-
   const response = await client.messages.create(params);
   return response.content.filter(b => b.type === 'text').map(b => b.text).join('');
+}
+
+// Streaming call — writes SSE chunks to res, returns accumulated full text
+async function streamClaude(res, systemPrompt, conversationHistory, userMessage) {
+  const messages = [...conversationHistory, { role: 'user', content: userMessage }];
+  const stream = client.messages.stream({
+    model: 'claude-sonnet-4-6',
+    max_tokens: 1200,
+    system: systemPrompt,
+    messages,
+  });
+
+  let fullText = '';
+  for await (const event of stream) {
+    if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+      const chunk = event.delta.text;
+      fullText += chunk;
+      res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`);
+    }
+  }
+  return fullText;
+}
+
+function openSSE(res) {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+  });
 }
 
 // ─── Round prompts ────────────────────────────────────────────────────────────
@@ -148,7 +172,7 @@ const ROUND_PROMPTS = [
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
-// POST /api/convene — start a session and run round 1
+// POST /api/convene — start a session and stream round 1
 app.post('/api/convene', async (req, res) => {
   const { entry, members } = req.body;
   if (!entry?.trim()) return res.status(400).json({ error: 'entry is required' });
@@ -159,33 +183,29 @@ app.post('/api/convene', async (req, res) => {
   const systemPrompt = buildSystemPrompt(members);
   const roundPrompt = ROUND_PROMPTS[0](entry);
 
+  openSSE(res);
   try {
-    const text = await callClaude(systemPrompt, [], roundPrompt);
+    const text = await streamClaude(res, systemPrompt, [], roundPrompt);
     const history = [
       { role: 'user', content: roundPrompt },
       { role: 'assistant', content: text },
     ];
-
     const session = {
-      id,
-      date,
-      entry,
-      members,
-      systemPrompt,
+      id, date, entry, members, systemPrompt,
       conversationHistory: history,
       rounds: [{ label: 'First Movement', text }],
       transcriptText: buildTranscriptHeader(entry, members, date) + `\n— First Movement —\n\n${text}\n`,
     };
-
     saveSession(session);
-    res.json({ sessionId: id, round: 1, label: 'First Movement', text });
+    res.write(`data: ${JSON.stringify({ done: true, sessionId: id, round: 1, label: 'First Movement' })}\n\n`);
   } catch (err) {
     console.error('Convene error:', err);
-    res.status(500).json({ error: 'Failed to convene lodge' });
+    res.write(`data: ${JSON.stringify({ error: 'Failed to convene lodge' })}\n\n`);
   }
+  res.end();
 });
 
-// POST /api/round — add the next round to an existing session
+// POST /api/round — stream the next round into an existing session
 app.post('/api/round', async (req, res) => {
   const { sessionId } = req.body;
   if (!sessionId) return res.status(400).json({ error: 'sessionId required' });
@@ -200,8 +220,9 @@ app.post('/api/round', async (req, res) => {
   const labels = ['First Movement', 'The Room Responds', 'Final Embers', 'One More Turn'];
   const label = labels[Math.min(roundIndex, labels.length - 1)];
 
+  openSSE(res);
   try {
-    const text = await callClaude(session.systemPrompt, session.conversationHistory, roundPrompt);
+    const text = await streamClaude(res, session.systemPrompt, session.conversationHistory, roundPrompt);
 
     session.conversationHistory.push({ role: 'user', content: roundPrompt });
     session.conversationHistory.push({ role: 'assistant', content: text });
@@ -209,14 +230,15 @@ app.post('/api/round', async (req, res) => {
     session.transcriptText += `\n— ${label} —\n\n${text}\n`;
 
     saveSession(session);
-    res.json({ round: roundIndex + 1, label, text });
+    res.write(`data: ${JSON.stringify({ done: true, round: roundIndex + 1, label })}\n\n`);
   } catch (err) {
     console.error('Round error:', err);
-    res.status(500).json({ error: 'Failed to generate round' });
+    res.write(`data: ${JSON.stringify({ error: 'Failed to generate round' })}\n\n`);
   }
+  res.end();
 });
 
-// POST /api/interject — user speaks; room responds
+// POST /api/interject — user speaks; room streams a response
 app.post('/api/interject', async (req, res) => {
   const { sessionId, text } = req.body;
   if (!sessionId || !text?.trim()) return res.status(400).json({ error: 'sessionId and text required' });
@@ -226,19 +248,21 @@ app.post('/api/interject', async (req, res) => {
 
   const prompt = `A mysterious presence — an observer from outside time — has just spoken: "${text}"\n\nThe room reacts. 2-3 members respond to what was said.`;
 
+  openSSE(res);
   try {
-    const response = await callClaude(session.systemPrompt, session.conversationHistory, prompt);
+    const response = await streamClaude(res, session.systemPrompt, session.conversationHistory, prompt);
 
     session.conversationHistory.push({ role: 'user', content: prompt });
     session.conversationHistory.push({ role: 'assistant', content: response });
     session.transcriptText += `\n— A Presence Passes Through —\n\n— a voice from elsewhere —\n${text}\n\n${response}\n`;
 
     saveSession(session);
-    res.json({ label: 'A Presence Passes Through', interjection: text, response });
+    res.write(`data: ${JSON.stringify({ done: true, label: 'A Presence Passes Through' })}\n\n`);
   } catch (err) {
     console.error('Interject error:', err);
-    res.status(500).json({ error: 'Failed to interject' });
+    res.write(`data: ${JSON.stringify({ error: 'Failed to interject' })}\n\n`);
   }
+  res.end();
 });
 
 // POST /api/dayone/journals — list Day One journals

@@ -154,3 +154,4 @@
 .source-tag { font-size:11px; color:var(--lodge-muted); font-family:'IM Fell English',serif; font-style:italic; margin-left:6px; }
 #additional-round-btn { display:none; }
 #additional-round-btn.visible { display:inline-block; }
+.transcript-stream-live { font-family:'Crimson Pro',serif; font-size:15px; line-height:1.75; color:var(--lodge-muted); white-space:pre-wrap; padding:4px 0 12px; font-style:italic; animation:flicker 3s ease-in-out infinite; }
