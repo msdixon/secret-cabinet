@@ -147,8 +147,11 @@
 .export-row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
 .export-note { font-family:'IM Fell English',serif; font-style:italic; font-size:13px; color:var(--lodge-muted); flex:1; min-width:200px; }
 .export-journal-row { display:flex; gap:10px; margin-top:10px; flex-wrap:wrap; align-items:center; }
-.status-bar { text-align:center; padding:10px; font-family:'IM Fell English',serif; font-style:italic; font-size:13px; color:var(--lodge-muted); min-height:36px; }
+.status-bar { text-align:center; padding:10px; font-family:'IM Fell English',serif; font-style:italic; font-size:13px; color:var(--lodge-muted); min-height:36px; display:flex; align-items:center; justify-content:center; gap:12px; }
 .status-bar.thinking { color:var(--lodge-amber); animation:flicker 2s ease-in-out infinite; }
+.status-bar.error { color:#a06060; }
+.status-retry-btn { font-size:11px; padding:3px 12px; border-color:#5a2a2a; color:#a06060; font-style:normal; }
+.status-retry-btn:hover { background:rgba(120,40,40,0.15); border-color:#a06060; color:#d09090; }
 @keyframes flicker { 0%,100%{opacity:1} 50%{opacity:0.6} }
 .tooltip-tag { font-size:11px; background:rgba(200,146,42,0.15); border:1px solid var(--lodge-amber-dim); color:var(--lodge-amber); padding:2px 7px; border-radius:2px; font-family:'IM Fell English',serif; letter-spacing:1px; }
 .source-tag { font-size:11px; color:var(--lodge-muted); font-family:'IM Fell English',serif; font-style:italic; margin-left:6px; }

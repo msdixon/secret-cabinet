@@ -17,6 +17,8 @@ const MEMBERS = [
   {id:'dee',      name:'John Dee',       guest:true},
 ];
 
+const ROUND_LABELS = ['First Movement', 'The Room Responds', 'Final Embers'];
+
 let activeMembers = new Set(['crowley','waite','pixie','yeats','blavatsky','levi','teresa','arabi']);
 let currentRound = 0;
 let currentSessionId = null;
@@ -24,6 +26,8 @@ let transcriptText = '';
 let sessionDate = '';
 let journalList = [];
 let currentEntry = '';
+let pendingRetry = null;
+let lastInterjectText = '';
 
 // ── Render member tokens ──────────────────────────────────────────────────────
 
@@ -79,6 +83,7 @@ function addRoundHeader(label) {
   h.innerHTML = `<div class="round-rule"></div><span class="round-rule-label">${label}</span><div class="round-rule"></div>`;
   c.appendChild(h);
   transcriptText += `\n\n— ${label} —\n\n`;
+  return h;
 }
 
 function addSpeech(speaker, text, isGuest, isObserver) {
@@ -157,7 +162,7 @@ async function streamPost(url, body, onChunk) {
   return donePayload;
 }
 
-// Attaches a live-streaming div to the transcript; returns { append, finalize }.
+// Attaches a live-streaming div to the transcript; returns { append, finalize, abort }.
 function startStreamEntry() {
   const c = document.getElementById('transcript-content');
   const live = document.createElement('div');
@@ -172,7 +177,28 @@ function startStreamEntry() {
       live.remove();
       parseAndRenderTranscript(fullText);
     },
+    abort() {
+      live.remove();
+    },
   };
+}
+
+// ── Error recovery ────────────────────────────────────────────────────────────
+
+function setError(msg, retryFn) {
+  pendingRetry = retryFn;
+  const el = document.getElementById('status-bar');
+  el.innerHTML = `<span>${msg}</span><button class="lodge-btn status-retry-btn" onclick="retryFromError()">Try again</button>`;
+  el.className = 'status-bar error';
+  setEmber(false);
+}
+
+async function retryFromError() {
+  if (!pendingRetry) return;
+  const fn = pendingRetry;
+  pendingRetry = null;
+  document.getElementById('status-bar').className = 'status-bar';
+  await fn();
 }
 
 // ── Day One ───────────────────────────────────────────────────────────────────
@@ -232,55 +258,92 @@ async function convene() {
   currentRound = 0;
   transcriptText = '';
   sessionDate = new Date().toISOString().split('T')[0];
-
-  const roundLabels = ['First Movement', 'The Room Responds', 'Final Embers'];
+  const members = [...activeMembers];
 
   try {
-    // Round 1 — POST /api/convene (streaming)
+    // Round 1
     currentRound = 1;
     updatePips();
     setStatus('First Movement... the room is speaking.', true);
-    addRoundHeader('First Movement');
-
-    let accumulated = '';
+    const txtBefore1 = transcriptText;
+    const h1 = addRoundHeader('First Movement');
     const s1 = startStreamEntry();
-    const d1 = await streamPost('/api/convene', { entry, members: [...activeMembers] }, chunk => {
-      accumulated += chunk;
-      s1.append(chunk);
-    });
-    s1.finalize(accumulated);
-    currentSessionId = d1.sessionId;
-    accumulated = '';
-
-    // Rounds 2 and 3
-    for (let i = 1; i < roundLabels.length; i++) {
-      currentRound = i + 1;
-      updatePips();
-      setStatus(`${roundLabels[i]}... the room is speaking.`, true);
-      await new Promise(r => setTimeout(r, 300));
-      addRoundHeader(roundLabels[i]);
-
-      const sn = startStreamEntry();
-      await streamPost('/api/round', { sessionId: currentSessionId }, chunk => {
-        accumulated += chunk;
-        sn.append(chunk);
-      });
-      sn.finalize(accumulated);
-      accumulated = '';
+    let acc = '';
+    let d1;
+    try {
+      d1 = await streamPost('/api/convene', { entry, members }, chunk => { acc += chunk; s1.append(chunk); });
+      s1.finalize(acc);
+      currentSessionId = d1.sessionId;
+    } catch (err) {
+      s1.abort(); h1.remove(); transcriptText = txtBefore1;
+      setError('The first movement could not begin. The fire may be low.', convene);
+      return;
     }
 
-    document.getElementById('interject-panel').className = 'interject-panel visible';
-    document.getElementById('additional-round-btn').className = 'lodge-btn visible';
-    document.getElementById('export-panel').className = 'export-panel visible';
-    updatePips();
-    setStatus('The meeting has found its natural pause. The embers hold.', false);
+    // Rounds 2 and 3
+    for (let i = 1; i < ROUND_LABELS.length; i++) {
+      currentRound = i + 1;
+      updatePips();
+      setStatus(`${ROUND_LABELS[i]}... the room is speaking.`, true);
+      await new Promise(r => setTimeout(r, 300));
+      const txtBefore = transcriptText;
+      const h = addRoundHeader(ROUND_LABELS[i]);
+      const s = startStreamEntry();
+      acc = '';
+      const ri = i;
+      try {
+        await streamPost('/api/round', { sessionId: currentSessionId }, chunk => { acc += chunk; s.append(chunk); });
+        s.finalize(acc);
+      } catch (err) {
+        s.abort(); h.remove(); transcriptText = txtBefore;
+        showSessionControls();
+        setError(`${ROUND_LABELS[ri]} could not continue.`, () => resumeRounds(ri));
+        return;
+      }
+    }
 
-  } catch (err) {
-    console.error(err);
-    setStatus('The lodge could not convene. Check the server.', false);
+    showSessionControls();
+    setStatus('The meeting has found its natural pause. The embers hold.', false);
   } finally {
     document.getElementById('convene-btn').disabled = false;
   }
+}
+
+// Resume rounds starting from index i (used when a mid-convene round fails and user retries).
+async function resumeRounds(fromIndex) {
+  if (!currentSessionId) return;
+  document.getElementById('convene-btn').disabled = true;
+  try {
+    for (let i = fromIndex; i < ROUND_LABELS.length; i++) {
+      currentRound = i + 1;
+      updatePips();
+      setStatus(`${ROUND_LABELS[i]}... the room is speaking.`, true);
+      if (i > fromIndex) await new Promise(r => setTimeout(r, 300));
+      const txtBefore = transcriptText;
+      const h = addRoundHeader(ROUND_LABELS[i]);
+      const s = startStreamEntry();
+      let acc = '';
+      const ri = i;
+      try {
+        await streamPost('/api/round', { sessionId: currentSessionId }, chunk => { acc += chunk; s.append(chunk); });
+        s.finalize(acc);
+      } catch (err) {
+        s.abort(); h.remove(); transcriptText = txtBefore;
+        setError(`${ROUND_LABELS[ri]} could not continue.`, () => resumeRounds(ri));
+        return;
+      }
+    }
+    setStatus('The meeting has found its natural pause. The embers hold.', false);
+  } finally {
+    document.getElementById('convene-btn').disabled = false;
+  }
+}
+
+function showSessionControls() {
+  document.getElementById('interject-panel').className = 'interject-panel visible';
+  document.getElementById('additional-round-btn').className = 'lodge-btn visible';
+  document.getElementById('export-panel').className = 'export-panel visible';
+  updatePips();
 }
 
 // ── Additional round ──────────────────────────────────────────────────────────
@@ -292,11 +355,12 @@ async function addRound() {
   currentRound++;
   updatePips();
   setStatus('One More Turn... the room continues.', true);
-  addRoundHeader('One More Turn');
+  const txtBefore = transcriptText;
+  const h = addRoundHeader('One More Turn');
+  const s = startStreamEntry();
+  let accumulated = '';
 
   try {
-    let accumulated = '';
-    const s = startStreamEntry();
     await streamPost('/api/round', { sessionId: currentSessionId }, chunk => {
       accumulated += chunk;
       s.append(chunk);
@@ -304,8 +368,9 @@ async function addRound() {
     s.finalize(accumulated);
     setStatus('The embers hold a while longer.', false);
   } catch (err) {
-    console.error(err);
-    setStatus('The round could not continue.', false);
+    s.abort(); h.remove(); transcriptText = txtBefore; currentRound--;
+    updatePips();
+    setError('The turn could not complete.', addRound);
   } finally {
     btn.disabled = false;
   }
@@ -319,23 +384,28 @@ async function interject() {
   const text = input.value.trim();
   if (!text) return;
   input.value = '';
+  lastInterjectText = text;
 
   addRoundHeader('A Presence Passes Through');
   addSpeech('— a voice from elsewhere —', text, false, true);
   setStatus('The room notices...', true);
+  await sendInterject(text);
+}
 
+async function sendInterject(text) {
+  const s = startStreamEntry();
+  let accumulated = '';
   try {
-    let accumulated = '';
-    const s = startStreamEntry();
     await streamPost('/api/interject', { sessionId: currentSessionId, text }, chunk => {
       accumulated += chunk;
       s.append(chunk);
     });
     s.finalize(accumulated);
+    lastInterjectText = '';
     setStatus('The presence withdraws. The room continues.', false);
   } catch (err) {
-    console.error(err);
-    setStatus('The interjection went unheard.', false);
+    s.abort();
+    setError('The interjection went unheard.', () => sendInterject(lastInterjectText));
   }
 }
 
