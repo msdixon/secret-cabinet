@@ -321,14 +321,35 @@ app.get('/api/sessions', (req, res) => {
       .filter(f => f.endsWith('.json'))
       .map(f => ({ file: f, mtime: fs.statSync(path.join(SESSIONS_DIR, f)).mtimeMs }))
       .sort((a, b) => b.mtime - a.mtime)
-      .slice(0, 20)
+      .slice(0, 40)
       .map(({ file }) => {
         const d = JSON.parse(fs.readFileSync(path.join(SESSIONS_DIR, file), 'utf8'));
-        return { id: d.id, date: d.date, entry: d.entry?.slice(0, 80) };
+        const memberNames = (d.members || [])
+          .map(id => ROSTER.find(m => m.id === id)?.name)
+          .filter(Boolean);
+        return {
+          id: d.id,
+          date: d.date,
+          entry: d.entry?.slice(0, 100),
+          members: memberNames,
+          rounds: d.rounds?.length || 0,
+        };
       });
     res.json(files);
   } catch (err) {
     res.status(500).json({ error: 'Failed to list sessions' });
+  }
+});
+
+// DELETE /api/sessions/:id — remove a session
+app.delete('/api/sessions/:id', (req, res) => {
+  const p = path.join(SESSIONS_DIR, `${req.params.id}.json`);
+  if (!fs.existsSync(p)) return res.status(404).json({ error: 'Session not found' });
+  try {
+    fs.unlinkSync(p);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete session' });
   }
 });
 

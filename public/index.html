@@ -98,6 +98,7 @@
         </div>
       </div>
       <button class="lodge-btn" id="additional-round-btn" onclick="addRound()">One More Turn ↻</button>
+      <button class="lodge-btn sessions-btn" id="sessions-btn" onclick="openSessionsDrawer()">Past Meetings <span id="sessions-count" class="sessions-count"></span></button>
     </div>
 
     <div class="transcript-panel" id="transcript-panel">
@@ -137,6 +138,18 @@
     <div class="status-bar" id="status-bar">The room waits.</div>
   </div>
 </div>
+<!-- Sessions drawer -->
+<div class="sessions-overlay" id="sessions-overlay" onclick="closeSessionsDrawer()"></div>
+<div class="sessions-drawer" id="sessions-drawer">
+  <div class="sessions-drawer-header">
+    <span class="sessions-drawer-title">Past Meetings</span>
+    <button class="sessions-close-btn" onclick="closeSessionsDrawer()">✕</button>
+  </div>
+  <div class="sessions-drawer-body" id="sessions-list">
+    <div class="sessions-empty">No past meetings found.</div>
+  </div>
+</div>
+
 <script src="app.js"></script>
 </body>
 </html>

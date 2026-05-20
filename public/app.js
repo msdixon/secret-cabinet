@@ -373,6 +373,117 @@ async function exportDayOne() {
   }
 }
 
+// ── Sessions drawer ───────────────────────────────────────────────────────────
+
+async function openSessionsDrawer() {
+  document.getElementById('sessions-overlay').classList.add('open');
+  document.getElementById('sessions-drawer').classList.add('open');
+  await loadSessionsList();
+}
+
+function closeSessionsDrawer() {
+  document.getElementById('sessions-overlay').classList.remove('open');
+  document.getElementById('sessions-drawer').classList.remove('open');
+}
+
+async function loadSessionsList() {
+  const list = document.getElementById('sessions-list');
+  list.innerHTML = '<div class="sessions-empty">Loading...</div>';
+  try {
+    const res = await fetch('/api/sessions');
+    const sessions = await res.json();
+    if (!sessions.length) {
+      list.innerHTML = '<div class="sessions-empty">No past meetings found.</div>';
+      document.getElementById('sessions-count').textContent = '';
+      return;
+    }
+    document.getElementById('sessions-count').textContent = sessions.length;
+    list.innerHTML = '';
+    sessions.forEach(s => {
+      const el = document.createElement('div');
+      el.className = 'session-item';
+      el.innerHTML = `
+        <div class="session-item-date">
+          ${s.date}
+          <span class="session-item-rounds">${s.rounds} round${s.rounds !== 1 ? 's' : ''}</span>
+        </div>
+        <div class="session-item-entry">${s.entry || '—'}</div>
+        <div class="session-item-members">${(s.members || []).join(' · ')}</div>
+        <div class="session-item-actions">
+          <button class="session-load-btn" onclick="restoreSession('${s.id}')">Load this meeting</button>
+          <button class="session-delete-btn" onclick="deleteSession('${s.id}', this)">Delete</button>
+        </div>`;
+      list.appendChild(el);
+    });
+  } catch (e) {
+    list.innerHTML = '<div class="sessions-empty">Could not load past meetings.</div>';
+  }
+}
+
+async function restoreSession(id) {
+  closeSessionsDrawer();
+  setStatus('Restoring past meeting...', true);
+  try {
+    const res = await fetch(`/api/sessions/${id}`);
+    if (!res.ok) throw new Error('Not found');
+    const session = await res.json();
+
+    // Reset UI state
+    document.getElementById('transcript-empty').style.display = 'none';
+    document.getElementById('transcript-content').innerHTML = '';
+    transcriptText = session.transcriptText || '';
+    currentSessionId = session.id;
+    sessionDate = session.date;
+    currentEntry = session.entry || '';
+    currentRound = session.rounds?.length || 0;
+
+    // Re-render rounds from stored data
+    (session.rounds || []).forEach(round => {
+      addRoundHeader(round.label);
+      parseAndRenderTranscript(round.text);
+    });
+
+    // Restore member selection
+    activeMembers = new Set(session.members || []);
+    renderMembers();
+
+    // Show controls
+    document.getElementById('interject-panel').className = 'interject-panel visible';
+    document.getElementById('additional-round-btn').className = 'lodge-btn visible';
+    document.getElementById('export-panel').className = 'export-panel visible';
+    updatePips();
+    setStatus(`Meeting of ${session.date} restored. The embers hold.`, false);
+  } catch (e) {
+    setStatus('Could not restore the meeting.', false);
+  }
+}
+
+async function deleteSession(id, btn) {
+  if (!confirm('Remove this meeting from the record? This cannot be undone.')) return;
+  try {
+    const res = await fetch(`/api/sessions/${id}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error('Delete failed');
+    // Remove the item from the list
+    btn.closest('.session-item').remove();
+    // Update count
+    const remaining = document.getElementById('sessions-list').querySelectorAll('.session-item').length;
+    document.getElementById('sessions-count').textContent = remaining || '';
+    if (!remaining) {
+      document.getElementById('sessions-list').innerHTML = '<div class="sessions-empty">No past meetings found.</div>';
+    }
+  } catch (e) {
+    alert('The meeting could not be removed.');
+  }
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 renderMembers();
+
+// Load session count on startup
+fetch('/api/sessions')
+  .then(r => r.json())
+  .then(sessions => {
+    if (sessions.length) document.getElementById('sessions-count').textContent = sessions.length;
+  })
+  .catch(() => {});
