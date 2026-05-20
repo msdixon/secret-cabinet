@@ -94,7 +94,7 @@ function addSpeech(speaker, text, isGuest, isObserver) {
   e.innerHTML = `<div class="speaker-name ${nc}">${speaker}</div><div class="speech-text">${text.replace(/\n/g, '<br>')}</div>`;
   c.appendChild(e);
   c.scrollTop = c.scrollHeight;
-  transcriptText += `${speaker}\n${text}\n\n`;
+  transcriptText += `${speaker} —\n${text}\n\n`;
 }
 
 function parseAndRenderTranscript(response) {
@@ -501,11 +501,14 @@ async function restoreSession(id) {
     // Reset UI state
     document.getElementById('transcript-empty').style.display = 'none';
     document.getElementById('transcript-content').innerHTML = '';
-    transcriptText = session.transcriptText || '';
     currentSessionId = session.id;
     sessionDate = session.date;
     currentEntry = session.entry || '';
     currentRound = session.rounds?.length || 0;
+
+    // Rebuild transcriptText from scratch with current formatting
+    const names = (session.members || []).map(id => MEMBERS.find(m => m.id === id)?.name).filter(Boolean).join(', ');
+    transcriptText = `THE SECRET-CABIN-ET\nMeeting Notes — ${session.date}\nAssembled: ${names}\n\nSource material:\n${session.entry || ''}\n`;
 
     // Re-render rounds from stored data
     (session.rounds || []).forEach(round => {
@@ -549,6 +552,10 @@ async function deleteSession(id, btn) {
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 renderMembers();
+
+// Load session from URL param if present (e.g. ?session=<id>)
+const _urlSession = new URLSearchParams(location.search).get('session');
+if (_urlSession) restoreSession(_urlSession);
 
 // Load session count on startup
 fetch('/api/sessions')
