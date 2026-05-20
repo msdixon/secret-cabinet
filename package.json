@@ -1,0 +1,16 @@
+{
+  "name": "secret-cabinet",
+  "version": "1.0.0",
+  "description": "The Secret-Cabin-et — a lodge salon for historical esotericists",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.52.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2"
+  }
+}

@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Secret-Cabin-et</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div class="lodge-root">
+  <div class="lodge-mantel">
+    <div class="dorian-frame" title="The portrait adjusts itself, nightly.">
+      <svg viewBox="0 0 140 170" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <filter id="decay"><feTurbulence type="fractalNoise" baseFrequency="0.04" numOctaves="4" result="noise"/><feDisplacementMap in="SourceGraphic" in2="noise" scale="3" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <radialGradient id="pG" cx="50%" cy="35%" r="60%"><stop offset="0%" stop-color="#3a2010"/><stop offset="60%" stop-color="#1a0d06"/><stop offset="100%" stop-color="#0a0503"/></radialGradient>
+          <radialGradient id="fG" cx="50%" cy="40%" r="50%"><stop offset="0%" stop-color="#5c3a20" stop-opacity="0.8"/><stop offset="100%" stop-color="#1a0d06" stop-opacity="0"/></radialGradient>
+          <linearGradient id="fmG" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#8a6520"/><stop offset="30%" stop-color="#c8922a"/><stop offset="60%" stop-color="#7a5010"/><stop offset="100%" stop-color="#e8b84b"/></linearGradient>
+          <linearGradient id="dG" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#2d1a0a" stop-opacity="0"/><stop offset="50%" stop-color="#4a0a0a" stop-opacity="0.6"/><stop offset="100%" stop-color="#1a0505" stop-opacity="0.9"/></linearGradient>
+        </defs>
+        <rect x="6" y="6" width="128" height="158" fill="url(#fmG)" rx="2"/>
+        <rect x="10" y="10" width="120" height="150" fill="#0a0705" rx="1"/>
+        <rect x="4" y="4" width="132" height="162" fill="none" stroke="url(#fmG)" stroke-width="2" rx="3"/>
+        <rect x="2" y="2" width="136" height="166" fill="none" stroke="#5a4010" stroke-width="1" rx="3"/>
+        <rect x="10" y="10" width="120" height="150" fill="url(#pG)" rx="1"/>
+        <ellipse cx="70" cy="58" rx="22" ry="26" fill="url(#fG)" filter="url(#decay)"/>
+        <ellipse cx="70" cy="58" rx="18" ry="20" fill="#2a1508" opacity="0.7" filter="url(#decay)"/>
+        <ellipse cx="63" cy="53" rx="3" ry="2" fill="#1a0d06" opacity="0.8"/>
+        <ellipse cx="77" cy="53" rx="3" ry="2" fill="#1a0d06" opacity="0.8"/>
+        <path d="M63 65 Q70 68 77 65" stroke="#3a1a0a" stroke-width="1.5" fill="none" opacity="0.6"/>
+        <rect x="52" y="85" width="36" height="50" fill="#1e1008" opacity="0.8" rx="2" filter="url(#decay)"/>
+        <rect x="10" y="10" width="120" height="150" fill="url(#dG)" rx="1"/>
+        <path d="M30 120 Q50 110 40 140 Q60 130 55 155 Q70 148 80 158" stroke="#4a0a0a" stroke-width="1.5" fill="none" opacity="0.5"/>
+        <path d="M100 80 Q110 95 105 115 Q115 108 118 130" stroke="#3a0808" stroke-width="1" fill="none" opacity="0.4"/>
+        <rect x="12" y="144" width="116" height="14" fill="#0e0905" rx="0"/>
+        <text x="70" y="154" text-anchor="middle" font-family="'IM Fell English', serif" font-style="italic" font-size="8" fill="#5a4010" letter-spacing="1">est. outside time</text>
+        <rect x="8" y="8" width="6" height="6" fill="url(#fmG)"/><rect x="126" y="8" width="6" height="6" fill="url(#fmG)"/><rect x="8" y="156" width="6" height="6" fill="url(#fmG)"/><rect x="126" y="156" width="6" height="6" fill="url(#fmG)"/>
+      </svg>
+    </div>
+    <div class="lodge-title-block">
+      <div class="lodge-title">The Secret-Cabin-et</div>
+      <div class="lodge-subtitle">A Salon Outside of Time</div>
+    </div>
+    <div class="lodge-divider"></div>
+    <div class="mantel-tagline">The fire is lit. The room remembers nothing. The document waits.</div>
+    <div class="hearth-glow">
+      <div class="ember-bar" id="ember-bar"></div>
+      <div class="ember-sparks" id="ember-sparks">
+        <div class="spark" id="s1"></div>
+        <div class="spark" id="s2"></div>
+        <div class="spark" id="s3"></div>
+        <div class="spark" id="s4"></div>
+        <div class="spark" id="s5"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="lodge-body">
+
+    <div class="journal-panel">
+      <div class="panel-label">I. The Document</div>
+      <div class="journal-controls">
+        <select class="lodge-select" id="source-select" onchange="handleSourceChange()">
+          <option value="paste">— paste an entry —</option>
+          <option value="dayone">— fetch from Day One —</option>
+        </select>
+        <button class="lodge-btn" id="fetch-btn" style="display:none" onclick="fetchEntry()">Fetch Latest</button>
+      </div>
+      <div id="paste-area-container">
+        <textarea class="journal-paste-area" id="paste-area" placeholder="Paste the entry here. The room will hear it." rows="4"></textarea>
+      </div>
+      <div id="fetched-display" style="display:none">
+        <div class="journal-entry-display placeholder" id="entry-display">Awaiting transmission...</div>
+        <div style="margin-top:8px;display:flex;gap:8px;align-items:center;">
+          <span class="tooltip-tag" id="entry-date-tag"></span>
+          <span class="source-tag" id="entry-journal-tag"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="member-panel">
+      <div class="panel-label">II. The Assembled</div>
+      <div class="members-grid" id="members-grid"></div>
+      <div style="margin-top:8px;">
+        <div class="panel-label" style="font-size:10px;">Occasional Guests</div>
+        <div class="members-grid" id="guests-grid" style="margin-top:6px;"></div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+      <button class="lodge-btn primary" id="convene-btn" onclick="convene()">Convene the Lodge</button>
+      <div class="round-controls">
+        <span class="round-label">Rounds</span>
+        <div class="round-pips" id="round-pips">
+          <div class="round-pip" id="pip-1"></div>
+          <div class="round-pip" id="pip-2"></div>
+          <div class="round-pip" id="pip-3"></div>
+        </div>
+      </div>
+      <button class="lodge-btn" id="additional-round-btn" onclick="addRound()">One More Turn ↻</button>
+    </div>
+
+    <div class="transcript-panel" id="transcript-panel">
+      <div class="transcript-empty" id="transcript-empty">
+        The chairs are arranged.<br>
+        The fire throws its light against the panelling.<br>
+        Above the mantel, the portrait<br>
+        <em style="color:#3a2810">regards the room with practiced indifference.</em><br><br>
+        When the document is read aloud, the meeting begins.
+      </div>
+      <div id="transcript-content"></div>
+    </div>
+
+    <div class="interject-panel" id="interject-panel">
+      <div class="panel-label" style="color:#a0c8a0;margin-bottom:8px;">III. Your Voice — Silent Bob Protocol</div>
+      <div class="interject-row">
+        <input type="text" class="interject-input" id="interject-input" placeholder="A presence moves through the room. It has something to say..." />
+        <button class="lodge-btn" style="border-color:#a0c8a0;color:#a0c8a0;" onclick="interject()">Interject</button>
+      </div>
+    </div>
+
+    <div class="export-panel" id="export-panel">
+      <div class="panel-label" style="margin-bottom:10px;">IV. The Record</div>
+      <div class="export-row">
+        <span class="export-note">The meeting has concluded. Preserve the transcript.</span>
+        <button class="lodge-btn export-txt" onclick="exportTxt()">↓ Download .txt</button>
+      </div>
+      <div class="export-journal-row">
+        <span class="export-note" style="font-style:normal;color:var(--lodge-muted);font-size:12px;">PreSeedings of the Secret Cabinet</span>
+        <button class="lodge-btn export-dayone" onclick="exportDayOne()">→ Save to Day One</button>
+      </div>
+      <div style="margin-top:8px;">
+        <span class="source-tag" id="export-status"></span>
+      </div>
+    </div>
+
+    <div class="status-bar" id="status-bar">The room waits.</div>
+  </div>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
