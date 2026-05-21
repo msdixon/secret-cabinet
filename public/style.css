@@ -7,8 +7,8 @@
   --lodge-amber: #c8922a;
   --lodge-amber-dim: #7a5418;
   --lodge-cream: #e8dfc8;
-  --lodge-muted: #8a7a62;
-  --lodge-ash: #4a3f30;
+  --lodge-muted: #a89272;
+  --lodge-ash: #7a6a54;
   --lodge-fire: #d4621a;
   --lodge-gold: #e8b84b;
   --lodge-parchment: #f2e8d0;
@@ -31,7 +31,7 @@
 .lodge-title { font-family: 'UnifrakturMaguntia', serif; font-size: 28px; color: var(--lodge-amber); letter-spacing: 2px; line-height: 1.2; text-shadow: 0 0 20px rgba(200,146,42,0.3); }
 .lodge-subtitle { font-family: 'IM Fell English', serif; font-style: italic; font-size: 12px; color: var(--lodge-muted); letter-spacing: 3px; text-transform: uppercase; margin-top: 4px; }
 .lodge-divider { width: 200px; height: 1px; background: linear-gradient(90deg, transparent, var(--lodge-amber-dim), transparent); margin: 10px auto; }
-.mantel-tagline { font-family:'IM Fell English',serif; font-style:italic; font-size:12px; color:#5a4a32; text-align:center; padding: 0 20px 12px; line-height:1.6; }
+.mantel-tagline { font-family:'IM Fell English',serif; font-style:italic; font-size:12px; color:var(--lodge-ash); text-align:center; padding: 0 20px 12px; line-height:1.6; }
 
 .hearth-glow {
   width: 100%; height: 48px; position: relative; overflow: hidden;
@@ -86,7 +86,7 @@
   100% { opacity:0; transform: translateY(-22px) scale(0.3) translateX(8px); }
 }
 
-.lodge-body { display:flex; flex-direction:column; flex:1; padding:20px 24px; gap:20px; max-width:800px; width:100%; margin:0 auto; }
+.lodge-body { display:flex; flex-direction:column; flex:1; padding:20px 24px; gap:20px; max-width:960px; width:100%; margin:0 auto; }
 .panel-label { font-family:'IM Fell English',serif; font-size:11px; letter-spacing:3px; text-transform:uppercase; color:var(--lodge-muted); margin-bottom:8px; }
 .journal-panel, .member-panel, .transcript-panel, .interject-panel, .export-panel { background:var(--lodge-surface); border:1px solid var(--lodge-border); border-radius:2px; padding:16px; }
 .journal-controls { display:flex; gap:10px; margin-bottom:12px; flex-wrap:wrap; }
@@ -132,12 +132,12 @@
 .transcript-entry { margin-bottom:20px; padding-bottom:20px; border-bottom:1px solid rgba(58,46,30,0.5); animation:fadeIn 0.4s ease; }
 .transcript-entry:last-child { border-bottom:none; margin-bottom:0; padding-bottom:0; }
 @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
-.speaker-name { font-family:'UnifrakturMaguntia',serif; font-size:17px; color:var(--lodge-amber); margin-bottom:4px; letter-spacing:1px; }
+.speaker-name { font-family:'UnifrakturMaguntia',serif; font-size:19px; color:var(--lodge-amber); margin-bottom:5px; letter-spacing:1px; }
 .speaker-name.guest-voice { color:var(--lodge-fire); }
 .speaker-name.observer-voice { color:#a0c8a0; }
-.speech-text { font-family:'Crimson Pro',serif; font-size:16px; line-height:1.75; color:var(--lodge-parchment); }
-.action-line { font-family:'IM Fell English','Crimson Pro',serif; font-style:italic; font-size:14px; color:var(--lodge-muted); text-align:left; margin:6px 0; letter-spacing:0.02em; opacity:0.85; }
-.action-inline { font-style:italic; color:var(--lodge-muted); opacity:0.9; }
+.speech-text { font-family:'Crimson Pro',serif; font-size:18px; line-height:1.8; color:var(--lodge-parchment); }
+.action-line { font-family:'IM Fell English','Crimson Pro',serif; font-style:italic; font-size:15px; color:var(--lodge-muted); text-align:left; margin:6px 0; letter-spacing:0.02em; }
+.action-inline { font-style:italic; color:var(--lodge-muted); }
 .interject-panel { display:none; }
 .interject-panel.visible { display:block; }
 .interject-row { display:flex; gap:10px; }
@@ -171,7 +171,7 @@
 .arc-textarea { background:var(--lodge-panel); border:1px solid var(--lodge-ash); border-left:3px solid var(--lodge-amber-dim); color:var(--lodge-cream); font-family:'Crimson Pro',serif; font-size:14px; font-style:italic; line-height:1.6; padding:8px 12px; border-radius:0 2px 2px 0; resize:vertical; width:100%; }
 .arc-textarea:focus { outline:none; border-left-color:var(--lodge-amber); }
 
-.transcript-stream-live { font-family:'Crimson Pro',serif; font-size:15px; line-height:1.75; color:var(--lodge-muted); white-space:pre-wrap; padding:4px 0 12px; font-style:italic; animation:flicker 3s ease-in-out infinite; }
+.transcript-stream-live { font-family:'Crimson Pro',serif; font-size:17px; line-height:1.8; color:var(--lodge-muted); white-space:pre-wrap; padding:4px 0 12px; font-style:italic; animation:flicker 3s ease-in-out infinite; }
 
 /* Sessions drawer */
 .sessions-btn { border-color:var(--lodge-ash); color:var(--lodge-muted); }
