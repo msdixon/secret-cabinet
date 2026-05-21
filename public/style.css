@@ -159,9 +159,14 @@
 .source-tag { font-size:11px; color:var(--lodge-muted); font-family:'IM Fell English',serif; font-style:italic; margin-left:6px; }
 #additional-round-btn { display:none; }
 #additional-round-btn.visible { display:inline-block; }
+/* Convene panel — arc config + convene button grouped together */
+.convene-panel { background:var(--lodge-surface); border:1px solid var(--lodge-border); border-radius:2px; display:flex; flex-direction:column; }
+.convene-row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; padding:12px 14px; border-top:1px solid var(--lodge-border); }
+
 /* Arc customisation panel */
-.arc-panel { border:1px solid var(--lodge-border); border-radius:2px; background:var(--lodge-surface); }
+.arc-panel { border:none; border-radius:0; background:transparent; }
 .arc-summary { font-family:'IM Fell English',serif; font-size:11px; letter-spacing:3px; text-transform:uppercase; color:var(--lodge-ash); padding:10px 14px; cursor:pointer; list-style:none; user-select:none; }
+.arc-summary-note { font-size:10px; letter-spacing:1px; color:var(--lodge-muted); opacity:0.7; text-transform:none; font-style:italic; }
 .arc-summary::-webkit-details-marker { display:none; }
 .arc-summary::before { content:'↳ '; color:var(--lodge-amber-dim); }
 .arc-panel[open] .arc-summary::before { content:'↑ '; }
