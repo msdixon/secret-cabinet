@@ -231,10 +231,13 @@ async function loadJournals() {
       sel.innerHTML = '<option value="">— no journals found —</option>';
       return;
     }
-    sel.innerHTML = journals.map(j => `<option value="${j.id}">${j.name}</option>`).join('');
-    // Restore previously saved journal, or auto-select first
-    const saved = journals.find(j => j.id === currentJournal.id);
-    const target = saved || journals[0];
+    // Float the PreSeedings journal to the top
+    const isPreferred = j => /preseedings|secret.cabin/i.test(j.name);
+    const sorted = [...journals].sort((a, b) => isPreferred(b) - isPreferred(a));
+    sel.innerHTML = sorted.map(j => `<option value="${j.id}">${j.name}</option>`).join('');
+    // Restore previously saved journal, or prefer PreSeedings, or fall back to first
+    const saved = sorted.find(j => j.id === currentJournal.id);
+    const target = saved || sorted.find(isPreferred) || sorted[0];
     sel.value = target.id;
     currentJournal = { id: target.id, name: target.name };
     localStorage.setItem('sc-journal', JSON.stringify(currentJournal));
