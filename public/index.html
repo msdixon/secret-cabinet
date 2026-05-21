@@ -90,36 +90,37 @@
       </div>
     </div>
 
-    <details class="arc-panel" id="arc-panel">
-      <summary class="arc-summary">Shape the arc</summary>
-      <div class="arc-fields">
-        <div class="arc-field">
-          <div class="panel-label">First Movement</div>
-          <textarea class="arc-textarea" id="arc-1" rows="2">The room stirs. Write the first movement — initial reactions, the first voices. 3-5 members respond.</textarea>
+    <div class="convene-panel">
+      <details class="arc-panel" id="arc-panel">
+        <summary class="arc-summary">Shape the arc <span class="arc-summary-note">— set before convening</span></summary>
+        <div class="arc-fields">
+          <div class="arc-field">
+            <div class="panel-label">First Movement</div>
+            <textarea class="arc-textarea" id="arc-1" rows="2">The room stirs. Write the first movement — initial reactions, the first voices. 3-5 members respond.</textarea>
+          </div>
+          <div class="arc-field">
+            <div class="panel-label">The Room Responds</div>
+            <textarea class="arc-textarea" id="arc-2" rows="2">Continue. Members react to each other — disagreements surface, alliances form, unexpected connections emerge. 3-5 members speak.</textarea>
+          </div>
+          <div class="arc-field">
+            <div class="panel-label">Final Embers</div>
+            <textarea class="arc-textarea" id="arc-3" rows="2">The conversation moves toward its close. Final thoughts. Someone may say the thing that persists as an ember. 2-4 members. Let it end naturally.</textarea>
+          </div>
         </div>
-        <div class="arc-field">
-          <div class="panel-label">The Room Responds</div>
-          <textarea class="arc-textarea" id="arc-2" rows="2">Continue. Members react to each other — disagreements surface, alliances form, unexpected connections emerge. 3-5 members speak.</textarea>
+      </details>
+      <div class="convene-row">
+        <button class="lodge-btn primary" id="convene-btn" onclick="convene()">Convene the Lodge</button>
+        <div class="round-controls">
+          <span class="round-label">Rounds</span>
+          <div class="round-pips" id="round-pips">
+            <div class="round-pip" id="pip-1"></div>
+            <div class="round-pip" id="pip-2"></div>
+            <div class="round-pip" id="pip-3"></div>
+          </div>
         </div>
-        <div class="arc-field">
-          <div class="panel-label">Final Embers</div>
-          <textarea class="arc-textarea" id="arc-3" rows="2">The conversation moves toward its close. Final thoughts. Someone may say the thing that persists as an ember. 2-4 members. Let it end naturally.</textarea>
-        </div>
+        <button class="lodge-btn" id="additional-round-btn" onclick="addRound()">One More Turn ↻</button>
+        <button class="lodge-btn sessions-btn" id="sessions-btn" onclick="openSessionsDrawer()">Past Meetings <span id="sessions-count" class="sessions-count"></span></button>
       </div>
-    </details>
-
-    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-      <button class="lodge-btn primary" id="convene-btn" onclick="convene()">Convene the Lodge</button>
-      <div class="round-controls">
-        <span class="round-label">Rounds</span>
-        <div class="round-pips" id="round-pips">
-          <div class="round-pip" id="pip-1"></div>
-          <div class="round-pip" id="pip-2"></div>
-          <div class="round-pip" id="pip-3"></div>
-        </div>
-      </div>
-      <button class="lodge-btn" id="additional-round-btn" onclick="addRound()">One More Turn ↻</button>
-      <button class="lodge-btn sessions-btn" id="sessions-btn" onclick="openSessionsDrawer()">Past Meetings <span id="sessions-count" class="sessions-count"></span></button>
     </div>
 
     <div class="transcript-panel" id="transcript-panel">
