@@ -259,6 +259,7 @@ async function convene() {
   transcriptText = '';
   sessionDate = new Date().toISOString().split('T')[0];
   const members = [...activeMembers];
+  const roundInstructions = [1, 2, 3].map(i => document.getElementById(`arc-${i}`)?.value.trim()).filter(Boolean);
 
   try {
     // Round 1
@@ -271,7 +272,7 @@ async function convene() {
     let acc = '';
     let d1;
     try {
-      d1 = await streamPost('/api/convene', { entry, members }, chunk => { acc += chunk; s1.append(chunk); });
+      d1 = await streamPost('/api/convene', { entry, members, roundInstructions }, chunk => { acc += chunk; s1.append(chunk); });
       s1.finalize(acc);
       currentSessionId = d1.sessionId;
     } catch (err) {

@@ -174,12 +174,18 @@ function formatTranscriptText(text) {
 
 // ─── Round prompts ────────────────────────────────────────────────────────────
 
-const ROUND_PROMPTS = [
-  (entry) => `The document has just been read aloud:\n\n"${entry}"\n\nThe room stirs. Write the first movement — initial reactions, the first voices. 3-5 members respond.`,
-  () => `Continue. Members react to each other — disagreements surface, alliances form, unexpected connections emerge. 3-5 members speak.`,
-  () => `The conversation moves toward its close. Final thoughts. Someone may say the thing that persists as an ember. 2-4 members. Let it end naturally.`,
-  () => `A thread unresolved, a silence wanting breaking, a late arrival to the argument. 2-4 members speak.`,
+const DEFAULT_ROUND_INSTRUCTIONS = [
+  'The room stirs. Write the first movement — initial reactions, the first voices. 3-5 members respond.',
+  'Continue. Members react to each other — disagreements surface, alliances form, unexpected connections emerge. 3-5 members speak.',
+  'The conversation moves toward its close. Final thoughts. Someone may say the thing that persists as an ember. 2-4 members. Let it end naturally.',
 ];
+const EXTRA_ROUND_INSTRUCTION = 'A thread unresolved, a silence wanting breaking, a late arrival to the argument. 2-4 members speak.';
+
+function buildRoundPrompt(index, entry, instructions) {
+  const instr = instructions?.[index] || DEFAULT_ROUND_INSTRUCTIONS[index] || EXTRA_ROUND_INSTRUCTION;
+  if (index === 0) return `The document has just been read aloud:\n\n"${entry}"\n\n${instr}`;
+  return instr;
+}
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
@@ -189,10 +195,11 @@ app.post('/api/convene', async (req, res) => {
   if (!entry?.trim()) return res.status(400).json({ error: 'entry is required' });
   if (!members?.length) return res.status(400).json({ error: 'at least one member is required' });
 
+  const { roundInstructions } = req.body;
   const id = makeSessionId(entry);
   const date = new Date().toISOString().slice(0, 10);
   const systemPrompt = buildSystemPrompt(members);
-  const roundPrompt = ROUND_PROMPTS[0](entry);
+  const roundPrompt = buildRoundPrompt(0, entry, roundInstructions);
 
   openSSE(res);
   try {
@@ -203,6 +210,7 @@ app.post('/api/convene', async (req, res) => {
     ];
     const session = {
       id, date, entry, members, systemPrompt,
+      roundInstructions: roundInstructions || null,
       conversationHistory: history,
       rounds: [{ label: 'First Movement', text }],
       transcriptText: buildTranscriptHeader(entry, members, date) + `\n— First Movement —\n\n${formatTranscriptText(text)}\n`,
@@ -225,8 +233,7 @@ app.post('/api/round', async (req, res) => {
   if (!session) return res.status(404).json({ error: 'Session not found' });
 
   const roundIndex = session.rounds.length;
-  const promptFn = ROUND_PROMPTS[Math.min(roundIndex, ROUND_PROMPTS.length - 1)];
-  const roundPrompt = promptFn(session.entry);
+  const roundPrompt = buildRoundPrompt(roundIndex, session.entry, session.roundInstructions);
 
   const labels = ['First Movement', 'The Room Responds', 'Final Embers', 'One More Turn'];
   const label = labels[Math.min(roundIndex, labels.length - 1)];
