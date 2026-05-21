@@ -1,7 +1,7 @@
 'use strict';
 
-const DAYONE_JOURNAL_ID   = '109509802833';
-const DAYONE_JOURNAL_NAME = 'PreSeedings of the Secret Cabinet';
+let currentJournal = JSON.parse(localStorage.getItem('sc-journal') || 'null') || { id: null, name: null };
+let journalsLoaded = false;
 
 const MEMBERS = [
   {id:'crowley',  name:'Crowley',        guest:false},
@@ -203,29 +203,76 @@ async function retryFromError() {
 
 // ── Day One ───────────────────────────────────────────────────────────────────
 
+function updateExportJournalLabel() {
+  const el = document.getElementById('export-journal-name');
+  if (el) el.textContent = currentJournal.name || 'No journal selected';
+}
+
+function handleJournalChange() {
+  const sel = document.getElementById('journal-select');
+  const opt = sel.options[sel.selectedIndex];
+  currentJournal = { id: opt.value, name: opt.textContent.trim() };
+  localStorage.setItem('sc-journal', JSON.stringify(currentJournal));
+  updateExportJournalLabel();
+}
+
+async function loadJournals() {
+  if (journalsLoaded) return;
+  const sel = document.getElementById('journal-select');
+  try {
+    const res = await fetch('/api/dayone/journals', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    const data = await res.json();
+    const journals = data.journals || [];
+    if (!journals.length) {
+      sel.innerHTML = '<option value="">— no journals found —</option>';
+      return;
+    }
+    sel.innerHTML = journals.map(j => `<option value="${j.id}">${j.name}</option>`).join('');
+    // Restore previously saved journal, or auto-select first
+    const saved = journals.find(j => j.id === currentJournal.id);
+    const target = saved || journals[0];
+    sel.value = target.id;
+    currentJournal = { id: target.id, name: target.name };
+    localStorage.setItem('sc-journal', JSON.stringify(currentJournal));
+    updateExportJournalLabel();
+    journalsLoaded = true;
+  } catch (e) {
+    sel.innerHTML = '<option value="">— could not load journals —</option>';
+  }
+}
+
 function handleSourceChange() {
   const v = document.getElementById('source-select').value;
-  document.getElementById('paste-area-container').style.display = v === 'paste' ? 'block' : 'none';
-  document.getElementById('fetched-display').style.display = v === 'dayone' ? 'block' : 'none';
+  const isDayOne = v === 'dayone';
+  document.getElementById('paste-area-container').style.display = isDayOne ? 'none' : 'block';
+  document.getElementById('fetched-display').style.display = isDayOne ? 'block' : 'none';
+  document.getElementById('journal-select').style.display = isDayOne ? '' : 'none';
+  document.getElementById('fetch-btn').style.display = isDayOne ? '' : 'none';
+  if (isDayOne) loadJournals();
 }
 
 async function fetchEntry() {
+  if (!currentJournal.id) { setStatus('Select a journal first.', false); return; }
   const display = document.getElementById('entry-display');
   display.textContent = 'Reaching through the veil...';
   display.classList.add('placeholder');
-  setStatus('Fetching from PreSeedings of the Secret Cabinet...', true);
+  setStatus(`Fetching from ${currentJournal.name}...`, true);
   try {
     const res = await fetch('/api/dayone/fetch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ journalId: DAYONE_JOURNAL_ID, journalName: DAYONE_JOURNAL_NAME }),
+      body: JSON.stringify({ journalId: currentJournal.id, journalName: currentJournal.name }),
     });
     const data = await res.json();
     currentEntry = data.text;
     display.textContent = data.text;
     display.classList.remove('placeholder');
     document.getElementById('entry-date-tag').textContent = data.date || '';
-    document.getElementById('entry-journal-tag').textContent = DAYONE_JOURNAL_NAME;
+    document.getElementById('entry-journal-tag').textContent = currentJournal.name;
     setStatus('The document has been read aloud. The room has heard it.', false);
   } catch (e) {
     display.textContent = 'The transmission failed. Try paste instead.';
@@ -424,20 +471,24 @@ function exportTxt() {
 }
 
 async function exportDayOne() {
-  document.getElementById('export-status').textContent = 'Saving to PreSeedings of the Secret Cabinet...';
+  if (!currentJournal.id) {
+    document.getElementById('export-status').textContent = 'Select a Day One journal first.';
+    return;
+  }
+  document.getElementById('export-status').textContent = `Saving to ${currentJournal.name}...`;
   try {
     const res = await fetch('/api/dayone/export', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        journalId: DAYONE_JOURNAL_ID,
-        journalName: DAYONE_JOURNAL_NAME,
+        journalId: currentJournal.id,
+        journalName: currentJournal.name,
         transcriptText,
         sessionDate,
       }),
     });
     if (!res.ok) throw new Error(`Server error ${res.status}`);
-    document.getElementById('export-status').textContent = `Saved to ${DAYONE_JOURNAL_NAME}.`;
+    document.getElementById('export-status').textContent = `Saved to ${currentJournal.name}.`;
   } catch (err) {
     console.error(err);
     document.getElementById('export-status').textContent = 'Export failed. Try .txt download.';
@@ -553,6 +604,7 @@ async function deleteSession(id, btn) {
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 renderMembers();
+updateExportJournalLabel();
 
 // Load session from URL param if present (e.g. ?session=<id>)
 const _urlSession = new URLSearchParams(location.search).get('session');
