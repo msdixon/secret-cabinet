@@ -161,6 +161,17 @@ function openSSE(res) {
   });
 }
 
+// Post-process raw Claude transcript text: append ' —' after speaker name lines
+// so plain-text exports clearly distinguish speakers from speech.
+const MEMBER_NAMES = new Set(ROSTER.map(m => m.name));
+function formatTranscriptText(text) {
+  return text.split('\n').map(line => {
+    const t = line.trim();
+    const bare = t.endsWith(':') ? t.slice(0, -1) : t;
+    return MEMBER_NAMES.has(bare) ? `${bare} —` : line;
+  }).join('\n');
+}
+
 // ─── Round prompts ────────────────────────────────────────────────────────────
 
 const ROUND_PROMPTS = [
@@ -194,7 +205,7 @@ app.post('/api/convene', async (req, res) => {
       id, date, entry, members, systemPrompt,
       conversationHistory: history,
       rounds: [{ label: 'First Movement', text }],
-      transcriptText: buildTranscriptHeader(entry, members, date) + `\n— First Movement —\n\n${text}\n`,
+      transcriptText: buildTranscriptHeader(entry, members, date) + `\n— First Movement —\n\n${formatTranscriptText(text)}\n`,
     };
     saveSession(session);
     res.write(`data: ${JSON.stringify({ done: true, sessionId: id, round: 1, label: 'First Movement' })}\n\n`);
@@ -227,7 +238,7 @@ app.post('/api/round', async (req, res) => {
     session.conversationHistory.push({ role: 'user', content: roundPrompt });
     session.conversationHistory.push({ role: 'assistant', content: text });
     session.rounds.push({ label, text });
-    session.transcriptText += `\n— ${label} —\n\n${text}\n`;
+    session.transcriptText += `\n— ${label} —\n\n${formatTranscriptText(text)}\n`;
 
     saveSession(session);
     res.write(`data: ${JSON.stringify({ done: true, round: roundIndex + 1, label })}\n\n`);
@@ -254,7 +265,7 @@ app.post('/api/interject', async (req, res) => {
 
     session.conversationHistory.push({ role: 'user', content: prompt });
     session.conversationHistory.push({ role: 'assistant', content: response });
-    session.transcriptText += `\n— A Presence Passes Through —\n\n— a voice from elsewhere —\n${text}\n\n${response}\n`;
+    session.transcriptText += `\n— A Presence Passes Through —\n\n— a voice from elsewhere —\n${text}\n\n${formatTranscriptText(response)}\n`;
 
     saveSession(session);
     res.write(`data: ${JSON.stringify({ done: true, label: 'A Presence Passes Through' })}\n\n`);
@@ -321,14 +332,35 @@ app.get('/api/sessions', (req, res) => {
       .filter(f => f.endsWith('.json'))
       .map(f => ({ file: f, mtime: fs.statSync(path.join(SESSIONS_DIR, f)).mtimeMs }))
       .sort((a, b) => b.mtime - a.mtime)
-      .slice(0, 20)
+      .slice(0, 40)
       .map(({ file }) => {
         const d = JSON.parse(fs.readFileSync(path.join(SESSIONS_DIR, file), 'utf8'));
-        return { id: d.id, date: d.date, entry: d.entry?.slice(0, 80) };
+        const memberNames = (d.members || [])
+          .map(id => ROSTER.find(m => m.id === id)?.name)
+          .filter(Boolean);
+        return {
+          id: d.id,
+          date: d.date,
+          entry: d.entry?.slice(0, 100),
+          members: memberNames,
+          rounds: d.rounds?.length || 0,
+        };
       });
     res.json(files);
   } catch (err) {
     res.status(500).json({ error: 'Failed to list sessions' });
+  }
+});
+
+// DELETE /api/sessions/:id — remove a session
+app.delete('/api/sessions/:id', (req, res) => {
+  const p = path.join(SESSIONS_DIR, `${req.params.id}.json`);
+  if (!fs.existsSync(p)) return res.status(404).json({ error: 'Session not found' });
+  try {
+    fs.unlinkSync(p);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete session' });
   }
 });
 
