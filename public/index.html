@@ -64,6 +64,9 @@
           <option value="paste">— paste an entry —</option>
           <option value="dayone">— fetch from Day One —</option>
         </select>
+        <select class="lodge-select" id="journal-select" style="display:none" onchange="handleJournalChange()">
+          <option value="">— loading journals… —</option>
+        </select>
         <button class="lodge-btn" id="fetch-btn" style="display:none" onclick="fetchEntry()">Fetch Latest</button>
       </div>
       <div id="paste-area-container">
@@ -145,7 +148,7 @@
         <button class="lodge-btn export-txt" onclick="exportTxt()">↓ Download .txt</button>
       </div>
       <div class="export-journal-row">
-        <span class="export-note" style="font-style:normal;color:var(--lodge-muted);font-size:12px;">PreSeedings of the Secret Cabinet</span>
+        <span class="export-note" style="font-style:normal;color:var(--lodge-muted);font-size:12px;" id="export-journal-name">No journal selected</span>
         <button class="lodge-btn export-dayone" onclick="exportDayOne()">→ Save to Day One</button>
       </div>
       <div style="margin-top:8px;">
