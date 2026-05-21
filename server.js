@@ -309,6 +309,27 @@ app.post('/api/dayone/journals', async (req, res) => {
   }
 });
 
+// POST /api/dayone/entries — return recent non-generated entries for a journal
+app.post('/api/dayone/entries', async (req, res) => {
+  const { journalId, limit = 3 } = req.body;
+  if (!journalId) return res.status(400).json({ error: 'journalId required' });
+  try {
+    const raw = await dayOne.getRecentEntries(journalId, limit);
+    const entries = raw.map(e => {
+      const body = (e.body || e.text || '').replace(/\\([.()[\]{}])/g, '$1');
+      return {
+        date: (e.date || e.creation_date || '').slice(0, 10),
+        preview: body.replace(/\n+/g, ' ').slice(0, 80),
+        text: body,
+      };
+    });
+    res.json({ entries });
+  } catch (err) {
+    console.error('Entries error:', err);
+    res.status(500).json({ error: 'Could not fetch entries' });
+  }
+});
+
 // POST /api/dayone/fetch — fetch latest entry from a journal
 app.post('/api/dayone/fetch', async (req, res) => {
   const { journalId, journalName } = req.body;

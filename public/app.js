@@ -1,7 +1,6 @@
 'use strict';
 
 let currentJournal = JSON.parse(localStorage.getItem('sc-journal') || 'null') || { id: null, name: null };
-let journalsLoaded = false;
 
 const MEMBERS = [
   {id:'crowley',  name:'Crowley',        guest:false},
@@ -244,84 +243,115 @@ async function retryFromError() {
 
 // ── Day One ───────────────────────────────────────────────────────────────────
 
+const entryCache = new Map(); // key: "dayone:journalId:idx" → { text, date, journalId, journalName }
+let sourceOptionsLoaded = false;
+
 function updateExportJournalLabel() {
   const el = document.getElementById('export-journal-name');
   if (el) el.textContent = currentJournal.name || 'No journal selected';
 }
 
-function handleJournalChange() {
-  const sel = document.getElementById('journal-select');
-  const opt = sel.options[sel.selectedIndex];
-  currentJournal = { id: opt.value, name: opt.textContent.trim() };
-  localStorage.setItem('sc-journal', JSON.stringify(currentJournal));
-  updateExportJournalLabel();
-}
+// Called on mousedown of source-select — loads journals + 3 recent entries per
+// journal into optgroups. Runs once; subsequent mousedowns are no-ops.
+async function loadSourceOptions() {
+  if (sourceOptionsLoaded) return;
+  sourceOptionsLoaded = true; // prevent double-load
 
-async function loadJournals() {
-  if (journalsLoaded) return;
-  const sel = document.getElementById('journal-select');
+  const sel = document.getElementById('source-select');
+  const loadingGroup = document.getElementById('source-loading-group');
+
   try {
     const res = await fetch('/api/dayone/journals', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: '{}',
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
     });
     const data = await res.json();
     const journals = data.journals || [];
     if (!journals.length) {
-      sel.innerHTML = '<option value="">— no journals found —</option>';
+      if (loadingGroup) loadingGroup.label = 'No Day One journals found';
       return;
     }
-    // Float the PreSeedings journal to the top
+
+    // Float PreSeedings to top
     const isPreferred = j => /preseedings|secret.cabin/i.test(j.name);
     const sorted = [...journals].sort((a, b) => isPreferred(b) - isPreferred(a));
-    sel.innerHTML = sorted.map(j => `<option value="${j.id}">${j.name}</option>`).join('');
-    // Restore previously saved journal, or prefer PreSeedings, or fall back to first
-    const saved = sorted.find(j => j.id === currentJournal.id);
-    const target = saved || sorted.find(isPreferred) || sorted[0];
-    sel.value = target.id;
-    currentJournal = { id: target.id, name: target.name };
-    localStorage.setItem('sc-journal', JSON.stringify(currentJournal));
-    updateExportJournalLabel();
-    journalsLoaded = true;
+
+    // Remove the placeholder loading group
+    if (loadingGroup) loadingGroup.remove();
+
+    // Pre-create groups in sorted order so the DOM order is guaranteed
+    const groups = sorted.map(journal => {
+      const group = document.createElement('optgroup');
+      group.label = journal.name;
+      sel.appendChild(group);
+      return { journal, group };
+    });
+
+    // Load entries for each journal in parallel, fill the pre-created groups
+    await Promise.all(groups.map(async ({ journal, group }) => {
+      try {
+        const er = await fetch('/api/dayone/entries', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ journalId: journal.id, limit: 3 }),
+        });
+        const ed = await er.json();
+        const entries = ed.entries || [];
+
+        entries.forEach((entry, idx) => {
+          const key = `dayone:${journal.id}:${idx}`;
+          entryCache.set(key, { ...entry, journalId: journal.id, journalName: journal.name });
+          const opt = document.createElement('option');
+          opt.value = key;
+          opt.textContent = `${entry.date}  ${entry.preview}`;
+          group.appendChild(opt);
+        });
+
+        if (!entries.length) {
+          const opt = document.createElement('option');
+          opt.disabled = true;
+          opt.textContent = 'No entries found';
+          group.appendChild(opt);
+        }
+      } catch {
+        const opt = document.createElement('option');
+        opt.disabled = true;
+        opt.textContent = 'Could not load entries';
+        group.appendChild(opt);
+      }
+    }));
+
+    // If we had a saved journal preference, try to pre-select its first entry
+    if (currentJournal.id) {
+      const key = `dayone:${currentJournal.id}:0`;
+      if (entryCache.has(key)) sel.value = key;
+    }
+
   } catch (e) {
-    sel.innerHTML = '<option value="">— could not load journals —</option>';
+    if (loadingGroup) loadingGroup.label = 'Could not connect to Day One';
   }
 }
 
 function handleSourceChange() {
   const v = document.getElementById('source-select').value;
-  const isDayOne = v === 'dayone';
-  document.getElementById('paste-area-container').style.display = isDayOne ? 'none' : 'block';
-  document.getElementById('fetched-display').style.display = isDayOne ? 'block' : 'none';
-  document.getElementById('journal-select').style.display = isDayOne ? '' : 'none';
-  document.getElementById('fetch-btn').style.display = isDayOne ? '' : 'none';
-  if (isDayOne) loadJournals();
-}
+  const isPaste = v === 'paste';
+  document.getElementById('paste-area-container').style.display = isPaste ? 'block' : 'none';
+  document.getElementById('fetched-display').style.display = isPaste ? 'none' : 'block';
 
-async function fetchEntry() {
-  if (!currentJournal.id) { setStatus('Select a journal first.', false); return; }
-  const display = document.getElementById('entry-display');
-  display.textContent = 'Reaching through the veil...';
-  display.classList.add('placeholder');
-  setStatus(`Fetching from ${currentJournal.name}...`, true);
-  try {
-    const res = await fetch('/api/dayone/fetch', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ journalId: currentJournal.id, journalName: currentJournal.name }),
-    });
-    const data = await res.json();
-    currentEntry = data.text;
-    display.textContent = data.text;
+  if (!isPaste && entryCache.has(v)) {
+    const cached = entryCache.get(v);
+    currentEntry = cached.text;
+    currentJournal = { id: cached.journalId, name: cached.journalName };
+    localStorage.setItem('sc-journal', JSON.stringify(currentJournal));
+    updateExportJournalLabel();
+
+    const display = document.getElementById('entry-display');
+    display.textContent = cached.text;
     display.classList.remove('placeholder');
-    document.getElementById('entry-date-tag').textContent = data.date || '';
-    document.getElementById('entry-journal-tag').textContent = currentJournal.name;
+    document.getElementById('entry-date-tag').textContent = cached.date || '';
+    document.getElementById('entry-journal-tag').textContent = cached.journalName;
     setStatus('The document has been read aloud. The room has heard it.', false);
-  } catch (e) {
-    display.textContent = 'The transmission failed. Try paste instead.';
-    display.classList.add('placeholder');
-    setStatus('Fetch failed. Use paste instead.', false);
+  } else if (isPaste) {
+    currentEntry = '';
   }
 }
 
@@ -330,6 +360,7 @@ function getEntry() {
     ? document.getElementById('paste-area').value.trim()
     : currentEntry;
 }
+
 
 // ── Convene ───────────────────────────────────────────────────────────────────
 
