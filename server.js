@@ -249,9 +249,12 @@ app.post('/api/round', async (req, res) => {
   const labels = ['First Movement', 'The Room Responds', 'Final Embers', 'One More Turn'];
   const label = labels[Math.min(roundIndex, labels.length - 1)];
 
+  // Keep only the last 6 messages (3 round-trips) to cap context growth in long sessions
+  const recentHistory = session.conversationHistory.slice(-6);
+
   openSSE(res);
   try {
-    const text = await streamClaude(res, session.systemPrompt, session.conversationHistory, roundPrompt);
+    const text = await streamClaude(res, session.systemPrompt, recentHistory, roundPrompt);
 
     session.conversationHistory.push({ role: 'user', content: roundPrompt });
     session.conversationHistory.push({ role: 'assistant', content: text });
@@ -276,10 +279,11 @@ app.post('/api/interject', async (req, res) => {
   if (!session) return res.status(404).json({ error: 'Session not found' });
 
   const prompt = `A mysterious presence — an observer from outside time — has just spoken: "${text}"\n\nThe room reacts. 2-3 members respond to what was said.`;
+  const recentHistory = session.conversationHistory.slice(-6);
 
   openSSE(res);
   try {
-    const response = await streamClaude(res, session.systemPrompt, session.conversationHistory, prompt);
+    const response = await streamClaude(res, session.systemPrompt, recentHistory, prompt);
 
     session.conversationHistory.push({ role: 'user', content: prompt });
     session.conversationHistory.push({ role: 'assistant', content: response });

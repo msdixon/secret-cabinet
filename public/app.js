@@ -44,6 +44,18 @@ function renderMembers() {
     };
     document.getElementById(m.guest ? 'guests-grid' : 'members-grid').appendChild(el);
   });
+  updateMemberCount();
+}
+
+function updateMemberCount() {
+  const n = activeMembers.size;
+  const badge = document.getElementById('member-count-badge');
+  if (!badge) return;
+  badge.textContent = `${n} present`;
+  badge.className = 'member-count-badge' + (n >= 8 ? ' over' : n >= 6 ? ' warn' : '');
+  badge.title = n >= 6
+    ? `${n} members active — larger casts reduce individual voice distinction and increase generation time. 4–6 recommended.`
+    : '';
 }
 
 // ── Ember animation ───────────────────────────────────────────────────────────
