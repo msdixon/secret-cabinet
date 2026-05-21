@@ -60,14 +60,12 @@
     <div class="journal-panel">
       <div class="panel-label">I. The Document</div>
       <div class="journal-controls">
-        <select class="lodge-select" id="source-select" onchange="handleSourceChange()">
+        <select class="lodge-select" id="source-select" onmousedown="loadSourceOptions()" onchange="handleSourceChange()">
           <option value="paste">— paste an entry —</option>
-          <option value="dayone">— fetch from Day One —</option>
+          <optgroup label="Loading Day One journals…" id="source-loading-group" disabled>
+            <option disabled>…</option>
+          </optgroup>
         </select>
-        <select class="lodge-select" id="journal-select" style="display:none" onchange="handleJournalChange()">
-          <option value="">— loading journals… —</option>
-        </select>
-        <button class="lodge-btn" id="fetch-btn" style="display:none" onclick="fetchEntry()">Fetch Latest</button>
       </div>
       <div id="paste-area-container">
         <textarea class="journal-paste-area" id="paste-area" placeholder="Paste the entry here. The room will hear it." rows="4"></textarea>

@@ -25,19 +25,22 @@ async function listJournals() {
 }
 
 async function getLatestEntry(journalId) {
+  const entries = await getRecentEntries(journalId, 1);
+  return entries[0] || null;
+}
+
+async function getRecentEntries(journalId, limit = 3) {
   return withDayOne(async (client) => {
-    // Fetch a small batch so we can skip exported transcripts (tagged 'generated')
+    // Fetch extra so filtering 'generated' still yields `limit` results
     const result = await client.callTool({
       name: 'get_entries',
-      arguments: { journal_ids: [journalId], limit: 10 },
+      arguments: { journal_ids: [journalId], limit: limit + 8 },
     });
     const text = result.content.find(c => c.type === 'text')?.text || '[]';
     const entries = JSON.parse(text);
-    const source = entries.find(e => {
-      const tags = Array.isArray(e.tags) ? e.tags : [];
-      return !tags.includes('generated');
-    });
-    return source || entries[0] || null;
+    return entries
+      .filter(e => !(Array.isArray(e.tags) && e.tags.includes('generated')))
+      .slice(0, limit);
   });
 }
 
@@ -56,4 +59,4 @@ async function createEntry(journalId, markdown, tags = []) {
   });
 }
 
-module.exports = { listJournals, getLatestEntry, createEntry };
+module.exports = { listJournals, getLatestEntry, getRecentEntries, createEntry };
