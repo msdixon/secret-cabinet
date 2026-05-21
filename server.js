@@ -111,7 +111,17 @@ ${guestSketches}
 
 ## FORMAT INSTRUCTIONS
 
-Generate a salon transcript. Each speaker's name appears alone on a line, followed by their speech on the next line(s). 3-5 members speak per round — not every member speaks every round. Silences are valid. Members may address each other by name, quote each other, disagree, complete each other's sentences, let something drop. Be specific: cite real texts, real historical tensions. Do not address the user or acknowledge any observer. The conversation proceeds as if no one is watching.`;
+Generate a salon transcript. Each speaker's name appears alone on a line, followed by their speech on the next line(s). 3-5 members speak per round — not every member speaks every round. Silences are valid. Members may address each other by name, quote each other, disagree, complete each other's sentences, let something drop, change the subject entirely.
+
+Physical actions, gestures, stage business, and pauses are written in *single asterisks*, either inline within speech or on their own line. Unattributed room-level beats (*The fire shifts. No one speaks for a moment.*) may appear between contributions on their own line, without a speaker name.
+
+Be specific: cite real texts, real historical tensions, real scholarship (including post-period scholarship — the room is atemporal and the receipts are real). Do not invent citations. If a member quotes a text, that text must exist and the quotation must be substantively accurate.
+
+There is no author present. The document was read aloud by no one in particular. Do not praise, critique, address, summarize, or workshop the writer. The document is the night's occasion, not its subject. Members do not say things like "this is beautifully observed" or "the writer captures" — there is no writer in the room.
+
+The conversation is not required to stay close to the document after the first round. It will drift where it drifts. This is the room.
+
+Do not address the user or acknowledge any observer. The conversation proceeds as if no one is watching.`;
 }
 
 // ─── Anthropic call helpers ───────────────────────────────────────────────────
@@ -175,11 +185,11 @@ function formatTranscriptText(text) {
 // ─── Round prompts ────────────────────────────────────────────────────────────
 
 const DEFAULT_ROUND_INSTRUCTIONS = [
-  'The room stirs. Write the first movement — initial reactions, the first voices. 3-5 members respond.',
-  'Continue. Members react to each other — disagreements surface, alliances form, unexpected connections emerge. 3-5 members speak.',
-  'The conversation moves toward its close. Final thoughts. Someone may say the thing that persists as an ember. 2-4 members. Let it end naturally.',
+  'The room stirs. Write the first movement — initial reactions to whatever the material woke up. Not every member must engage with the document directly; some may respond to the room\'s reaction to it before responding to it themselves. 3-5 members speak. There is no author to address.',
+  'The document recedes. The conversation follows what it raised. Members are now talking to each other about the actual question that has surfaced — disagreements crystallize, alliances form, citations come out, someone is irritated, someone is more interested than they wanted to be. References to the document are welcome but not required; the room is no longer obliged to it. 3-5 members speak. Receipts may be deployed. Actions in asterisks.',
+  'The conversation has gone where it has gone. It may have left the document entirely. Final movement: the room arrives somewhere, or it doesn\'t. Someone may say the thing that persists as an ember. Someone may push back hard at a point that has been allowed to stand too long. Someone may simply observe the fire. 2-4 members. Let it end as it ends.',
 ];
-const EXTRA_ROUND_INSTRUCTION = 'A thread unresolved, a silence wanting breaking, a late arrival to the argument. 2-4 members speak.';
+const EXTRA_ROUND_INSTRUCTION = 'A thread unresolved, a silence wanting breaking, a late arrival to the argument, a member who passed earlier returning with something they have just thought of. 2-4 members speak.';
 
 function buildRoundPrompt(index, entry, instructions) {
   const instr = instructions?.[index] || DEFAULT_ROUND_INSTRUCTIONS[index] || EXTRA_ROUND_INSTRUCTION;
