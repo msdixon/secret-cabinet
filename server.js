@@ -34,6 +34,7 @@ const ROSTER = [
   { id: 'levi',     name: 'Lévi',             file: 'levi.md',          guest: false },
   { id: 'teresa',   name: 'Teresa of Ávila',  file: 'teresa.md',        guest: false },
   { id: 'arabi',    name: 'Ibn Arabi',        file: 'ibn-arabi.md',     guest: false },
+  { id: 'maud',     name: 'Maud Gonne',       file: 'maud-gonne.md',    guest: true  },
   { id: 'llull',    name: 'Llull',            file: 'llull.md',         guest: true  },
   { id: 'khaldun',  name: 'Ibn Khaldun',      file: 'ibn-khaldun.md',   guest: true  },
   { id: 'dee',      name: 'John Dee',         file: 'john-dee.md',      guest: true  },

@@ -12,6 +12,7 @@ const MEMBERS = [
   {id:'levi',     name:'Lévi',           guest:false},
   {id:'teresa',   name:'Teresa of Ávila',guest:false},
   {id:'arabi',    name:'Ibn Arabi',      guest:false},
+  {id:'maud',     name:'Maud Gonne',     guest:true},
   {id:'llull',    name:'Llull',          guest:true},
   {id:'khaldun',  name:'Ibn Khaldun',    guest:true},
   {id:'dee',      name:'John Dee',       guest:true},
@@ -19,7 +20,8 @@ const MEMBERS = [
 
 const ROUND_LABELS = ['First Movement', 'The Room Responds', 'Final Embers'];
 
-let activeMembers = new Set(['crowley','waite','pixie','yeats','blavatsky','levi','teresa','arabi']);
+// Maud is a guest but default-present alongside the eight core members.
+let activeMembers = new Set(['crowley','waite','pixie','yeats','blavatsky','levi','teresa','arabi','maud']);
 let currentRound = 0;
 let currentSessionId = null;
 let transcriptText = '';
@@ -86,12 +88,40 @@ function addRoundHeader(label) {
   return h;
 }
 
+// Escape HTML to avoid injecting from model output, then transform asterisk-actions.
+function escapeHTML(s) {
+  return s.replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+}
+
+// Two passes:
+//   1. A whole line wrapped in *...* becomes a block-level action (own paragraph).
+//   2. Inline *...* becomes inline action italics.
+// Empty actions (** or * *) are left alone.
+function renderActions(text) {
+  const safe = escapeHTML(text);
+  return safe
+    .split('\n')
+    .map(line => {
+      const trimmed = line.trim();
+      const m = trimmed.match(/^\*(.+)\*$/);
+      if (m && !m[1].includes('*')) {
+        return `<div class="action-line">${m[1]}</div>`;
+      }
+      return line.replace(/\*([^*\n]+?)\*/g, '<span class="action-inline">$1</span>');
+    })
+    .join('<br>');
+}
+
 function addSpeech(speaker, text, isGuest, isObserver) {
   const c = document.getElementById('transcript-content');
   const e = document.createElement('div');
   e.className = 'transcript-entry';
   const nc = isObserver ? 'observer-voice' : (isGuest ? 'guest-voice' : '');
-  e.innerHTML = `<div class="speaker-name ${nc}">${speaker}</div><div class="speech-text">${text.replace(/\n/g, '<br>')}</div>`;
+  e.innerHTML = `<div class="speaker-name ${nc}">${escapeHTML(speaker)}</div><div class="speech-text">${renderActions(text)}</div>`;
   c.appendChild(e);
   c.scrollTop = c.scrollHeight;
   transcriptText += `${speaker} —\n${text}\n\n`;
@@ -112,6 +142,17 @@ function parseAndRenderTranscript(response) {
   lines.forEach(line => {
     const t = line.trim();
     if (!t) { flush(); return; }
+    // Unattributed action line between speakers — render directly, no speaker needed
+    const isActionLine = /^\*[^*\n]+\*$/.test(t);
+    if (isActionLine && !speaker) {
+      const c = document.getElementById('transcript-content');
+      const d = document.createElement('div');
+      d.className = 'action-line';
+      d.textContent = t.slice(1, -1);
+      c.appendChild(d);
+      transcriptText += `${t}\n\n`;
+      return;
+    }
     const isKnownName = MEMBERS.some(m => t === m.name || t === m.name + ':');
     const looksLikeName = !t.includes(' ') && t.endsWith(':') && t.length < 30;
     if (isKnownName || looksLikeName) {
