@@ -26,13 +26,18 @@ async function listJournals() {
 
 async function getLatestEntry(journalId) {
   return withDayOne(async (client) => {
+    // Fetch a small batch so we can skip exported transcripts (tagged 'generated')
     const result = await client.callTool({
       name: 'get_entries',
-      arguments: { journal_ids: [journalId], limit: 1 },
+      arguments: { journal_ids: [journalId], limit: 10 },
     });
     const text = result.content.find(c => c.type === 'text')?.text || '[]';
     const entries = JSON.parse(text);
-    return entries[0] || null;
+    const source = entries.find(e => {
+      const tags = Array.isArray(e.tags) ? e.tags : [];
+      return !tags.includes('generated');
+    });
+    return source || entries[0] || null;
   });
 }
 
