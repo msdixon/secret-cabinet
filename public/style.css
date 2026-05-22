@@ -142,42 +142,8 @@
 .speaker-name.guest-voice { color:var(--lodge-fire); }
 .speaker-name.observer-voice { color:#a0c8a0; }
 
-/* ── Per-member voice typography ───────────────────────────────────────────── */
-/* Crowley: Fraktur dominant, full amber — he owns the register */
-.speaker-name.voice-crowley { font-size:21px; letter-spacing:2px; color:var(--lodge-amber); }
-
-/* Waite: IM Fell English small-caps — the cataloguer, institutional weight */
-.speaker-name.voice-waite { font-family:'IM Fell English',serif; font-variant:small-caps; font-style:normal; font-size:14px; letter-spacing:4px; color:#c4a050; }
-
-/* Coleman-Smith: Crimson Pro italic gold — the artist, no ceremony (fixes Fraktur legibility for long hyphenated name) */
-.speaker-name.voice-pixie { font-family:'Crimson Pro',serif; font-style:italic; font-weight:400; font-size:21px; letter-spacing:0.5px; color:var(--lodge-gold); }
-
-/* Yeats: IM Fell English italic, wide tracking — the poet */
-.speaker-name.voice-yeats { font-family:'IM Fell English',serif; font-style:italic; font-size:18px; letter-spacing:3px; color:var(--lodge-gold); }
-
-/* Blavatsky: Fraktur, slightly warmer — imposing but distinct from Crowley */
-.speaker-name.voice-blavatsky { font-size:18px; letter-spacing:1.5px; color:#d4a535; }
-
-/* Lévi: IM Fell English regular — the French systematiser, structured */
-.speaker-name.voice-levi { font-family:'IM Fell English',serif; font-style:normal; font-size:16px; letter-spacing:2.5px; color:var(--lodge-amber); }
-
-/* Teresa of Ávila: Crimson Pro italic light, parchment — the mystic (fixes Fraktur accent legibility) */
-.speaker-name.voice-teresa { font-family:'Crimson Pro',serif; font-style:italic; font-weight:300; font-size:20px; letter-spacing:0.5px; color:var(--lodge-parchment); }
-
-/* Ibn Arabi: Crimson Pro light, very wide tracking, cream — spacious, contemplative */
-.speaker-name.voice-arabi { font-family:'Crimson Pro',serif; font-weight:300; font-style:normal; font-size:17px; letter-spacing:5px; color:var(--lodge-cream); }
-
-/* Maud Gonne: IM Fell English italic, fire — the revolutionary */
-.speaker-name.voice-maud { font-family:'IM Fell English',serif; font-style:italic; font-size:17px; letter-spacing:1px; color:var(--lodge-fire); }
-
-/* Llull: IM Fell English small-caps — the combinatorialist, methodical */
-.speaker-name.voice-llull { font-family:'IM Fell English',serif; font-variant:small-caps; font-style:normal; font-size:14px; letter-spacing:3px; color:var(--lodge-amber); }
-
-/* Ibn Khaldun: IM Fell English regular, amber — the historian, measured */
-.speaker-name.voice-khaldun { font-family:'IM Fell English',serif; font-style:normal; font-size:16px; letter-spacing:2px; color:#c4a050; }
-
-/* John Dee: Fraktur, ember — the Elizabethan, stranger fire */
-.speaker-name.voice-dee { font-size:19px; letter-spacing:1px; color:var(--lodge-ember-2); }
+/* ── Per-member voice classes (reserved for future avatar/identity work) ───── */
+/* Typography is intentionally uniform — voice-{id} classes are hooks only.   */
 .speech-text { font-family:'Crimson Pro',serif; font-size:18px; line-height:1.8; color:var(--lodge-parchment); }
 .action-line { font-family:'IM Fell English','Crimson Pro',serif; font-style:italic; font-size:15px; color:var(--lodge-muted); text-align:left; margin:6px 0; letter-spacing:0.02em; }
 .action-inline { font-style:italic; color:var(--lodge-muted); }
