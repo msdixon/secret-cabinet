@@ -118,6 +118,9 @@
 .member-dot { width:7px; height:7px; border-radius:50%; background:var(--lodge-ash); flex-shrink:0; }
 .member-token.active .member-dot { background:var(--lodge-amber); box-shadow:0 0 6px rgba(200,146,42,0.6); }
 .member-token.guest.active .member-dot { background:var(--lodge-fire); box-shadow:0 0 6px rgba(212,98,26,0.6); }
+.member-token.shadow { border-style:dashed; border-color:var(--lodge-ash); opacity:0.7; }
+.member-token.shadow .member-dot { background:transparent; border:1px solid var(--lodge-ash); }
+.member-token.shadow .member-name { font-style:italic; color:var(--lodge-ash); }
 .member-name { font-family:'IM Fell English',serif; font-size:13px; color:var(--lodge-muted); }
 .member-token.active .member-name { color:var(--lodge-cream); }
 .round-controls { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
