@@ -347,7 +347,10 @@ async function loadSourceOptions() {
     // If we had a saved journal preference, try to pre-select its first entry
     if (currentJournal.id) {
       const key = `dayone:${currentJournal.id}:0`;
-      if (entryCache.has(key)) sel.value = key;
+      if (entryCache.has(key)) {
+        sel.value = key;
+        handleSourceChange(); // load entry text into state
+      }
     }
 
   } catch (e) {

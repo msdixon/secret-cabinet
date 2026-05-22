@@ -190,9 +190,15 @@ const DEFAULT_ROUND_INSTRUCTIONS = [
 ];
 const EXTRA_ROUND_INSTRUCTION = 'A thread unresolved, a silence wanting breaking, a late arrival to the argument, a member who passed earlier returning with something they have just thought of. 2-4 members speak.';
 
-function buildRoundPrompt(index, entry, instructions) {
+function buildRoundPrompt(index, entry, instructions, artifact = null) {
   const instr = instructions?.[index] || DEFAULT_ROUND_INSTRUCTIONS[index] || EXTRA_ROUND_INSTRUCTION;
-  if (index === 0) return `The document has just been read aloud:\n\n"${entry}"\n\n${instr}`;
+  if (index === 0) {
+    const artifactMember = artifact?.memberId ? ROSTER.find(m => m.id === artifact.memberId) : null;
+    const artifactHint = artifactMember
+      ? `\n\n${artifactMember.name} has private context from before the meeting. They should speak in this round.`
+      : '';
+    return `The document has just been read aloud:\n\n"${entry}"\n\n${instr}${artifactHint}`;
+  }
   return instr;
 }
 
@@ -208,7 +214,7 @@ app.post('/api/convene', async (req, res) => {
   const id = makeSessionId(entry);
   const date = new Date().toISOString().slice(0, 10);
   const systemPrompt = buildSystemPrompt(members, artifact || null);
-  const roundPrompt = buildRoundPrompt(0, entry, roundInstructions);
+  const roundPrompt = buildRoundPrompt(0, entry, roundInstructions, artifact || null);
 
   openSSE(res);
   try {
