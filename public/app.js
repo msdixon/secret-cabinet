@@ -646,7 +646,7 @@ async function loadSessionsList(q = '', tag = '') {
       const el = document.createElement('div');
       el.className = 'session-item';
       const tagsHtml = (s.tags || []).map(t =>
-        `<span class="session-tag" onclick="filterByTag('${escapeHTML(t)}')">${escapeHTML(t)}</span>`
+        `<span class="session-tag" onclick="filterByTag('${escapeHTML(t)}')">${escapeHTML(t)}<span class="tag-remove" onclick="event.stopPropagation();removeTagById('${s.id}','${escapeHTML(t)}',this)">×</span></span>`
       ).join('');
       el.innerHTML = `
         <div class="session-item-date">
@@ -701,10 +701,26 @@ function addTagUI(sessionId, btn) {
   inp.addEventListener('blur', commit);
 }
 
-async function removeTag(sessionId, tag, row, btn) {
-  const existing = [...row.querySelectorAll('.session-tag')].map(el => el.textContent);
+async function removeTagById(sessionId, tag, el) {
+  const row = el.closest('.session-tags-row');
+  const addBtn = row.querySelector('.add-tag-btn');
+  // Read tag text from first child text node to exclude the × span
+  const existing = [...row.querySelectorAll('.session-tag')].map(c => c.firstChild.textContent.trim());
   const newTags = existing.filter(t => t !== tag);
-  await saveTags(sessionId, newTags, row, btn);
+  await saveTags(sessionId, newTags, row, addBtn);
+}
+
+function makeTagChip(sessionId, tag, addBtn) {
+  const chip = document.createElement('span');
+  chip.className = 'session-tag';
+  chip.appendChild(document.createTextNode(tag));
+  const x = document.createElement('span');
+  x.className = 'tag-remove';
+  x.textContent = '×';
+  x.onclick = (e) => { e.stopPropagation(); removeTagById(sessionId, tag, x); };
+  chip.appendChild(x);
+  chip.onclick = () => filterByTag(tag);
+  return chip;
 }
 
 async function saveTags(sessionId, tags, row, addBtn) {
@@ -714,17 +730,8 @@ async function saveTags(sessionId, tags, row, addBtn) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tags }),
     });
-    // Re-render just the tags in this row
-    const chips = row.querySelectorAll('.session-tag');
-    chips.forEach(c => c.remove());
-    tags.forEach(t => {
-      const chip = document.createElement('span');
-      chip.className = 'session-tag';
-      chip.textContent = t;
-      chip.onclick = () => filterByTag(t);
-      chip.ondblclick = () => removeTag(sessionId, t, row, addBtn);
-      row.insertBefore(chip, addBtn);
-    });
+    row.querySelectorAll('.session-tag').forEach(c => c.remove());
+    tags.forEach(t => row.insertBefore(makeTagChip(sessionId, t, addBtn), addBtn));
   } catch (e) { /* silent */ }
 }
 
