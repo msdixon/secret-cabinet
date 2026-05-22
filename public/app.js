@@ -165,7 +165,8 @@ function addSpeech(speaker, text, isGuest, isObserver, memberId) {
   else if (memberId) nc = `voice-${memberId}`;
   else if (isGuest) nc = 'guest-voice';
   else nc = '';
-  e.innerHTML = `<div class="speaker-name ${nc}">${escapeHTML(speaker)}</div><div class="speech-text">${renderActions(text)}</div>`;
+  const nameEl = `<div class="speaker-name ${nc}" ${memberId ? `onclick="highlightDossierEntry('${memberId}')" style="cursor:pointer"` : ''}>${escapeHTML(speaker)}</div>`;
+  e.innerHTML = `${nameEl}<div class="speech-text">${renderActions(text)}</div>`;
   c.appendChild(e);
   c.scrollTop = c.scrollHeight;
   transcriptText += `${speaker} —\n${text}\n\n`;
@@ -461,6 +462,7 @@ async function convene() {
       d1 = await streamPost('/api/convene', { entry, members, shadows, roundInstructions, artifact }, chunk => { acc += chunk; s1.append(chunk); });
       s1.finalize(acc);
       currentSessionId = d1.sessionId;
+      buildDossier(members);
     } catch (err) {
       s1.abort(); h1.remove(); transcriptText = txtBefore1;
       setError('The first movement could not begin. The fire may be low.', convene);
@@ -797,6 +799,7 @@ async function restoreSession(id) {
     // Restore member selection
     activeMembers = new Set(session.members || []);
     renderMembers();
+    buildDossier(session.members || []);
 
     // Show controls
     document.getElementById('interject-panel').className = 'interject-panel visible';
@@ -825,6 +828,50 @@ async function deleteSession(id, btn) {
   } catch (e) {
     alert('The meeting could not be removed.');
   }
+}
+
+// ── Dossier drawer ────────────────────────────────────────────────────────────
+
+let dossierOpen = false;
+
+function toggleDossier() {
+  dossierOpen = !dossierOpen;
+  document.getElementById('dossier-drawer').classList.toggle('open', dossierOpen);
+  document.getElementById('dossier-overlay').classList.toggle('open', dossierOpen);
+}
+
+async function buildDossier(memberIds) {
+  const body = document.getElementById('dossier-body');
+  body.innerHTML = '<div class="sessions-empty">Loading…</div>';
+  document.getElementById('dossier-btn').style.display = 'inline-block';
+
+  const entries = await Promise.all(memberIds.map(id =>
+    fetch(`/api/members/${id}/dossier`).then(r => r.json()).catch(() => null)
+  ));
+
+  body.innerHTML = '';
+  entries.filter(Boolean).forEach(d => {
+    const el = document.createElement('div');
+    el.className = 'dossier-entry';
+    el.id = `dossier-${d.id}`;
+    el.innerHTML = `
+      <div class="dossier-name">${escapeHTML(d.name)}</div>
+      ${d.bio ? `<div class="dossier-section-label">Who they are</div>
+      <div class="dossier-text">${escapeHTML(d.bio)}</div>` : ''}
+      ${d.voice ? `<button class="dossier-toggle" onclick="this.nextElementSibling.classList.toggle('open');this.textContent=this.nextElementSibling.classList.contains('open')?'▲ Voice':'▼ Voice'">▼ Voice</button>
+      <div class="dossier-voice"><div class="dossier-section-label">How they speak</div>
+      <div class="dossier-text">${escapeHTML(d.voice)}</div></div>` : ''}`;
+    body.appendChild(el);
+  });
+}
+
+function highlightDossierEntry(memberId) {
+  if (!memberId) return;
+  document.querySelectorAll('.dossier-entry.highlighted').forEach(e => e.classList.remove('highlighted'));
+  const entry = document.getElementById(`dossier-${memberId}`);
+  if (!entry) return;
+  entry.classList.add('highlighted');
+  if (dossierOpen) entry.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 // ── Add member modal ──────────────────────────────────────────────────────────

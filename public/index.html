@@ -179,6 +179,7 @@
         </div>
         <button class="lodge-btn" id="additional-round-btn" onclick="addRound()">One More Turn ↻</button>
         <button class="lodge-btn sessions-btn" id="sessions-btn" onclick="openSessionsDrawer()">Past Meetings <span id="sessions-count" class="sessions-count"></span></button>
+        <button class="lodge-btn sessions-btn" id="dossier-btn" onclick="toggleDossier()" style="display:none;">The Assembled ↗</button>
       </div>
     </div>
 
@@ -231,6 +232,18 @@
   </div>
   <div class="sessions-drawer-body" id="sessions-list">
     <div class="sessions-empty">No past meetings found.</div>
+  </div>
+</div>
+
+<!-- Dossier drawer -->
+<div class="dossier-overlay" id="dossier-overlay" onclick="toggleDossier()"></div>
+<div class="dossier-drawer" id="dossier-drawer">
+  <div class="sessions-drawer-header">
+    <span class="sessions-drawer-title">The Assembled</span>
+    <button class="sessions-close-btn" onclick="toggleDossier()">✕</button>
+  </div>
+  <div class="dossier-body" id="dossier-body">
+    <div class="sessions-empty">Convene a meeting to see the assembled.</div>
   </div>
 </div>
 
