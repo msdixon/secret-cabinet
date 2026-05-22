@@ -59,6 +59,8 @@ function renderMembers() {
   });
   updateMemberCount();
   populateArtifactSelect();
+  // Refresh dossier pre-convene whenever member selection changes
+  if (activeMembers.size > 0) buildDossier([...activeMembers]);
 }
 
 function populateArtifactSelect() {
@@ -447,6 +449,7 @@ async function convene() {
   const artifactText = document.getElementById('artifact-text')?.value.trim();
   const artifactMemberId = document.getElementById('artifact-member')?.value;
   const artifact = (artifactText && artifactMemberId) ? { text: artifactText, memberId: artifactMemberId } : null;
+  const notes = collectSessionNotes();
 
   try {
     // Round 1
@@ -459,7 +462,7 @@ async function convene() {
     let acc = '';
     let d1;
     try {
-      d1 = await streamPost('/api/convene', { entry, members, shadows, roundInstructions, artifact }, chunk => { acc += chunk; s1.append(chunk); });
+      d1 = await streamPost('/api/convene', { entry, members, shadows, roundInstructions, artifact, notes }, chunk => { acc += chunk; s1.append(chunk); });
       s1.finalize(acc);
       currentSessionId = d1.sessionId;
       buildDossier(members);
@@ -833,6 +836,7 @@ async function deleteSession(id, btn) {
 // ── Dossier drawer ────────────────────────────────────────────────────────────
 
 let dossierOpen = false;
+const sessionNotes = {}; // memberId → override text
 
 function toggleDossier() {
   dossierOpen = !dossierOpen;
@@ -845,6 +849,11 @@ async function buildDossier(memberIds) {
   body.innerHTML = '<div class="sessions-empty">Loading…</div>';
   document.getElementById('dossier-btn').style.display = 'inline-block';
 
+  // Preserve any notes already typed before rebuilding
+  document.querySelectorAll('.dossier-note').forEach(ta => {
+    if (ta.value.trim()) sessionNotes[ta.dataset.memberId] = ta.value;
+  });
+
   const entries = await Promise.all(memberIds.map(id =>
     fetch(`/api/members/${id}/dossier`).then(r => r.json()).catch(() => null)
   ));
@@ -854,15 +863,29 @@ async function buildDossier(memberIds) {
     const el = document.createElement('div');
     el.className = 'dossier-entry';
     el.id = `dossier-${d.id}`;
+    const existingNote = sessionNotes[d.id] || '';
     el.innerHTML = `
       <div class="dossier-name">${escapeHTML(d.name)}</div>
       ${d.bio ? `<div class="dossier-section-label">Who they are</div>
       <div class="dossier-text">${escapeHTML(d.bio)}</div>` : ''}
       ${d.voice ? `<button class="dossier-toggle" onclick="this.nextElementSibling.classList.toggle('open');this.textContent=this.nextElementSibling.classList.contains('open')?'▲ Voice':'▼ Voice'">▼ Voice</button>
       <div class="dossier-voice"><div class="dossier-section-label">How they speak</div>
-      <div class="dossier-text">${escapeHTML(d.voice)}</div></div>` : ''}`;
+      <div class="dossier-text">${escapeHTML(d.voice)}</div></div>` : ''}
+      <div class="dossier-section-label" style="margin-top:10px;">Session note</div>
+      <textarea class="dossier-note arc-textarea" data-member-id="${d.id}" rows="2"
+        placeholder="Context for this session only — not saved to the character file."
+        oninput="sessionNotes['${d.id}']=this.value"
+      >${escapeHTML(existingNote)}</textarea>`;
     body.appendChild(el);
   });
+}
+
+function collectSessionNotes() {
+  // Also sweep any live textareas in case oninput missed something
+  document.querySelectorAll('.dossier-note').forEach(ta => {
+    sessionNotes[ta.dataset.memberId] = ta.value;
+  });
+  return Object.fromEntries(Object.entries(sessionNotes).filter(([, v]) => v.trim()));
 }
 
 function highlightDossierEntry(memberId) {
