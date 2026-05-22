@@ -61,7 +61,7 @@ function loadSession(id) {
 
 // ─── System prompt builder ────────────────────────────────────────────────────
 
-function buildSystemPrompt(memberIds, artifact = null, shadowIds = []) {
+function buildSystemPrompt(memberIds, artifact = null, shadowIds = [], notes = {}) {
   const present = memberIds
     .map(id => ROSTER.find(m => m.id === id))
     .filter(Boolean);
@@ -90,7 +90,10 @@ function buildSystemPrompt(memberIds, artifact = null, shadowIds = []) {
       const artifactNote = (artifactMember && m.id === artifactMember.id && artifact.text?.trim())
         ? `\n\n---\n\n## PRIVATE — BEFORE THE MEETING BEGAN\n\nBefore the others arrived, you were shown the following. No one else in the room has seen it. You may reference it, produce it at the right moment, withhold it entirely, or let it colour what you say without naming it. The choice is yours.\n\n${artifact.text.trim()}`
         : '';
-      return `---\n${text}${artifactNote}`;
+      const sessionNote = notes[m.id]?.trim()
+        ? `\n\n---\n\n## SESSION NOTE\n\n${notes[m.id].trim()}`
+        : '';
+      return `---\n${text}${artifactNote}${sessionNote}`;
     })
     .filter(Boolean)
     .join('\n\n');
@@ -217,10 +220,10 @@ app.post('/api/convene', async (req, res) => {
   if (!entry?.trim()) return res.status(400).json({ error: 'entry is required' });
   if (!members?.length) return res.status(400).json({ error: 'at least one member is required' });
 
-  const { roundInstructions, artifact, shadows } = req.body;
+  const { roundInstructions, artifact, shadows, notes } = req.body;
   const id = makeSessionId(entry);
   const date = new Date().toISOString().slice(0, 10);
-  const systemPrompt = buildSystemPrompt(members, artifact || null, shadows || []);
+  const systemPrompt = buildSystemPrompt(members, artifact || null, shadows || [], notes || {});
   const roundPrompt = buildRoundPrompt(0, entry, roundInstructions, artifact || null);
 
   openSSE(res);
@@ -235,6 +238,7 @@ app.post('/api/convene', async (req, res) => {
       roundInstructions: roundInstructions || null,
       artifact: artifact || null,
       shadows: shadows || [],
+      notes: notes || {},
       conversationHistory: history,
       rounds: [{ label: 'First Movement', text }],
       transcriptText: buildTranscriptHeader(entry, members, date) + `\n— First Movement —\n\n${formatTranscriptText(text)}\n`,
