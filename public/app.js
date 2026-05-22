@@ -685,17 +685,19 @@ function addTagUI(sessionId, btn) {
   row.insertBefore(inp, btn);
   inp.focus();
 
+  let committed = false;
   const commit = async () => {
+    if (committed) return;
+    committed = true;
     const val = inp.value.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/(^-|-$)/g, '');
     inp.remove();
     if (!val) return;
-    // Collect current tags from the row
     const existing = [...row.querySelectorAll('.session-tag')].map(el => el.textContent);
     if (existing.includes(val)) return;
     const newTags = [...existing, val];
     await saveTags(sessionId, newTags, row, btn);
   };
-  inp.addEventListener('keydown', e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') inp.remove(); });
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') { committed = true; inp.remove(); } });
   inp.addEventListener('blur', commit);
 }
 
