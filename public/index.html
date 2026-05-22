@@ -89,6 +89,49 @@
         <div class="panel-label" style="font-size:10px;">Occasional Guests</div>
         <div class="members-grid" id="guests-grid" style="margin-top:6px;"></div>
       </div>
+      <div style="margin-top:12px;">
+        <button class="lodge-btn add-member-btn" onclick="openAddMemberModal()">+ Invite to the Lodge</button>
+      </div>
+    </div>
+
+    <!-- Add member modal -->
+    <div class="modal-overlay" id="add-member-overlay" onclick="closeAddMemberModal()"></div>
+    <div class="modal-drawer" id="add-member-modal">
+      <div class="modal-header">
+        <span class="modal-title">Invite a New Member</span>
+        <button class="sessions-close-btn" onclick="closeAddMemberModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="panel-label" style="margin-bottom:4px;">Name</div>
+        <input class="interject-input" id="new-member-name" placeholder="e.g. Giordano Bruno" style="width:100%;border-left:3px solid var(--lodge-amber-dim);" />
+
+        <div class="panel-label" style="margin-top:14px;margin-bottom:4px;">Biography</div>
+        <textarea class="arc-textarea" id="new-member-bio" rows="4" placeholder="Who were they? What did they believe, write, practice? What defined their intellectual life?"></textarea>
+
+        <div class="panel-label" style="margin-top:14px;margin-bottom:4px;">Voice &amp; Register <span style="font-style:italic;text-transform:none;letter-spacing:0;color:var(--lodge-ash);font-size:10px;">— optional</span></div>
+        <textarea class="arc-textarea" id="new-member-voice" rows="2" placeholder="How do they speak? Formal, aphoristic, argumentative, elliptical?"></textarea>
+
+        <div class="panel-label" style="margin-top:14px;margin-bottom:4px;">Cognitive Style <span style="font-style:italic;text-transform:none;letter-spacing:0;color:var(--lodge-ash);font-size:10px;">— optional</span></div>
+        <textarea class="arc-textarea" id="new-member-cognitive" rows="2" placeholder="How do they think and organize ideas? Systematic, associative, dialectical?"></textarea>
+
+        <div class="panel-label" style="margin-top:14px;margin-bottom:4px;">Relationship Notes <span style="font-style:italic;text-transform:none;letter-spacing:0;color:var(--lodge-ash);font-size:10px;">— optional</span></div>
+        <textarea class="arc-textarea" id="new-member-relationships" rows="2" placeholder="Any historical connections or tensions with existing lodge members?"></textarea>
+
+        <div style="display:flex;align-items:center;gap:10px;margin-top:14px;">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-family:'IM Fell English',serif;font-size:13px;color:var(--lodge-muted);">
+            <input type="checkbox" id="new-member-guest" style="accent-color:var(--lodge-amber);" />
+            Occasional guest
+          </label>
+          <span style="font-family:'IM Fell English',serif;font-style:italic;font-size:11px;color:var(--lodge-ash);">appears in the guest row</span>
+        </div>
+
+        <div id="add-member-status" style="margin-top:12px;min-height:20px;font-family:'IM Fell English',serif;font-style:italic;font-size:13px;color:var(--lodge-muted);"></div>
+
+        <div style="display:flex;gap:10px;margin-top:16px;">
+          <button class="lodge-btn primary" id="add-member-submit-btn" onclick="submitNewMember()">Draft &amp; Invite</button>
+          <button class="lodge-btn" onclick="closeAddMemberModal()">Cancel</button>
+        </div>
+      </div>
     </div>
 
     <div class="convene-panel">

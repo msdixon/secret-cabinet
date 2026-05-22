@@ -206,3 +206,14 @@
 .session-load-btn:hover { background:rgba(200,146,42,0.12); border-color:var(--lodge-amber); }
 .session-delete-btn { background:transparent; border:1px solid #3a1a1a; color:#7a4040; font-family:'IM Fell English',serif; font-size:11px; padding:4px 10px; border-radius:2px; cursor:pointer; letter-spacing:1px; transition:all 0.15s; }
 .session-delete-btn:hover { border-color:#7a3030; color:#c07070; background:rgba(120,40,40,0.1); }
+
+/* Add member modal */
+.add-member-btn { border-color:var(--lodge-ash); color:var(--lodge-muted); font-size:12px; padding:5px 14px; }
+.add-member-btn:hover { border-color:var(--lodge-amber-dim); color:var(--lodge-cream); }
+.modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:100; }
+.modal-overlay.open { display:block; }
+.modal-drawer { position:fixed; top:0; right:0; width:420px; max-width:96vw; height:100vh; background:var(--lodge-panel); border-left:1px solid var(--lodge-border); z-index:101; display:flex; flex-direction:column; transform:translateX(100%); transition:transform 0.25s ease; overflow-y:auto; }
+.modal-drawer.open { transform:translateX(0); }
+.modal-header { display:flex; align-items:center; justify-content:space-between; padding:16px 18px; border-bottom:1px solid var(--lodge-border); flex-shrink:0; }
+.modal-title { font-family:'IM Fell English',serif; font-size:14px; letter-spacing:2px; text-transform:uppercase; color:var(--lodge-amber); }
+.modal-body { padding:18px; display:flex; flex-direction:column; }
