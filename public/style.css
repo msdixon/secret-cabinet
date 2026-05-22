@@ -206,6 +206,18 @@
 .session-load-btn:hover { background:rgba(200,146,42,0.12); border-color:var(--lodge-amber); }
 .session-delete-btn { background:transparent; border:1px solid #3a1a1a; color:#7a4040; font-family:'IM Fell English',serif; font-size:11px; padding:4px 10px; border-radius:2px; cursor:pointer; letter-spacing:1px; transition:all 0.15s; }
 .session-delete-btn:hover { border-color:#7a3030; color:#c07070; background:rgba(120,40,40,0.1); }
+.sessions-search-row { padding:8px 12px; border-bottom:1px solid var(--lodge-border); flex-shrink:0; }
+.sessions-search-input { width:100%; background:var(--lodge-surface); border:1px solid var(--lodge-border); color:var(--lodge-cream); font-family:'Crimson Pro',serif; font-size:14px; padding:6px 10px; border-radius:2px; }
+.sessions-search-input:focus { outline:none; border-color:var(--lodge-amber-dim); }
+.sessions-search-input::placeholder { color:var(--lodge-ash); font-style:italic; }
+.session-tags-row { display:flex; flex-wrap:wrap; gap:5px; margin-bottom:8px; align-items:center; }
+.session-tag { font-family:'IM Fell English',serif; font-size:10px; letter-spacing:1px; background:rgba(200,146,42,0.12); border:1px solid var(--lodge-amber-dim); color:var(--lodge-amber); padding:2px 7px; border-radius:2px; cursor:pointer; user-select:none; display:inline-flex; align-items:center; gap:4px; }
+.session-tag:hover { background:rgba(200,146,42,0.22); }
+.tag-remove { font-size:11px; line-height:1; opacity:0.5; cursor:pointer; }
+.tag-remove:hover { opacity:1; }
+.add-tag-btn { background:transparent; border:1px dashed var(--lodge-border); color:var(--lodge-ash); font-size:12px; padding:1px 6px; border-radius:2px; cursor:pointer; line-height:1.4; }
+.add-tag-btn:hover { border-color:var(--lodge-amber-dim); color:var(--lodge-muted); }
+.tag-input { background:var(--lodge-surface); border:1px solid var(--lodge-amber-dim); color:var(--lodge-cream); font-family:'Crimson Pro',serif; font-size:12px; padding:2px 6px; border-radius:2px; width:80px; }
 
 /* Add member modal */
 .add-member-btn { border-color:var(--lodge-ash); color:var(--lodge-muted); font-size:12px; padding:5px 14px; }

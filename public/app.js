@@ -603,9 +603,21 @@ async function exportDayOne() {
 
 // ── Sessions drawer ───────────────────────────────────────────────────────────
 
+let _searchTimer = null;
+function onSessionsSearch(val) {
+  clearTimeout(_searchTimer);
+  _searchTimer = setTimeout(() => {
+    const v = val.trim();
+    const isTag = v.startsWith('#');
+    loadSessionsList(isTag ? '' : v, isTag ? v.slice(1).toLowerCase() : '');
+  }, 280);
+}
+
 async function openSessionsDrawer() {
   document.getElementById('sessions-overlay').classList.add('open');
   document.getElementById('sessions-drawer').classList.add('open');
+  const searchEl = document.getElementById('sessions-search');
+  if (searchEl) searchEl.value = '';
   await loadSessionsList();
 }
 
@@ -614,29 +626,36 @@ function closeSessionsDrawer() {
   document.getElementById('sessions-drawer').classList.remove('open');
 }
 
-async function loadSessionsList() {
+async function loadSessionsList(q = '', tag = '') {
   const list = document.getElementById('sessions-list');
   list.innerHTML = '<div class="sessions-empty">Loading...</div>';
   try {
-    const res = await fetch('/api/sessions');
+    const params = new URLSearchParams();
+    if (q) params.set('q', q);
+    if (tag) params.set('tag', tag);
+    const res = await fetch('/api/sessions' + (params.toString() ? '?' + params : ''));
     const sessions = await res.json();
     if (!sessions.length) {
-      list.innerHTML = '<div class="sessions-empty">No past meetings found.</div>';
-      document.getElementById('sessions-count').textContent = '';
+      list.innerHTML = `<div class="sessions-empty">${q || tag ? 'No meetings match.' : 'No past meetings found.'}</div>`;
+      if (!q && !tag) document.getElementById('sessions-count').textContent = '';
       return;
     }
-    document.getElementById('sessions-count').textContent = sessions.length;
+    if (!q && !tag) document.getElementById('sessions-count').textContent = sessions.length;
     list.innerHTML = '';
     sessions.forEach(s => {
       const el = document.createElement('div');
       el.className = 'session-item';
+      const tagsHtml = (s.tags || []).map(t =>
+        `<span class="session-tag" onclick="filterByTag('${escapeHTML(t)}')">${escapeHTML(t)}<span class="tag-remove" onclick="event.stopPropagation();removeTagById('${s.id}','${escapeHTML(t)}',this)">×</span></span>`
+      ).join('');
       el.innerHTML = `
         <div class="session-item-date">
           ${s.date}
           <span class="session-item-rounds">${s.rounds} round${s.rounds !== 1 ? 's' : ''}</span>
         </div>
-        <div class="session-item-entry">${s.entry || '—'}</div>
-        <div class="session-item-members">${(s.members || []).join(' · ')}</div>
+        <div class="session-item-entry">${escapeHTML(s.entry || '—')}</div>
+        <div class="session-item-members">${(s.members || []).map(escapeHTML).join(' · ')}</div>
+        <div class="session-tags-row">${tagsHtml}<button class="add-tag-btn" onclick="addTagUI('${s.id}', this)">+</button></div>
         <div class="session-item-actions">
           <button class="session-load-btn" onclick="restoreSession('${s.id}')">Load this meeting</button>
           <button class="session-delete-btn" onclick="deleteSession('${s.id}', this)">Delete</button>
@@ -646,6 +665,74 @@ async function loadSessionsList() {
   } catch (e) {
     list.innerHTML = '<div class="sessions-empty">Could not load past meetings.</div>';
   }
+}
+
+function filterByTag(tag) {
+  const input = document.getElementById('sessions-search');
+  if (input) input.value = '';
+  loadSessionsList('', tag);
+  const active = document.querySelector('.session-tag.active-filter');
+  if (active) active.classList.remove('active-filter');
+}
+
+function addTagUI(sessionId, btn) {
+  const row = btn.closest('.session-tags-row');
+  if (row.querySelector('.tag-input')) return; // already open
+  const inp = document.createElement('input');
+  inp.className = 'tag-input';
+  inp.placeholder = 'tag…';
+  inp.maxLength = 30;
+  row.insertBefore(inp, btn);
+  inp.focus();
+
+  let committed = false;
+  const commit = async () => {
+    if (committed) return;
+    committed = true;
+    const val = inp.value.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/(^-|-$)/g, '');
+    inp.remove();
+    if (!val) return;
+    const existing = [...row.querySelectorAll('.session-tag')].map(el => el.textContent);
+    if (existing.includes(val)) return;
+    const newTags = [...existing, val];
+    await saveTags(sessionId, newTags, row, btn);
+  };
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') { committed = true; inp.remove(); } });
+  inp.addEventListener('blur', commit);
+}
+
+async function removeTagById(sessionId, tag, el) {
+  const row = el.closest('.session-tags-row');
+  const addBtn = row.querySelector('.add-tag-btn');
+  // Read tag text from first child text node to exclude the × span
+  const existing = [...row.querySelectorAll('.session-tag')].map(c => c.firstChild.textContent.trim());
+  const newTags = existing.filter(t => t !== tag);
+  await saveTags(sessionId, newTags, row, addBtn);
+}
+
+function makeTagChip(sessionId, tag, addBtn) {
+  const chip = document.createElement('span');
+  chip.className = 'session-tag';
+  chip.appendChild(document.createTextNode(tag));
+  const x = document.createElement('span');
+  x.className = 'tag-remove';
+  x.textContent = '×';
+  x.onclick = (e) => { e.stopPropagation(); removeTagById(sessionId, tag, x); };
+  chip.appendChild(x);
+  chip.onclick = () => filterByTag(tag);
+  return chip;
+}
+
+async function saveTags(sessionId, tags, row, addBtn) {
+  try {
+    await fetch(`/api/sessions/${sessionId}/tags`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tags }),
+    });
+    row.querySelectorAll('.session-tag').forEach(c => c.remove());
+    tags.forEach(t => row.insertBefore(makeTagChip(sessionId, t, addBtn), addBtn));
+  } catch (e) { /* silent */ }
 }
 
 async function restoreSession(id) {
