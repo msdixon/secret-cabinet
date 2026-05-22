@@ -23,22 +23,15 @@ app.use(express.json({ limit: '4mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ─── Lodge roster ────────────────────────────────────────────────────────────
-// id must match what the frontend sends; file is the prompt filename
+// Loaded from roster.json; reloadRoster() refreshes in-memory copy after writes.
 
-const ROSTER = [
-  { id: 'crowley',  name: 'Crowley',         file: 'crowley.md',       guest: false },
-  { id: 'waite',    name: 'Waite',            file: 'waite.md',         guest: false },
-  { id: 'pixie',    name: 'Coleman-Smith',    file: 'coleman-smith.md', guest: false },
-  { id: 'yeats',    name: 'Yeats',            file: 'yeats.md',         guest: false },
-  { id: 'blavatsky',name: 'Blavatsky',        file: 'blavatsky.md',     guest: false },
-  { id: 'levi',     name: 'Lévi',             file: 'levi.md',          guest: false },
-  { id: 'teresa',   name: 'Teresa of Ávila',  file: 'teresa.md',        guest: false },
-  { id: 'arabi',    name: 'Ibn Arabi',        file: 'ibn-arabi.md',     guest: false },
-  { id: 'maud',     name: 'Maud Gonne',       file: 'maud-gonne.md',    guest: true  },
-  { id: 'llull',    name: 'Llull',            file: 'llull.md',         guest: true  },
-  { id: 'khaldun',  name: 'Ibn Khaldun',      file: 'ibn-khaldun.md',   guest: true  },
-  { id: 'dee',      name: 'John Dee',         file: 'john-dee.md',      guest: true  },
-];
+const ROSTER_FILE = path.join(MEMBERS_DIR, 'roster.json');
+let ROSTER = [];
+
+function reloadRoster() {
+  ROSTER = JSON.parse(fs.readFileSync(ROSTER_FILE, 'utf8'));
+}
+reloadRoster();
 
 const lodgeContext = fs.readFileSync(path.join(PROMPTS_DIR, 'lodge-context.md'), 'utf8');
 
@@ -412,6 +405,87 @@ app.get('/api/sessions/:id', (req, res) => {
   const session = loadSession(req.params.id);
   if (!session) return res.status(404).json({ error: 'Session not found' });
   res.json(session);
+});
+
+// GET /api/members — return current roster
+app.get('/api/members', (req, res) => {
+  res.json(ROSTER);
+});
+
+// POST /api/members — draft + save a new character file, update roster
+app.post('/api/members', async (req, res) => {
+  const { name, bio, voiceRegister, cognitiveStyle, relationships, isGuest } = req.body;
+  if (!name?.trim() || !bio?.trim()) return res.status(400).json({ error: 'name and bio are required' });
+
+  // Build a safe filename + id from the name
+  const id = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+  const file = `${id}.md`;
+  const filePath = path.join(MEMBERS_DIR, file);
+
+  if (fs.existsSync(filePath)) {
+    return res.status(409).json({ error: `A member file already exists for "${name}". Choose a different name or edit the file directly.` });
+  }
+
+  // Read one canonical character file as a format exemplar
+  const exemplar = loadMemberFile('crowley.md');
+
+  const systemPrompt = `You are a researcher and writer helping build a character prompt for a historical salon simulation called The Secret-Cabin-et. The salon is atemporal — members from different centuries speak together as equals. You will write a character system prompt in the exact style and structure of the exemplar below.
+
+The character file must contain these sections, in order:
+- # [NAME IN CAPS]
+- ### Character System Prompt — the Secret-Cabin-et
+- *Builds on: Lodge Context Document*
+- ## WHO YOU ARE — 2–3 paragraphs: historical identity, expertise, self-understanding, and one honest complicating note
+- ## HOW YOU SPEAK — 3–4 paragraphs: register, rhythm, rhetorical moves, what they do with disagreement
+- ## YOUR RELATIONSHIPS IN THIS ROOM — one paragraph per relevant member present in the room (use only the members listed in the existing roster: Crowley, Waite, Coleman-Smith, Yeats, Blavatsky, Lévi, Teresa of Ávila, Ibn Arabi, Maud Gonne, Llull, Ibn Khaldun, John Dee)
+- ## WHAT YOU DO WITH THE DOCUMENT — 2 paragraphs about how this member engages with a journal entry read aloud
+- ## WHAT YOU DO NOT DO — bullet list of 4–6 hard constraints on this character's voice
+- *Character prompt complete. Deploy on top of Lodge Context Document.*
+
+Rules:
+- Write in second person ("You are…", "You speak…")
+- Be specific: cite real texts, real positions, real historical tensions
+- Do not invent citations or relationships
+- Keep the same section headers, formatting, and tone as the exemplar
+- Do not summarize or editorialize — write the prompt as if deploying it directly
+
+EXEMPLAR FORMAT (Crowley):
+${exemplar}`;
+
+  const userMessage = `Write a character prompt for: ${name}
+
+Biography / background:
+${bio}
+
+Voice and register:
+${voiceRegister || '(not specified — infer from the biography)'}
+
+Cognitive style:
+${cognitiveStyle || '(not specified — infer from the biography)'}
+
+Relationship notes:
+${relationships || '(not specified — infer from historical record)'}`;
+
+  try {
+    const response = await client.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 2400,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: userMessage }],
+    });
+    const characterFile = response.content.filter(b => b.type === 'text').map(b => b.text).join('');
+
+    fs.writeFileSync(filePath, characterFile, 'utf8');
+
+    const newMember = { id, name: name.trim(), file, guest: !!isGuest };
+    ROSTER.push(newMember);
+    fs.writeFileSync(ROSTER_FILE, JSON.stringify(ROSTER, null, 2), 'utf8');
+
+    res.json({ member: newMember, characterFile });
+  } catch (err) {
+    console.error('Member creation error:', err);
+    res.status(500).json({ error: 'Failed to draft character file' });
+  }
 });
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

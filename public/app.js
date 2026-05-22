@@ -2,20 +2,17 @@
 
 let currentJournal = JSON.parse(localStorage.getItem('sc-journal') || 'null') || { id: null, name: null };
 
-const MEMBERS = [
-  {id:'crowley',  name:'Crowley',        guest:false},
-  {id:'waite',    name:'Waite',          guest:false},
-  {id:'pixie',    name:'Coleman-Smith',  guest:false},
-  {id:'yeats',    name:'Yeats',          guest:false},
-  {id:'blavatsky',name:'Blavatsky',      guest:false},
-  {id:'levi',     name:'Lévi',           guest:false},
-  {id:'teresa',   name:'Teresa of Ávila',guest:false},
-  {id:'arabi',    name:'Ibn Arabi',      guest:false},
-  {id:'maud',     name:'Maud Gonne',     guest:true},
-  {id:'llull',    name:'Llull',          guest:true},
-  {id:'khaldun',  name:'Ibn Khaldun',    guest:true},
-  {id:'dee',      name:'John Dee',       guest:true},
-];
+// Roster is fetched from the server so newly added members appear without reload.
+let MEMBERS = [];
+
+async function fetchMembers() {
+  try {
+    const data = await fetch('/api/members').then(r => r.json());
+    if (Array.isArray(data)) MEMBERS = data;
+  } catch (e) {
+    console.error('Could not load roster', e);
+  }
+}
 
 const ROUND_LABELS = ['First Movement', 'The Room Responds', 'Final Embers'];
 
@@ -688,9 +685,66 @@ async function deleteSession(id, btn) {
   }
 }
 
+// ── Add member modal ──────────────────────────────────────────────────────────
+
+function openAddMemberModal() {
+  document.getElementById('add-member-overlay').classList.add('open');
+  document.getElementById('add-member-modal').classList.add('open');
+  document.getElementById('add-member-name').focus();
+}
+
+function closeAddMemberModal() {
+  document.getElementById('add-member-overlay').classList.remove('open');
+  document.getElementById('add-member-modal').classList.remove('open');
+}
+
+async function submitNewMember() {
+  const name = document.getElementById('new-member-name').value.trim();
+  const bio = document.getElementById('new-member-bio').value.trim();
+  const voiceRegister = document.getElementById('new-member-voice').value.trim();
+  const cognitiveStyle = document.getElementById('new-member-cognitive').value.trim();
+  const relationships = document.getElementById('new-member-relationships').value.trim();
+  const isGuest = document.getElementById('new-member-guest').checked;
+  const statusEl = document.getElementById('add-member-status');
+  const btn = document.getElementById('add-member-submit-btn');
+
+  if (!name) { statusEl.textContent = 'A name is required.'; return; }
+  if (!bio) { statusEl.textContent = 'A biography is required.'; return; }
+
+  btn.disabled = true;
+  statusEl.style.color = 'var(--lodge-amber)';
+  statusEl.textContent = 'Drafting the character… the room makes room.';
+
+  try {
+    const res = await fetch('/api/members', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, bio, voiceRegister, cognitiveStyle, relationships, isGuest }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Unknown error');
+
+    MEMBERS.push(data.member);
+    renderMembers();
+
+    // Clear form
+    ['new-member-name','new-member-bio','new-member-voice','new-member-cognitive','new-member-relationships']
+      .forEach(id => { document.getElementById(id).value = ''; });
+    document.getElementById('new-member-guest').checked = false;
+
+    statusEl.style.color = 'var(--lodge-muted)';
+    statusEl.textContent = `${data.member.name} has joined the lodge.`;
+    setTimeout(closeAddMemberModal, 1400);
+  } catch (e) {
+    statusEl.style.color = '#a06060';
+    statusEl.textContent = e.message || 'The invitation could not be sent.';
+    btn.disabled = false;
+  }
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 
-renderMembers();
+fetchMembers().then(() => renderMembers());
 updateExportJournalLabel();
 
 // Load session from URL param if present (e.g. ?session=<id>)
