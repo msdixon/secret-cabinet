@@ -647,7 +647,10 @@ function onSessionsSearch(val) {
   _searchTimer = setTimeout(() => {
     const v = val.trim();
     const isTag = v.startsWith('#');
-    loadSessionsList(isTag ? '' : v, isTag ? v.slice(1).toLowerCase() : '');
+    const isThread = v.startsWith('@');
+    if (isTag) loadSessionsList('', v.slice(1).toLowerCase(), '');
+    else if (isThread) loadSessionsList('', '', v.slice(1).toLowerCase());
+    else loadSessionsList(v, '', '');
   }, 280);
 }
 
@@ -664,38 +667,54 @@ function closeSessionsDrawer() {
   document.getElementById('sessions-drawer').classList.remove('open');
 }
 
-async function loadSessionsList(q = '', tag = '') {
+async function loadSessionsList(q = '', tag = '', thread = '') {
   const list = document.getElementById('sessions-list');
   list.innerHTML = '<div class="sessions-empty">Loading...</div>';
   try {
     const params = new URLSearchParams();
     if (q) params.set('q', q);
     if (tag) params.set('tag', tag);
+    if (thread) params.set('thread', thread);
     const res = await fetch('/api/sessions' + (params.toString() ? '?' + params : ''));
     const sessions = await res.json();
+    const isFiltered = q || tag || thread;
     if (!sessions.length) {
-      list.innerHTML = `<div class="sessions-empty">${q || tag ? 'No meetings match.' : 'No past meetings found.'}</div>`;
-      if (!q && !tag) document.getElementById('sessions-count').textContent = '';
+      list.innerHTML = `<div class="sessions-empty">${isFiltered ? 'No meetings match.' : 'No past meetings found.'}</div>`;
+      if (!isFiltered) document.getElementById('sessions-count').textContent = '';
       return;
     }
-    if (!q && !tag) document.getElementById('sessions-count').textContent = sessions.length;
+    if (!isFiltered) document.getElementById('sessions-count').textContent = sessions.length;
     list.innerHTML = '';
+
+    // Thread view header
+    if (thread && sessions[0]?.threadName) {
+      const hdr = document.createElement('div');
+      hdr.className = 'thread-header';
+      hdr.innerHTML = `<span class="thread-header-name">${escapeHTML(sessions[0].threadName)}</span><span class="thread-header-count">${sessions.length} meeting${sessions.length !== 1 ? 's' : ''}</span><button class="thread-clear-btn" onclick="loadSessionsList()">✕ All meetings</button>`;
+      list.appendChild(hdr);
+    }
+
     sessions.forEach(s => {
       const el = document.createElement('div');
       el.className = 'session-item';
       const tagsHtml = (s.tags || []).map(t =>
         `<span class="session-tag" onclick="filterByTag('${escapeHTML(t)}')">${escapeHTML(t)}<span class="tag-remove" onclick="event.stopPropagation();removeTagById('${s.id}','${escapeHTML(t)}',this)">×</span></span>`
       ).join('');
+      const threadBadge = s.threadId
+        ? `<span class="session-thread-badge" onclick="filterByThread('${escapeHTML(s.threadId)}','${escapeHTML(s.threadName || '')}')" title="View thread: ${escapeHTML(s.threadName || '')}">⬡ ${escapeHTML(s.threadName || s.threadId)}</span>`
+        : '';
       el.innerHTML = `
         <div class="session-item-date">
           ${s.date}
           <span class="session-item-rounds">${s.rounds} round${s.rounds !== 1 ? 's' : ''}</span>
+          ${threadBadge}
         </div>
         <div class="session-item-entry">${escapeHTML(s.entry || '—')}</div>
         <div class="session-item-members">${(s.members || []).map(escapeHTML).join(' · ')}</div>
         <div class="session-tags-row">${tagsHtml}<button class="add-tag-btn" onclick="addTagUI('${s.id}', this)">+</button></div>
         <div class="session-item-actions">
           <button class="session-load-btn" onclick="restoreSession('${s.id}')">Load this meeting</button>
+          <button class="session-thread-btn" onclick="assignThreadUI('${s.id}', '${escapeHTML(s.threadId||'')}', '${escapeHTML(s.threadName||'')}', this)">⬡ Thread</button>
           <button class="session-delete-btn" onclick="deleteSession('${s.id}', this)">Delete</button>
         </div>`;
       list.appendChild(el);
@@ -703,6 +722,64 @@ async function loadSessionsList(q = '', tag = '') {
   } catch (e) {
     list.innerHTML = '<div class="sessions-empty">Could not load past meetings.</div>';
   }
+}
+
+function filterByThread(threadId, threadName) {
+  const input = document.getElementById('sessions-search');
+  if (input) input.value = '';
+  loadSessionsList('', '', threadId);
+}
+
+async function assignThreadUI(sessionId, currentThreadId, currentThreadName, btn) {
+  // Fetch existing threads for the picker
+  const threadsRes = await fetch('/api/threads').then(r => r.json()).catch(() => []);
+
+  // Build inline picker
+  const actions = btn.closest('.session-item-actions');
+  if (actions.querySelector('.thread-picker')) return;
+
+  const picker = document.createElement('div');
+  picker.className = 'thread-picker';
+
+  const existing = threadsRes.filter(t => t.id !== currentThreadId);
+  const optionsHtml = existing.map(t =>
+    `<button class="thread-pick-btn" onclick="setThread('${sessionId}','${escapeHTML(t.id)}','${escapeHTML(t.name)}',this)">${escapeHTML(t.name)}</button>`
+  ).join('');
+  const clearHtml = currentThreadId
+    ? `<button class="thread-pick-btn thread-pick-clear" onclick="setThread('${sessionId}','','',this)">Remove from thread</button>`
+    : '';
+
+  picker.innerHTML = `
+    ${optionsHtml}
+    <div class="thread-new-row">
+      <input class="tag-input" style="width:120px" placeholder="New thread name…" id="new-thread-input-${sessionId}" />
+      <button class="thread-pick-btn" onclick="createAndSetThread('${sessionId}',this)">Create</button>
+    </div>
+    ${clearHtml}`;
+
+  actions.appendChild(picker);
+  picker.querySelector(`#new-thread-input-${sessionId}`)?.focus();
+}
+
+async function createAndSetThread(sessionId, btn) {
+  const inp = btn.previousElementSibling;
+  const name = inp.value.trim();
+  if (!name) return;
+  await setThread(sessionId, null, name, btn);
+}
+
+async function setThread(sessionId, threadId, threadName, el) {
+  const body = (threadId || threadName)
+    ? { threadId: threadId || threadName, threadName: threadName || threadId }
+    : {};
+  await fetch(`/api/sessions/${sessionId}/thread`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  el.closest('.thread-picker')?.remove();
+  // Refresh list
+  loadSessionsList();
 }
 
 function filterByTag(tag) {
