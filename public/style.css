@@ -141,6 +141,9 @@
 .speaker-name { font-family:'UnifrakturMaguntia',serif; font-size:19px; color:var(--lodge-amber); margin-bottom:5px; letter-spacing:1px; }
 .speaker-name.guest-voice { color:var(--lodge-fire); }
 .speaker-name.observer-voice { color:#a0c8a0; }
+
+/* ── Per-member voice classes (reserved for future avatar/identity work) ───── */
+/* Typography is intentionally uniform — voice-{id} classes are hooks only.   */
 .speech-text { font-family:'Crimson Pro',serif; font-size:18px; line-height:1.8; color:var(--lodge-parchment); }
 .action-line { font-family:'IM Fell English','Crimson Pro',serif; font-style:italic; font-size:15px; color:var(--lodge-muted); text-align:left; margin:6px 0; letter-spacing:0.02em; }
 .action-inline { font-style:italic; color:var(--lodge-muted); }

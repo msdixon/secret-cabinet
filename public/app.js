@@ -156,16 +156,27 @@ function renderActions(text) {
     .join('<br>');
 }
 
-function addSpeech(speaker, text, isGuest, isObserver) {
+function addSpeech(speaker, text, isGuest, isObserver, memberId) {
   const c = document.getElementById('transcript-content');
   const e = document.createElement('div');
   e.className = 'transcript-entry';
-  const nc = isObserver ? 'observer-voice' : (isGuest ? 'guest-voice' : '');
+  let nc;
+  if (isObserver) nc = 'observer-voice';
+  else if (memberId) nc = `voice-${memberId}`;
+  else if (isGuest) nc = 'guest-voice';
+  else nc = '';
   e.innerHTML = `<div class="speaker-name ${nc}">${escapeHTML(speaker)}</div><div class="speech-text">${renderActions(text)}</div>`;
   c.appendChild(e);
   c.scrollTop = c.scrollHeight;
   transcriptText += `${speaker} —\n${text}\n\n`;
 }
+
+// Known aliases the model uses that don't match the roster name directly
+const SPEAKER_ALIASES = {
+  'Pamela': 'pixie', 'Pamela Coleman-Smith': 'pixie', 'Coleman Smith': 'pixie',
+  "Ibn 'Arabi": 'arabi',
+  'Teresa': 'teresa', 'Teresa of Avila': 'teresa',
+};
 
 function parseAndRenderTranscript(response) {
   const lines = response.split('\n');
@@ -173,8 +184,11 @@ function parseAndRenderTranscript(response) {
 
   const flush = () => {
     if (speaker && textLines.length) {
-      const m = MEMBERS.find(m => speaker.includes(m.name) || m.name.includes(speaker));
-      addSpeech(speaker, textLines.join('\n').trim(), m?.guest || false, false);
+      const aliasId = Object.keys(SPEAKER_ALIASES).find(a => speaker.toLowerCase().includes(a.toLowerCase()));
+      const m = aliasId
+        ? MEMBERS.find(m => m.id === SPEAKER_ALIASES[aliasId])
+        : MEMBERS.find(m => speaker.includes(m.name) || m.name.includes(speaker));
+      addSpeech(speaker, textLines.join('\n').trim(), m?.guest || false, false, m?.id);
       speaker = null; textLines = [];
     }
   };
@@ -193,7 +207,8 @@ function parseAndRenderTranscript(response) {
       transcriptText += `${t}\n\n`;
       return;
     }
-    const isKnownName = MEMBERS.some(m => t === m.name || t === m.name + ':');
+    const isKnownName = MEMBERS.some(m => t === m.name || t === m.name + ':')
+      || Object.keys(SPEAKER_ALIASES).some(a => t === a || t === a + ':');
     const looksLikeName = !t.includes(' ') && t.endsWith(':') && t.length < 30;
     if (isKnownName || looksLikeName) {
       flush();
