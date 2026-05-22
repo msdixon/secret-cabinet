@@ -42,6 +42,21 @@ function renderMembers() {
     document.getElementById(m.guest ? 'guests-grid' : 'members-grid').appendChild(el);
   });
   updateMemberCount();
+  populateArtifactSelect();
+}
+
+function populateArtifactSelect() {
+  const sel = document.getElementById('artifact-member');
+  if (!sel) return;
+  const current = sel.value;
+  sel.innerHTML = '<option value="">— select a member —</option>';
+  MEMBERS.forEach(m => {
+    const opt = document.createElement('option');
+    opt.value = m.id;
+    opt.textContent = m.name;
+    sel.appendChild(opt);
+  });
+  if (current) sel.value = current;
 }
 
 function updateMemberCount() {
@@ -332,7 +347,10 @@ async function loadSourceOptions() {
     // If we had a saved journal preference, try to pre-select its first entry
     if (currentJournal.id) {
       const key = `dayone:${currentJournal.id}:0`;
-      if (entryCache.has(key)) sel.value = key;
+      if (entryCache.has(key)) {
+        sel.value = key;
+        handleSourceChange(); // load entry text into state
+      }
     }
 
   } catch (e) {
@@ -392,6 +410,10 @@ async function convene() {
   const members = [...activeMembers];
   const roundInstructions = [1, 2, 3].map(i => document.getElementById(`arc-${i}`)?.value.trim()).filter(Boolean);
 
+  const artifactText = document.getElementById('artifact-text')?.value.trim();
+  const artifactMemberId = document.getElementById('artifact-member')?.value;
+  const artifact = (artifactText && artifactMemberId) ? { text: artifactText, memberId: artifactMemberId } : null;
+
   try {
     // Round 1
     currentRound = 1;
@@ -403,7 +425,7 @@ async function convene() {
     let acc = '';
     let d1;
     try {
-      d1 = await streamPost('/api/convene', { entry, members, roundInstructions }, chunk => { acc += chunk; s1.append(chunk); });
+      d1 = await streamPost('/api/convene', { entry, members, roundInstructions, artifact }, chunk => { acc += chunk; s1.append(chunk); });
       s1.finalize(acc);
       currentSessionId = d1.sessionId;
     } catch (err) {
