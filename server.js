@@ -373,14 +373,16 @@ app.post('/api/dayone/export', async (req, res) => {
   }
 });
 
-// GET /api/sessions — list recent sessions
+// GET /api/sessions — list recent sessions, with optional ?q= and ?tag= filters
 app.get('/api/sessions', (req, res) => {
+  const q = (req.query.q || '').trim().toLowerCase();
+  const tag = (req.query.tag || '').trim().toLowerCase();
   try {
-    const files = fs.readdirSync(SESSIONS_DIR)
+    let sessions = fs.readdirSync(SESSIONS_DIR)
       .filter(f => f.endsWith('.json'))
       .map(f => ({ file: f, mtime: fs.statSync(path.join(SESSIONS_DIR, f)).mtimeMs }))
       .sort((a, b) => b.mtime - a.mtime)
-      .slice(0, 40)
+      .slice(0, 200) // read more before filtering
       .map(({ file }) => {
         const d = JSON.parse(fs.readFileSync(path.join(SESSIONS_DIR, file), 'utf8'));
         const memberNames = (d.members || [])
@@ -392,12 +394,39 @@ app.get('/api/sessions', (req, res) => {
           entry: d.entry?.slice(0, 100),
           members: memberNames,
           rounds: d.rounds?.length || 0,
+          tags: d.tags || [],
+          // keep full text only for filtering; not sent to client
+          _entry: (d.entry || '').toLowerCase(),
+          _transcript: (d.transcriptText || '').toLowerCase(),
         };
       });
-    res.json(files);
+
+    if (tag) {
+      sessions = sessions.filter(s => s.tags.map(t => t.toLowerCase()).includes(tag));
+    }
+    if (q) {
+      sessions = sessions.filter(s =>
+        s._entry.includes(q) || s._transcript.includes(q) ||
+        s.tags.some(t => t.toLowerCase().includes(q)) ||
+        (s.date || '').includes(q)
+      );
+    }
+
+    res.json(sessions.slice(0, 40).map(({ _entry, _transcript, ...s }) => s));
   } catch (err) {
     res.status(500).json({ error: 'Failed to list sessions' });
   }
+});
+
+// PATCH /api/sessions/:id/tags — replace tags array on a session
+app.patch('/api/sessions/:id/tags', (req, res) => {
+  const { tags } = req.body;
+  if (!Array.isArray(tags)) return res.status(400).json({ error: 'tags must be an array' });
+  const session = loadSession(req.params.id);
+  if (!session) return res.status(404).json({ error: 'Session not found' });
+  session.tags = tags.map(t => t.trim()).filter(Boolean);
+  saveSession(session);
+  res.json({ tags: session.tags });
 });
 
 // DELETE /api/sessions/:id — remove a session
