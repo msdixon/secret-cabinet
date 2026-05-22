@@ -18,6 +18,8 @@ const ROUND_LABELS = ['First Movement', 'The Room Responds', 'Final Embers'];
 
 // Maud is a guest but default-present alongside the eight core members.
 let activeMembers = new Set(['crowley','waite','pixie','yeats','blavatsky','levi','teresa','arabi','maud']);
+// Shadow members: named in the assembled section but never speak.
+let shadowMembers = new Set();
 let currentRound = 0;
 let currentSessionId = null;
 let transcriptText = '';
@@ -32,11 +34,25 @@ let lastInterjectText = '';
 function renderMembers() {
   ['members-grid','guests-grid'].forEach(id => document.getElementById(id).innerHTML = '');
   MEMBERS.forEach(m => {
+    const isActive = activeMembers.has(m.id);
+    const isShadow = shadowMembers.has(m.id);
     const el = document.createElement('div');
-    el.className = 'member-token' + (m.guest ? ' guest' : '') + (activeMembers.has(m.id) ? ' active' : '');
+    el.className = 'member-token'
+      + (m.guest ? ' guest' : '')
+      + (isActive ? ' active' : '')
+      + (isShadow ? ' shadow' : '');
+    el.title = isShadow ? 'Shadow — named but silent. Click to deactivate.' : '';
     el.innerHTML = `<div class="member-dot"></div><span class="member-name">${m.name}</span>`;
     el.onclick = () => {
-      activeMembers.has(m.id) ? activeMembers.delete(m.id) : activeMembers.add(m.id);
+      // Cycle: inactive → active → shadow → inactive
+      if (!isActive && !isShadow) {
+        activeMembers.add(m.id);
+      } else if (isActive) {
+        activeMembers.delete(m.id);
+        shadowMembers.add(m.id);
+      } else {
+        shadowMembers.delete(m.id);
+      }
       renderMembers();
     };
     document.getElementById(m.guest ? 'guests-grid' : 'members-grid').appendChild(el);
@@ -61,9 +77,10 @@ function populateArtifactSelect() {
 
 function updateMemberCount() {
   const n = activeMembers.size;
+  const s = shadowMembers.size;
   const badge = document.getElementById('member-count-badge');
   if (!badge) return;
-  badge.textContent = `${n} present`;
+  badge.textContent = s > 0 ? `${n} present · ${s} shadow` : `${n} present`;
   badge.className = 'member-count-badge' + (n >= 8 ? ' over' : n >= 6 ? ' warn' : '');
   badge.title = n >= 6
     ? `${n} members active — larger casts reduce individual voice distinction and increase generation time. 4–6 recommended.`
@@ -408,6 +425,7 @@ async function convene() {
   transcriptText = '';
   sessionDate = new Date().toISOString().split('T')[0];
   const members = [...activeMembers];
+  const shadows = [...shadowMembers];
   const roundInstructions = [1, 2, 3].map(i => document.getElementById(`arc-${i}`)?.value.trim()).filter(Boolean);
 
   const artifactText = document.getElementById('artifact-text')?.value.trim();
@@ -425,7 +443,7 @@ async function convene() {
     let acc = '';
     let d1;
     try {
-      d1 = await streamPost('/api/convene', { entry, members, roundInstructions, artifact }, chunk => { acc += chunk; s1.append(chunk); });
+      d1 = await streamPost('/api/convene', { entry, members, shadows, roundInstructions, artifact }, chunk => { acc += chunk; s1.append(chunk); });
       s1.finalize(acc);
       currentSessionId = d1.sessionId;
     } catch (err) {
