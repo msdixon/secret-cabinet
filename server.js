@@ -461,6 +461,35 @@ app.get('/api/members', (req, res) => {
   res.json(ROSTER);
 });
 
+// GET /api/members/:id/dossier — parse and return brief + voice from character file
+app.get('/api/members/:id/dossier', (req, res) => {
+  const member = ROSTER.find(m => m.id === req.params.id);
+  if (!member) return res.status(404).json({ error: 'Member not found' });
+  const text = loadMemberFile(member.file);
+  if (!text) return res.json({ id: member.id, name: member.name, bio: null, voice: null });
+
+  // Extract first substantive paragraph after each section header
+  const extractSection = (sectionName) => {
+    const re = new RegExp(`## ${sectionName}[\\s\\S]*?\\n\\n([^#\\n][\\s\\S]*?)(?:\\n\\n---|\n\n##|$)`);
+    const m = text.match(re);
+    if (!m) return null;
+    // First non-empty paragraph
+    const para = m[1].split(/\n\n/)[0].trim()
+      .replace(/\*([^*]+)\*/g, '$1') // strip asterisk emphasis
+      .replace(/\n/g, ' ')
+      .slice(0, 320);
+    return para || null;
+  };
+
+  res.json({
+    id: member.id,
+    name: member.name,
+    guest: member.guest,
+    bio: extractSection('WHO YOU ARE'),
+    voice: extractSection('HOW YOU SPEAK'),
+  });
+});
+
 // POST /api/members — draft + save a new character file, update roster
 app.post('/api/members', async (req, res) => {
   const { name, bio, voiceRegister, cognitiveStyle, relationships, isGuest } = req.body;
