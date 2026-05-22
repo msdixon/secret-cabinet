@@ -61,7 +61,7 @@ function loadSession(id) {
 
 // ─── System prompt builder ────────────────────────────────────────────────────
 
-function buildSystemPrompt(memberIds) {
+function buildSystemPrompt(memberIds, artifact = null) {
   const present = memberIds
     .map(id => ROSTER.find(m => m.id === id))
     .filter(Boolean);
@@ -74,11 +74,16 @@ function buildSystemPrompt(memberIds) {
   const presentNames = present.map(m => m.name).join(', ');
   const guestLine = guests.length ? `\nOCCASIONAL GUESTS PRESENT TONIGHT: ${guests.map(m => m.name).join(', ')}` : '';
 
-  // Build character sections — all members with files get full treatment
+  // Build character sections — inject artifact as private context for the named recipient
+  const artifactMember = artifact?.memberId ? ROSTER.find(m => m.id === artifact.memberId) : null;
   const characterSections = fullMembers
     .map(m => {
       const text = loadMemberFile(m.file);
-      return text ? `---\n${text}` : '';
+      if (!text) return '';
+      const artifactNote = (artifactMember && m.id === artifactMember.id && artifact.text?.trim())
+        ? `\n\n---\n\n## PRIVATE — BEFORE THE MEETING BEGAN\n\nBefore the others arrived, you were shown the following. No one else in the room has seen it. You may reference it, produce it at the right moment, withhold it entirely, or let it colour what you say without naming it. The choice is yours.\n\n${artifact.text.trim()}`
+        : '';
+      return `---\n${text}${artifactNote}`;
     })
     .filter(Boolean)
     .join('\n\n');
@@ -199,10 +204,10 @@ app.post('/api/convene', async (req, res) => {
   if (!entry?.trim()) return res.status(400).json({ error: 'entry is required' });
   if (!members?.length) return res.status(400).json({ error: 'at least one member is required' });
 
-  const { roundInstructions } = req.body;
+  const { roundInstructions, artifact } = req.body;
   const id = makeSessionId(entry);
   const date = new Date().toISOString().slice(0, 10);
-  const systemPrompt = buildSystemPrompt(members);
+  const systemPrompt = buildSystemPrompt(members, artifact || null);
   const roundPrompt = buildRoundPrompt(0, entry, roundInstructions);
 
   openSSE(res);
@@ -215,6 +220,7 @@ app.post('/api/convene', async (req, res) => {
     const session = {
       id, date, entry, members, systemPrompt,
       roundInstructions: roundInstructions || null,
+      artifact: artifact || null,
       conversationHistory: history,
       rounds: [{ label: 'First Movement', text }],
       transcriptText: buildTranscriptHeader(entry, members, date) + `\n— First Movement —\n\n${formatTranscriptText(text)}\n`,
