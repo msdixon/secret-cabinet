@@ -158,20 +158,64 @@ function renderActions(text) {
     .join('<br>');
 }
 
-function addSpeech(speaker, text, isGuest, isObserver, memberId) {
+let _entryCounter = 0;
+
+function addSpeech(speaker, text, isGuest, isObserver, memberId, existingAnnotation) {
   const c = document.getElementById('transcript-content');
   const e = document.createElement('div');
+  const entryId = `entry-${++_entryCounter}`;
   e.className = 'transcript-entry';
+  e.dataset.entryId = entryId;
+  e.dataset.speaker = speaker;
   let nc;
   if (isObserver) nc = 'observer-voice';
   else if (memberId) nc = `voice-${memberId}`;
   else if (isGuest) nc = 'guest-voice';
   else nc = '';
   const nameEl = `<div class="speaker-name ${nc}" ${memberId ? `onclick="highlightDossierEntry('${memberId}')" style="cursor:pointer"` : ''}>${escapeHTML(speaker)}</div>`;
-  e.innerHTML = `${nameEl}<div class="speech-text">${renderActions(text)}</div>`;
+  e.innerHTML = `${nameEl}<div class="speech-text" onclick="toggleAnnotation(this.closest('.transcript-entry'))">${renderActions(text)}</div><div class="annotation-area" style="display:none"><textarea class="annotation-input" placeholder="Note…" onblur="saveAnnotation(this)" onkeydown="if(event.key==='Escape')closeAnnotation(this.closest('.transcript-entry'))"></textarea></div>`;
+  if (existingAnnotation) {
+    e.classList.add('annotated');
+    e.querySelector('.annotation-input').value = existingAnnotation;
+  }
   c.appendChild(e);
   c.scrollTop = c.scrollHeight;
   transcriptText += `${speaker} —\n${text}\n\n`;
+}
+
+function toggleAnnotation(entry) {
+  const area = entry.querySelector('.annotation-area');
+  const isOpen = area.style.display !== 'none';
+  if (isOpen) {
+    closeAnnotation(entry);
+  } else {
+    area.style.display = 'block';
+    area.querySelector('textarea').focus();
+    entry.classList.add('annotating');
+  }
+}
+
+function closeAnnotation(entry) {
+  entry.querySelector('.annotation-area').style.display = 'none';
+  entry.classList.remove('annotating');
+}
+
+async function saveAnnotation(textarea) {
+  const entry = textarea.closest('.transcript-entry');
+  const note = textarea.value.trim();
+  entry.classList.toggle('annotated', !!note);
+  if (!currentSessionId) return;
+  // Collect all annotations across all entries
+  const all = [...document.querySelectorAll('.transcript-entry')].map(e => ({
+    entryId: e.dataset.entryId,
+    speaker: e.dataset.speaker,
+    note: e.querySelector('.annotation-input')?.value.trim() || '',
+  })).filter(a => a.note);
+  await fetch(`/api/sessions/${currentSessionId}/annotations`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ annotations: all }),
+  }).catch(() => {});
 }
 
 // Known aliases the model uses that don't match the roster name directly
@@ -433,6 +477,7 @@ async function convene() {
 
   document.getElementById('transcript-empty').style.display = 'none';
   document.getElementById('transcript-content').innerHTML = '';
+  _entryCounter = 0;
   document.getElementById('convene-btn').disabled = true;
   document.getElementById('additional-round-btn').className = 'lodge-btn';
   document.getElementById('export-panel').className = 'export-panel';
@@ -603,8 +648,40 @@ async function sendInterject(text) {
 
 // ── Export ────────────────────────────────────────────────────────────────────
 
+function buildAnnotatedTranscript() {
+  // Weave annotations into the transcript text after each annotated speech block
+  let out = transcriptText;
+  const annotated = [...document.querySelectorAll('.transcript-entry.annotated')];
+  if (!annotated.length) return out;
+  // Rebuild line-by-line, inserting annotations after each speaker's block
+  const lines = out.split('\n');
+  const result = [];
+  let i = 0;
+  while (i < lines.length) {
+    result.push(lines[i]);
+    // Check if this is a speaker — line ending in " —" followed by speech
+    const match = lines[i].match(/^(.+) —$/);
+    if (match) {
+      const speaker = match[1];
+      const entry = annotated.find(e => e.dataset.speaker === speaker);
+      const note = entry?.querySelector('.annotation-input')?.value.trim();
+      if (note && entry) {
+        // Collect the speech block (next non-empty lines until blank)
+        while (i + 1 < lines.length && lines[i + 1] !== '') {
+          i++;
+          result.push(lines[i]);
+        }
+        result.push(`  ↳ ${note}`);
+        annotated.splice(annotated.indexOf(entry), 1); // consume so dupes don't re-match
+      }
+    }
+    i++;
+  }
+  return result.join('\n');
+}
+
 function exportTxt() {
-  const blob = new Blob([transcriptText], { type: 'text/plain' });
+  const blob = new Blob([buildAnnotatedTranscript()], { type: 'text/plain' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -627,7 +704,7 @@ async function exportDayOne() {
       body: JSON.stringify({
         journalId: currentJournal.id,
         journalName: currentJournal.name,
-        transcriptText,
+        transcriptText: buildAnnotatedTranscript(),
         sessionDate,
       }),
     });
@@ -870,6 +947,7 @@ async function restoreSession(id) {
     // Reset UI state
     document.getElementById('transcript-empty').style.display = 'none';
     document.getElementById('transcript-content').innerHTML = '';
+    _entryCounter = 0;
     currentSessionId = session.id;
     sessionDate = session.date;
     currentEntry = session.entry || '';
@@ -879,10 +957,24 @@ async function restoreSession(id) {
     const names = (session.members || []).map(id => MEMBERS.find(m => m.id === id)?.name).filter(Boolean).join(', ');
     transcriptText = `THE SECRET-CABIN-ET\nMeeting Notes — ${session.date}\nAssembled: ${names}\n\nSource material:\n${session.entry || ''}\n`;
 
+    // Build annotation lookup by entryId for restoration
+    const annotationMap = {};
+    (session.annotations || []).forEach(a => { annotationMap[a.entryId] = a.note; });
+
     // Re-render rounds from stored data
     (session.rounds || []).forEach(round => {
       addRoundHeader(round.label);
       parseAndRenderTranscript(round.text);
+    });
+
+    // Restore annotations after render (entry IDs are now stable)
+    document.querySelectorAll('.transcript-entry').forEach(e => {
+      const note = annotationMap[e.dataset.entryId];
+      if (note) {
+        e.classList.add('annotated');
+        const ta = e.querySelector('.annotation-input');
+        if (ta) ta.value = note;
+      }
     });
 
     // Restore member selection
