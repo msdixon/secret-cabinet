@@ -212,6 +212,27 @@
 .session-load-btn:hover { background:rgba(200,146,42,0.12); border-color:var(--lodge-amber); }
 .session-delete-btn { background:transparent; border:1px solid #3a1a1a; color:#7a4040; font-family:'IM Fell English',serif; font-size:11px; padding:4px 10px; border-radius:2px; cursor:pointer; letter-spacing:1px; transition:all 0.15s; }
 .session-delete-btn:hover { border-color:#7a3030; color:#c07070; background:rgba(120,40,40,0.1); }
+/* Thread styles */
+.thread-header { padding:10px 14px 6px; border-bottom:1px solid var(--lodge-border); display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.thread-header-name { font-family:'UnifrakturMaguntia',serif; font-size:16px; color:var(--lodge-amber); }
+.thread-header-count { font-family:'IM Fell English',serif; font-size:11px; color:var(--lodge-ash); letter-spacing:1px; }
+.thread-clear-btn { background:none; border:none; color:var(--lodge-ash); font-family:'IM Fell English',serif; font-size:11px; cursor:pointer; margin-left:auto; letter-spacing:1px; }
+.thread-clear-btn:hover { color:var(--lodge-muted); }
+.session-thread-badge { font-family:'IM Fell English',serif; font-size:10px; letter-spacing:1px; background:rgba(122,84,24,0.2); border:1px solid var(--lodge-amber-dim); color:var(--lodge-amber); padding:1px 6px; border-radius:2px; cursor:pointer; margin-left:4px; }
+.session-thread-badge:hover { background:rgba(200,146,42,0.2); }
+.session-thread-btn { background:transparent; border:1px solid var(--lodge-border); color:var(--lodge-ash); font-family:'IM Fell English',serif; font-size:11px; padding:4px 8px; border-radius:2px; cursor:pointer; letter-spacing:1px; }
+.session-thread-btn:hover { border-color:var(--lodge-amber-dim); color:var(--lodge-muted); }
+.thread-picker { margin-top:8px; display:flex; flex-direction:column; gap:5px; padding:10px; background:var(--lodge-panel); border:1px solid var(--lodge-amber-dim); border-radius:2px; }
+.thread-picker-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:2px; }
+.thread-picker-close { background:none; border:none; color:var(--lodge-ash); font-size:12px; cursor:pointer; padding:0 2px; line-height:1; }
+.thread-picker-close:hover { color:var(--lodge-cream); }
+.thread-pick-label { font-family:'IM Fell English',serif; font-size:10px; letter-spacing:2px; text-transform:uppercase; color:var(--lodge-ash); }
+.thread-new-row { display:flex; gap:6px; align-items:center; }
+.thread-pick-btn { background:none; border:1px solid var(--lodge-border); color:var(--lodge-muted); font-family:'IM Fell English',serif; font-size:11px; padding:3px 10px; border-radius:2px; cursor:pointer; text-align:left; letter-spacing:1px; }
+.thread-pick-btn:hover { border-color:var(--lodge-amber-dim); color:var(--lodge-cream); }
+.thread-pick-clear { color:#7a4040; border-color:#3a1a1a; }
+.thread-pick-clear:hover { color:#c07070; border-color:#7a3030; }
+
 .sessions-search-row { padding:8px 12px; border-bottom:1px solid var(--lodge-border); flex-shrink:0; }
 .sessions-search-input { width:100%; background:var(--lodge-surface); border:1px solid var(--lodge-border); color:var(--lodge-cream); font-family:'Crimson Pro',serif; font-size:14px; padding:6px 10px; border-radius:2px; }
 .sessions-search-input:focus { outline:none; border-color:var(--lodge-amber-dim); }
