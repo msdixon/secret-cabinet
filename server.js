@@ -471,6 +471,17 @@ app.patch('/api/sessions/:id/thread', (req, res) => {
   res.json({ threadId: session.threadId || null, threadName: session.threadName || null });
 });
 
+// PATCH /api/sessions/:id/annotations — save annotations array
+app.patch('/api/sessions/:id/annotations', (req, res) => {
+  const { annotations } = req.body;
+  if (!Array.isArray(annotations)) return res.status(400).json({ error: 'annotations must be an array' });
+  const session = loadSession(req.params.id);
+  if (!session) return res.status(404).json({ error: 'Session not found' });
+  session.annotations = annotations;
+  saveSession(session);
+  res.json({ count: annotations.length });
+});
+
 // PATCH /api/sessions/:id/tags — replace tags array on a session
 app.patch('/api/sessions/:id/tags', (req, res) => {
   const { tags } = req.body;
