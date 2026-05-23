@@ -731,33 +731,42 @@ function filterByThread(threadId, threadName) {
 }
 
 async function assignThreadUI(sessionId, currentThreadId, currentThreadName, btn) {
-  // Fetch existing threads for the picker
-  const threadsRes = await fetch('/api/threads').then(r => r.json()).catch(() => []);
+  const item = btn.closest('.session-item');
+  // Toggle off if already open
+  const existing = item.querySelector('.thread-picker');
+  if (existing) { existing.remove(); return; }
 
-  // Build inline picker
-  const actions = btn.closest('.session-item-actions');
-  if (actions.querySelector('.thread-picker')) return;
+  const threadsRes = await fetch('/api/threads').then(r => r.json()).catch(() => []);
 
   const picker = document.createElement('div');
   picker.className = 'thread-picker';
 
-  const existing = threadsRes.filter(t => t.id !== currentThreadId);
-  const optionsHtml = existing.map(t =>
-    `<button class="thread-pick-btn" onclick="setThread('${sessionId}','${escapeHTML(t.id)}','${escapeHTML(t.name)}',this)">${escapeHTML(t.name)}</button>`
-  ).join('');
+  const others = threadsRes.filter(t => t.id !== currentThreadId);
+  const optionsHtml = others.length
+    ? `<div class="thread-pick-label">Add to existing thread</div>` +
+      others.map(t =>
+        `<button class="thread-pick-btn" onclick="setThread('${sessionId}','${escapeHTML(t.id)}','${escapeHTML(t.name)}',this)">${escapeHTML(t.name)}</button>`
+      ).join('')
+    : '';
   const clearHtml = currentThreadId
     ? `<button class="thread-pick-btn thread-pick-clear" onclick="setThread('${sessionId}','','',this)">Remove from thread</button>`
     : '';
 
   picker.innerHTML = `
+    <div class="thread-picker-header">
+      <span class="thread-pick-label">Thread</span>
+      <button class="thread-picker-close" onclick="this.closest('.thread-picker').remove()">✕</button>
+    </div>
     ${optionsHtml}
+    <div class="thread-pick-label" style="margin-top:${others.length ? '8px' : '0'}">New thread</div>
     <div class="thread-new-row">
-      <input class="tag-input" style="width:120px" placeholder="New thread name…" id="new-thread-input-${sessionId}" />
+      <input class="tag-input" style="flex:1;min-width:0" placeholder="Thread name…" id="new-thread-input-${sessionId}" />
       <button class="thread-pick-btn" onclick="createAndSetThread('${sessionId}',this)">Create</button>
     </div>
     ${clearHtml}`;
 
-  actions.appendChild(picker);
+  // Append to session-item (outside the flex actions row) so layout isn't constrained
+  item.appendChild(picker);
   picker.querySelector(`#new-thread-input-${sessionId}`)?.focus();
 }
 
