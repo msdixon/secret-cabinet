@@ -8,6 +8,10 @@ const path = require('path');
 const crypto = require('crypto');
 
 const dayOne = require('./dayone');
+const multer = require('multer');
+const pdfParse = require('pdf-parse');
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 const app = express();
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -619,6 +623,31 @@ ${relationships || '(not specified — infer from historical record)'}`;
   } catch (err) {
     console.error('Member creation error:', err);
     res.status(500).json({ error: 'Failed to draft character file' });
+  }
+});
+
+// POST /api/upload — extract text from .txt, .md, or .pdf file
+app.post('/api/upload', upload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file provided' });
+  const { originalname, mimetype, buffer } = req.file;
+  const ext = path.extname(originalname).toLowerCase();
+
+  try {
+    let text = '';
+    if (ext === '.pdf' || mimetype === 'application/pdf') {
+      const data = await pdfParse(buffer);
+      text = data.text;
+    } else {
+      // .txt and .md — read as UTF-8
+      text = buffer.toString('utf8');
+    }
+    // Normalise whitespace
+    text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+    if (!text) return res.status(422).json({ error: 'No readable text found in file' });
+    res.json({ text, filename: originalname });
+  } catch (err) {
+    console.error('Upload error:', err);
+    res.status(500).json({ error: 'Could not extract text from file' });
   }
 });
 

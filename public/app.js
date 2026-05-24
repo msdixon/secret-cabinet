@@ -468,6 +468,48 @@ function getEntry() {
 }
 
 
+// ── File import ───────────────────────────────────────────────────────────────
+
+async function handleFileSelect(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const nameEl = document.getElementById('file-pick-name');
+  nameEl.textContent = 'Reading…';
+
+  const ext = file.name.split('.').pop().toLowerCase();
+
+  if (ext === 'txt' || ext === 'md') {
+    // Read client-side — no server round-trip
+    const text = await file.text();
+    fillFromFile(text.trim(), file.name);
+  } else if (ext === 'pdf') {
+    // Send to server for extraction
+    const form = new FormData();
+    form.append('file', file);
+    try {
+      const res = await fetch('/api/upload', { method: 'POST', body: form });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Upload failed');
+      fillFromFile(data.text, data.filename);
+    } catch (e) {
+      nameEl.textContent = `Error: ${e.message}`;
+    }
+  }
+  // Reset input so the same file can be re-selected
+  input.value = '';
+}
+
+function fillFromFile(text, filename) {
+  const area = document.getElementById('paste-area');
+  area.value = text;
+  document.getElementById('file-pick-name').textContent = filename;
+  // Ensure paste mode is active
+  const sel = document.getElementById('source-select');
+  sel.value = 'paste';
+  handleSourceChange();
+  setStatus(`"${filename}" loaded. The room has heard it.`, false);
+}
+
 // ── Convene ───────────────────────────────────────────────────────────────────
 
 async function convene() {

@@ -69,6 +69,11 @@
       </div>
       <div id="paste-area-container">
         <textarea class="journal-paste-area" id="paste-area" placeholder="Paste the entry here. The room will hear it." rows="4"></textarea>
+        <div class="file-pick-row">
+          <button class="lodge-btn file-pick-btn" onclick="document.getElementById('file-input').click()">↑ From file</button>
+          <span class="file-pick-name" id="file-pick-name"></span>
+          <input type="file" id="file-input" accept=".txt,.md,.pdf" style="display:none" onchange="handleFileSelect(this)" />
+        </div>
       </div>
       <div id="fetched-display" style="display:none">
         <div class="journal-entry-display placeholder" id="entry-display">Awaiting transmission...</div>
