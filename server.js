@@ -11,7 +11,7 @@ const dayOne = require('./dayone');
 const multer = require('multer');
 const pdfParse = require('pdf-parse');
 
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
 const app = express();
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -627,7 +627,17 @@ ${relationships || '(not specified — infer from historical record)'}`;
 });
 
 // POST /api/upload — extract text from .txt, .md, or .pdf file
-app.post('/api/upload', upload.single('file'), async (req, res) => {
+app.post('/api/upload', (req, res, next) => {
+  upload.single('file')(req, res, err => {
+    if (err) {
+      const msg = err.code === 'LIMIT_FILE_SIZE'
+        ? 'File too large — maximum 25 MB'
+        : err.message || 'Upload failed';
+      return res.status(400).json({ error: msg });
+    }
+    next();
+  });
+}, async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file provided' });
   const { originalname, mimetype, buffer } = req.file;
   const ext = path.extname(originalname).toLowerCase();
