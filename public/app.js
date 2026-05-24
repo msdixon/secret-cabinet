@@ -501,7 +501,6 @@ async function convene() {
     currentRound = 1;
     updatePips();
     setStatus('First Movement... the room is speaking.', true);
-    startAmbience();
     const txtBefore1 = transcriptText;
     const h1 = addRoundHeader('First Movement');
     const s1 = startStreamEntry();
@@ -541,7 +540,6 @@ async function convene() {
     }
 
     showSessionControls();
-    stopAmbience(4);
     setStatus('The meeting has found its natural pause. The embers hold.', false);
   } finally {
     document.getElementById('convene-btn').disabled = false;
@@ -1075,111 +1073,6 @@ function highlightDossierEntry(memberId) {
   if (!entry) return;
   entry.classList.add('highlighted');
   if (dossierOpen) entry.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-}
-
-// ── Ambient audio ─────────────────────────────────────────────────────────────
-
-let _audioCtx = null;
-let _fireNodes = null;
-let _audioEnabled = false;
-let _audioVolume = parseInt(localStorage.getItem('sc-audio-vol') ?? '35', 10);
-
-function _ensureAudioCtx() {
-  if (_audioCtx) return _audioCtx;
-  _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  return _audioCtx;
-}
-
-function _buildFireNodes(ctx) {
-  // Brown noise: accumulate white noise samples
-  const sampleRate = ctx.sampleRate;
-  const bufLen = sampleRate * 6; // 6-second loop
-  const buf = ctx.createBuffer(1, bufLen, sampleRate);
-  const data = buf.getChannelData(0);
-  let last = 0;
-  for (let i = 0; i < bufLen; i++) {
-    const w = Math.random() * 2 - 1;
-    last = (last + 0.02 * w) / 1.02;
-    data[i] = last * 4;
-  }
-
-  const src = ctx.createBufferSource();
-  src.buffer = buf;
-  src.loop = true;
-
-  // Low-pass filter to warm it up
-  const filter = ctx.createBiquadFilter();
-  filter.type = 'lowpass';
-  filter.frequency.value = 420;
-  filter.Q.value = 0.8;
-
-  // Slow LFO for breath / variation
-  const lfo = ctx.createOscillator();
-  lfo.type = 'sine';
-  lfo.frequency.value = 0.18;
-  const lfoGain = ctx.createGain();
-  lfoGain.gain.value = 0.12;
-  lfo.connect(lfoGain);
-
-  // Master gain
-  const master = ctx.createGain();
-  master.gain.value = 0;
-
-  lfoGain.connect(master.gain);
-  src.connect(filter);
-  filter.connect(master);
-  master.connect(ctx.destination);
-
-  lfo.start();
-  src.start();
-
-  return { src, master, lfo };
-}
-
-function _targetGain() {
-  return (_audioEnabled ? (_audioVolume / 100) * 0.25 : 0);
-}
-
-function startAmbience() {
-  const ctx = _ensureAudioCtx();
-  if (ctx.state === 'suspended') ctx.resume();
-  if (!_fireNodes) _fireNodes = _buildFireNodes(ctx);
-  document.getElementById('audio-controls').style.display = 'flex';
-  // Restore saved volume
-  document.getElementById('audio-volume').value = _audioVolume;
-  if (!_audioEnabled) {
-    _audioEnabled = true;
-    document.getElementById('audio-toggle').textContent = '🔥';
-  }
-  _fireNodes.master.gain.cancelScheduledValues(ctx.currentTime);
-  _fireNodes.master.gain.linearRampToValueAtTime(_targetGain(), ctx.currentTime + 2);
-}
-
-function stopAmbience(fadeTime = 3) {
-  if (!_fireNodes || !_audioCtx) return;
-  const ctx = _audioCtx;
-  _fireNodes.master.gain.cancelScheduledValues(ctx.currentTime);
-  _fireNodes.master.gain.linearRampToValueAtTime(0, ctx.currentTime + fadeTime);
-}
-
-function toggleAudio() {
-  _audioEnabled = !_audioEnabled;
-  document.getElementById('audio-toggle').textContent = _audioEnabled ? '🔥' : '🔇';
-  if (_fireNodes && _audioCtx) {
-    const ctx = _audioCtx;
-    _fireNodes.master.gain.cancelScheduledValues(ctx.currentTime);
-    _fireNodes.master.gain.linearRampToValueAtTime(_targetGain(), ctx.currentTime + 1);
-  }
-}
-
-function setAudioVolume(val) {
-  _audioVolume = parseInt(val, 10);
-  localStorage.setItem('sc-audio-vol', _audioVolume);
-  if (_audioEnabled && _fireNodes && _audioCtx) {
-    const ctx = _audioCtx;
-    _fireNodes.master.gain.cancelScheduledValues(ctx.currentTime);
-    _fireNodes.master.gain.linearRampToValueAtTime(_targetGain(), ctx.currentTime + 0.1);
-  }
 }
 
 // ── Add member modal ──────────────────────────────────────────────────────────
