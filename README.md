@@ -2,6 +2,8 @@
 
 A local web application for research into the novel. Runs AI-powered salon conversations between historical esotericists, scientists, other thinkers in a room outside of time, for the purposes of uncovering new work/frictions/intersections/questions and general drama, to make online research as sparkly as it is in the meatspace.
 
+(An MVP of a proposal from my DH grad program: what if the archives were "playable"?)
+
 A document is read aloud. The lodge responds.
 
 ---
