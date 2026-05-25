@@ -896,6 +896,7 @@ async function loadSessionsList(q = '', tag = '', thread = '') {
         <div class="session-item-actions">
           <button class="session-load-btn" onclick="restoreSession('${s.id}')">Load this meeting</button>
           <button class="session-thread-btn" onclick="assignThreadUI('${s.id}', '${escapeHTML(s.threadId||'')}', '${escapeHTML(s.threadName||'')}', this)">⬡ Thread</button>
+          <button class="session-compare-btn" id="compare-btn-${s.id}" onclick="toggleCompareSelect('${s.id}', this)">⊕ Compare</button>
           <button class="session-delete-btn" onclick="deleteSession('${s.id}', this)">Delete</button>
         </div>`;
       list.appendChild(el);
@@ -1113,6 +1114,142 @@ async function deleteSession(id, btn) {
   } catch (e) {
     alert('The meeting could not be removed.');
   }
+}
+
+// ── Comparative mode ──────────────────────────────────────────────────────────
+
+const compareSelected = new Set(); // up to 2 session ids
+
+function toggleCompareSelect(id, btn) {
+  if (compareSelected.has(id)) {
+    compareSelected.delete(id);
+    btn.classList.remove('active');
+    btn.textContent = '⊕ Compare';
+  } else {
+    if (compareSelected.size >= 2) return; // already have two
+    compareSelected.add(id);
+    btn.classList.add('active');
+    btn.textContent = '✓ Selected';
+  }
+  updateCompareBar();
+}
+
+function updateCompareBar() {
+  let bar = document.getElementById('compare-bar');
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'compare-bar';
+    bar.className = 'compare-bar';
+    const drawerBody = document.getElementById('sessions-list');
+    drawerBody.parentElement.insertBefore(bar, drawerBody);
+  }
+  if (compareSelected.size === 0) {
+    bar.style.display = 'none';
+    return;
+  }
+  bar.style.display = 'flex';
+  bar.innerHTML = compareSelected.size === 1
+    ? '<span class="compare-bar-hint">Select one more to compare</span><button class="compare-bar-cancel" onclick="clearCompareSelection()">✕</button>'
+    : `<button class="lodge-btn compare-bar-go" onclick="openCompareView()">Compare these two</button><button class="compare-bar-cancel" onclick="clearCompareSelection()">✕</button>`;
+}
+
+function clearCompareSelection() {
+  compareSelected.forEach(id => {
+    const btn = document.getElementById(`compare-btn-${id}`);
+    if (btn) { btn.classList.remove('active'); btn.textContent = '⊕ Compare'; }
+  });
+  compareSelected.clear();
+  updateCompareBar();
+}
+
+async function openCompareView() {
+  const [id1, id2] = [...compareSelected];
+  closeSessionsDrawer();
+  clearCompareSelection();
+
+  const [s1, s2] = await Promise.all([
+    fetch(`/api/sessions/${id1}`).then(r => r.json()),
+    fetch(`/api/sessions/${id2}`).then(r => r.json()),
+  ]);
+
+  const overlay = document.createElement('div');
+  overlay.id = 'compare-overlay';
+  overlay.className = 'compare-overlay';
+  overlay.innerHTML = `
+    <div class="compare-header">
+      <span class="compare-title">Comparative View</span>
+      <button class="sessions-close-btn" onclick="this.closest('.compare-overlay').remove()">✕ Close</button>
+    </div>
+    <div class="compare-panels">
+      <div class="compare-panel" id="cp-left"></div>
+      <div class="compare-panel" id="cp-right"></div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  renderComparePanel('cp-left', s1);
+  renderComparePanel('cp-right', s2);
+}
+
+function renderComparePanel(containerId, session) {
+  const panel = document.getElementById(containerId);
+  const memberNames = (session.members || [])
+    .map(id => MEMBERS.find(m => m.id === id)?.name || id).join(' · ');
+  panel.innerHTML = `
+    <div class="compare-panel-header">
+      <div class="compare-panel-date">${session.date}</div>
+      <div class="compare-panel-members">${memberNames}</div>
+      <div class="compare-panel-source">${escapeHTML((session.entry || '').slice(0, 120))}</div>
+    </div>
+    <div class="compare-panel-transcript" id="${containerId}-transcript"></div>`;
+
+  // Render each round into the panel
+  const transcriptEl = document.getElementById(`${containerId}-transcript`);
+  (session.rounds || []).forEach(round => {
+    const hdr = document.createElement('div');
+    hdr.className = 'transcript-round-header';
+    hdr.innerHTML = `<div class="round-rule"></div><span class="round-rule-label">${round.label}</span><div class="round-rule"></div>`;
+    transcriptEl.appendChild(hdr);
+    renderTranscriptInto(transcriptEl, round.text);
+  });
+}
+
+function renderTranscriptInto(container, text) {
+  const lines = text.split('\n');
+  let speaker = null, textLines = [];
+
+  const flush = () => {
+    if (!speaker || !textLines.length) return;
+    const aliasId = Object.keys(SPEAKER_ALIASES).find(a => speaker.toLowerCase().includes(a.toLowerCase()));
+    const m = aliasId
+      ? MEMBERS.find(m => m.id === SPEAKER_ALIASES[aliasId])
+      : MEMBERS.find(m => speaker.includes(m.name) || m.name.includes(speaker));
+    const nc = m ? `voice-${m.id}` : (m?.guest ? 'guest-voice' : '');
+    const e = document.createElement('div');
+    e.className = 'transcript-entry';
+    e.innerHTML = `<div class="speaker-name ${nc}">${escapeHTML(speaker)}</div><div class="speech-text">${renderActions(textLines.join('\n').trim())}</div>`;
+    container.appendChild(e);
+    speaker = null; textLines = [];
+  };
+
+  lines.forEach(line => {
+    const t = line.trim();
+    if (!t) { flush(); return; }
+    if (t === '---' || t === '—' || t === '--') return;
+    const isAction = /^\*[^*\n]+\*$/.test(t);
+    if (isAction && !speaker) {
+      const d = document.createElement('div');
+      d.className = 'action-line';
+      d.textContent = t.slice(1, -1);
+      container.appendChild(d);
+      return;
+    }
+    const isKnownName = MEMBERS.some(m => t === m.name || t === m.name + ':')
+      || Object.keys(SPEAKER_ALIASES).some(a => t === a || t === a + ':');
+    const looksLikeName = !t.includes(' ') && t.length < 30 && /^[A-Z]/.test(t) && !t.includes('*');
+    if (isKnownName || looksLikeName) { flush(); speaker = t.replace(/:$/, ''); textLines = []; }
+    else if (speaker) textLines.push(t);
+  });
+  flush();
 }
 
 // ── Dossier drawer ────────────────────────────────────────────────────────────

@@ -267,6 +267,26 @@
 .add-tag-btn:hover { border-color:var(--lodge-amber-dim); color:var(--lodge-muted); }
 .tag-input { background:var(--lodge-surface); border:1px solid var(--lodge-amber-dim); color:var(--lodge-cream); font-family:'Crimson Pro',serif; font-size:12px; padding:2px 6px; border-radius:2px; width:80px; }
 
+/* Comparative mode */
+.compare-bar { display:none; align-items:center; gap:10px; padding:8px 12px; background:rgba(200,146,42,0.08); border-bottom:1px solid var(--lodge-amber-dim); flex-shrink:0; }
+.compare-bar-hint { font-family:'IM Fell English',serif; font-style:italic; font-size:12px; color:var(--lodge-amber); flex:1; }
+.compare-bar-go { font-size:12px; padding:5px 14px; }
+.compare-bar-cancel { background:none; border:none; color:var(--lodge-ash); cursor:pointer; font-size:14px; line-height:1; padding:2px 6px; }
+.compare-bar-cancel:hover { color:var(--lodge-cream); }
+.session-compare-btn { background:transparent; border:1px solid var(--lodge-border); color:var(--lodge-ash); font-family:'IM Fell English',serif; font-size:11px; padding:4px 8px; border-radius:2px; cursor:pointer; letter-spacing:1px; }
+.session-compare-btn:hover { border-color:var(--lodge-amber-dim); color:var(--lodge-muted); }
+.session-compare-btn.active { border-color:var(--lodge-amber); color:var(--lodge-amber); background:rgba(200,146,42,0.1); }
+.compare-overlay { position:fixed; inset:0; background:var(--lodge-bg); z-index:200; display:flex; flex-direction:column; }
+.compare-header { display:flex; align-items:center; justify-content:space-between; padding:14px 20px; border-bottom:1px solid var(--lodge-border); flex-shrink:0; }
+.compare-title { font-family:'IM Fell English',serif; font-size:14px; letter-spacing:2px; text-transform:uppercase; color:var(--lodge-amber); }
+.compare-panels { display:flex; flex:1; overflow:hidden; gap:1px; background:var(--lodge-border); }
+.compare-panel { flex:1; overflow-y:auto; background:var(--lodge-bg); display:flex; flex-direction:column; }
+.compare-panel-header { padding:16px 20px; border-bottom:1px solid var(--lodge-border); flex-shrink:0; }
+.compare-panel-date { font-family:'IM Fell English',serif; font-size:11px; letter-spacing:2px; color:var(--lodge-amber); margin-bottom:4px; }
+.compare-panel-members { font-family:'IM Fell English',serif; font-size:12px; color:var(--lodge-muted); margin-bottom:6px; }
+.compare-panel-source { font-family:'Crimson Pro',serif; font-style:italic; font-size:14px; color:var(--lodge-cream); line-height:1.5; }
+.compare-panel-transcript { padding:16px 20px; flex:1; }
+
 /* Dossier drawer (slides from right, below sessions drawer) */
 .dossier-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.4); z-index:100; }
 .dossier-overlay.open { display:block; }
