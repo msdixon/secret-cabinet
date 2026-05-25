@@ -243,6 +243,8 @@ function parseAndRenderTranscript(response) {
   lines.forEach(line => {
     const t = line.trim();
     if (!t) { flush(); return; }
+    // Skip model-generated dividers and bare em-dashes
+    if (t === '---' || t === '—' || t === '--') return;
     // Unattributed action line between speakers — render directly, no speaker needed
     const isActionLine = /^\*[^*\n]+\*$/.test(t);
     if (isActionLine && !speaker) {
