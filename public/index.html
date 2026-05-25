@@ -227,6 +227,16 @@
           <input class="ulysses-group-input" id="ulysses-group" placeholder="e.g. The Affected" value="" oninput="localStorage.setItem('sc-ulysses-group',this.value)" />
         </div>
       </div>
+      <div class="export-journal-row" style="flex-direction:column;align-items:flex-start;gap:6px;">
+        <div style="display:flex;align-items:center;gap:10px;width:100%;">
+          <span class="export-note" style="font-style:normal;color:var(--lodge-muted);font-size:12px;">Obsidian vault</span>
+          <button class="lodge-btn export-obsidian" onclick="exportObsidian()">→ Save to Obsidian</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="export-note" style="font-size:11px;font-style:italic;white-space:nowrap;">Vault path:</span>
+          <input class="ulysses-group-input" id="obsidian-vault" placeholder="~/Documents/My Vault" value="" oninput="localStorage.setItem('sc-obsidian-vault',this.value)" />
+        </div>
+      </div>
       <div style="margin-top:8px;">
         <span class="source-tag" id="export-status"></span>
       </div>
