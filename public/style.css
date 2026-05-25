@@ -103,6 +103,8 @@
 .lodge-btn.export-txt:hover { background:rgba(100,130,150,0.15); }
 .lodge-btn.export-ulysses { border-color:#7a6a9a; color:#b8a8d8; }
 .lodge-btn.export-ulysses:hover { background:rgba(120,100,160,0.15); }
+.lodge-btn.export-obsidian { border-color:#5a7a5a; color:#90c890; }
+.lodge-btn.export-obsidian:hover { background:rgba(80,130,80,0.15); }
 .ulysses-group-input { background:var(--lodge-panel); border:1px solid var(--lodge-border); color:var(--lodge-cream); font-family:'Crimson Pro',serif; font-size:13px; font-style:italic; padding:3px 8px; border-radius:2px; width:180px; }
 .ulysses-group-input:focus { outline:none; border-color:var(--lodge-amber-dim); }
 .ulysses-group-input::placeholder { color:var(--lodge-ash); }

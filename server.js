@@ -428,6 +428,44 @@ app.post('/api/ulysses/export', (req, res) => {
   });
 });
 
+// POST /api/export/obsidian — write transcript as Markdown to an Obsidian vault
+app.post('/api/export/obsidian', (req, res) => {
+  const { vaultPath, transcriptText, sessionDate, members, tags, sourceExcerpt, sessionId } = req.body;
+  if (!vaultPath?.trim()) return res.status(400).json({ error: 'vaultPath required' });
+  if (!transcriptText) return res.status(400).json({ error: 'transcriptText required' });
+
+  const resolvedVault = vaultPath.trim().replace(/^~/, require('os').homedir());
+  const cabinetDir = path.join(resolvedVault, 'Secret Cabinet');
+
+  try {
+    if (!fs.existsSync(resolvedVault)) return res.status(400).json({ error: `Vault not found: ${resolvedVault}` });
+    if (!fs.existsSync(cabinetDir)) fs.mkdirSync(cabinetDir, { recursive: true });
+
+    // Build filename from date + source slug
+    const slug = (sourceExcerpt || 'meeting').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 40);
+    const filename = `${sessionDate || new Date().toISOString().slice(0,10)}-${slug}.md`;
+    const filePath = path.join(cabinetDir, filename);
+
+    // YAML frontmatter
+    const memberList = (members || []).map(m => `  - ${m}`).join('\n');
+    const tagList = ['secret-cabinet', 'meeting-notes', ...(tags || [])].map(t => `  - ${t}`).join('\n');
+    const frontmatter = `---\ndate: ${sessionDate || ''}\nmembers:\n${memberList}\ntags:\n${tagList}\nsource: "${(sourceExcerpt || '').replace(/"/g, '\\"').slice(0, 120)}"\n---\n\n`;
+
+    // Format transcript: bold speaker names for Obsidian scanning
+    const MEMBER_NAMES_SET = new Set(ROSTER.map(m => m.name));
+    const obsidianTranscript = transcriptText.split('\n').map(line => {
+      const bare = line.replace(/ —$/, '').trim();
+      return MEMBER_NAMES_SET.has(bare) ? `**${bare}**` : line;
+    }).join('\n');
+
+    fs.writeFileSync(filePath, frontmatter + obsidianTranscript, 'utf8');
+    res.json({ success: true, filename, path: filePath });
+  } catch (err) {
+    console.error('Obsidian export error:', err);
+    res.status(500).json({ error: err.message || 'Export failed' });
+  }
+});
+
 // GET /api/sessions — list recent sessions, with optional ?q=, ?tag=, ?thread= filters
 app.get('/api/sessions', (req, res) => {
   const q = (req.query.q || '').trim().toLowerCase();

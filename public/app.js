@@ -770,6 +770,33 @@ async function exportDayOne() {
   }
 }
 
+async function exportObsidian() {
+  const statusEl = document.getElementById('export-status');
+  const vaultPath = document.getElementById('obsidian-vault')?.value.trim();
+  if (!vaultPath) { statusEl.textContent = 'Enter your Obsidian vault path first.'; return; }
+  statusEl.textContent = 'Writing to Obsidian…';
+  try {
+    const res = await fetch('/api/export/obsidian', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        vaultPath,
+        transcriptText: buildAnnotatedTranscript(),
+        sessionDate,
+        members: [...activeMembers].map(id => MEMBERS.find(m => m.id === id)?.name).filter(Boolean),
+        tags: [],
+        sourceExcerpt: currentEntry?.slice(0, 120) || '',
+        sessionId: currentSessionId,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    statusEl.textContent = `Saved to Obsidian — ${data.filename}`;
+  } catch (err) {
+    statusEl.textContent = err.message || 'Obsidian export failed.';
+  }
+}
+
 async function exportUlysses() {
   const statusEl = document.getElementById('export-status');
   const group = document.getElementById('ulysses-group')?.value.trim() || '';
@@ -1216,6 +1243,8 @@ updateExportJournalLabel();
 // Restore saved Ulysses group preference
 const _savedGroup = localStorage.getItem('sc-ulysses-group');
 if (_savedGroup) { const _gi = document.getElementById('ulysses-group'); if (_gi) _gi.value = _savedGroup; }
+const _savedVault = localStorage.getItem('sc-obsidian-vault');
+if (_savedVault) { const _vi = document.getElementById('obsidian-vault'); if (_vi) _vi.value = _savedVault; }
 
 // Load session from URL param if present (e.g. ?session=<id>)
 const _urlSession = new URLSearchParams(location.search).get('session');
