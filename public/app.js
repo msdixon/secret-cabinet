@@ -768,6 +768,27 @@ async function exportDayOne() {
   }
 }
 
+async function exportUlysses() {
+  const statusEl = document.getElementById('export-status');
+  statusEl.textContent = 'Opening Ulysses…';
+  try {
+    const res = await fetch('/api/ulysses/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        transcriptText: buildAnnotatedTranscript(),
+        sessionDate,
+        title: currentEntry?.slice(0, 60) || sessionDate,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    statusEl.textContent = 'Sent to Ulysses.';
+  } catch (err) {
+    statusEl.textContent = err.message || 'Ulysses export failed.';
+  }
+}
+
 // ── Sessions drawer ───────────────────────────────────────────────────────────
 
 let _searchTimer = null;

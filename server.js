@@ -402,6 +402,31 @@ app.post('/api/dayone/export', async (req, res) => {
   }
 });
 
+// POST /api/ulysses/export — save transcript to a new Ulysses sheet via URL scheme
+app.post('/api/ulysses/export', async (req, res) => {
+  const { transcriptText, sessionDate, title } = req.body;
+  if (!transcriptText) return res.status(400).json({ error: 'transcriptText required' });
+
+  const sheetTitle = `[Secret-Cabin-et] ${title || sessionDate || 'Meeting Notes'}`;
+  const markdown = `# ${sheetTitle}\n\n${transcriptText}`;
+
+  // Write to a temp file — Ulysses will import and then we can clean up
+  const tmpPath = path.join(require('os').tmpdir(), `secret-cabinets-${Date.now()}.md`);
+  fs.writeFileSync(tmpPath, markdown, 'utf8');
+
+  const url = `ulysses://x-callback-url/import-file?path=${encodeURIComponent(tmpPath)}&type=markdown`;
+  const { exec } = require('child_process');
+  exec(`open "${url}"`, err => {
+    // Clean up temp file after a delay (give Ulysses time to import)
+    setTimeout(() => { try { fs.unlinkSync(tmpPath); } catch {} }, 10000);
+    if (err) {
+      console.error('Ulysses export error:', err);
+      return res.status(500).json({ error: 'Could not open Ulysses. Is it installed?' });
+    }
+    res.json({ success: true });
+  });
+});
+
 // GET /api/sessions — list recent sessions, with optional ?q=, ?tag=, ?thread= filters
 app.get('/api/sessions', (req, res) => {
   const q = (req.query.q || '').trim().toLowerCase();
