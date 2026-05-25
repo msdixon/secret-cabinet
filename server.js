@@ -82,6 +82,31 @@ function loadSession(id) {
   return fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, 'utf8')) : null;
 }
 
+// ─── Section extractor (shared by dossier route + abbreviated prompt) ────────
+
+/**
+ * Extract the first paragraph of a named `## SECTION` from a character file.
+ * Returns the extracted text, or '' if not found.
+ */
+function extractSection(text, sectionName) {
+  const re = new RegExp(`##\\s+${sectionName}\\s*\\n([\\s\\S]*?)(?=\\n##|$)`, 'i');
+  const match = text.match(re);
+  if (!match) return '';
+  // Return first non-empty paragraph only
+  const paragraphs = match[1].split(/\n\n+/).map(p => p.trim()).filter(Boolean);
+  return paragraphs[0] || '';
+}
+
+/**
+ * Extract the full bullet list from WHAT YOU DO NOT DO (all lines starting with - or *).
+ */
+function extractConstraints(text) {
+  const re = /##\s+WHAT YOU DO NOT DO\s*\n([\s\S]*?)(?=\n##|$)/i;
+  const match = text.match(re);
+  if (!match) return '';
+  return match[1].trim();
+}
+
 // ─── System prompt builder ────────────────────────────────────────────────────
 
 function buildSystemPrompt(memberIds, artifact = null, shadowIds = [], notes = {}) {
@@ -156,6 +181,56 @@ There is no author present. The document was read aloud by no one in particular.
 The conversation is not required to stay close to the document after the first round. It will drift where it drifts. This is the room.
 
 Do not address the user or acknowledge any observer. The conversation proceeds as if no one is watching.`;
+}
+
+/**
+ * Abbreviated system prompt for rounds 2+.
+ * Keeps the full lodge context and FORMAT INSTRUCTIONS, but replaces each
+ * character file with three short extracts: WHO YOU ARE (first para),
+ * HOW YOU SPEAK (first para), WHAT YOU DO NOT DO (full constraint list).
+ * Reduces per-round token cost by ~85 % vs. the full prompt.
+ */
+function buildSystemPromptAbbreviated(memberIds, shadowIds = []) {
+  const present = memberIds
+    .map(id => ROSTER.find(m => m.id === id))
+    .filter(Boolean);
+
+  const guests = present.filter(m => m.guest);
+  const presentNames = present.map(m => m.name).join(', ');
+  const guestLine = guests.length ? `\nOCCASIONAL GUESTS PRESENT TONIGHT: ${guests.map(m => m.name).join(', ')}` : '';
+
+  const characterSections = present
+    .filter(m => m.file)
+    .map(m => {
+      const text = loadMemberFile(m.file);
+      if (!text) return '';
+      const who = extractSection(text, 'WHO YOU ARE');
+      const how = extractSection(text, 'HOW YOU SPEAK');
+      const constraints = extractConstraints(text);
+      const parts = [`## ${m.name}`];
+      if (who) parts.push(`**WHO YOU ARE**\n${who}`);
+      if (how) parts.push(`**HOW YOU SPEAK**\n${how}`);
+      if (constraints) parts.push(`**WHAT YOU DO NOT DO**\n${constraints}`);
+      return parts.join('\n\n');
+    })
+    .filter(Boolean)
+    .join('\n\n---\n\n');
+
+  return `${lodgeContext}
+
+---
+
+## ASSEMBLED TONIGHT
+
+PRESENT: ${presentNames}${guestLine}
+
+${characterSections}
+
+---
+
+## FORMAT INSTRUCTIONS
+
+Generate a salon transcript. Each speaker's name appears alone on a line, followed by their speech on the next line(s). 3-5 members speak per round — not every member speaks every round. Silences are valid. Members may address each other by name, quote each other, disagree, complete each other's sentences, let something drop. Be specific: cite real texts, real historical tensions. Do not address the user or acknowledge any observer. The conversation proceeds as if no one is watching.`;
 }
 
 // ─── Anthropic call helpers ───────────────────────────────────────────────────
@@ -291,12 +366,20 @@ app.post('/api/round', async (req, res) => {
   const labels = ['First Movement', 'The Room Responds', 'Final Embers', 'One More Turn'];
   const label = labels[Math.min(roundIndex, labels.length - 1)];
 
+<<<<<<< HEAD
   // Keep only the last 6 messages (3 round-trips) to cap context growth in long sessions
   const recentHistory = session.conversationHistory.slice(-6);
 
   openSSE(res);
   try {
     const text = await streamClaude(res, session.systemPrompt, recentHistory, roundPrompt);
+=======
+  const systemPrompt = buildSystemPromptAbbreviated(session.members, session.shadowMembers || []);
+
+  openSSE(res);
+  try {
+    const text = await streamClaude(res, systemPrompt, session.conversationHistory.slice(-6), roundPrompt);
+>>>>>>> 22254c7 (#50 — Abbreviated system prompt for rounds 2+)
 
     session.conversationHistory.push({ role: 'user', content: roundPrompt });
     session.conversationHistory.push({ role: 'assistant', content: text });
@@ -323,9 +406,15 @@ app.post('/api/interject', async (req, res) => {
   const prompt = `A mysterious presence — an observer from outside time — has just spoken: "${text}"\n\nThe room reacts. 2-3 members respond to what was said.`;
   const recentHistory = session.conversationHistory.slice(-6);
 
+  const systemPrompt = buildSystemPromptAbbreviated(session.members, session.shadowMembers || []);
+
   openSSE(res);
   try {
+<<<<<<< HEAD
     const response = await streamClaude(res, session.systemPrompt, recentHistory, prompt);
+=======
+    const response = await streamClaude(res, systemPrompt, session.conversationHistory.slice(-6), prompt);
+>>>>>>> 22254c7 (#50 — Abbreviated system prompt for rounds 2+)
 
     session.conversationHistory.push({ role: 'user', content: prompt });
     session.conversationHistory.push({ role: 'assistant', content: response });
