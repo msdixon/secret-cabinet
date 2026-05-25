@@ -404,23 +404,22 @@ app.post('/api/dayone/export', async (req, res) => {
   }
 });
 
-// POST /api/ulysses/export — save transcript to a new Ulysses sheet via URL scheme
-app.post('/api/ulysses/export', async (req, res) => {
-  const { transcriptText, sessionDate, title } = req.body;
+// POST /api/ulysses/export — create a new Ulysses sheet via URL scheme
+app.post('/api/ulysses/export', (req, res) => {
+  const { transcriptText, sessionDate, title, group } = req.body;
   if (!transcriptText) return res.status(400).json({ error: 'transcriptText required' });
 
   const sheetTitle = `[Secret-Cabin-et] ${title || sessionDate || 'Meeting Notes'}`;
   const markdown = `# ${sheetTitle}\n\n${transcriptText}`;
 
-  // Write to a temp file — Ulysses will import and then we can clean up
-  const tmpPath = path.join(require('os').tmpdir(), `secret-cabinets-${Date.now()}.md`);
-  fs.writeFileSync(tmpPath, markdown, 'utf8');
+  // Build URL using new-sheet scheme — no temp file, no shell quoting issues
+  const params = new URLSearchParams({ text: markdown });
+  if (group?.trim()) params.set('group', group.trim());
+  // URLSearchParams uses + for spaces; Ulysses needs %20 — replace manually
+  const url = `ulysses://x-callback-url/new-sheet?${params.toString().replace(/\+/g, '%20')}`;
 
-  const url = `ulysses://x-callback-url/import-file?path=${encodeURIComponent(tmpPath)}&type=markdown`;
-  const { exec } = require('child_process');
-  exec(`open "${url}"`, err => {
-    // Clean up temp file after a delay (give Ulysses time to import)
-    setTimeout(() => { try { fs.unlinkSync(tmpPath); } catch {} }, 10000);
+  const { execFile } = require('child_process');
+  execFile('open', [url], err => {
     if (err) {
       console.error('Ulysses export error:', err);
       return res.status(500).json({ error: 'Could not open Ulysses. Is it installed?' });

@@ -217,9 +217,15 @@
         <span class="export-note" style="font-style:normal;color:var(--lodge-muted);font-size:12px;" id="export-journal-name">No journal selected</span>
         <button class="lodge-btn export-dayone" onclick="exportDayOne()">→ Save to Day One</button>
       </div>
-      <div class="export-journal-row">
-        <span class="export-note" style="font-style:normal;color:var(--lodge-muted);font-size:12px;">Ulysses (macOS)</span>
-        <button class="lodge-btn export-ulysses" onclick="exportUlysses()">→ Save to Ulysses</button>
+      <div class="export-journal-row" style="flex-direction:column;align-items:flex-start;gap:6px;">
+        <div style="display:flex;align-items:center;gap:10px;width:100%;">
+          <span class="export-note" style="font-style:normal;color:var(--lodge-muted);font-size:12px;">Ulysses (macOS)</span>
+          <button class="lodge-btn export-ulysses" onclick="exportUlysses()">→ Save to Ulysses</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="export-note" style="font-size:11px;font-style:italic;white-space:nowrap;">Group / project:</span>
+          <input class="ulysses-group-input" id="ulysses-group" placeholder="e.g. The Affected" value="" oninput="localStorage.setItem('sc-ulysses-group',this.value)" />
+        </div>
       </div>
       <div style="margin-top:8px;">
         <span class="source-tag" id="export-status"></span>

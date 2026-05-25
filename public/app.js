@@ -772,6 +772,7 @@ async function exportDayOne() {
 
 async function exportUlysses() {
   const statusEl = document.getElementById('export-status');
+  const group = document.getElementById('ulysses-group')?.value.trim() || '';
   statusEl.textContent = 'Opening Ulysses…';
   try {
     const res = await fetch('/api/ulysses/export', {
@@ -781,11 +782,12 @@ async function exportUlysses() {
         transcriptText: buildAnnotatedTranscript(),
         sessionDate,
         title: currentEntry?.slice(0, 60) || sessionDate,
+        group,
       }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error);
-    statusEl.textContent = 'Sent to Ulysses.';
+    statusEl.textContent = group ? `Sent to Ulysses — ${group}.` : 'Sent to Ulysses.';
   } catch (err) {
     statusEl.textContent = err.message || 'Ulysses export failed.';
   }
@@ -1211,6 +1213,9 @@ async function submitNewMember() {
 
 fetchMembers().then(() => renderMembers());
 updateExportJournalLabel();
+// Restore saved Ulysses group preference
+const _savedGroup = localStorage.getItem('sc-ulysses-group');
+if (_savedGroup) { const _gi = document.getElementById('ulysses-group'); if (_gi) _gi.value = _savedGroup; }
 
 // Load session from URL param if present (e.g. ?session=<id>)
 const _urlSession = new URLSearchParams(location.search).get('session');
