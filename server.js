@@ -157,7 +157,7 @@ async function callClaude(systemPrompt, conversationHistory, userMessage, useDay
   const messages = [...conversationHistory, { role: 'user', content: userMessage }];
   const params = {
     model: 'claude-sonnet-4-6',
-    max_tokens: 1200,
+    max_tokens: 2400,
     system: systemPrompt,
     messages,
   };
@@ -173,7 +173,7 @@ async function streamClaude(res, systemPrompt, conversationHistory, userMessage)
   const messages = [...conversationHistory, { role: 'user', content: userMessage }];
   const stream = client.messages.stream({
     model: 'claude-sonnet-4-6',
-    max_tokens: 1200,
+    max_tokens: 2400,
     system: systemPrompt,
     messages,
   });
