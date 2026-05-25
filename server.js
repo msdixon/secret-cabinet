@@ -366,20 +366,11 @@ app.post('/api/round', async (req, res) => {
   const labels = ['First Movement', 'The Room Responds', 'Final Embers', 'One More Turn'];
   const label = labels[Math.min(roundIndex, labels.length - 1)];
 
-<<<<<<< HEAD
-  // Keep only the last 6 messages (3 round-trips) to cap context growth in long sessions
-  const recentHistory = session.conversationHistory.slice(-6);
-
-  openSSE(res);
-  try {
-    const text = await streamClaude(res, session.systemPrompt, recentHistory, roundPrompt);
-=======
   const systemPrompt = buildSystemPromptAbbreviated(session.members, session.shadowMembers || []);
 
   openSSE(res);
   try {
     const text = await streamClaude(res, systemPrompt, session.conversationHistory.slice(-6), roundPrompt);
->>>>>>> 22254c7 (#50 — Abbreviated system prompt for rounds 2+)
 
     session.conversationHistory.push({ role: 'user', content: roundPrompt });
     session.conversationHistory.push({ role: 'assistant', content: text });
@@ -410,11 +401,7 @@ app.post('/api/interject', async (req, res) => {
 
   openSSE(res);
   try {
-<<<<<<< HEAD
-    const response = await streamClaude(res, session.systemPrompt, recentHistory, prompt);
-=======
     const response = await streamClaude(res, systemPrompt, session.conversationHistory.slice(-6), prompt);
->>>>>>> 22254c7 (#50 — Abbreviated system prompt for rounds 2+)
 
     session.conversationHistory.push({ role: 'user', content: prompt });
     session.conversationHistory.push({ role: 'assistant', content: response });
