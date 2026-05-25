@@ -16,8 +16,8 @@ async function fetchMembers() {
 
 const ROUND_LABELS = ['First Movement', 'The Room Responds', 'Final Embers'];
 
-// Maud is a guest but default-present alongside the eight core members.
-let activeMembers = new Set(['crowley','waite','pixie','yeats','blavatsky','levi','teresa','arabi','maud']);
+// No members selected by default — user assembles the room each session.
+let activeMembers = new Set();
 // Shadow members: named in the assembled section but never speak.
 let shadowMembers = new Set();
 let currentRound = 0;

@@ -46,7 +46,13 @@ const ROSTER_FILE = path.join(MEMBERS_DIR, 'roster.json');
 let ROSTER = [];
 
 function reloadRoster() {
-  ROSTER = JSON.parse(fs.readFileSync(ROSTER_FILE, 'utf8'));
+  const all = JSON.parse(fs.readFileSync(ROSTER_FILE, 'utf8'));
+  // Filter out any entry whose character file no longer exists on disk
+  ROSTER = all.filter(m => !m.file || fs.existsSync(path.join(MEMBERS_DIR, m.file)));
+  // Also rewrite roster.json to remove stale entries
+  if (ROSTER.length < all.length) {
+    fs.writeFileSync(ROSTER_FILE, JSON.stringify(ROSTER, null, 2) + '\n', 'utf8');
+  }
 }
 reloadRoster();
 

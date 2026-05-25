@@ -43,6 +43,9 @@
     </div>
     <div class="lodge-divider"></div>
     <div class="mantel-tagline">The fire is lit. The room remembers nothing. The document waits.</div>
+    <div class="mantel-nav">
+      <button class="lodge-btn sessions-btn mantel-sessions-btn" onclick="openSessionsDrawer()">Past Meetings <span id="sessions-count" class="sessions-count"></span></button>
+    </div>
     <div class="hearth-glow">
       <div class="ember-bar" id="ember-bar"></div>
       <div class="ember-sparks" id="ember-sparks">
@@ -183,7 +186,6 @@
           </div>
         </div>
         <button class="lodge-btn" id="additional-round-btn" onclick="addRound()">One More Turn ↻</button>
-        <button class="lodge-btn sessions-btn" id="sessions-btn" onclick="openSessionsDrawer()">Past Meetings <span id="sessions-count" class="sessions-count"></span></button>
         <button class="lodge-btn sessions-btn" id="dossier-btn" onclick="toggleDossier()" style="display:none;">The Assembled ↗</button>
       </div>
     </div>
