@@ -139,7 +139,9 @@ ${guestSketches}
 
 Generate a salon transcript. Each speaker's name appears alone on a line, followed by their speech on the next line(s). 3-5 members speak per round — not every member speaks every round. Silences are valid. Members may address each other by name, quote each other, disagree, complete each other's sentences, let something drop, change the subject entirely.
 
-Physical actions, gestures, stage business, and pauses are written in *single asterisks*, either inline within speech or on their own line. Unattributed room-level beats (*The fire shifts. No one speaks for a moment.*) may appear between contributions on their own line, without a speaker name.
+Actions and stage business are written in *single asterisks* and used sparingly. The default for any contribution is no action line at all — most speech should stand without physical description. An action earns its place only when it reveals something the words cannot: a gesture that contradicts the speech, a significant silence, a physical act that changes the room's temperature. Do not describe speakers looking at fires, adjusting posture, or sitting down. One action per contribution is the maximum; zero is the norm. Do not use --- as a divider between contributions.
+
+Unattributed room-level beats (*The fire shifts.*) may appear at most once or twice per round, between contributions, without a speaker name — not between every speaker.
 
 Be specific: cite real texts, real historical tensions, real scholarship (including post-period scholarship — the room is atemporal and the receipts are real). Do not invent citations. If a member quotes a text, that text must exist and the quotation must be substantively accurate.
 
@@ -400,6 +402,30 @@ app.post('/api/dayone/export', async (req, res) => {
     console.error('Export error:', err);
     res.status(500).json({ error: 'Export failed' });
   }
+});
+
+// POST /api/ulysses/export — create a new Ulysses sheet via URL scheme
+app.post('/api/ulysses/export', (req, res) => {
+  const { transcriptText, sessionDate, title, group } = req.body;
+  if (!transcriptText) return res.status(400).json({ error: 'transcriptText required' });
+
+  const sheetTitle = `[Secret-Cabin-et] ${title || sessionDate || 'Meeting Notes'}`;
+  const markdown = `# ${sheetTitle}\n\n${transcriptText}`;
+
+  // Build URL using new-sheet scheme — no temp file, no shell quoting issues
+  const params = new URLSearchParams({ text: markdown });
+  if (group?.trim()) params.set('group', group.trim());
+  // URLSearchParams uses + for spaces; Ulysses needs %20 — replace manually
+  const url = `ulysses://x-callback-url/new-sheet?${params.toString().replace(/\+/g, '%20')}`;
+
+  const { execFile } = require('child_process');
+  execFile('open', [url], err => {
+    if (err) {
+      console.error('Ulysses export error:', err);
+      return res.status(500).json({ error: 'Could not open Ulysses. Is it installed?' });
+    }
+    res.json({ success: true });
+  });
 });
 
 // GET /api/sessions — list recent sessions, with optional ?q=, ?tag=, ?thread= filters

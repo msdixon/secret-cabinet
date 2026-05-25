@@ -101,6 +101,11 @@
 .lodge-btn.export-dayone:hover { background:rgba(90,138,90,0.15); }
 .lodge-btn.export-txt { border-color:#6a7a8a; color:#a0b8c8; }
 .lodge-btn.export-txt:hover { background:rgba(100,130,150,0.15); }
+.lodge-btn.export-ulysses { border-color:#7a6a9a; color:#b8a8d8; }
+.lodge-btn.export-ulysses:hover { background:rgba(120,100,160,0.15); }
+.ulysses-group-input { background:var(--lodge-panel); border:1px solid var(--lodge-border); color:var(--lodge-cream); font-family:'Crimson Pro',serif; font-size:13px; font-style:italic; padding:3px 8px; border-radius:2px; width:180px; }
+.ulysses-group-input:focus { outline:none; border-color:var(--lodge-amber-dim); }
+.ulysses-group-input::placeholder { color:var(--lodge-ash); }
 .journal-entry-display { background:var(--lodge-panel); border:1px solid var(--lodge-ash); border-left:3px solid var(--lodge-amber-dim); padding:14px 16px; font-size:15px; line-height:1.7; color:var(--lodge-cream); font-style:italic; min-height:80px; border-radius:0 2px 2px 0; white-space:pre-wrap; }
 .journal-entry-display.placeholder { color:var(--lodge-muted); }
 .journal-paste-area { background:var(--lodge-panel); border:1px solid var(--lodge-ash); border-left:3px solid var(--lodge-amber-dim); padding:14px 16px; font-family:'Crimson Pro',serif; font-size:15px; font-style:italic; line-height:1.7; color:var(--lodge-cream); border-radius:0 2px 2px 0; width:100%; min-height:100px; resize:vertical; }
