@@ -11,6 +11,8 @@
     "@anthropic-ai/sdk": "^0.52.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "dotenv": "^16.4.7",
-    "express": "^4.21.2"
+    "express": "^4.21.2",
+    "multer": "^2.1.1",
+    "pdf2json": "^4.0.3"
   }
 }

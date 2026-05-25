@@ -468,6 +468,58 @@ function getEntry() {
 }
 
 
+// ── File import ───────────────────────────────────────────────────────────────
+
+async function handleFileSelect(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const nameEl = document.getElementById('file-pick-name');
+  nameEl.textContent = 'Reading…';
+
+  const ext = file.name.split('.').pop().toLowerCase();
+
+  if (ext === 'txt' || ext === 'md') {
+    // Read client-side — no server round-trip
+    const text = await file.text();
+    fillFromFile(text.trim(), file.name);
+  } else if (ext === 'pdf') {
+    // Send to server for extraction
+    const form = new FormData();
+    form.append('file', file);
+    try {
+      const res = await fetch('/api/upload', { method: 'POST', body: form });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Upload failed');
+      fillFromFile(data.text, data.filename);
+    } catch (e) {
+      nameEl.textContent = `Error: ${e.message}`;
+    }
+  }
+  // Reset input so the same file can be re-selected
+  input.value = '';
+}
+
+const FILE_TEXT_LIMIT = 4000; // chars — keeps context manageable across rounds
+
+function fillFromFile(text, filename) {
+  const area = document.getElementById('paste-area');
+  let notice = '';
+  if (text.length > FILE_TEXT_LIMIT) {
+    text = text.slice(0, FILE_TEXT_LIMIT);
+    // Trim to last complete sentence
+    const lastStop = Math.max(text.lastIndexOf('. '), text.lastIndexOf('.\n'), text.lastIndexOf('? '), text.lastIndexOf('! '));
+    if (lastStop > FILE_TEXT_LIMIT * 0.7) text = text.slice(0, lastStop + 1);
+    notice = ' (trimmed to first ~4,000 chars — paste a specific passage for longer texts)';
+  }
+  area.value = text;
+  document.getElementById('file-pick-name').textContent = filename + notice;
+  // Ensure paste mode is active
+  const sel = document.getElementById('source-select');
+  sel.value = 'paste';
+  handleSourceChange();
+  setStatus(`"${filename}" loaded.${notice ? ' Long document trimmed.' : ' The room has heard it.'}`, false);
+}
+
 // ── Convene ───────────────────────────────────────────────────────────────────
 
 async function convene() {

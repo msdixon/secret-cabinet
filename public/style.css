@@ -106,6 +106,10 @@
 .journal-paste-area { background:var(--lodge-panel); border:1px solid var(--lodge-ash); border-left:3px solid var(--lodge-amber-dim); padding:14px 16px; font-family:'Crimson Pro',serif; font-size:15px; font-style:italic; line-height:1.7; color:var(--lodge-cream); border-radius:0 2px 2px 0; width:100%; min-height:100px; resize:vertical; }
 .journal-paste-area::placeholder { color:var(--lodge-muted); }
 .journal-paste-area:focus { outline:none; border-left-color:var(--lodge-amber); }
+.file-pick-row { display:flex; align-items:center; gap:10px; margin-top:8px; }
+.file-pick-btn { font-size:12px; padding:5px 12px; border-color:var(--lodge-ash); color:var(--lodge-muted); }
+.file-pick-btn:hover { border-color:var(--lodge-amber-dim); color:var(--lodge-cream); }
+.file-pick-name { font-family:'IM Fell English',serif; font-style:italic; font-size:12px; color:var(--lodge-ash); }
 .member-count-badge { font-family:'IM Fell English',serif; font-size:10px; letter-spacing:1px; color:var(--lodge-ash); font-style:italic; text-transform:none; }
 .member-count-badge.warn { color:#a07840; cursor:help; }
 .member-count-badge.over { color:#a05030; cursor:help; }
