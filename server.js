@@ -9,9 +9,22 @@ const crypto = require('crypto');
 
 const dayOne = require('./dayone');
 const multer = require('multer');
-const pdfParse = require('pdf-parse');
+const PDFParser = require('pdf2json');
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
+
+function extractPdfText(buffer) {
+  return new Promise((resolve, reject) => {
+    const parser = new PDFParser(null, true); // true = raw text mode
+    parser.on('pdfParser_dataError', err => reject(err.parserError));
+    parser.on('pdfParser_dataReady', () => {
+      const text = parser.getRawTextContent()
+        .replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+      resolve(text);
+    });
+    parser.parseBuffer(buffer);
+  });
+}
 
 const app = express();
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -645,8 +658,7 @@ app.post('/api/upload', (req, res, next) => {
   try {
     let text = '';
     if (ext === '.pdf' || mimetype === 'application/pdf') {
-      const data = await pdfParse(buffer);
-      text = data.text;
+      text = await extractPdfText(buffer);
     } else {
       // .txt and .md — read as UTF-8
       text = buffer.toString('utf8');
