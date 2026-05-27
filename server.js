@@ -918,6 +918,6 @@ function buildTranscriptHeader(entry, memberIds, date) {
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`The Secret-Cabin-et is open at http://localhost:${PORT}`);
 });
