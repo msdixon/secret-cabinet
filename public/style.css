@@ -152,9 +152,10 @@
 .transcript-entry { margin-bottom:20px; padding-bottom:20px; border-bottom:1px solid rgba(58,46,30,0.5); animation:fadeIn 0.4s ease; }
 .transcript-entry:last-child { border-bottom:none; margin-bottom:0; padding-bottom:0; }
 @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
-.speaker-name { font-family:'UnifrakturMaguntia',serif; font-size:19px; color:var(--lodge-amber); margin-bottom:5px; letter-spacing:1px; }
+.speaker-name { font-family:'UnifrakturMaguntia',serif; font-size:19px; color:var(--lodge-amber); margin-bottom:5px; letter-spacing:1px; display:flex; align-items:baseline; gap:6px; }
 .speaker-name.guest-voice { color:var(--lodge-fire); }
 .speaker-name.observer-voice { color:#a0c8a0; }
+.speaker-glyph { font-family:'Georgia',serif; font-size:13px; opacity:0.6; letter-spacing:0; line-height:1; flex-shrink:0; }
 
 /* ── Per-member voice classes (reserved for future avatar/identity work) ───── */
 /* Typography is intentionally uniform — voice-{id} classes are hooks only.   */
