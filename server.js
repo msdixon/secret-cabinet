@@ -114,6 +114,7 @@ app.get('/logout', (req, res) => {
 // Auth guard — applied to all routes except login/logout/static assets
 function requireAuth(req, res, next) {
   if (!PASSPHRASE) return next(); // no passphrase set = open
+  if (req.path === '/api/config') return next(); // health check — always public
   if (req.session.authed) return next();
   if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'Unauthorized' });
   res.redirect('/login');
