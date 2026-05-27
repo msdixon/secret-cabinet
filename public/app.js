@@ -1373,8 +1373,34 @@ async function submitNewMember() {
   }
 }
 
+// ── Environment config ────────────────────────────────────────────────────────
+
+async function applyEnvConfig() {
+  try {
+    const { isLocal } = await fetch('/api/config').then(r => r.json());
+    if (!isLocal) {
+      document.getElementById('export-ulysses-row')?.style.setProperty('display', 'none');
+      document.getElementById('export-obsidian-row')?.style.setProperty('display', 'none');
+      document.getElementById('export-md-row')?.style.setProperty('display', 'flex');
+    }
+  } catch (_) {}
+}
+
+function exportMd() {
+  if (!currentTranscript) return;
+  const text = buildAnnotatedTranscript();
+  const blob = new Blob([text], { type: 'text/markdown' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `secret-cabinet-${currentSession?.date || new Date().toISOString().slice(0,10)}.md`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 
+applyEnvConfig();
 fetchMembers().then(() => renderMembers());
 updateExportJournalLabel();
 // Restore saved Ulysses group preference
