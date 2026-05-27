@@ -1,0 +1,92 @@
+[
+  {
+    "id": "crowley-golden-dawn-1900",
+    "title": "The Revolt of 1900 — Crowley's Account",
+    "source": "The Confessions of Aleister Crowley",
+    "date": "1929",
+    "members": ["crowley", "waite", "yeats"],
+    "themes": ["golden-dawn", "schism", "authority", "initiation"],
+    "file": "crowley-golden-dawn-1900.md"
+  },
+  {
+    "id": "yeats-automatic-writing-1917",
+    "title": "The First Automatic Script — A Vision, Introduction",
+    "source": "A Vision",
+    "date": "1937",
+    "members": ["yeats", "maud"],
+    "themes": ["automatism", "vision", "marriage", "spirits", "symbolism"],
+    "file": "yeats-automatic-writing-1917.md"
+  },
+  {
+    "id": "blavatsky-astral-light-1877",
+    "title": "On the Astral Light — Isis Unveiled",
+    "source": "Isis Unveiled, Vol. I",
+    "date": "1877",
+    "members": ["blavatsky", "levi"],
+    "themes": ["astral", "occult-science", "will", "ether", "plagiarism"],
+    "file": "blavatsky-astral-light-1877.md"
+  },
+  {
+    "id": "waite-pictorial-key-preface-1911",
+    "title": "Preface to The Pictorial Key to the Tarot",
+    "source": "The Pictorial Key to the Tarot",
+    "date": "1911",
+    "members": ["waite", "pixie"],
+    "themes": ["tarot", "symbolism", "authorship", "hermeticism", "pictorial-tradition"],
+    "file": "waite-pictorial-key-preface-1911.md"
+  },
+  {
+    "id": "teresa-fourth-mansion-1577",
+    "title": "The Fourth Mansion — The Interior Castle",
+    "source": "The Interior Castle",
+    "date": "1577",
+    "members": ["teresa", "arabi"],
+    "themes": ["mysticism", "union", "interiority", "prayer", "consolations"],
+    "file": "teresa-fourth-mansion-1577.md"
+  },
+  {
+    "id": "arabi-imagination-fusus",
+    "title": "On the Imagination and the Forms of God — Fusus al-Hikam",
+    "source": "Fusus al-Hikam (The Bezels of Wisdom)",
+    "date": "1229",
+    "members": ["arabi", "teresa", "levi"],
+    "themes": ["imagination", "theophany", "form", "vision", "unity-of-being"],
+    "file": "arabi-imagination-fusus.md"
+  },
+  {
+    "id": "levi-great-arcanum-1856",
+    "title": "The Great Arcanum — Dogme et Rituel de la Haute Magie",
+    "source": "Dogme et Rituel de la Haute Magie",
+    "date": "1856",
+    "members": ["levi", "crowley", "waite"],
+    "themes": ["magic", "will", "initiation", "arcanum", "astral-light"],
+    "file": "levi-great-arcanum-1856.md"
+  },
+  {
+    "id": "maud-gonne-servant-of-queen-1938",
+    "title": "On Vision and the Irish Cause — A Servant of the Queen",
+    "source": "A Servant of the Queen",
+    "date": "1938",
+    "members": ["maud", "yeats"],
+    "themes": ["ireland", "nationalism", "vision", "mysticism", "sacrifice"],
+    "file": "maud-gonne-servant-of-queen-1938.md"
+  },
+  {
+    "id": "dee-monas-hieroglyphica-1564",
+    "title": "Preface to the Monas Hieroglyphica",
+    "source": "Monas Hieroglyphica",
+    "date": "1564",
+    "members": ["dee", "crowley", "levi"],
+    "themes": ["symbol", "unity", "mathematics", "alchemy", "hieroglyph"],
+    "file": "dee-monas-hieroglyphica-1564.md"
+  },
+  {
+    "id": "khaldun-asabiyyah-muqaddimah-1377",
+    "title": "On Asabiyyah and the Rise and Fall of Dynasties — Muqaddimah",
+    "source": "Muqaddimah",
+    "date": "1377",
+    "members": ["khaldun", "arabi"],
+    "themes": ["history", "civilisation", "decline", "solidarity", "cycles"],
+    "file": "khaldun-asabiyyah-muqaddimah-1377.md"
+  }
+]
