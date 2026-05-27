@@ -458,6 +458,23 @@ async function loadSourceOptions() {
   } catch (e) {
     if (loadingGroup) loadingGroup.label = 'Could not connect to Day One';
   }
+
+  // Add library entries as an optgroup
+  try {
+    const libRes = await fetch('/api/library');
+    const libEntries = await libRes.json();
+    if (Array.isArray(libEntries) && libEntries.length) {
+      const libGroup = document.createElement('optgroup');
+      libGroup.label = 'Archival Library';
+      libEntries.forEach(entry => {
+        const opt = document.createElement('option');
+        opt.value = `library:${entry.id}`;
+        opt.textContent = `${entry.date}  ${entry.title}`;
+        libGroup.appendChild(opt);
+      });
+      sel.appendChild(libGroup);
+    }
+  } catch (_) {}
 }
 
 function handleSourceChange() {
@@ -466,7 +483,26 @@ function handleSourceChange() {
   document.getElementById('paste-area-container').style.display = isPaste ? 'block' : 'none';
   document.getElementById('fetched-display').style.display = isPaste ? 'none' : 'block';
 
-  if (!isPaste && entryCache.has(v)) {
+  if (v.startsWith('library:')) {
+    const id = v.slice('library:'.length);
+    currentEntry = '';
+    const display = document.getElementById('entry-display');
+    display.textContent = 'Loading…';
+    display.classList.add('placeholder');
+    fetch(`/api/library/${id}`)
+      .then(r => r.json())
+      .then(entry => {
+        currentEntry = entry.text;
+        display.textContent = entry.text;
+        display.classList.remove('placeholder');
+        document.getElementById('entry-date-tag').textContent = entry.date || '';
+        document.getElementById('entry-journal-tag').textContent = entry.source || 'Library';
+        setStatus('The document has been read aloud. The room has heard it.', false);
+      })
+      .catch(() => {
+        display.textContent = 'Could not load entry.';
+      });
+  } else if (!isPaste && entryCache.has(v)) {
     const cached = entryCache.get(v);
     currentEntry = cached.text;
     currentJournal = { id: cached.journalId, name: cached.journalName };

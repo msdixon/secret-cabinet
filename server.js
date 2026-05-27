@@ -910,6 +910,58 @@ app.get('/api/config', (req, res) => {
   res.json({ isLocal: IS_LOCAL });
 });
 
+// ─── Library routes ───────────────────────────────────────────────────────────
+
+const LIBRARY_DIR = path.join(PROMPTS_DIR, 'library');
+const LIBRARY_FILE = path.join(LIBRARY_DIR, 'library.json');
+
+function loadLibraryIndex() {
+  if (!fs.existsSync(LIBRARY_FILE)) return [];
+  return JSON.parse(fs.readFileSync(LIBRARY_FILE, 'utf8'));
+}
+
+// GET /api/library — list all entries (index only, no full text)
+// Optional query params: ?member=crowley, ?theme=schism, ?q=search+terms
+app.get('/api/library', (req, res) => {
+  try {
+    let entries = loadLibraryIndex();
+    const { member, theme, q } = req.query;
+    if (member) entries = entries.filter(e => e.members?.includes(member));
+    if (theme)  entries = entries.filter(e => e.themes?.includes(theme));
+    if (q) {
+      const terms = q.toLowerCase().split(/\s+/);
+      entries = entries.filter(e =>
+        terms.every(t =>
+          e.title.toLowerCase().includes(t) ||
+          e.source.toLowerCase().includes(t) ||
+          e.themes?.some(th => th.includes(t)) ||
+          e.members?.some(m => m.includes(t))
+        )
+      );
+    }
+    res.json(entries);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load library' });
+  }
+});
+
+// GET /api/library/:id — return full text of a single entry
+app.get('/api/library/:id', (req, res) => {
+  try {
+    const index = loadLibraryIndex();
+    const entry = index.find(e => e.id === req.params.id);
+    if (!entry) return res.status(404).json({ error: 'Entry not found' });
+    const filePath = path.join(LIBRARY_DIR, entry.file);
+    if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found' });
+    const raw = fs.readFileSync(filePath, 'utf8');
+    // Strip YAML frontmatter, return plain text
+    const text = raw.replace(/^---[\s\S]*?---\n/, '').trim();
+    res.json({ ...entry, text });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load entry' });
+  }
+});
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function buildTranscriptHeader(entry, memberIds, date) {
