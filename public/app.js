@@ -32,35 +32,55 @@ let lastInterjectText = '';
 // ── Render member tokens ──────────────────────────────────────────────────────
 
 function renderMembers() {
-  ['members-grid','guests-grid'].forEach(id => document.getElementById(id).innerHTML = '');
+  ['members-grid', 'guests-grid', 'shadow-grid'].forEach(id => document.getElementById(id).innerHTML = '');
+
+  // Roster tokens — active and inactive only; shadow members rendered separately below
   MEMBERS.forEach(m => {
+    if (shadowMembers.has(m.id)) return; // shadows live in the shadow section
     const isActive = activeMembers.has(m.id);
-    const isShadow = shadowMembers.has(m.id);
     const el = document.createElement('div');
-    el.className = 'member-token'
-      + (m.guest ? ' guest' : '')
-      + (isActive ? ' active' : '')
-      + (isShadow ? ' shadow' : '');
-    el.title = isShadow ? 'Shadow — named but silent. Click to deactivate.' : '';
-    el.innerHTML = `<div class="member-dot"></div><span class="member-name">${m.name}</span>`;
+    el.className = 'member-token' + (m.guest ? ' guest' : '') + (isActive ? ' active' : '');
+    el.innerHTML = `<div class="member-dot"></div><span class="member-name">${m.name}</span><button class="shadow-btn" title="Add as absent presence" onclick="event.stopPropagation();addShadow('${m.id}')">◌</button>`;
     el.onclick = () => {
-      // Cycle: inactive → active → shadow → inactive
-      if (!isActive && !isShadow) {
-        activeMembers.add(m.id);
-      } else if (isActive) {
-        activeMembers.delete(m.id);
-        shadowMembers.add(m.id);
-      } else {
-        shadowMembers.delete(m.id);
-      }
+      if (isActive) activeMembers.delete(m.id);
+      else activeMembers.add(m.id);
       renderMembers();
     };
     document.getElementById(m.guest ? 'guests-grid' : 'members-grid').appendChild(el);
   });
+
+  // Shadow section
+  const shadowGrid = document.getElementById('shadow-grid');
+  const shadowEmpty = document.getElementById('shadow-empty');
+  const shadowSection = document.getElementById('shadow-section');
+  shadowSection.classList.toggle('has-shadows', shadowMembers.size > 0);
+  shadowEmpty.style.display = shadowMembers.size === 0 ? 'block' : 'none';
+
+  shadowMembers.forEach(id => {
+    const m = MEMBERS.find(m => m.id === id);
+    if (!m) return;
+    const el = document.createElement('div');
+    el.className = 'member-token shadow' + (m.guest ? ' guest' : '');
+    el.title = 'Click to remove from absent presences';
+    el.innerHTML = `<div class="member-dot"></div><span class="member-name">${m.name}</span><button class="shadow-remove-btn" title="Remove" onclick="event.stopPropagation();removeShadow('${m.id}')">×</button>`;
+    el.onclick = () => removeShadow(m.id);
+    shadowGrid.appendChild(el);
+  });
+
   updateMemberCount();
   populateArtifactSelect();
-  // Refresh dossier pre-convene whenever member selection changes
   if (activeMembers.size > 0) buildDossier([...activeMembers]);
+}
+
+function addShadow(id) {
+  activeMembers.delete(id); // can't be both active and shadow
+  shadowMembers.add(id);
+  renderMembers();
+}
+
+function removeShadow(id) {
+  shadowMembers.delete(id);
+  renderMembers();
 }
 
 function populateArtifactSelect() {
