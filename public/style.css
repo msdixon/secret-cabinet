@@ -124,7 +124,7 @@
 .member-count-badge.warn { color:#a07840; cursor:help; }
 .member-count-badge.over { color:#a05030; cursor:help; }
 .members-grid { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:4px; }
-.member-token { display:flex; align-items:center; gap:7px; background:var(--lodge-panel); border:1px solid var(--lodge-border); border-radius:2px; padding:6px 10px; cursor:pointer; transition:all 0.2s; user-select:none; }
+.member-token { display:flex; align-items:center; gap:7px; background:var(--lodge-panel); border:1px solid var(--lodge-border); border-radius:2px; padding:6px 10px; cursor:pointer; transition:all 0.2s; user-select:none; position:relative; }
 .member-token:hover { border-color:var(--lodge-amber-dim); }
 .member-token.active { border-color:var(--lodge-amber); background:rgba(200,146,42,0.08); }
 .member-token.guest { border-style:dashed; }
@@ -132,11 +132,28 @@
 .member-dot { width:7px; height:7px; border-radius:50%; background:var(--lodge-ash); flex-shrink:0; }
 .member-token.active .member-dot { background:var(--lodge-amber); box-shadow:0 0 6px rgba(200,146,42,0.6); }
 .member-token.guest.active .member-dot { background:var(--lodge-fire); box-shadow:0 0 6px rgba(212,98,26,0.6); }
-.member-token.shadow { border-style:dashed; border-color:var(--lodge-ash); opacity:0.7; }
+.member-name { font-family:'IM Fell English',serif; font-size:14px; color:var(--lodge-muted); flex:1; }
+.member-token.active .member-name { color:var(--lodge-cream); }
+
+/* Shadow-add button — appears on hover of roster token */
+.shadow-btn { display:none; background:none; border:none; color:var(--lodge-ash); font-size:13px; cursor:pointer; padding:0 2px; line-height:1; opacity:0.7; flex-shrink:0; }
+.shadow-btn:hover { color:var(--lodge-muted); opacity:1; }
+.member-token:hover .shadow-btn { display:block; }
+
+/* Absent Presences section */
+.shadow-section { margin-top:16px; padding-top:12px; border-top:1px solid var(--lodge-border); }
+.shadow-section-label { font-family:'IM Fell English',serif; font-size:11px; letter-spacing:2px; text-transform:uppercase; color:var(--lodge-ash); margin-bottom:8px; }
+.shadow-section-hint { font-style:italic; letter-spacing:0; text-transform:none; font-size:11px; opacity:0.7; }
+.shadow-empty { font-family:'IM Fell English',serif; font-size:12px; color:var(--lodge-border); font-style:italic; padding:4px 0; }
+
+/* Shadow tokens */
+.member-token.shadow { border-style:dashed; border-color:var(--lodge-ash); background:transparent; opacity:1; cursor:default; }
 .member-token.shadow .member-dot { background:transparent; border:1px solid var(--lodge-ash); }
 .member-token.shadow .member-name { font-style:italic; color:var(--lodge-ash); }
-.member-name { font-family:'IM Fell English',serif; font-size:14px; color:var(--lodge-muted); }
-.member-token.active .member-name { color:var(--lodge-cream); }
+.shadow-remove-btn { display:none; background:none; border:none; color:var(--lodge-ash); font-size:14px; cursor:pointer; padding:0 2px; line-height:1; flex-shrink:0; }
+.shadow-remove-btn:hover { color:var(--lodge-muted); }
+.member-token.shadow:hover .shadow-remove-btn { display:block; }
+.member-token.shadow:hover { border-color:var(--lodge-muted); cursor:pointer; }
 .round-controls { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
 .round-pips { display:flex; gap:6px; align-items:center; }
 .round-pip { width:10px; height:10px; border-radius:50%; border:1px solid var(--lodge-border); background:transparent; transition:all 0.3s; }
