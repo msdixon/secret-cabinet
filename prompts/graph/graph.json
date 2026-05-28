@@ -1,0 +1,95 @@
+{
+  "notes": "Historical seed edges only. Library edges (member↔text, text↔theme) and session edges are derived at query time from library.json and sessions/. Add new historical relationships here as research deepens.",
+  "edges": [
+    {
+      "source": "crowley", "target": "waite",
+      "type": "rivalry",
+      "label": "Golden Dawn schism; competing Tarot visions",
+      "origin": "historical"
+    },
+    {
+      "source": "crowley", "target": "yeats",
+      "type": "rivalry",
+      "label": "Mutual contempt; Golden Dawn expulsion conflict 1900",
+      "origin": "historical"
+    },
+    {
+      "source": "yeats", "target": "maud",
+      "type": "love",
+      "label": "Lifelong entanglement; she refused his proposals repeatedly",
+      "origin": "historical"
+    },
+    {
+      "source": "yeats", "target": "maud",
+      "type": "collaboration",
+      "label": "Irish nationalist work; shared occult visions",
+      "origin": "historical"
+    },
+    {
+      "source": "blavatsky", "target": "levi",
+      "type": "intellectual-debt",
+      "label": "Blavatsky borrowed extensively from Lévi in Isis Unveiled; acknowledged obliquely",
+      "origin": "historical"
+    },
+    {
+      "source": "waite", "target": "pixie",
+      "type": "collaboration",
+      "label": "The Rider-Waite Tarot deck, 1909",
+      "origin": "historical"
+    },
+    {
+      "source": "teresa", "target": "arabi",
+      "type": "parallel",
+      "label": "Mystics of union from different traditions; near-contemporaries in Iberia",
+      "origin": "historical"
+    },
+    {
+      "source": "yeats", "target": "blavatsky",
+      "type": "influence",
+      "label": "Early Yeats was a Theosophist; attended Blavatsky's London salon 1887–1890",
+      "origin": "historical"
+    },
+    {
+      "source": "levi", "target": "crowley",
+      "type": "influence",
+      "label": "Lévi foundational to Crowley's magical system; Crowley believed himself Lévi reincarnated",
+      "origin": "historical"
+    },
+    {
+      "source": "dee", "target": "arabi",
+      "type": "parallel",
+      "label": "Angelic language (Enochian) and divine mathematics echo Ibn Arabi's imaginal world",
+      "origin": "historical"
+    },
+    {
+      "source": "crowley", "target": "levi",
+      "type": "influence",
+      "label": "Crowley's Magick draws directly on Lévi's magical theory and Astral Light doctrine",
+      "origin": "historical"
+    },
+    {
+      "source": "waite", "target": "yeats",
+      "type": "membership",
+      "label": "Both members of the Hermetic Order of the Golden Dawn",
+      "origin": "historical"
+    },
+    {
+      "source": "crowley", "target": "blavatsky",
+      "type": "influence",
+      "label": "Theosophy shaped Crowley's early cosmology before he broke with it",
+      "origin": "historical"
+    },
+    {
+      "source": "llull", "target": "dee",
+      "type": "influence",
+      "label": "Dee owned and annotated Lullian texts; combinatory logic influenced Monas Hieroglyphica",
+      "origin": "historical"
+    },
+    {
+      "source": "arabi", "target": "levi",
+      "type": "parallel",
+      "label": "Both theorised the imagination as a cosmological faculty, not mere fantasy",
+      "origin": "historical"
+    }
+  ]
+}

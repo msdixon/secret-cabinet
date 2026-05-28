@@ -910,6 +910,137 @@ app.get('/api/config', (req, res) => {
   res.json({ isLocal: IS_LOCAL });
 });
 
+// ─── Knowledge graph ──────────────────────────────────────────────────────────
+
+const GRAPH_FILE = path.join(PROMPTS_DIR, 'graph', 'graph.json');
+
+/**
+ * Build the full graph at query time from three sources:
+ *   1. Historical seed edges (graph.json)
+ *   2. Library-derived edges (member↔text, text↔theme) from library.json
+ *   3. Session-derived edges (co-convened members, discussed text, theme tags) from sessions/
+ *
+ * Returns { nodes: [...], edges: [...] }
+ */
+function buildGraph() {
+  const edges = [];
+  const nodeMap = new Map(); // id → node
+
+  function ensureNode(id, type, label) {
+    if (!nodeMap.has(id)) nodeMap.set(id, { id, type, label });
+  }
+
+  // ── 1. Roster nodes ────────────────────────────────────────────────────────
+  ROSTER.forEach(m => ensureNode(m.id, 'member', m.name));
+
+  // ── 2. Historical seed edges ───────────────────────────────────────────────
+  if (fs.existsSync(GRAPH_FILE)) {
+    const seed = JSON.parse(fs.readFileSync(GRAPH_FILE, 'utf8'));
+    (seed.edges || []).forEach(e => {
+      ensureNode(e.source, 'member', e.source);
+      ensureNode(e.target, 'member', e.target);
+      edges.push({ ...e, weight: 1 });
+    });
+  }
+
+  // ── 3. Library-derived edges ───────────────────────────────────────────────
+  const LIBRARY_FILE_PATH = path.join(PROMPTS_DIR, 'library', 'library.json');
+  if (fs.existsSync(LIBRARY_FILE_PATH)) {
+    const library = JSON.parse(fs.readFileSync(LIBRARY_FILE_PATH, 'utf8'));
+    library.forEach(entry => {
+      ensureNode(entry.id, 'text', entry.title);
+      // member → text
+      (entry.members || []).forEach(memberId => {
+        ensureNode(memberId, 'member', memberId);
+        edges.push({ source: memberId, target: entry.id, type: 'appears-in', origin: 'library', weight: 1 });
+      });
+      // text → theme
+      (entry.themes || []).forEach(theme => {
+        ensureNode(theme, 'theme', theme);
+        edges.push({ source: entry.id, target: theme, type: 'touches', origin: 'library', weight: 1 });
+      });
+      // member → theme (direct, for easier querying)
+      (entry.members || []).forEach(memberId => {
+        (entry.themes || []).forEach(theme => {
+          edges.push({ source: memberId, target: theme, type: 'associated-with', origin: 'library', weight: 1 });
+        });
+      });
+    });
+  }
+
+  // ── 4. Session-derived edges ───────────────────────────────────────────────
+  const sessionEdges = new Map(); // key → edge with accumulated weight
+
+  function accumulateEdge(source, target, type, origin, sessionId) {
+    const key = `${source}|${target}|${type}`;
+    if (sessionEdges.has(key)) {
+      sessionEdges.get(key).weight++;
+      if (sessionId) sessionEdges.get(key).sessions.push(sessionId);
+    } else {
+      sessionEdges.set(key, { source, target, type, origin, weight: 1, sessions: sessionId ? [sessionId] : [] });
+    }
+  }
+
+  if (fs.existsSync(SESSIONS_DIR)) {
+    fs.readdirSync(SESSIONS_DIR)
+      .filter(f => f.endsWith('.json') && f !== '.gitkeep')
+      .forEach(f => {
+        try {
+          const s = JSON.parse(fs.readFileSync(path.join(SESSIONS_DIR, f), 'utf8'));
+          const members = s.members || [];
+          const shadows = s.shadowMembers || [];
+          const tags = s.tags || [];
+          const sid = s.id;
+
+          // Ensure session node
+          ensureNode(sid, 'session', s.entry?.slice(0, 60) || sid);
+
+          // session → member (co-convened)
+          members.forEach(mid => {
+            ensureNode(mid, 'member', mid);
+            accumulateEdge(sid, mid, 'convened', 'session', null);
+            // member co-occurrence with other members
+            members.forEach(mid2 => {
+              if (mid < mid2) accumulateEdge(mid, mid2, 'co-convened', 'session', sid);
+            });
+            // member with shadow
+            shadows.forEach(sid2 => {
+              accumulateEdge(mid, sid2, 'shadowed-with', 'session', sid);
+            });
+          });
+
+          // session → tags as themes
+          tags.forEach(tag => {
+            ensureNode(tag, 'theme', tag);
+            accumulateEdge(sid, tag, 'tagged', 'session', null);
+            // member → theme via session tag
+            members.forEach(mid => {
+              accumulateEdge(mid, tag, 'associated-with', 'session', sid);
+            });
+          });
+        } catch (_) {}
+      });
+  }
+
+  sessionEdges.forEach(e => edges.push(e));
+
+  return {
+    nodes: Array.from(nodeMap.values()),
+    edges,
+    generated: new Date().toISOString(),
+  };
+}
+
+// GET /api/graph — return full knowledge graph
+app.get('/api/graph', (req, res) => {
+  try {
+    res.json(buildGraph());
+  } catch (err) {
+    console.error('Graph error:', err);
+    res.status(500).json({ error: 'Failed to build graph' });
+  }
+});
+
 // ─── Library routes ───────────────────────────────────────────────────────────
 
 const LIBRARY_DIR = path.join(PROMPTS_DIR, 'library');
