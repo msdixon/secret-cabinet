@@ -22,6 +22,7 @@ let activeMembers = new Set();
 let shadowMembers = new Set();
 let currentRound = 0;
 let currentSessionId = null;
+let currentSourceSessionId = null; // set when reconvening on a prior transcript
 let transcriptText = '';
 let sessionDate = '';
 let journalList = [];
@@ -503,6 +504,9 @@ function handleSourceChange() {
   document.getElementById('paste-area-container').style.display = isPaste ? 'block' : 'none';
   document.getElementById('fetched-display').style.display = isPaste ? 'none' : 'block';
 
+  // Changing source clears any prior transcript reconvene state
+  if (!v.startsWith('transcript:')) currentSourceSessionId = null;
+
   if (v.startsWith('library:')) {
     const id = v.slice('library:'.length);
     currentEntry = '';
@@ -638,7 +642,7 @@ async function convene() {
     let acc = '';
     let d1;
     try {
-      d1 = await streamPost('/api/convene', { entry, members, shadows, roundInstructions, artifact, notes }, chunk => { acc += chunk; s1.append(chunk); });
+      d1 = await streamPost('/api/convene', { entry, members, shadows, roundInstructions, artifact, notes, sourceSessionId: currentSourceSessionId || undefined }, chunk => { acc += chunk; s1.append(chunk); });
       s1.finalize(acc);
       currentSessionId = d1.sessionId;
       buildDossier(members);
@@ -811,6 +815,46 @@ function buildAnnotatedTranscript() {
   return result.join('\n');
 }
 
+function reconveneOnCurrentSession() {
+  if (!currentSessionId || !transcriptText) return;
+  const FILE_TEXT_LIMIT = 4000;
+  const full = buildAnnotatedTranscript();
+  const truncated = full.length > FILE_TEXT_LIMIT
+    ? full.slice(0, FILE_TEXT_LIMIT) + '\n\n[transcript truncated]'
+    : full;
+
+  currentEntry = truncated;
+  currentSourceSessionId = currentSessionId;
+
+  // Scroll to top and show document panel with transcript loaded
+  document.getElementById('paste-area-container').style.display = 'none';
+  document.getElementById('fetched-display').style.display = 'block';
+  const display = document.getElementById('entry-display');
+  display.textContent = truncated;
+  display.classList.remove('placeholder');
+  document.getElementById('entry-date-tag').textContent = sessionDate || '';
+  document.getElementById('entry-journal-tag').textContent = '↩ Prior transcript';
+
+  const sel = document.getElementById('source-select');
+  const opt = document.createElement('option');
+  opt.value = `transcript:${currentSessionId}`;
+  opt.textContent = `Transcript — ${sessionDate}`;
+  opt.selected = true;
+  sel.prepend(opt);
+  sel.value = `transcript:${currentSessionId}`;
+
+  // Clear transcript view so user starts fresh
+  document.getElementById('transcript-content').innerHTML = '';
+  document.getElementById('export-panel').className = 'export-panel';
+  currentRound = 0;
+  currentSessionId = null;
+  transcriptText = '';
+  updatePips();
+
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  setStatus('The transcript has been placed on the table. Assemble a new room and reconvene.', false);
+}
+
 function exportTxt() {
   const blob = new Blob([buildAnnotatedTranscript()], { type: 'text/plain' });
   const url = URL.createObjectURL(blob);
@@ -925,6 +969,47 @@ function closeSessionsDrawer() {
   document.getElementById('sessions-drawer').classList.remove('open');
 }
 
+async function reconveneOnSession(id) {
+  try {
+    const data = await fetch(`/api/sessions/${id}/transcript`).then(r => r.json());
+    if (data.error) { alert('Could not load transcript.'); return; }
+
+    // Truncate to file import limit to avoid context overflow
+    const FILE_TEXT_LIMIT = 4000;
+    const truncated = data.transcript.length > FILE_TEXT_LIMIT
+      ? data.transcript.slice(0, FILE_TEXT_LIMIT) + '\n\n[transcript truncated]'
+      : data.transcript;
+
+    // Set as current document source
+    currentEntry = truncated;
+    currentSourceSessionId = id;
+
+    // Show in the document panel
+    const sourceLabel = `Transcript — ${data.date}${data.members?.length ? ' · ' + data.members.slice(0, 3).join(', ') : ''}`;
+    document.getElementById('paste-area-container').style.display = 'none';
+    document.getElementById('fetched-display').style.display = 'block';
+    const display = document.getElementById('entry-display');
+    display.textContent = truncated;
+    display.classList.remove('placeholder');
+    document.getElementById('entry-date-tag').textContent = data.date || '';
+    document.getElementById('entry-journal-tag').textContent = '↩ Prior transcript';
+
+    // Reset source select to avoid confusion
+    const sel = document.getElementById('source-select');
+    const opt = document.createElement('option');
+    opt.value = `transcript:${id}`;
+    opt.textContent = sourceLabel;
+    opt.selected = true;
+    sel.prepend(opt);
+    sel.value = `transcript:${id}`;
+
+    setStatus('A prior transcript has been placed on the table. Assemble the room and reconvene.', false);
+    closeSessionsDrawer();
+  } catch (e) {
+    alert('Could not load transcript.');
+  }
+}
+
 async function loadSessionsList(q = '', tag = '', thread = '') {
   const list = document.getElementById('sessions-list');
   list.innerHTML = '<div class="sessions-empty">Loading...</div>';
@@ -972,6 +1057,7 @@ async function loadSessionsList(q = '', tag = '', thread = '') {
         <div class="session-tags-row">${tagsHtml}<button class="add-tag-btn" onclick="addTagUI('${s.id}', this)">+</button></div>
         <div class="session-item-actions">
           <button class="session-load-btn" onclick="restoreSession('${s.id}')">Load this meeting</button>
+          <button class="session-reconvene-btn" onclick="reconveneOnSession('${s.id}')" title="Use this transcript as the document for a new session">↩ Reconvene</button>
           <button class="session-thread-btn" onclick="assignThreadUI('${s.id}', '${escapeHTML(s.threadId||'')}', '${escapeHTML(s.threadName||'')}', this)">⬡ Thread</button>
           <button class="session-compare-btn" id="compare-btn-${s.id}" onclick="toggleCompareSelect('${s.id}', this)">⊕ Compare</button>
           <button class="session-delete-btn" onclick="deleteSession('${s.id}', this)">Delete</button>

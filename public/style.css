@@ -264,6 +264,8 @@
 .session-thread-badge:hover { background:rgba(200,146,42,0.2); }
 .session-thread-btn { background:transparent; border:1px solid var(--lodge-border); color:var(--lodge-ash); font-family:'IM Fell English',serif; font-size:11px; padding:4px 8px; border-radius:2px; cursor:pointer; letter-spacing:1px; }
 .session-thread-btn:hover { border-color:var(--lodge-amber-dim); color:var(--lodge-muted); }
+.session-reconvene-btn { background:transparent; border:1px solid var(--lodge-ash); color:var(--lodge-ash); font-family:'IM Fell English',serif; font-size:11px; padding:4px 10px; border-radius:2px; cursor:pointer; letter-spacing:1px; transition:all 0.15s; }
+.session-reconvene-btn:hover { border-color:var(--lodge-amber-dim); color:var(--lodge-amber); background:rgba(200,146,42,0.05); }
 .thread-picker { margin-top:8px; display:flex; flex-direction:column; gap:5px; padding:10px; background:var(--lodge-panel); border:1px solid var(--lodge-amber-dim); border-radius:2px; }
 .thread-picker-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:2px; }
 .thread-picker-close { background:none; border:none; color:var(--lodge-ash); font-size:12px; cursor:pointer; padding:0 2px; line-height:1; }
