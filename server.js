@@ -384,14 +384,17 @@ const DEFAULT_ROUND_INSTRUCTIONS = [
 ];
 const EXTRA_ROUND_INSTRUCTION = 'A thread unresolved, a silence wanting breaking, a late arrival to the argument, a member who passed earlier returning with something they have just thought of. 2-4 members speak.';
 
-function buildRoundPrompt(index, entry, instructions, artifact = null) {
+function buildRoundPrompt(index, entry, instructions, artifact = null, isTranscriptSource = false) {
   const instr = instructions?.[index] || DEFAULT_ROUND_INSTRUCTIONS[index] || EXTRA_ROUND_INSTRUCTION;
   if (index === 0) {
     const artifactMember = artifact?.memberId ? ROSTER.find(m => m.id === artifact.memberId) : null;
     const artifactHint = artifactMember
       ? `\n\n${artifactMember.name} has private context from before the meeting. They should speak in this round.`
       : '';
-    return `The document has just been read aloud:\n\n"${entry}"\n\n${instr}${artifactHint}`;
+    const preamble = isTranscriptSource
+      ? `A record has been passed around the table — minutes of a previous gathering, authorship uncertain, date unclear. The room considers it.\n\n"${entry}"`
+      : `The document has just been read aloud:\n\n"${entry}"`;
+    return `${preamble}\n\n${instr}${artifactHint}`;
   }
   return instr;
 }
@@ -404,11 +407,12 @@ app.post('/api/convene', async (req, res) => {
   if (!entry?.trim()) return res.status(400).json({ error: 'entry is required' });
   if (!members?.length) return res.status(400).json({ error: 'at least one member is required' });
 
-  const { roundInstructions, artifact, shadows, notes } = req.body;
+  const { roundInstructions, artifact, shadows, notes, sourceSessionId } = req.body;
+  const isTranscriptSource = !!sourceSessionId;
   const id = makeSessionId(entry);
   const date = new Date().toISOString().slice(0, 10);
   const systemPrompt = buildSystemPrompt(members, artifact || null, shadows || [], notes || {});
-  const roundPrompt = buildRoundPrompt(0, entry, roundInstructions, artifact || null);
+  const roundPrompt = buildRoundPrompt(0, entry, roundInstructions, artifact || null, isTranscriptSource);
 
   openSSE(res);
   try {
@@ -423,6 +427,7 @@ app.post('/api/convene', async (req, res) => {
       artifact: artifact || null,
       shadows: shadows || [],
       notes: notes || {},
+      sourceSessionId: sourceSessionId || null,
       conversationHistory: history,
       rounds: [{ label: 'First Movement', text }],
       transcriptText: buildTranscriptHeader(entry, members, date) + `\n— First Movement —\n\n${formatTranscriptText(text)}\n`,
@@ -759,6 +764,50 @@ app.get('/api/sessions/:id', (req, res) => {
   const session = loadSession(req.params.id);
   if (!session) return res.status(404).json({ error: 'Session not found' });
   res.json(session);
+});
+
+// GET /api/sessions/:id/transcript — return annotated transcript text for reconvening
+// Weaves stored annotations into the transcript text, same as the frontend export does.
+app.get('/api/sessions/:id/transcript', (req, res) => {
+  const session = loadSession(req.params.id);
+  if (!session) return res.status(404).json({ error: 'Session not found' });
+
+  let transcript = session.transcriptText || '';
+
+  // Weave in stored annotations if present
+  const annotations = session.annotations || {};
+  if (Object.keys(annotations).length) {
+    const lines = transcript.split('\n');
+    const result = [];
+    let i = 0;
+    while (i < lines.length) {
+      result.push(lines[i]);
+      const match = lines[i].match(/^(.+) —$/);
+      if (match) {
+        const speaker = match[1];
+        // Find annotation by speaker name match
+        const note = Object.values(annotations).find(a => a.speaker === speaker)?.note;
+        if (note) {
+          while (i + 1 < lines.length && lines[i + 1] !== '') { i++; result.push(lines[i]); }
+          result.push(`  ↳ ${note}`);
+        }
+      }
+      i++;
+    }
+    transcript = result.join('\n');
+  }
+
+  const memberNames = (session.members || [])
+    .map(id => ROSTER.find(m => m.id === id)?.name)
+    .filter(Boolean);
+
+  res.json({
+    id: session.id,
+    date: session.date,
+    members: memberNames,
+    entry: session.entry?.slice(0, 80),
+    transcript,
+  });
 });
 
 // GET /api/members — return current roster
