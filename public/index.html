@@ -249,12 +249,27 @@
         <button class="lodge-btn" onclick="exportMd()">↓ Download .md</button>
       </div>
       <div class="export-journal-row" style="margin-top:4px;border-top:1px solid var(--lodge-border);padding-top:10px;">
+        <span class="export-note" style="font-style:italic;color:var(--lodge-ash);font-size:12px;">Witness</span>
+        <button class="lodge-btn" style="border-color:var(--lodge-ash);color:var(--lodge-ash);" onclick="startWitness()" title="Watch the transcript play back with reading-time pacing">◎ Watch this meeting</button>
+      </div>
+      <div class="export-journal-row" style="margin-top:4px;">
         <span class="export-note" style="font-style:italic;color:var(--lodge-ash);font-size:12px;">The Lodge Beyond the Lodge</span>
         <button class="lodge-btn" style="border-color:var(--lodge-ash);color:var(--lodge-ash);" onclick="reconveneOnCurrentSession()" title="Use this transcript as the document for a new session">↩ Reconvene on this transcript</button>
       </div>
       <div style="margin-top:8px;">
         <span class="source-tag" id="export-status"></span>
       </div>
+    </div>
+
+    <!-- Witness mode panel — inline alternate view -->
+    <div class="witness-panel" id="witness-panel" style="display:none;">
+      <div class="witness-controls">
+        <span class="witness-label">◎ Witness</span>
+        <span class="witness-hint" id="witness-hint">Space or click to advance</span>
+        <button class="witness-exit-btn" onclick="exitWitness()">✕ Exit</button>
+      </div>
+      <div class="witness-stage" id="witness-stage" onclick="witnessAdvance()"></div>
+      <div class="witness-progress" id="witness-progress"></div>
     </div>
 
     <div class="status-bar" id="status-bar">The room waits.</div>

@@ -855,6 +855,239 @@ function reconveneOnCurrentSession() {
   setStatus('The transcript has been placed on the table. Assemble a new room and reconvene.', false);
 }
 
+// ── Witness mode ──────────────────────────────────────────────────────────────
+
+let witnessBlocks = [];      // parsed sequence of blocks to play
+let witnessIndex = 0;        // current block position
+let witnessTimer = null;     // auto-advance timer
+let witnessActive = false;
+
+const WITNESS_WPM = 180;     // reading speed for auto-advance pacing
+const WITNESS_PAUSE_AFTER_HEADER = 1800;   // ms pause after round headers
+const WITNESS_MIN_PAUSE = 1200;            // minimum ms between blocks
+const WITNESS_MAX_PAUSE = 12000;           // cap on auto-advance delay
+
+/**
+ * Parse a session's rounds + annotations into a flat sequence of playback blocks.
+ * Block types: { type: 'header', label }
+ *              { type: 'speech', speaker, text, memberId, isGuest, annotation }
+ *              { type: 'action', text }
+ */
+function parseWitnessBlocks(session) {
+  const blocks = [];
+  const annotations = session.annotations || {};
+
+  (session.rounds || []).forEach(round => {
+    blocks.push({ type: 'header', label: round.label });
+
+    const lines = (round.text || '').split('\n');
+    let speaker = null, textLines = [];
+
+    const flush = () => {
+      if (!speaker || !textLines.length) return;
+      const aliasId = Object.keys(SPEAKER_ALIASES).find(a => speaker.toLowerCase().includes(a.toLowerCase()));
+      const m = aliasId
+        ? MEMBERS.find(m => m.id === SPEAKER_ALIASES[aliasId])
+        : MEMBERS.find(m => speaker.includes(m.name) || m.name.includes(speaker));
+      // Find annotation for this speaker (match by speaker name)
+      const annotation = Object.values(annotations).find(a => a.speaker === speaker)?.note || null;
+      blocks.push({
+        type: 'speech',
+        speaker,
+        text: textLines.join('\n').trim(),
+        memberId: m?.id || null,
+        isGuest: m?.guest || false,
+        annotation,
+      });
+      speaker = null; textLines = [];
+    };
+
+    lines.forEach(line => {
+      const t = line.trim();
+      if (!t) { flush(); return; }
+      if (t === '---' || t === '—' || t === '--') return;
+      const isActionLine = /^\*[^*\n]+\*$/.test(t);
+      if (isActionLine && !speaker) {
+        flush();
+        blocks.push({ type: 'action', text: t.slice(1, -1) });
+        return;
+      }
+      const isKnownName = MEMBERS.some(m => t === m.name || t === m.name + ':')
+        || Object.keys(SPEAKER_ALIASES).some(a => t === a || t === a + ':');
+      const looksLikeName = !t.includes(' ') && t.endsWith(':') && t.length < 30;
+      if (isKnownName || looksLikeName) { flush(); speaker = t.replace(/:$/, ''); textLines = []; }
+      else if (speaker) textLines.push(t);
+    });
+    flush();
+  });
+
+  return blocks;
+}
+
+function witnessReadingTime(text) {
+  const words = text.trim().split(/\s+/).length;
+  const ms = (words / WITNESS_WPM) * 60 * 1000;
+  return Math.min(Math.max(ms, WITNESS_MIN_PAUSE), WITNESS_MAX_PAUSE);
+}
+
+function renderWitnessBlock(block) {
+  const stage = document.getElementById('witness-stage');
+  stage.innerHTML = '';
+
+  if (block.type === 'header') {
+    const el = document.createElement('div');
+    el.className = 'witness-round-header';
+    el.innerHTML = `<div class="witness-rule"></div><span class="witness-round-label">${escapeHTML(block.label)}</span><div class="witness-rule"></div>`;
+    stage.appendChild(el);
+    return WITNESS_PAUSE_AFTER_HEADER;
+  }
+
+  if (block.type === 'action') {
+    const el = document.createElement('div');
+    el.className = 'witness-action';
+    el.textContent = block.text;
+    stage.appendChild(el);
+    return witnessReadingTime(block.text);
+  }
+
+  if (block.type === 'speech') {
+    const nc = block.memberId ? `voice-${block.memberId}` : (block.isGuest ? 'guest-voice' : '');
+    const glyph = block.memberId && MEMBER_GLYPHS[block.memberId]
+      ? `<span class="speaker-glyph">${MEMBER_GLYPHS[block.memberId]}</span>` : '';
+
+    const nameEl = document.createElement('div');
+    nameEl.className = `witness-speaker ${nc}`;
+    nameEl.innerHTML = `${glyph}${escapeHTML(block.speaker)}`;
+    stage.appendChild(nameEl);
+
+    const textEl = document.createElement('div');
+    textEl.className = 'witness-speech';
+    textEl.innerHTML = renderActions(block.text);
+    stage.appendChild(textEl);
+
+    if (block.annotation) {
+      const annEl = document.createElement('div');
+      annEl.className = 'witness-annotation';
+      annEl.textContent = `↳ ${block.annotation}`;
+      stage.appendChild(annEl);
+    }
+
+    return witnessReadingTime(block.text);
+  }
+
+  return WITNESS_MIN_PAUSE;
+}
+
+function witnessAdvance() {
+  if (!witnessActive) return;
+  clearTimeout(witnessTimer);
+
+  if (witnessIndex >= witnessBlocks.length) {
+    // End of transcript
+    const stage = document.getElementById('witness-stage');
+    stage.innerHTML = '<div class="witness-end">The room falls silent.</div>';
+    document.getElementById('witness-hint').textContent = 'Click Exit to return';
+    document.getElementById('witness-progress').style.width = '100%';
+    return;
+  }
+
+  const block = witnessBlocks[witnessIndex];
+  const delay = renderWitnessBlock(block);
+  witnessIndex++;
+
+  // Update progress bar
+  const pct = (witnessIndex / witnessBlocks.length) * 100;
+  document.getElementById('witness-progress').style.width = `${pct}%`;
+  document.getElementById('witness-hint').textContent =
+    `${witnessIndex} / ${witnessBlocks.length} — space or click to advance`;
+
+  // Schedule auto-advance
+  witnessTimer = setTimeout(witnessAdvance, delay);
+}
+
+function startWitness(sessionData) {
+  // sessionData is optional — if omitted, use the current in-memory session
+  const session = sessionData || {
+    rounds: (() => {
+      // Reconstruct rounds from the current live transcript
+      // We don't have rounds split out in memory, so use the stored session
+      return null;
+    })(),
+    annotations: (() => {
+      const result = {};
+      document.querySelectorAll('.transcript-entry.annotated').forEach(e => {
+        const note = e.querySelector('.annotation-input')?.value.trim();
+        const speaker = e.dataset.speaker;
+        if (note && speaker) result[e.dataset.entryId] = { speaker, note };
+      });
+      return result;
+    })(),
+  };
+
+  if (!session.rounds) {
+    // No rounds yet — need to fetch from server
+    if (!currentSessionId) return;
+    fetch(`/api/sessions/${currentSessionId}`)
+      .then(r => r.json())
+      .then(s => {
+        // Merge live annotations into stored session
+        const liveAnnotations = {};
+        document.querySelectorAll('.transcript-entry.annotated').forEach(e => {
+          const note = e.querySelector('.annotation-input')?.value.trim();
+          const speaker = e.dataset.speaker;
+          if (note && speaker) liveAnnotations[e.dataset.entryId] = { speaker, note };
+        });
+        s.annotations = { ...( s.annotations || {}), ...liveAnnotations };
+        startWitness(s);
+      });
+    return;
+  }
+
+  witnessBlocks = parseWitnessBlocks(session);
+  witnessIndex = 0;
+  witnessActive = true;
+
+  // Show witness panel, hide transcript panel
+  document.getElementById('witness-panel').style.display = 'block';
+  document.getElementById('witness-panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  document.getElementById('witness-progress').style.width = '0%';
+  document.getElementById('witness-hint').textContent = 'Space or click to advance';
+
+  // Keyboard handler
+  document.addEventListener('keydown', witnessKeyHandler);
+
+  witnessAdvance();
+}
+
+function witnessKeyHandler(e) {
+  if (e.code === 'Space' && witnessActive) {
+    e.preventDefault();
+    witnessAdvance();
+  }
+  if (e.code === 'Escape' && witnessActive) {
+    exitWitness();
+  }
+}
+
+function exitWitness() {
+  witnessActive = false;
+  clearTimeout(witnessTimer);
+  document.removeEventListener('keydown', witnessKeyHandler);
+  document.getElementById('witness-panel').style.display = 'none';
+  document.getElementById('witness-stage').innerHTML = '';
+}
+
+// Entry point from Past Meetings drawer
+async function startWitnessFromSession(id) {
+  try {
+    const session = await fetch(`/api/sessions/${id}`).then(r => r.json());
+    closeSessionsDrawer();
+    startWitness(session);
+  } catch (e) {
+    alert('Could not load session for playback.');
+  }
+}
+
 function exportTxt() {
   const blob = new Blob([buildAnnotatedTranscript()], { type: 'text/plain' });
   const url = URL.createObjectURL(blob);
@@ -1057,6 +1290,7 @@ async function loadSessionsList(q = '', tag = '', thread = '') {
         <div class="session-tags-row">${tagsHtml}<button class="add-tag-btn" onclick="addTagUI('${s.id}', this)">+</button></div>
         <div class="session-item-actions">
           <button class="session-load-btn" onclick="restoreSession('${s.id}')">Load this meeting</button>
+          <button class="session-witness-btn" onclick="startWitnessFromSession('${s.id}')" title="Watch this meeting play back">◎ Watch</button>
           <button class="session-reconvene-btn" onclick="reconveneOnSession('${s.id}')" title="Use this transcript as the document for a new session">↩ Reconvene</button>
           <button class="session-thread-btn" onclick="assignThreadUI('${s.id}', '${escapeHTML(s.threadId||'')}', '${escapeHTML(s.threadName||'')}', this)">⬡ Thread</button>
           <button class="session-compare-btn" id="compare-btn-${s.id}" onclick="toggleCompareSelect('${s.id}', this)">⊕ Compare</button>
