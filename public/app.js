@@ -884,13 +884,12 @@ function parseWitnessBlocks(session) {
     const lines = (round.text || '').split('\n');
     let speaker = null, textLines = [];
 
-    const flush = () => {
+    const flush = (keepSpeaker = false) => {
       if (!speaker || !textLines.length) return;
       const aliasId = Object.keys(SPEAKER_ALIASES).find(a => speaker.toLowerCase().includes(a.toLowerCase()));
       const m = aliasId
         ? MEMBERS.find(m => m.id === SPEAKER_ALIASES[aliasId])
         : MEMBERS.find(m => speaker.includes(m.name) || m.name.includes(speaker));
-      // Find annotation for this speaker (match by speaker name)
       const annotation = Object.values(annotations).find(a => a.speaker === speaker)?.note || null;
       blocks.push({
         type: 'speech',
@@ -900,12 +899,14 @@ function parseWitnessBlocks(session) {
         isGuest: m?.guest || false,
         annotation,
       });
-      speaker = null; textLines = [];
+      // Keep speaker across blank lines so multi-paragraph speeches aren't dropped
+      if (!keepSpeaker) speaker = null;
+      textLines = [];
     };
 
     lines.forEach(line => {
       const t = line.trim();
-      if (!t) { flush(); return; }
+      if (!t) { flush(true); return; } // keepSpeaker=true: blank line is paragraph break, not speaker change
       if (t === '---' || t === '—' || t === '--') return;
       const isActionLine = /^\*[^*\n]+\*$/.test(t);
       if (isActionLine && !speaker) {
