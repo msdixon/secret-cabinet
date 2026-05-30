@@ -355,6 +355,8 @@
 .witness-speech { font-family:'Crimson Pro',serif; font-size:17px; line-height:1.8; color:var(--lodge-cream); max-width:680px; opacity:0; animation:witnessslide 0.5s ease 0.15s forwards; }
 .witness-annotation { font-family:'Crimson Pro',serif; font-size:14px; font-style:italic; color:var(--lodge-ash); margin-top:4px; padding-left:16px; border-left:2px solid var(--lodge-border); opacity:0; animation:witnessslide 0.5s ease 0.3s forwards; }
 .witness-action { font-family:'Crimson Pro',serif; font-size:14px; font-style:italic; color:var(--lodge-ash); text-align:center; opacity:0; animation:witnessslide 0.5s ease forwards; }
+.witness-action-solo { font-size:15px; }
+.witness-action-ghost { font-family:'Crimson Pro',serif; font-size:12px; font-style:italic; color:var(--lodge-border); text-align:center; padding-bottom:10px; border-bottom:1px solid var(--lodge-border); margin-bottom:6px; opacity:0; animation:witnessslide 0.4s ease forwards; }
 .witness-end { font-family:'IM Fell English',serif; font-size:14px; font-style:italic; color:var(--lodge-ash); text-align:center; letter-spacing:1px; opacity:0; animation:witnessslide 0.5s ease forwards; }
 @keyframes witnessslide {
   from { opacity:0; transform:translateY(8px); }

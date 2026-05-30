@@ -861,6 +861,7 @@ let witnessBlocks = [];      // parsed sequence of blocks to play
 let witnessIndex = 0;        // current block position
 let witnessTimer = null;     // auto-advance timer
 let witnessActive = false;
+let witnessPendingAction = null; // action text held over into next speech block
 
 const WITNESS_WPM = 180;     // reading speed for auto-advance pacing
 const WITNESS_PAUSE_AFTER_HEADER = 1800;   // ms pause after round headers
@@ -943,8 +944,11 @@ function renderWitnessBlock(block) {
   }
 
   if (block.type === 'action') {
+    // Show the action on its own, then hold it as a persistent header
+    // for the next speech block — store it and show a brief preview
+    witnessPendingAction = block.text;
     const el = document.createElement('div');
-    el.className = 'witness-action';
+    el.className = 'witness-action witness-action-solo';
     el.textContent = block.text;
     stage.appendChild(el);
     return witnessReadingTime(block.text);
@@ -954,6 +958,15 @@ function renderWitnessBlock(block) {
     const nc = block.memberId ? `voice-${block.memberId}` : (block.isGuest ? 'guest-voice' : '');
     const glyph = block.memberId && MEMBER_GLYPHS[block.memberId]
       ? `<span class="speaker-glyph">${MEMBER_GLYPHS[block.memberId]}</span>` : '';
+
+    // If there's a pending action, render it as a dimmed persistent header above the speech
+    if (witnessPendingAction) {
+      const actionEl = document.createElement('div');
+      actionEl.className = 'witness-action-ghost';
+      actionEl.textContent = witnessPendingAction;
+      stage.appendChild(actionEl);
+      witnessPendingAction = null;
+    }
 
     const nameEl = document.createElement('div');
     nameEl.className = `witness-speaker ${nc}`;
@@ -1071,6 +1084,7 @@ function witnessKeyHandler(e) {
 
 function exitWitness() {
   witnessActive = false;
+  witnessPendingAction = null;
   clearTimeout(witnessTimer);
   document.removeEventListener('keydown', witnessKeyHandler);
   document.getElementById('witness-panel').style.display = 'none';
