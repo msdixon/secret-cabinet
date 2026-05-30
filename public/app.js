@@ -944,9 +944,10 @@ function witnessReadingTime(text) {
 
 function renderWitnessBlock(block) {
   const stage = document.getElementById('witness-stage');
-  stage.innerHTML = '';
 
   if (block.type === 'header') {
+    stage.innerHTML = '';
+    witnessPendingAction = null;
     const el = document.createElement('div');
     el.className = 'witness-round-header';
     el.innerHTML = `<div class="witness-rule"></div><span class="witness-round-label">${escapeHTML(block.label)}</span><div class="witness-rule"></div>`;
@@ -955,8 +956,8 @@ function renderWitnessBlock(block) {
   }
 
   if (block.type === 'action') {
-    // Show the action on its own, then hold it as a persistent header
-    // for the next speech block — store it and show a brief preview
+    // Clear stage, show action on its own — but DON'T clear it when next speech arrives
+    stage.innerHTML = '';
     witnessPendingAction = block.text;
     const el = document.createElement('div');
     el.className = 'witness-action witness-action-solo';
@@ -970,13 +971,17 @@ function renderWitnessBlock(block) {
     const glyph = block.memberId && MEMBER_GLYPHS[block.memberId]
       ? `<span class="speaker-glyph">${MEMBER_GLYPHS[block.memberId]}</span>` : '';
 
-    // If there's a pending action, render it as a dimmed persistent header above the speech
     if (witnessPendingAction) {
-      const actionEl = document.createElement('div');
-      actionEl.className = 'witness-action-ghost';
-      actionEl.textContent = witnessPendingAction;
-      stage.appendChild(actionEl);
+      // Action stays in the DOM — demote the solo action element to ghost style in place
+      const existing = stage.querySelector('.witness-action-solo');
+      if (existing) {
+        existing.classList.remove('witness-action-solo');
+        existing.classList.add('witness-action-ghost');
+      }
       witnessPendingAction = null;
+      // Don't clear stage — speech appends below the persisting action
+    } else {
+      stage.innerHTML = '';
     }
 
     const nameEl = document.createElement('div');
@@ -999,6 +1004,7 @@ function renderWitnessBlock(block) {
     return witnessReadingTime(block.text);
   }
 
+  stage.innerHTML = '';
   return WITNESS_MIN_PAUSE;
 }
 
