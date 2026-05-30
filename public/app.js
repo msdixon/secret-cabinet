@@ -263,8 +263,17 @@ async function saveAnnotation(textarea) {
 // Known aliases the model uses that don't match the roster name directly
 const SPEAKER_ALIASES = {
   'Pamela': 'pixie', 'Pamela Coleman-Smith': 'pixie', 'Coleman Smith': 'pixie',
-  "Ibn 'Arabi": 'arabi',
-  'Teresa': 'teresa', 'Teresa of Avila': 'teresa',
+  "Ibn 'Arabi": 'arabi', 'Ibn Arabi': 'arabi',
+  'Teresa': 'teresa', 'Teresa of Avila': 'teresa', 'Teresa of Ávila': 'teresa',
+  'John Dee': 'dee', 'Dee': 'dee',
+  'Maud': 'maud', 'Maud Gonne': 'maud',
+  'Khaldun': 'khaldun', 'Ibn Khaldun': 'khaldun',
+  'Llull': 'llull', 'Ramon Llull': 'llull',
+  'Blavatsky': 'blavatsky',
+  'Crowley': 'crowley',
+  'Waite': 'waite',
+  'Yeats': 'yeats',
+  'Lévi': 'levi', 'Levi': 'levi', 'Eliphas Lévi': 'levi',
 };
 
 function parseAndRenderTranscript(response) {
@@ -862,6 +871,7 @@ let witnessIndex = 0;        // current block position
 let witnessTimer = null;     // auto-advance timer
 let witnessActive = false;
 let witnessPendingAction = null; // action text held over into next speech block
+let witnessSourceSessionId = null; // session being witnessed (for restore on exit)
 
 const WITNESS_WPM = 180;     // reading speed for auto-advance pacing
 const WITNESS_PAUSE_AFTER_HEADER = 1800;   // ms pause after round headers
@@ -1060,6 +1070,7 @@ function startWitness(sessionData) {
   witnessBlocks = parseWitnessBlocks(session);
   witnessIndex = 0;
   witnessActive = true;
+  witnessSourceSessionId = session.id || null;
 
   // Show witness panel, hide transcript panel
   document.getElementById('witness-panel').style.display = 'block';
@@ -1084,12 +1095,18 @@ function witnessKeyHandler(e) {
 }
 
 function exitWitness() {
+  const sessionToRestore = witnessSourceSessionId;
   witnessActive = false;
   witnessPendingAction = null;
+  witnessSourceSessionId = null;
   clearTimeout(witnessTimer);
   document.removeEventListener('keydown', witnessKeyHandler);
   document.getElementById('witness-panel').style.display = 'none';
   document.getElementById('witness-stage').innerHTML = '';
+  // Restore the session transcript so the user lands back in the full view
+  if (sessionToRestore && sessionToRestore !== currentSessionId) {
+    restoreSession(sessionToRestore);
+  }
 }
 
 // Entry point from Past Meetings drawer
