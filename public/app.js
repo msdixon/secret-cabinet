@@ -198,12 +198,23 @@ const MEMBER_GLYPHS = {
 };
 
 let _entryCounter = 0;
+let speakerSideMap = {};
+let speakerSideCounter = 0;
+
+function getSpeakerSide(key) {
+  if (!(key in speakerSideMap)) {
+    speakerSideMap[key] = speakerSideCounter % 2 === 0 ? 'left' : 'right';
+    speakerSideCounter++;
+  }
+  return speakerSideMap[key];
+}
 
 function addSpeech(speaker, text, isGuest, isObserver, memberId, existingAnnotation) {
   const c = document.getElementById('transcript-content');
   const e = document.createElement('div');
   const entryId = `entry-${++_entryCounter}`;
-  e.className = 'transcript-entry';
+  const side = getSpeakerSide(memberId || speaker);
+  e.className = `transcript-entry bubble-${side}`;
   e.dataset.entryId = entryId;
   e.dataset.speaker = speaker;
   let nc;
@@ -215,7 +226,7 @@ function addSpeech(speaker, text, isGuest, isObserver, memberId, existingAnnotat
     ? `<span class="speaker-glyph">${MEMBER_GLYPHS[memberId]}</span>`
     : '';
   const nameEl = `<div class="speaker-name ${nc}" ${memberId ? `onclick="highlightDossierEntry('${memberId}')" style="cursor:pointer"` : ''}>${glyph}${escapeHTML(speaker)}</div>`;
-  e.innerHTML = `${nameEl}<div class="speech-text" onclick="toggleAnnotation(this.closest('.transcript-entry'))">${renderActions(text)}</div><div class="annotation-area" style="display:none"><textarea class="annotation-input" placeholder="Note…" onblur="saveAnnotation(this)" onkeydown="if(event.key==='Escape')closeAnnotation(this.closest('.transcript-entry'))"></textarea></div>`;
+  e.innerHTML = `${nameEl}<div class="bubble-body"><div class="speech-text" onclick="toggleAnnotation(this.closest('.transcript-entry'))">${renderActions(text)}</div><div class="annotation-area" style="display:none"><textarea class="annotation-input" placeholder="Note…" onblur="saveAnnotation(this)" onkeydown="if(event.key==='Escape')closeAnnotation(this.closest('.transcript-entry'))"></textarea></div></div>`;
   if (existingAnnotation) {
     e.classList.add('annotated');
     e.querySelector('.annotation-input').value = existingAnnotation;
@@ -622,6 +633,8 @@ async function convene() {
   document.getElementById('transcript-empty').style.display = 'none';
   document.getElementById('transcript-content').innerHTML = '';
   _entryCounter = 0;
+  speakerSideMap = {};
+  speakerSideCounter = 0;
   document.getElementById('convene-btn').disabled = true;
   document.getElementById('additional-round-btn').className = 'lodge-btn';
   document.getElementById('export-panel').className = 'export-panel';
@@ -870,7 +883,6 @@ let witnessBlocks = [];      // parsed sequence of blocks to play
 let witnessIndex = 0;        // current block position
 let witnessTimer = null;     // auto-advance timer
 let witnessActive = false;
-let witnessPendingAction = null; // action text held over into next speech block
 let witnessSourceSessionId = null; // session being witnessed (for restore on exit)
 
 const WITNESS_WPM = 180;     // reading speed for auto-advance pacing
@@ -946,23 +958,20 @@ function renderWitnessBlock(block) {
   const stage = document.getElementById('witness-stage');
 
   if (block.type === 'header') {
-    stage.innerHTML = '';
-    witnessPendingAction = null;
     const el = document.createElement('div');
     el.className = 'witness-round-header';
     el.innerHTML = `<div class="witness-rule"></div><span class="witness-round-label">${escapeHTML(block.label)}</span><div class="witness-rule"></div>`;
     stage.appendChild(el);
+    stage.scrollTop = stage.scrollHeight;
     return WITNESS_PAUSE_AFTER_HEADER;
   }
 
   if (block.type === 'action') {
-    // Clear stage, show action on its own — but DON'T clear it when next speech arrives
-    stage.innerHTML = '';
-    witnessPendingAction = block.text;
     const el = document.createElement('div');
-    el.className = 'witness-action witness-action-solo';
+    el.className = 'action-line';
     el.textContent = block.text;
     stage.appendChild(el);
+    stage.scrollTop = stage.scrollHeight;
     return witnessReadingTime(block.text);
   }
 
@@ -970,41 +979,20 @@ function renderWitnessBlock(block) {
     const nc = block.memberId ? `voice-${block.memberId}` : (block.isGuest ? 'guest-voice' : '');
     const glyph = block.memberId && MEMBER_GLYPHS[block.memberId]
       ? `<span class="speaker-glyph">${MEMBER_GLYPHS[block.memberId]}</span>` : '';
+    const side = getSpeakerSide(block.memberId || block.speaker);
 
-    if (witnessPendingAction) {
-      // Action stays in the DOM — demote the solo action element to ghost style in place
-      const existing = stage.querySelector('.witness-action-solo');
-      if (existing) {
-        existing.classList.remove('witness-action-solo');
-        existing.classList.add('witness-action-ghost');
-      }
-      witnessPendingAction = null;
-      // Don't clear stage — speech appends below the persisting action
-    } else {
-      stage.innerHTML = '';
-    }
-
-    const nameEl = document.createElement('div');
-    nameEl.className = `witness-speaker ${nc}`;
-    nameEl.innerHTML = `${glyph}${escapeHTML(block.speaker)}`;
-    stage.appendChild(nameEl);
-
-    const textEl = document.createElement('div');
-    textEl.className = 'witness-speech';
-    textEl.innerHTML = renderActions(block.text);
-    stage.appendChild(textEl);
-
-    if (block.annotation) {
-      const annEl = document.createElement('div');
-      annEl.className = 'witness-annotation';
-      annEl.textContent = `↳ ${block.annotation}`;
-      stage.appendChild(annEl);
-    }
-
+    const e = document.createElement('div');
+    e.className = `transcript-entry bubble-${side}`;
+    const nameHtml = `<div class="speaker-name ${nc}">${glyph}${escapeHTML(block.speaker)}</div>`;
+    let bodyHtml = `<div class="bubble-body"><div class="speech-text">${renderActions(block.text)}</div>`;
+    if (block.annotation) bodyHtml += `<div class="witness-annotation">↳ ${escapeHTML(block.annotation)}</div>`;
+    bodyHtml += '</div>';
+    e.innerHTML = nameHtml + bodyHtml;
+    stage.appendChild(e);
+    stage.scrollTop = stage.scrollHeight;
     return witnessReadingTime(block.text);
   }
 
-  stage.innerHTML = '';
   return WITNESS_MIN_PAUSE;
 }
 
@@ -1013,9 +1001,12 @@ function witnessAdvance() {
   clearTimeout(witnessTimer);
 
   if (witnessIndex >= witnessBlocks.length) {
-    // End of transcript
     const stage = document.getElementById('witness-stage');
-    stage.innerHTML = '<div class="witness-end">The room falls silent.</div>';
+    const endEl = document.createElement('div');
+    endEl.className = 'witness-end';
+    endEl.textContent = 'The room falls silent.';
+    stage.appendChild(endEl);
+    stage.scrollTop = stage.scrollHeight;
     document.getElementById('witness-hint').textContent = 'Click Exit to return';
     document.getElementById('witness-progress').style.width = '100%';
     return;
@@ -1078,7 +1069,12 @@ function startWitness(sessionData) {
   witnessActive = true;
   witnessSourceSessionId = session.id || null;
 
-  // Show witness panel, hide transcript panel
+  // Reset side map for a clean Witness run
+  speakerSideMap = {};
+  speakerSideCounter = 0;
+  document.getElementById('witness-stage').innerHTML = '';
+
+  // Show witness panel
   document.getElementById('witness-panel').style.display = 'block';
   document.getElementById('witness-panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
   document.getElementById('witness-progress').style.width = '0%';
@@ -1103,7 +1099,6 @@ function witnessKeyHandler(e) {
 function exitWitness() {
   const sessionToRestore = witnessSourceSessionId;
   witnessActive = false;
-  witnessPendingAction = null;
   witnessSourceSessionId = null;
   clearTimeout(witnessTimer);
   document.removeEventListener('keydown', witnessKeyHandler);
@@ -1488,6 +1483,8 @@ async function restoreSession(id) {
     document.getElementById('transcript-empty').style.display = 'none';
     document.getElementById('transcript-content').innerHTML = '';
     _entryCounter = 0;
+    speakerSideMap = {};
+    speakerSideCounter = 0;
     currentSessionId = session.id;
     sessionDate = session.date;
     currentEntry = session.entry || '';
@@ -1649,6 +1646,13 @@ function renderComparePanel(containerId, session) {
 }
 
 function renderTranscriptInto(container, text) {
+  const localSides = {};
+  let localCounter = 0;
+  const getLocalSide = key => {
+    if (!(key in localSides)) localSides[key] = localCounter++ % 2 === 0 ? 'left' : 'right';
+    return localSides[key];
+  };
+
   const lines = text.split('\n');
   let speaker = null, textLines = [];
 
@@ -1659,9 +1663,10 @@ function renderTranscriptInto(container, text) {
       ? MEMBERS.find(m => m.id === SPEAKER_ALIASES[aliasId])
       : MEMBERS.find(m => speaker.includes(m.name) || m.name.includes(speaker));
     const nc = m ? `voice-${m.id}` : (m?.guest ? 'guest-voice' : '');
+    const side = getLocalSide(m?.id || speaker);
     const e = document.createElement('div');
-    e.className = 'transcript-entry';
-    e.innerHTML = `<div class="speaker-name ${nc}">${escapeHTML(speaker)}</div><div class="speech-text">${renderActions(textLines.join('\n').trim())}</div>`;
+    e.className = `transcript-entry bubble-${side}`;
+    e.innerHTML = `<div class="speaker-name ${nc}">${escapeHTML(speaker)}</div><div class="bubble-body"><div class="speech-text">${renderActions(textLines.join('\n').trim())}</div></div>`;
     container.appendChild(e);
     speaker = null; textLines = [];
   };
