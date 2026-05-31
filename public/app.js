@@ -215,6 +215,21 @@ function getSpeakerSide(speakerId) {
 
 function addSpeech(speaker, text, isGuest, isObserver, memberId, existingAnnotation) {
   const c = document.getElementById('transcript-content');
+  // If every non-empty line is wrapped in *...*, render as centered action line(s) with
+  // no bubble and no speaker-side update. Handles both single and multi-line action blocks.
+  const nonEmptyLines = text.trim().split('\n').map(l => l.trim()).filter(Boolean);
+  const allAction = nonEmptyLines.length > 0 && nonEmptyLines.every(l => /^\*[^*]+\*$/.test(l));
+  if (allAction) {
+    nonEmptyLines.forEach(l => {
+      const d = document.createElement('div');
+      d.className = 'action-line';
+      d.textContent = l.slice(1, -1);
+      c.appendChild(d);
+    });
+    c.scrollTop = c.scrollHeight;
+    transcriptText += nonEmptyLines.join('\n') + '\n\n';
+    return;
+  }
   const e = document.createElement('div');
   const entryId = `entry-${++_entryCounter}`;
   const side = getSpeakerSide(memberId || speaker);
@@ -980,6 +995,18 @@ function renderWitnessBlock(block) {
   }
 
   if (block.type === 'speech') {
+    const nonEmptyLines = block.text.trim().split('\n').map(l => l.trim()).filter(Boolean);
+    const allAction = nonEmptyLines.length > 0 && nonEmptyLines.every(l => /^\*[^*]+\*$/.test(l));
+    if (allAction) {
+      nonEmptyLines.forEach(l => {
+        const el = document.createElement('div');
+        el.className = 'action-line';
+        el.textContent = l.slice(1, -1);
+        stage.appendChild(el);
+      });
+      stage.scrollTop = stage.scrollHeight;
+      return witnessReadingTime(block.text);
+    }
     const nc = block.memberId ? `voice-${block.memberId}` : (block.isGuest ? 'guest-voice' : '');
     const glyph = block.memberId && MEMBER_GLYPHS[block.memberId]
       ? `<span class="speaker-glyph">${MEMBER_GLYPHS[block.memberId]}</span>` : '';
