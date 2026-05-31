@@ -312,12 +312,18 @@ function parseAndRenderTranscript(response) {
 
   const flush = () => {
     if (speaker && textLines.length) {
+      const text = textLines.join('\n').trim();
       const aliasId = Object.keys(SPEAKER_ALIASES).find(a => speaker.toLowerCase().includes(a.toLowerCase()));
       const m = aliasId
         ? MEMBERS.find(m => m.id === SPEAKER_ALIASES[aliasId])
         : MEMBERS.find(m => speaker.includes(m.name) || m.name.includes(speaker));
-      addSpeech(speaker, textLines.join('\n').trim(), m?.guest || false, false, m?.id);
-      speaker = null; textLines = [];
+      addSpeech(speaker, text, m?.guest || false, false, m?.id);
+      // If the block was pure action, preserve speaker so the next speech
+      // (without a repeated header) still gets attributed correctly.
+      const nonEmpty = text.split('\n').map(l => l.trim()).filter(Boolean);
+      const wasPureAction = nonEmpty.length > 0 && nonEmpty.every(l => /^\*[^*]+\*$/.test(l));
+      if (!wasPureAction) speaker = null;
+      textLines = [];
     }
   };
 
