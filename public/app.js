@@ -252,7 +252,8 @@ function addSpeech(speaker, text, isGuest, isObserver, memberId, existingAnnotat
   }
   c.appendChild(e);
   c.scrollTop = c.scrollHeight;
-  transcriptText += `${speaker} —\n${text}\n\n`;
+  // Skip "—" fallback speaker — it's a parser artefact, not real speech
+  if (speaker !== '—') transcriptText += `${speaker} —\n${text}\n\n`;
 }
 
 function toggleAnnotation(entry) {
@@ -667,10 +668,12 @@ async function convene() {
 
   currentSessionId = null;
   currentRound = 0;
-  transcriptText = '';
   sessionDate = new Date().toISOString().split('T')[0];
   const members = [...activeMembers];
   const shadows = [...shadowMembers];
+  const memberNames = members.map(id => MEMBERS.find(m => m.id === id)?.name).filter(Boolean).join(', ');
+  const entryForHeader = getEntry();
+  transcriptText = `THE SECRET-CABIN-ET\nMeeting Notes — ${sessionDate}\nAssembled: ${memberNames}\n\nSource material:\n${entryForHeader}\n`;
   const roundInstructions = [1, 2, 3].map(i => document.getElementById(`arc-${i}`)?.value.trim()).filter(Boolean);
 
   const artifactText = document.getElementById('artifact-text')?.value.trim();
