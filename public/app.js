@@ -198,22 +198,17 @@ const MEMBER_GLYPHS = {
 };
 
 let _entryCounter = 0;
-let speakerSideMap = {};
-let speakerSideCounter = 0;
+let speechTurnCounter = 0;
 
-function getSpeakerSide(key) {
-  if (!(key in speakerSideMap)) {
-    speakerSideMap[key] = speakerSideCounter % 2 === 0 ? 'left' : 'right';
-    speakerSideCounter++;
-  }
-  return speakerSideMap[key];
+function nextSpeechSide() {
+  return speechTurnCounter++ % 2 === 0 ? 'left' : 'right';
 }
 
 function addSpeech(speaker, text, isGuest, isObserver, memberId, existingAnnotation) {
   const c = document.getElementById('transcript-content');
   const e = document.createElement('div');
   const entryId = `entry-${++_entryCounter}`;
-  const side = getSpeakerSide(memberId || speaker);
+  const side = nextSpeechSide();
   e.className = `transcript-entry bubble-${side}`;
   e.dataset.entryId = entryId;
   e.dataset.speaker = speaker;
@@ -633,8 +628,8 @@ async function convene() {
   document.getElementById('transcript-empty').style.display = 'none';
   document.getElementById('transcript-content').innerHTML = '';
   _entryCounter = 0;
-  speakerSideMap = {};
-  speakerSideCounter = 0;
+
+  speechTurnCounter = 0;
   document.getElementById('convene-btn').disabled = true;
   document.getElementById('additional-round-btn').className = 'lodge-btn';
   document.getElementById('export-panel').className = 'export-panel';
@@ -979,7 +974,7 @@ function renderWitnessBlock(block) {
     const nc = block.memberId ? `voice-${block.memberId}` : (block.isGuest ? 'guest-voice' : '');
     const glyph = block.memberId && MEMBER_GLYPHS[block.memberId]
       ? `<span class="speaker-glyph">${MEMBER_GLYPHS[block.memberId]}</span>` : '';
-    const side = getSpeakerSide(block.memberId || block.speaker);
+    const side = nextSpeechSide();
 
     const e = document.createElement('div');
     e.className = `transcript-entry bubble-${side}`;
@@ -1070,8 +1065,8 @@ function startWitness(sessionData) {
   witnessSourceSessionId = session.id || null;
 
   // Reset side map for a clean Witness run
-  speakerSideMap = {};
-  speakerSideCounter = 0;
+
+  speechTurnCounter = 0;
   document.getElementById('witness-stage').innerHTML = '';
 
   // Show witness panel
@@ -1483,8 +1478,8 @@ async function restoreSession(id) {
     document.getElementById('transcript-empty').style.display = 'none';
     document.getElementById('transcript-content').innerHTML = '';
     _entryCounter = 0;
-    speakerSideMap = {};
-    speakerSideCounter = 0;
+  
+    speechTurnCounter = 0;
     currentSessionId = session.id;
     sessionDate = session.date;
     currentEntry = session.entry || '';
@@ -1646,12 +1641,8 @@ function renderComparePanel(containerId, session) {
 }
 
 function renderTranscriptInto(container, text) {
-  const localSides = {};
-  let localCounter = 0;
-  const getLocalSide = key => {
-    if (!(key in localSides)) localSides[key] = localCounter++ % 2 === 0 ? 'left' : 'right';
-    return localSides[key];
-  };
+  let localTurn = 0;
+  const localSide = () => localTurn++ % 2 === 0 ? 'left' : 'right';
 
   const lines = text.split('\n');
   let speaker = null, textLines = [];
@@ -1663,7 +1654,7 @@ function renderTranscriptInto(container, text) {
       ? MEMBERS.find(m => m.id === SPEAKER_ALIASES[aliasId])
       : MEMBERS.find(m => speaker.includes(m.name) || m.name.includes(speaker));
     const nc = m ? `voice-${m.id}` : (m?.guest ? 'guest-voice' : '');
-    const side = getLocalSide(m?.id || speaker);
+    const side = localSide();
     const e = document.createElement('div');
     e.className = `transcript-entry bubble-${side}`;
     e.innerHTML = `<div class="speaker-name ${nc}">${escapeHTML(speaker)}</div><div class="bubble-body"><div class="speech-text">${renderActions(textLines.join('\n').trim())}</div></div>`;

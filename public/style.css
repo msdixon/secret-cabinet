@@ -183,7 +183,8 @@
 /* ── Per-member voice classes (reserved for future avatar/identity work) ───── */
 /* Typography is intentionally uniform — voice-{id} classes are hooks only.   */
 .speech-text { font-family:'Crimson Pro',serif; font-size:18px; line-height:1.8; color:var(--lodge-parchment); }
-.action-line { font-family:'IM Fell English','Crimson Pro',serif; font-style:italic; font-size:14px; color:var(--lodge-muted); text-align:center; align-self:center; max-width:58%; margin:4px 0 10px; letter-spacing:0.02em; }
+.action-line { font-family:'IM Fell English','Crimson Pro',serif; font-style:italic; font-size:13px; color:var(--lodge-ash); text-align:center; align-self:center; max-width:55%; margin:14px 0 16px; letter-spacing:0.03em; opacity:0.8; }
+.bubble-body .action-line { align-self:auto; max-width:none; margin:6px 0 2px; opacity:1; }
 .action-inline { font-style:italic; color:var(--lodge-muted); }
 .interject-panel { display:none; }
 .interject-panel.visible { display:block; }
@@ -357,7 +358,8 @@
 .witness-stage .transcript-entry { max-width:70%; }
 .witness-stage .speaker-name { font-size:22px; }
 .witness-stage .speech-text { font-size:17px; }
-.witness-stage .action-line { opacity:0; animation:witnessslide 0.5s ease forwards; }
+.witness-stage .action-line { opacity:0; animation:witnessfade-dim 0.5s ease forwards; }
+@keyframes witnessfade-dim { from{opacity:0;transform:translateY(8px)} to{opacity:0.8;transform:translateY(0)} }
 .witness-stage .transcript-entry { opacity:0; animation:witnessslide 0.5s ease forwards; }
 .witness-round-header { display:flex; align-items:center; gap:12px; opacity:0; animation:witnessfade 0.6s ease forwards; }
 .witness-rule { flex:1; height:1px; background:var(--lodge-border); }
