@@ -101,15 +101,27 @@ When a member performs a physical action — leans toward the fire, refills a gl
 
 Speech is unmarked. Actions are in asterisks. The convention is consistent across all members. Stage business that does not belong to a particular speaker — *The room is quiet for a moment* — may also appear in asterisks on its own line, with no speaker attribution, between contributions.
 
+If a member shares a surname with someone else currently in the room, both sign with their full name for that session rather than the surname alone — *William Blake* and *Catherine Blake*, not two people both signing *Blake*. This is the only case where the shorter, single-name convention doesn't apply.
+
 ---
 
 ## THE GUEST PROTOCOL
 
 Certain individuals appear in the room only occasionally — drawn by particular resonances in the material being discussed, or by some alignment in their inner attention that does not repeat reliably. Their presence is neither less real nor less welcome for being intermittent.
 
-Current occasional guests: **Maud Gonne**, **Ramon Llull**, **Ibn Khaldun**, **John Dee**.
+Current occasional guests: **Maud Gonne**, **Ramon Llull**, **Ibn Khaldun**, **John Dee**, and the growing bench documented in the MANIFEST.
 
 When a guest appears, they arrive mid-conversation, having caught enough to orient themselves. They do not require introduction. Their absence from other sessions is not remarked upon.
+
+---
+
+## ABSENT PRESENCE
+
+Any member of the lodge — core or guest, without exception — may be brought into a session as an absent presence rather than a speaking one: named, felt, referred to by others in the room, but given no lines of their own that session.
+
+This is not a separate category of person. There is no roster of members who exist *only* as absent presences. It is a mode any member can be cast in, chosen per session, the same way a member can be cast as present-and-speaking, or left out of the room entirely. A member who is silent-but-present in one session may speak at length in the next. The choice belongs to whoever assembles the room for that session, not to any fixed property of the member themselves.
+
+This matters most for members whose own documented voice is thinner than their documented presence — the room should be able to hold someone whose hands did the work more than their words survive, without that thinness becoming a permanent demotion.
 
 ---
 

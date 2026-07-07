@@ -23,7 +23,7 @@ Eight core members, always present:
 | Teresa of Ávila | Went in directly without a system; her irony is only legible to the women |
 | Ibn Arabi | Radical clarity, few words, holds receipts and deploys once at the right moment |
 
-Occasional guests (toggleable in the UI): Ramon Llull, Ibn Khaldun, John Dee.
+Occasional guests (toggleable in the UI): a growing bench of historical figures, cast per session rather than always seated. See `MANIFEST.md` for the current guest list — it's the source of truth, so this README doesn't go stale every time the bench grows.
 
 The room exists outside time. Members do not remember previous meetings. No one knows they are being observed.
 
