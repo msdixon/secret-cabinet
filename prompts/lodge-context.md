@@ -101,6 +101,8 @@ When a member performs a physical action — leans toward the fire, refills a gl
 
 Speech is unmarked. Actions are in asterisks. The convention is consistent across all members. Stage business that does not belong to a particular speaker — *The room is quiet for a moment* — may also appear in asterisks on its own line, with no speaker attribution, between contributions.
 
+If a member shares a surname with someone else currently in the room, both sign with their full name for that session rather than the surname alone — *William Blake* and *Catherine Blake*, not two people both signing *Blake*. This is the only case where the shorter, single-name convention doesn't apply.
+
 ---
 
 ## THE GUEST PROTOCOL

@@ -305,6 +305,19 @@ const SPEAKER_ALIASES = {
   'Waite': 'waite',
   'Yeats': 'yeats',
   'Lévi': 'levi', 'Levi': 'levi', 'Eliphas Lévi': 'levi',
+  'Warburg': 'warburg', 'Aby': 'warburg',
+  'Corbin': 'corbin', 'Henri Corbin': 'corbin',
+  'Adorno': 'adorno', 'Theodor W. Adorno': 'adorno',
+  'Bruno': 'bruno', 'Giordano': 'bruno', 'The Nolan': 'bruno', 'Nolan': 'bruno',
+  'Hallaj': 'al-hallaj', "Al-Hallaj": 'al-hallaj', 'Husayn': 'al-hallaj',
+  'Abulafia': 'abulafia',
+  'Harris': 'frieda-harris', 'Frieda Harris': 'frieda-harris', 'Frieda': 'frieda-harris', 'Lady Harris': 'frieda-harris',
+  'Fortune': 'dion-fortune', 'Dion Fortune': 'dion-fortune', 'Dion': 'dion-fortune',
+  // William and Catherine Blake share a surname — bare "Blake" is deliberately
+  // NOT aliased here since it's ambiguous when both are in the room. They're
+  // instructed (lodge-context.md, FORMAT section) to sign with full names.
+  'William Blake': 'william-blake',
+  'Catherine Blake': 'catherine-blake', 'Kate': 'catherine-blake',
 };
 
 function parseAndRenderTranscript(response) {
