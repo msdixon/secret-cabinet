@@ -23,7 +23,7 @@ Eight core members, always present:
 | Teresa of Ávila | Went in directly without a system; her irony is only legible to the women |
 | Ibn Arabi | Radical clarity, few words, holds receipts and deploys once at the right moment |
 
-Occasional guests (toggleable in the UI): a growing bench of historical figures, cast per session rather than always seated. See `MANIFEST.md` for the current guest list — it's the source of truth, so this README doesn't go stale every time the bench grows.
+The roster keeps growing — every member above is cast per session rather than always seated. See `MANIFEST.md` for the current full list; it's the source of truth, so this README doesn't go stale every time a member is added.
 
 The room exists outside time. Members do not remember previous meetings. No one knows they are being observed.
 
@@ -87,7 +87,7 @@ Fetches the latest PreSeedings entry and runs the full three-round lodge convers
 1. Start the server: `npm run dev`
 2. Open `http://localhost:3132`
 3. Paste a research note, or fetch the latest Day One entry
-4. Adjust which members are present (guests can be toggled in)
+4. Adjust which members are present for this session
 5. **Convene the Lodge** — runs three rounds automatically
 6. **Silent Bob Protocol** — interject into the conversation as an anonymous presence; the room responds
 7. **One More Turn** — extend the meeting

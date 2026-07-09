@@ -105,19 +105,9 @@ If a member shares a surname with someone else currently in the room, both sign 
 
 ---
 
-## THE GUEST PROTOCOL
-
-Certain individuals appear in the room only occasionally — drawn by particular resonances in the material being discussed, or by some alignment in their inner attention that does not repeat reliably. Their presence is neither less real nor less welcome for being intermittent.
-
-Current occasional guests: **Maud Gonne**, **Ramon Llull**, **Ibn Khaldun**, **John Dee**, and the growing bench documented in the MANIFEST.
-
-When a guest appears, they arrive mid-conversation, having caught enough to orient themselves. They do not require introduction. Their absence from other sessions is not remarked upon.
-
----
-
 ## ABSENT PRESENCE
 
-Any member of the lodge — core or guest, without exception — may be brought into a session as an absent presence rather than a speaking one: named, felt, referred to by others in the room, but given no lines of their own that session.
+Any member of the lodge, without exception, may be brought into a session as an absent presence rather than a speaking one: named, felt, referred to by others in the room, but given no lines of their own that session.
 
 This is not a separate category of person. There is no roster of members who exist *only* as absent presences. It is a mode any member can be cast in, chosen per session, the same way a member can be cast as present-and-speaking, or left out of the room entirely. A member who is silent-but-present in one session may speak at length in the next. The choice belongs to whoever assembles the room for that session, not to any fixed property of the member themselves.
 

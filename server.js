@@ -202,13 +202,9 @@ function buildSystemPrompt(memberIds, artifact = null, shadowIds = [], notes = {
     .map(id => ROSTER.find(m => m.id === id))
     .filter(Boolean);
 
-  const guests = present.filter(m => m.guest);
-  // Guests with full character files are treated identically to core members
   const fullMembers = present.filter(m => m.file);
-  const sketchOnlyGuests = guests.filter(m => !m.file);
 
   const presentNames = present.map(m => m.name).join(', ');
-  const guestLine = guests.length ? `\nOCCASIONAL GUESTS PRESENT TONIGHT: ${guests.map(m => m.name).join(', ')}` : '';
   const shadowLine = shadows.length
     ? `\nABSENT PRESENCES — named but not speaking tonight: ${shadows.map(m => m.name).join(', ')}. The room is aware of them. Members may invoke their ideas, quote them, note their absence, or argue with their positions. They do not speak.`
     : '';
@@ -230,23 +226,15 @@ function buildSystemPrompt(memberIds, artifact = null, shadowIds = [], notes = {
     .filter(Boolean)
     .join('\n\n');
 
-  // Fallback sketches for guests without files (future-proofing)
-  const guestSketches = sketchOnlyGuests.map(m => {
-    const sketches = {};
-    return sketches[m.id] ? `---\n**${m.name}** (occasional guest)\n${sketches[m.id]}` : '';
-  }).filter(Boolean).join('\n\n');
-
   return `${lodgeContext}
 
 ---
 
 ## ASSEMBLED TONIGHT
 
-PRESENT: ${presentNames}${guestLine}${shadowLine}
+PRESENT: ${presentNames}${shadowLine}
 
 ${characterSections}
-
-${guestSketches}
 
 ---
 
@@ -279,9 +267,7 @@ function buildSystemPromptAbbreviated(memberIds, shadowIds = []) {
     .map(id => ROSTER.find(m => m.id === id))
     .filter(Boolean);
 
-  const guests = present.filter(m => m.guest);
   const presentNames = present.map(m => m.name).join(', ');
-  const guestLine = guests.length ? `\nOCCASIONAL GUESTS PRESENT TONIGHT: ${guests.map(m => m.name).join(', ')}` : '';
 
   const characterSections = present
     .filter(m => m.file)
@@ -306,7 +292,7 @@ function buildSystemPromptAbbreviated(memberIds, shadowIds = []) {
 
 ## ASSEMBLED TONIGHT
 
-PRESENT: ${presentNames}${guestLine}
+PRESENT: ${presentNames}
 
 ${characterSections}
 
@@ -870,7 +856,6 @@ app.get('/api/members/:id/dossier', (req, res) => {
   res.json({
     id: member.id,
     name: member.name,
-    guest: member.guest,
     bio: extractSection('WHO YOU ARE'),
     voice: extractSection('HOW YOU SPEAK'),
   });
@@ -878,7 +863,7 @@ app.get('/api/members/:id/dossier', (req, res) => {
 
 // POST /api/members — draft + save a new character file, update roster
 app.post('/api/members', async (req, res) => {
-  const { name, bio, voiceRegister, cognitiveStyle, relationships, isGuest } = req.body;
+  const { name, bio, voiceRegister, cognitiveStyle, relationships } = req.body;
   if (!name?.trim() || !bio?.trim()) return res.status(400).json({ error: 'name and bio are required' });
 
   // Build a safe filename + id from the name
@@ -941,7 +926,7 @@ ${relationships || '(not specified — infer from historical record)'}`;
 
     fs.writeFileSync(filePath, characterFile, 'utf8');
 
-    const newMember = { id, name: name.trim(), file, guest: !!isGuest };
+    const newMember = { id, name: name.trim(), file };
     ROSTER.push(newMember);
     fs.writeFileSync(ROSTER_FILE, JSON.stringify(ROSTER, null, 2), 'utf8');
 
