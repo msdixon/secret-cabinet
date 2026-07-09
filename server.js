@@ -364,14 +364,46 @@ function openSSE(res) {
   });
 }
 
+// ── Speaker header recognition (mirrors public/app.js's alias index) ──────
+// Members sign with a short form (surname, first name, or nickname), not
+// their full roster name — see roster.json's `aliases` field and the
+// comment above buildAliasIndex in public/app.js for the full rationale.
+// Kept in sync with that client-side logic; if one changes, change both.
+const ALIAS_STOPWORDS = new Set(['of', 'the', 'van', 'der', 'de', 'la', 'lady', 'sir', 'dr', 'st']);
+
+function normalizeSpeaker(s) {
+  return s.normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/['’]/g, '').toLowerCase().replace(/[\s-]+/g, ' ').trim();
+}
+
+function buildSpeakerHeaderSet(roster) {
+  const owner = new Map(); // normalized key -> member id, or null if ambiguous
+  const register = (key, id) => {
+    const k = normalizeSpeaker(key);
+    if (!k) return;
+    if (owner.has(k) && owner.get(k) !== id) owner.set(k, null);
+    else if (!owner.has(k)) owner.set(k, id);
+  };
+  roster.forEach(m => {
+    register(m.name, m.id);
+    m.name.split(/[\s-]+/)
+      .filter(tok => tok.length > 2 && !ALIAS_STOPWORDS.has(tok.toLowerCase()))
+      .forEach(tok => register(tok, m.id));
+    (m.aliases || []).forEach(a => register(a, m.id));
+  });
+  const set = new Set();
+  owner.forEach((id, k) => { if (id != null) set.add(k); });
+  return set;
+}
+
 // Post-process raw Claude transcript text: append ' —' after speaker name lines
 // so plain-text exports clearly distinguish speakers from speech.
-const MEMBER_NAMES = new Set(ROSTER.map(m => m.name));
 function formatTranscriptText(text) {
+  const headers = buildSpeakerHeaderSet(ROSTER);
   return text.split('\n').map(line => {
     const t = line.trim();
     const bare = t.endsWith(':') ? t.slice(0, -1) : t;
-    return MEMBER_NAMES.has(bare) ? `${bare} —` : line;
+    return headers.has(normalizeSpeaker(bare)) ? `${bare} —` : line;
   }).join('\n');
 }
 
@@ -625,10 +657,10 @@ app.post('/api/export/obsidian', (req, res) => {
     const frontmatter = `---\ndate: ${sessionDate || ''}\nmembers:\n${memberList}\ntags:\n${tagList}\nsource: "${(sourceExcerpt || '').replace(/"/g, '\\"').slice(0, 120)}"\n---\n\n`;
 
     // Format transcript: bold speaker names for Obsidian scanning
-    const MEMBER_NAMES_SET = new Set(ROSTER.map(m => m.name));
+    const obsidianHeaders = buildSpeakerHeaderSet(ROSTER);
     const obsidianTranscript = transcriptText.split('\n').map(line => {
       const bare = line.replace(/ —$/, '').trim();
-      return MEMBER_NAMES_SET.has(bare) ? `**${bare}**` : line;
+      return obsidianHeaders.has(normalizeSpeaker(bare)) ? `**${bare}**` : line;
     }).join('\n');
 
     fs.writeFileSync(filePath, frontmatter + obsidianTranscript, 'utf8');
@@ -869,7 +901,7 @@ The character file must contain these sections, in order:
 - *Builds on: Lodge Context Document*
 - ## WHO YOU ARE — 2–3 paragraphs: historical identity, expertise, self-understanding, and one honest complicating note
 - ## HOW YOU SPEAK — 3–4 paragraphs: register, rhythm, rhetorical moves, what they do with disagreement
-- ## YOUR RELATIONSHIPS IN THIS ROOM — one paragraph per relevant member present in the room (use only the members listed in the existing roster: Crowley, Waite, Coleman-Smith, Yeats, Blavatsky, Lévi, Teresa of Ávila, Ibn Arabi, Maud Gonne, Llull, Ibn Khaldun, John Dee)
+- ## YOUR RELATIONSHIPS IN THIS ROOM — one paragraph per relevant member present in the room (use only the members listed in the existing roster: ${ROSTER.map(m => m.name).join(', ')})
 - ## WHAT YOU DO WITH THE DOCUMENT — 2 paragraphs about how this member engages with a journal entry read aloud
 - ## WHAT YOU DO NOT DO — bullet list of 4–6 hard constraints on this character's voice
 - *Character prompt complete. Deploy on top of Lodge Context Document.*

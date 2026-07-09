@@ -291,34 +291,67 @@ async function saveAnnotation(textarea) {
   }).catch(() => {});
 }
 
-// Known aliases the model uses that don't match the roster name directly
-const SPEAKER_ALIASES = {
-  'Pamela': 'pixie', 'Pamela Coleman-Smith': 'pixie', 'Coleman Smith': 'pixie',
-  "Ibn 'Arabi": 'arabi', 'Ibn Arabi': 'arabi',
-  'Teresa': 'teresa', 'Teresa of Avila': 'teresa', 'Teresa of Ávila': 'teresa',
-  'John Dee': 'dee', 'Dee': 'dee',
-  'Maud': 'maud', 'Maud Gonne': 'maud',
-  'Khaldun': 'khaldun', 'Ibn Khaldun': 'khaldun',
-  'Llull': 'llull', 'Ramon Llull': 'llull',
-  'Blavatsky': 'blavatsky',
-  'Crowley': 'crowley',
-  'Waite': 'waite',
-  'Yeats': 'yeats',
-  'Lévi': 'levi', 'Levi': 'levi', 'Eliphas Lévi': 'levi',
-  'Warburg': 'warburg', 'Aby': 'warburg',
-  'Corbin': 'corbin', 'Henri Corbin': 'corbin',
-  'Adorno': 'adorno', 'Theodor W. Adorno': 'adorno',
-  'Bruno': 'bruno', 'Giordano': 'bruno', 'The Nolan': 'bruno', 'Nolan': 'bruno',
-  'Hallaj': 'al-hallaj', "Al-Hallaj": 'al-hallaj', 'Husayn': 'al-hallaj',
-  'Abulafia': 'abulafia',
-  'Harris': 'frieda-harris', 'Frieda Harris': 'frieda-harris', 'Frieda': 'frieda-harris', 'Lady Harris': 'frieda-harris',
-  'Fortune': 'dion-fortune', 'Dion Fortune': 'dion-fortune', 'Dion': 'dion-fortune',
-  // William and Catherine Blake share a surname — bare "Blake" is deliberately
-  // NOT aliased here since it's ambiguous when both are in the room. They're
-  // instructed (lodge-context.md, FORMAT section) to sign with full names.
-  'William Blake': 'william-blake',
-  'Catherine Blake': 'catherine-blake', 'Kate': 'catherine-blake',
-};
+// ── Speaker attribution ────────────────────────────────────────────────────
+// Members sign transcripts with a short form (surname, first name, or a
+// nickname) rather than their full roster name. Short forms are derived
+// automatically from each member's `name` in roster.json; a member's
+// `aliases` array (also in roster.json) covers nicknames that aren't
+// derivable from the name itself (e.g. "Pamela" for Coleman-Smith). This
+// keeps the roster the single source of truth — adding a Wave 2 guest to
+// roster.json is enough; nothing here needs hand-editing.
+//
+// If two members derive the same token (e.g. "Ibn" from both "Ibn Arabi"
+// and "Ibn Khaldun", or "Blake" from both Blakes), that token is ambiguous
+// and dropped from the index — lodge-context.md's FORMAT section instructs
+// members with colliding surnames to sign in full, which the exact
+// full-name match in resolveMember/isKnownSpeakerHeader still catches.
+const ALIAS_STOPWORDS = new Set(['of', 'the', 'van', 'der', 'de', 'la', 'lady', 'sir', 'dr', 'st']);
+
+function normalizeSpeaker(s) {
+  return s.normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/['’]/g, '').toLowerCase().replace(/[\s-]+/g, ' ').trim();
+}
+
+function buildAliasIndex(members) {
+  const index = new Map(); // normalized alias -> member id, or null if ambiguous
+  const register = (key, id) => {
+    const k = normalizeSpeaker(key);
+    if (!k) return;
+    if (index.has(k) && index.get(k) !== id) index.set(k, null);
+    else if (!index.has(k)) index.set(k, id);
+  };
+  members.forEach(m => {
+    register(m.name, m.id);
+    m.name.split(/[\s-]+/)
+      .filter(tok => tok.length > 2 && !ALIAS_STOPWORDS.has(tok.toLowerCase()))
+      .forEach(tok => register(tok, m.id));
+    (m.aliases || []).forEach(a => register(a, m.id));
+  });
+  return index;
+}
+
+// Resolves a signed speaker string (e.g. "Warburg", "Ibn 'Arabi") to its roster member.
+function resolveMember(speaker, members) {
+  const norm = normalizeSpeaker(speaker);
+  const candidates = [...buildAliasIndex(members).entries()]
+    .filter(([, id]) => id)
+    .sort((a, b) => b[0].length - a[0].length); // prefer the more specific (longer) alias
+  const hit = candidates.find(([alias]) => norm.includes(alias));
+  if (hit) return members.find(m => m.id === hit[1]);
+  // No alias hit — fall back to loose name-substring matching, but only when
+  // exactly one member matches. A speaker string that partially overlaps two
+  // members' names (e.g. bare "Blake") is ambiguous and stays unresolved
+  // rather than silently picking whichever member happens to be listed first.
+  const matches = members.filter(m => speaker.includes(m.name) || m.name.includes(speaker));
+  return matches.length === 1 ? matches[0] : undefined;
+}
+
+// True if a trimmed transcript line is a recognized speaker header (full name or alias).
+function isKnownSpeakerHeader(t, members) {
+  const norm = normalizeSpeaker(t.replace(/:$/, ''));
+  const index = buildAliasIndex(members);
+  return index.has(norm) && index.get(norm) != null;
+}
 
 function parseAndRenderTranscript(response) {
   const lines = response.split('\n');
@@ -327,10 +360,7 @@ function parseAndRenderTranscript(response) {
   const flush = () => {
     if (speaker && textLines.length) {
       const text = textLines.join('\n').trim();
-      const aliasId = Object.keys(SPEAKER_ALIASES).find(a => speaker.toLowerCase().includes(a.toLowerCase()));
-      const m = aliasId
-        ? MEMBERS.find(m => m.id === SPEAKER_ALIASES[aliasId])
-        : MEMBERS.find(m => speaker.includes(m.name) || m.name.includes(speaker));
+      const m = resolveMember(speaker, MEMBERS);
       addSpeech(speaker, text, m?.guest || false, false, m?.id);
       // If the block was pure action, preserve speaker so the next speech
       // (without a repeated header) still gets attributed correctly.
@@ -357,8 +387,7 @@ function parseAndRenderTranscript(response) {
       transcriptText += `${t}\n\n`;
       return;
     }
-    const isKnownName = MEMBERS.some(m => t === m.name || t === m.name + ':')
-      || Object.keys(SPEAKER_ALIASES).some(a => t === a || t === a + ':');
+    const isKnownName = isKnownSpeakerHeader(t, MEMBERS);
     const looksLikeName = !t.includes(' ') && t.endsWith(':') && t.length < 30;
     if (isKnownName || looksLikeName) {
       flush();
@@ -949,10 +978,7 @@ function parseWitnessBlocks(session) {
 
     const flush = (keepSpeaker = false) => {
       if (!speaker || !textLines.length) return;
-      const aliasId = Object.keys(SPEAKER_ALIASES).find(a => speaker.toLowerCase().includes(a.toLowerCase()));
-      const m = aliasId
-        ? MEMBERS.find(m => m.id === SPEAKER_ALIASES[aliasId])
-        : MEMBERS.find(m => speaker.includes(m.name) || m.name.includes(speaker));
+      const m = resolveMember(speaker, MEMBERS);
       const annotation = Object.values(annotations).find(a => a.speaker === speaker)?.note || null;
       blocks.push({
         type: 'speech',
@@ -977,8 +1003,7 @@ function parseWitnessBlocks(session) {
         blocks.push({ type: 'action', text: t.slice(1, -1) });
         return;
       }
-      const isKnownName = MEMBERS.some(m => t === m.name || t === m.name + ':')
-        || Object.keys(SPEAKER_ALIASES).some(a => t === a || t === a + ':');
+      const isKnownName = isKnownSpeakerHeader(t, MEMBERS);
       const looksLikeName = !t.includes(' ') && t.endsWith(':') && t.length < 30;
       if (isKnownName || looksLikeName) { flush(); speaker = t.replace(/:$/, ''); textLines = []; }
       else if (speaker) textLines.push(t);
@@ -1711,10 +1736,7 @@ function renderTranscriptInto(container, text) {
 
   const flush = () => {
     if (!speaker || !textLines.length) return;
-    const aliasId = Object.keys(SPEAKER_ALIASES).find(a => speaker.toLowerCase().includes(a.toLowerCase()));
-    const m = aliasId
-      ? MEMBERS.find(m => m.id === SPEAKER_ALIASES[aliasId])
-      : MEMBERS.find(m => speaker.includes(m.name) || m.name.includes(speaker));
+    const m = resolveMember(speaker, MEMBERS);
     const nc = m ? `voice-${m.id}` : (m?.guest ? 'guest-voice' : '');
     const side = localSide(m?.id || speaker);
     const e = document.createElement('div');
@@ -1736,8 +1758,7 @@ function renderTranscriptInto(container, text) {
       container.appendChild(d);
       return;
     }
-    const isKnownName = MEMBERS.some(m => t === m.name || t === m.name + ':')
-      || Object.keys(SPEAKER_ALIASES).some(a => t === a || t === a + ':');
+    const isKnownName = isKnownSpeakerHeader(t, MEMBERS);
     const looksLikeName = !t.includes(' ') && t.length < 30 && /^[A-Z]/.test(t) && !t.includes('*');
     if (isKnownName || looksLikeName) { flush(); speaker = t.replace(/:$/, ''); textLines = []; }
     else if (speaker) textLines.push(t);
