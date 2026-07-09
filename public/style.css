@@ -127,11 +127,8 @@
 .member-token { display:flex; align-items:center; gap:7px; background:var(--lodge-panel); border:1px solid var(--lodge-border); border-radius:2px; padding:6px 10px; cursor:pointer; transition:all 0.2s; user-select:none; position:relative; }
 .member-token:hover { border-color:var(--lodge-amber-dim); }
 .member-token.active { border-color:var(--lodge-amber); background:rgba(200,146,42,0.08); }
-.member-token.guest { border-style:dashed; }
-.member-token.guest.active { border-style:solid; border-color:var(--lodge-fire); background:rgba(212,98,26,0.08); }
 .member-dot { width:7px; height:7px; border-radius:50%; background:var(--lodge-ash); flex-shrink:0; }
 .member-token.active .member-dot { background:var(--lodge-amber); box-shadow:0 0 6px rgba(200,146,42,0.6); }
-.member-token.guest.active .member-dot { background:var(--lodge-fire); box-shadow:0 0 6px rgba(212,98,26,0.6); }
 .member-name { font-family:'IM Fell English',serif; font-size:14px; color:var(--lodge-muted); flex:1; }
 .member-token.active .member-name { color:var(--lodge-cream); }
 
@@ -139,6 +136,10 @@
 .shadow-btn { display:none; background:none; border:none; color:var(--lodge-ash); font-size:13px; cursor:pointer; padding:0 2px; line-height:1; opacity:0.7; flex-shrink:0; }
 .shadow-btn:hover { color:var(--lodge-muted); opacity:1; }
 .member-token:hover .shadow-btn { display:block; }
+.member-filter-input { background:var(--lodge-surface); border:1px solid var(--lodge-border); color:var(--lodge-cream); font-family:'Crimson Pro',serif; font-size:12px; text-transform:none; letter-spacing:normal; padding:3px 8px; border-radius:2px; width:120px; }
+.member-filter-input:focus { outline:none; border-color:var(--lodge-amber-dim); }
+.member-filter-input::placeholder { color:var(--lodge-ash); font-style:italic; }
+.members-empty-hint { font-family:'Crimson Pro',serif; font-size:13px; font-style:italic; color:var(--lodge-muted); padding:4px 2px; }
 
 /* Absent Presences section */
 .shadow-section { margin-top:16px; padding-top:12px; border-top:1px solid var(--lodge-border); }
@@ -175,7 +176,6 @@
 .bubble-right .bubble-body { border-radius:8px 2px 8px 8px; }
 @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
 .speaker-name { font-family:'UnifrakturMaguntia',serif; font-size:19px; color:var(--lodge-amber); margin-bottom:5px; letter-spacing:1px; display:flex; align-items:baseline; gap:6px; }
-.speaker-name.guest-voice { color:var(--lodge-fire); }
 .speaker-name.observer-voice { color:#a0c8a0; }
 .transcript-entry.bubble-right .speaker-name { justify-content:flex-end; }
 .speaker-glyph { font-family:'Georgia',serif; font-size:13px; opacity:0.6; letter-spacing:0; line-height:1; flex-shrink:0; }

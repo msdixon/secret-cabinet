@@ -33,22 +33,35 @@ let lastInterjectText = '';
 // ── Render member tokens ──────────────────────────────────────────────────────
 
 function renderMembers() {
-  ['members-grid', 'guests-grid', 'shadow-grid'].forEach(id => document.getElementById(id).innerHTML = '');
+  ['members-grid', 'shadow-grid'].forEach(id => document.getElementById(id).innerHTML = '');
 
-  // Roster tokens — active and inactive only; shadow members rendered separately below
-  MEMBERS.forEach(m => {
+  // No core/guest distinction — one sorted, filterable roster. An already-active
+  // member stays visible even when the filter no longer matches them, so casting
+  // someone doesn't make them disappear.
+  const filter = (document.getElementById('member-filter')?.value || '').trim().toLowerCase();
+  const roster = [...MEMBERS].sort((a, b) => a.name.localeCompare(b.name));
+  const grid = document.getElementById('members-grid');
+  let visibleCount = 0;
+
+  roster.forEach(m => {
     if (shadowMembers.has(m.id)) return; // shadows live in the shadow section
     const isActive = activeMembers.has(m.id);
+    if (filter && !isActive && !m.name.toLowerCase().includes(filter)) return;
+    visibleCount++;
     const el = document.createElement('div');
-    el.className = 'member-token' + (m.guest ? ' guest' : '') + (isActive ? ' active' : '');
+    el.className = 'member-token' + (isActive ? ' active' : '');
     el.innerHTML = `<div class="member-dot"></div><span class="member-name">${m.name}</span><button class="shadow-btn" title="Add as absent presence" onclick="event.stopPropagation();addShadow('${m.id}')">◌</button>`;
     el.onclick = () => {
       if (isActive) activeMembers.delete(m.id);
       else activeMembers.add(m.id);
       renderMembers();
     };
-    document.getElementById(m.guest ? 'guests-grid' : 'members-grid').appendChild(el);
+    grid.appendChild(el);
   });
+
+  const emptyHint = document.getElementById('members-empty-hint');
+  emptyHint.style.display = (filter && visibleCount === 0) ? 'block' : 'none';
+  if (filter) document.getElementById('members-empty-hint-term').textContent = filter;
 
   // Shadow section
   const shadowGrid = document.getElementById('shadow-grid');
@@ -61,7 +74,7 @@ function renderMembers() {
     const m = MEMBERS.find(m => m.id === id);
     if (!m) return;
     const el = document.createElement('div');
-    el.className = 'member-token shadow' + (m.guest ? ' guest' : '');
+    el.className = 'member-token shadow';
     el.title = 'Click to remove from absent presences';
     el.innerHTML = `<div class="member-dot"></div><span class="member-name">${m.name}</span><button class="shadow-remove-btn" title="Remove" onclick="event.stopPropagation();removeShadow('${m.id}')">×</button>`;
     el.onclick = () => removeShadow(m.id);
@@ -213,7 +226,7 @@ function getSpeakerSide(speakerId) {
   return currentSpeakerSide;
 }
 
-function addSpeech(speaker, text, isGuest, isObserver, memberId, existingAnnotation) {
+function addSpeech(speaker, text, isObserver, memberId, existingAnnotation) {
   const c = document.getElementById('transcript-content');
   // If every non-empty line is wrapped in *...*, render as centered action line(s) with
   // no bubble and no speaker-side update. Handles both single and multi-line action blocks.
@@ -239,7 +252,6 @@ function addSpeech(speaker, text, isGuest, isObserver, memberId, existingAnnotat
   let nc;
   if (isObserver) nc = 'observer-voice';
   else if (memberId) nc = `voice-${memberId}`;
-  else if (isGuest) nc = 'guest-voice';
   else nc = '';
   const glyph = memberId && MEMBER_GLYPHS[memberId]
     ? `<span class="speaker-glyph">${MEMBER_GLYPHS[memberId]}</span>`
@@ -361,7 +373,7 @@ function parseAndRenderTranscript(response) {
     if (speaker && textLines.length) {
       const text = textLines.join('\n').trim();
       const m = resolveMember(speaker, MEMBERS);
-      addSpeech(speaker, text, m?.guest || false, false, m?.id);
+      addSpeech(speaker, text, false, m?.id);
       // If the block was pure action, preserve speaker so the next speech
       // (without a repeated header) still gets attributed correctly.
       const nonEmpty = text.split('\n').map(l => l.trim()).filter(Boolean);
@@ -851,7 +863,7 @@ async function interject() {
   lastInterjectText = text;
 
   addRoundHeader('A Presence Passes Through');
-  addSpeech('— a voice from elsewhere —', text, false, true);
+  addSpeech('— a voice from elsewhere —', text, true);
   setStatus('The room notices...', true);
   await sendInterject(text);
 }
@@ -963,7 +975,7 @@ const WITNESS_MAX_PAUSE = 12000;           // cap on auto-advance delay
 /**
  * Parse a session's rounds + annotations into a flat sequence of playback blocks.
  * Block types: { type: 'header', label }
- *              { type: 'speech', speaker, text, memberId, isGuest, annotation }
+ *              { type: 'speech', speaker, text, memberId, annotation }
  *              { type: 'action', text }
  */
 function parseWitnessBlocks(session) {
@@ -985,7 +997,6 @@ function parseWitnessBlocks(session) {
         speaker,
         text: textLines.join('\n').trim(),
         memberId: m?.id || null,
-        isGuest: m?.guest || false,
         annotation,
       });
       // Keep speaker across blank lines so multi-paragraph speeches aren't dropped
@@ -1054,7 +1065,7 @@ function renderWitnessBlock(block) {
       stage.scrollTop = stage.scrollHeight;
       return witnessReadingTime(block.text);
     }
-    const nc = block.memberId ? `voice-${block.memberId}` : (block.isGuest ? 'guest-voice' : '');
+    const nc = block.memberId ? `voice-${block.memberId}` : '';
     const glyph = block.memberId && MEMBER_GLYPHS[block.memberId]
       ? `<span class="speaker-glyph">${MEMBER_GLYPHS[block.memberId]}</span>` : '';
     const side = getSpeakerSide(block.memberId || block.speaker);
@@ -1737,7 +1748,7 @@ function renderTranscriptInto(container, text) {
   const flush = () => {
     if (!speaker || !textLines.length) return;
     const m = resolveMember(speaker, MEMBERS);
-    const nc = m ? `voice-${m.id}` : (m?.guest ? 'guest-voice' : '');
+    const nc = m ? `voice-${m.id}` : '';
     const side = localSide(m?.id || speaker);
     const e = document.createElement('div');
     e.className = `transcript-entry bubble-${side}`;
@@ -1849,7 +1860,6 @@ async function submitNewMember() {
   const voiceRegister = document.getElementById('new-member-voice').value.trim();
   const cognitiveStyle = document.getElementById('new-member-cognitive').value.trim();
   const relationships = document.getElementById('new-member-relationships').value.trim();
-  const isGuest = document.getElementById('new-member-guest').checked;
   const statusEl = document.getElementById('add-member-status');
   const btn = document.getElementById('add-member-submit-btn');
 
@@ -1864,7 +1874,7 @@ async function submitNewMember() {
     const res = await fetch('/api/members', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, bio, voiceRegister, cognitiveStyle, relationships, isGuest }),
+      body: JSON.stringify({ name, bio, voiceRegister, cognitiveStyle, relationships }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Unknown error');
@@ -1875,7 +1885,6 @@ async function submitNewMember() {
     // Clear form
     ['new-member-name','new-member-bio','new-member-voice','new-member-cognitive','new-member-relationships']
       .forEach(id => { document.getElementById(id).value = ''; });
-    document.getElementById('new-member-guest').checked = false;
 
     statusEl.style.color = 'var(--lodge-muted)';
     statusEl.textContent = `${data.member.name} has joined the lodge.`;

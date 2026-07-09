@@ -103,15 +103,12 @@
     </div>
 
     <div class="member-panel">
-      <div class="panel-label" style="display:flex;align-items:center;gap:8px;">
-        II. The Assembled
-        <span id="member-count-badge" class="member-count-badge"></span>
+      <div class="panel-label" style="display:flex;align-items:center;gap:8px;justify-content:space-between;">
+        <span style="display:flex;align-items:center;gap:8px;">II. The Assembled <span id="member-count-badge" class="member-count-badge"></span></span>
+        <input type="text" class="member-filter-input" id="member-filter" placeholder="Filter…" oninput="renderMembers()" />
       </div>
       <div class="members-grid" id="members-grid"></div>
-      <div style="margin-top:8px;">
-        <div class="panel-label" style="font-size:10px;">Occasional Guests</div>
-        <div class="members-grid" id="guests-grid" style="margin-top:6px;"></div>
-      </div>
+      <div class="members-empty-hint" id="members-empty-hint" style="display:none;">No members match "<span id="members-empty-hint-term"></span>".</div>
       <div class="shadow-section" id="shadow-section">
         <div class="shadow-section-label">Absent Presences <span class="shadow-section-hint">— named, not speaking</span></div>
         <div class="members-grid" id="shadow-grid"></div>
@@ -144,14 +141,6 @@
 
         <div class="panel-label" style="margin-top:14px;margin-bottom:4px;">Relationship Notes <span style="font-style:italic;text-transform:none;letter-spacing:0;color:var(--lodge-ash);font-size:10px;">— optional</span></div>
         <textarea class="arc-textarea" id="new-member-relationships" rows="2" placeholder="Any historical connections or tensions with existing lodge members?"></textarea>
-
-        <div style="display:flex;align-items:center;gap:10px;margin-top:14px;">
-          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-family:'IM Fell English',serif;font-size:13px;color:var(--lodge-muted);">
-            <input type="checkbox" id="new-member-guest" style="accent-color:var(--lodge-amber);" />
-            Occasional guest
-          </label>
-          <span style="font-family:'IM Fell English',serif;font-style:italic;font-size:11px;color:var(--lodge-ash);">appears in the guest row</span>
-        </div>
 
         <div id="add-member-status" style="margin-top:12px;min-height:20px;font-family:'IM Fell English',serif;font-style:italic;font-size:13px;color:var(--lodge-muted);"></div>
 
