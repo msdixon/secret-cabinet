@@ -109,8 +109,12 @@
       </div>
       <div class="members-grid" id="members-grid"></div>
       <div style="margin-top:8px;">
-        <div class="panel-label" style="font-size:10px;">Occasional Guests</div>
+        <div class="panel-label" style="font-size:10px;display:flex;align-items:center;justify-content:space-between;gap:8px;">
+          <span>Occasional Guests</span>
+          <input type="text" class="guest-filter-input" id="guest-filter" placeholder="Filter…" oninput="renderMembers()" />
+        </div>
         <div class="members-grid" id="guests-grid" style="margin-top:6px;"></div>
+        <div class="guests-empty-hint" id="guests-empty-hint" style="display:none;">No guests match "<span id="guests-empty-hint-term"></span>".</div>
       </div>
       <div class="shadow-section" id="shadow-section">
         <div class="shadow-section-label">Absent Presences <span class="shadow-section-hint">— named, not speaking</span></div>

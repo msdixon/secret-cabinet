@@ -154,6 +154,10 @@
 .shadow-remove-btn:hover { color:var(--lodge-muted); }
 .member-token.shadow:hover .shadow-remove-btn { display:block; }
 .member-token.shadow:hover { border-color:var(--lodge-muted); cursor:pointer; }
+.guest-filter-input { background:var(--lodge-surface); border:1px solid var(--lodge-border); color:var(--lodge-cream); font-family:'Crimson Pro',serif; font-size:12px; text-transform:none; letter-spacing:normal; padding:3px 8px; border-radius:2px; width:110px; }
+.guest-filter-input:focus { outline:none; border-color:var(--lodge-amber-dim); }
+.guest-filter-input::placeholder { color:var(--lodge-ash); font-style:italic; }
+.guests-empty-hint { font-family:'Crimson Pro',serif; font-size:13px; font-style:italic; color:var(--lodge-muted); padding:4px 2px; }
 .round-controls { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
 .round-pips { display:flex; gap:6px; align-items:center; }
 .round-pip { width:10px; height:10px; border-radius:50%; border:1px solid var(--lodge-border); background:transparent; transition:all 0.3s; }

@@ -35,10 +35,22 @@ let lastInterjectText = '';
 function renderMembers() {
   ['members-grid', 'guests-grid', 'shadow-grid'].forEach(id => document.getElementById(id).innerHTML = '');
 
+  // Guest bench is large enough (14+) that a flat unfiltered grid stops being
+  // scannable — sort alphabetically and let a filter narrow it. Active guests
+  // stay visible even when filtered out, so casting one doesn't hide it.
+  const guestFilter = (document.getElementById('guest-filter')?.value || '').trim().toLowerCase();
+  const core = MEMBERS.filter(m => !m.guest);
+  const guests = MEMBERS.filter(m => m.guest).sort((a, b) => a.name.localeCompare(b.name));
+  let visibleGuestCount = 0;
+
   // Roster tokens — active and inactive only; shadow members rendered separately below
-  MEMBERS.forEach(m => {
+  [...core, ...guests].forEach(m => {
     if (shadowMembers.has(m.id)) return; // shadows live in the shadow section
     const isActive = activeMembers.has(m.id);
+    if (m.guest) {
+      if (guestFilter && !isActive && !m.name.toLowerCase().includes(guestFilter)) return;
+      visibleGuestCount++;
+    }
     const el = document.createElement('div');
     el.className = 'member-token' + (m.guest ? ' guest' : '') + (isActive ? ' active' : '');
     el.innerHTML = `<div class="member-dot"></div><span class="member-name">${m.name}</span><button class="shadow-btn" title="Add as absent presence" onclick="event.stopPropagation();addShadow('${m.id}')">◌</button>`;
@@ -49,6 +61,10 @@ function renderMembers() {
     };
     document.getElementById(m.guest ? 'guests-grid' : 'members-grid').appendChild(el);
   });
+
+  const emptyHint = document.getElementById('guests-empty-hint');
+  emptyHint.style.display = (guestFilter && visibleGuestCount === 0) ? 'block' : 'none';
+  if (guestFilter) document.getElementById('guests-empty-hint-term').textContent = guestFilter;
 
   // Shadow section
   const shadowGrid = document.getElementById('shadow-grid');
