@@ -12,7 +12,7 @@ const session = require('express-session');
 const dayOne = require('./dayone');
 const multer = require('multer');
 const PDFParser = require('pdf2json');
-const { buildMemberSection } = require('./pipeline');
+const { buildMemberSection, runRound } = require('./pipeline');
 
 // ─── Environment flags ────────────────────────────────────────────────────────
 const IS_LOCAL = process.env.LOCAL === 'true' || process.env.NODE_ENV !== 'production';
@@ -501,6 +501,40 @@ app.post('/api/interject', async (req, res) => {
   } catch (err) {
     console.error('Interject error:', err);
     res.write(`data: ${JSON.stringify({ error: 'Failed to interject' })}\n\n`);
+  }
+  res.end();
+});
+
+// POST /api/prototype/round — Stage 3 of #51: local-only test route for the
+// new director + per-speaker pipeline. Never touches session storage (no
+// saveSession call) — purely for validating the pipeline end-to-end against
+// the existing, unmodified client rendering before any live route is cut
+// over to it.
+app.post('/api/prototype/round', async (req, res) => {
+  if (!IS_LOCAL) return res.status(404).json({ error: 'Not available in deployed mode' });
+
+  const { entry, members, speakerCount } = req.body;
+  if (!entry?.trim()) return res.status(400).json({ error: 'entry is required' });
+  if (!members?.length) return res.status(400).json({ error: 'at least one member is required' });
+
+  const roundPrompt = buildRoundPrompt(0, entry, null, null, false);
+  const metrics = [];
+
+  openSSE(res);
+  try {
+    const { fullRoundText, speakerOrder } = await runRound({
+      client, model: 'claude-sonnet-4-6', lodgeContext, ROSTER, loadMemberFile,
+      presentMemberIds: members, artifact: null, notes: {},
+      roundPrompt, conversationHistory: [],
+      speakerCount: speakerCount || Math.min(members.length, 5),
+      round: 0,
+      onChunk: chunk => res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`),
+      onMetric: m => metrics.push(m),
+    });
+    res.write(`data: ${JSON.stringify({ done: true, fullRoundText, speakerOrder, metrics })}\n\n`);
+  } catch (err) {
+    console.error('[prototype] round error:', err);
+    res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
   }
   res.end();
 });
