@@ -46,13 +46,24 @@ function makeMetric(phase, { round, memberId, attempts, usage, latencyMs, skippe
   };
 }
 
-// ── Shared retry helper (used by the per-speaker call in Stage 2) ─────────
+// ── Shared retry helper ──────────────────────────────────────────────────────
 
+// Tries fn() once; on failure, tries again and reports how many attempts it
+// took. If the second attempt also fails, that error is rethrown with an
+// `.attempts` property attached so the caller can still report an accurate
+// metric without re-deriving the count itself.
 async function withOneRetry(fn) {
   try {
-    return await fn();
-  } catch (err) {
-    return await fn();
+    const result = await fn();
+    return { result, attempts: 1 };
+  } catch (firstErr) {
+    try {
+      const result = await fn();
+      return { result, attempts: 2 };
+    } catch (secondErr) {
+      secondErr.attempts = 2;
+      throw secondErr;
+    }
   }
 }
 
@@ -187,6 +198,8 @@ You are about to contribute your turn in this round of the salon. Generate only 
 
 Do not sign your own name at the start of your response — that is handled automatically, outside this call. Begin directly with your action (if any) or your speech.
 
+Write your entire turn as one continuous block — no blank line anywhere inside it, even across multiple sentences or beats. A blank line marks a change of speaker to whoever reads this afterward; leaving one in the middle of your own turn would read as someone else taking over mid-thought. If you need a pause or a shift, use a single line break, never a blank one.
+
 Actions and stage business are written in *single asterisks* and used sparingly. The default for any contribution is no action line at all — most speech should stand without physical description. An action earns its place only when it reveals something the words cannot: a gesture that contradicts the speech, a significant silence, a physical act that changes the room's temperature. Do not describe yourself looking at fires, adjusting posture, or sitting down. One action is the maximum; zero is the norm. Do not use --- as a divider.
 
 Be specific: cite real texts, real historical tensions, real scholarship (including post-period scholarship — the room is atemporal and the receipts are real). Do not invent citations. If you quote a text, that text must exist and the quotation must be substantively accurate.
@@ -194,6 +207,18 @@ Be specific: cite real texts, real historical tensions, real scholarship (includ
 There is no author present. The document was read aloud by no one in particular. Do not praise, critique, address, summarize, or workshop the writer — there is no writer in the room.
 
 Do not address the user or acknowledge any observer. Proceed as if no one is watching.`;
+}
+
+// A blank line inside a speaker's own turn reads as a new, unattributed
+// speaker to the client's transcript parser (a convention inherited from the
+// old single-call format, where blank lines only ever appeared *between*
+// speakers). The prompt instructs the model not to leave one, but that's a
+// soft constraint the model doesn't always honor — this collapses any that
+// slip through so a multi-paragraph turn doesn't fragment into a run of
+// unattributed "—" bubbles. Same principle as selectSpeakers' validation:
+// don't rely on prompt compliance alone for something structural.
+function stripInternalBlankLines(text) {
+  return text.replace(/\n[ \t]*\n+/g, '\n');
 }
 
 function buildSpeakerUserMessage({ roundPrompt, roundSoFarText, member }) {
@@ -232,6 +257,74 @@ async function callSpeakerTurn({ client, model, system, conversationHistory, use
   return { text: text.trim(), usage: finalMessage.usage, latencyMs };
 }
 
+// ── Orchestrator ──────────────────────────────────────────────────────────
+
+// Ties the director and per-speaker calls together into one round. Returns
+// { fullRoundText, speakerOrder } in the exact shape the caller already
+// persists today (one rolled-up round of text) — this function is the only
+// thing that changes about *how* that text gets generated.
+//
+// `roundSoFar` is local to this call only — it is never persisted on its
+// own, only as the finished `fullRoundText`. Each per-speaker call still
+// receives the same `conversationHistory` slice (prior rounds); roundSoFar
+// is threaded separately via buildSpeakerUserMessage so a mid-round retry
+// can't contaminate the across-round history.
+//
+// Known accepted risk: onChunk forwards each speaker's text live as it
+// streams. If a first attempt fails partway through (after some chunks
+// already reached the client) and the retry succeeds, the live view during
+// generation could show a garbled interleaving of the failed attempt's
+// partial text and the successful retry's full text. The *stored* result
+// is unaffected (each attempt's `text` is self-contained, not accumulated
+// across attempts), and the client's existing finalize() flow re-renders
+// from that authoritative stored text once the round completes — so this
+// is a cosmetic, self-correcting glitch during live viewing only, not a
+// data-integrity issue. Not solving for it now; revisit if it's ever
+// actually visible in practice.
+async function runRound({ client, model, lodgeContext, ROSTER, loadMemberFile,
+  presentMemberIds, artifact, notes, roundPrompt, conversationHistory,
+  speakerCount, round, onChunk, onMetric }) {
+
+  const presentMembers = ROSTER.filter(m => presentMemberIds.includes(m.id));
+  const effectiveCount = Math.min(speakerCount, presentMembers.length);
+
+  const { speakers } = await selectSpeakers({
+    client, model, lodgeContext, presentMembers,
+    instruction: roundPrompt, conversationHistory, count: effectiveCount, round, onMetric,
+  });
+
+  let roundSoFar = '';
+  const speakerOrder = [];
+
+  for (const memberId of speakers) {
+    const member = presentMembers.find(m => m.id === memberId);
+    if (!member) continue; // shouldn't happen — selectSpeakers validates against presentIds
+
+    const system = buildSpeakerSystemPrompt({ lodgeContext, member, artifact, notes, loadMemberFile });
+    const userMessage = buildSpeakerUserMessage({ roundPrompt, roundSoFarText: roundSoFar, member });
+
+    onChunk?.(`${member.name}\n`);
+    try {
+      const { result, attempts } = await withOneRetry(() =>
+        callSpeakerTurn({ client, model, system, conversationHistory, userMessage, onChunk }));
+      onMetric?.(makeMetric('speaker', { round, memberId, attempts, usage: result.usage, latencyMs: result.latencyMs }));
+
+      roundSoFar += (roundSoFar ? '\n\n' : '') + `${member.name}\n${stripInternalBlankLines(result.text)}`;
+      speakerOrder.push(memberId);
+      onChunk?.('\n\n');
+    } catch (err) {
+      onMetric?.(makeMetric('speaker', { round, memberId, attempts: err.attempts || 1, skipped: true, error: err.message }));
+      // Skip this speaker, keep the round going with fewer voices.
+    }
+  }
+
+  if (!roundSoFar) {
+    throw new Error('Every speaker failed this round — nothing to save.');
+  }
+
+  return { fullRoundText: roundSoFar, speakerOrder };
+}
+
 module.exports = {
   buildMemberSection,
   makeMetric,
@@ -243,5 +336,7 @@ module.exports = {
   selectSpeakers,
   buildSpeakerSystemPrompt,
   buildSpeakerUserMessage,
+  stripInternalBlankLines,
   callSpeakerTurn,
+  runRound,
 };
