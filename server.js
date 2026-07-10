@@ -12,6 +12,7 @@ const session = require('express-session');
 const dayOne = require('./dayone');
 const multer = require('multer');
 const PDFParser = require('pdf2json');
+const { buildMemberSection } = require('./pipeline');
 
 // ─── Environment flags ────────────────────────────────────────────────────────
 const IS_LOCAL = process.env.LOCAL === 'true' || process.env.NODE_ENV !== 'production';
@@ -203,19 +204,8 @@ function buildSystemPrompt(memberIds, artifact = null, notes = {}) {
   const presentNames = present.map(m => m.name).join(', ');
 
   // Build character sections — inject artifact as private context for the named recipient
-  const artifactMember = artifact?.memberId ? ROSTER.find(m => m.id === artifact.memberId) : null;
   const characterSections = fullMembers
-    .map(m => {
-      const text = loadMemberFile(m.file);
-      if (!text) return '';
-      const artifactNote = (artifactMember && m.id === artifactMember.id && artifact.text?.trim())
-        ? `\n\n---\n\n## PRIVATE — BEFORE THE MEETING BEGAN\n\nBefore the others arrived, you were shown the following. No one else in the room has seen it. You may reference it, produce it at the right moment, withhold it entirely, or let it colour what you say without naming it. The choice is yours.\n\n${artifact.text.trim()}`
-        : '';
-      const sessionNote = notes[m.id]?.trim()
-        ? `\n\n---\n\n## SESSION NOTE\n\n${notes[m.id].trim()}`
-        : '';
-      return `---\n${text}${artifactNote}${sessionNote}`;
-    })
+    .map(m => buildMemberSection(m, artifact, notes, loadMemberFile))
     .filter(Boolean)
     .join('\n\n');
 
