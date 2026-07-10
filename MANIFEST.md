@@ -17,7 +17,7 @@ Standing roster of the Secret-Cabin-et. Source of truth for the meta-cabinet ind
 
 **No tiers.** `roster.json` does not distinguish members by how often they're cast. Whether someone appears in every session or one is a fact about that session's casting, not a label on the person. (Until 2026-07-09 the roster carried a `guest: true/false` field; it was removed after an audit found its only live effect was a small "arrives without introduction" narrative flourish in `lodge-context.md` that wasn't earning its keep — see git history for the fuller account.)
 
-**No separate cadre for absent presences, either.** Any member can be cast as a silent, named-but-not-speaking presence in a given session (see `lodge-context.md`, ABSENT PRESENCE). This is a per-session casting choice, not a fixed property of the member.
+(The roster also briefly supported an "Absent Presence" mode — a member named but not speaking in a given session. Removed 2026-07-10: it had been broken since it shipped — the field a session read to check who was silently present never matched the field a session wrote — so it silently applied to at most one round per session, and wasn't used enough to be worth fixing. See git history for the fuller account.)
 
 ---
 

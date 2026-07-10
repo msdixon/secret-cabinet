@@ -193,21 +193,14 @@ function extractConstraints(text) {
 
 // ─── System prompt builder ────────────────────────────────────────────────────
 
-function buildSystemPrompt(memberIds, artifact = null, shadowIds = [], notes = {}) {
+function buildSystemPrompt(memberIds, artifact = null, notes = {}) {
   const present = memberIds
-    .map(id => ROSTER.find(m => m.id === id))
-    .filter(Boolean);
-
-  const shadows = shadowIds
     .map(id => ROSTER.find(m => m.id === id))
     .filter(Boolean);
 
   const fullMembers = present.filter(m => m.file);
 
   const presentNames = present.map(m => m.name).join(', ');
-  const shadowLine = shadows.length
-    ? `\nABSENT PRESENCES — named but not speaking tonight: ${shadows.map(m => m.name).join(', ')}. The room is aware of them. Members may invoke their ideas, quote them, note their absence, or argue with their positions. They do not speak.`
-    : '';
 
   // Build character sections — inject artifact as private context for the named recipient
   const artifactMember = artifact?.memberId ? ROSTER.find(m => m.id === artifact.memberId) : null;
@@ -232,7 +225,7 @@ function buildSystemPrompt(memberIds, artifact = null, shadowIds = [], notes = {
 
 ## ASSEMBLED TONIGHT
 
-PRESENT: ${presentNames}${shadowLine}
+PRESENT: ${presentNames}
 
 ${characterSections}
 
@@ -262,7 +255,7 @@ Do not address the user or acknowledge any observer. The conversation proceeds a
  * HOW YOU SPEAK (first para), WHAT YOU DO NOT DO (full constraint list).
  * Reduces per-round token cost by ~85 % vs. the full prompt.
  */
-function buildSystemPromptAbbreviated(memberIds, shadowIds = []) {
+function buildSystemPromptAbbreviated(memberIds) {
   const present = memberIds
     .map(id => ROSTER.find(m => m.id === id))
     .filter(Boolean);
@@ -425,11 +418,11 @@ app.post('/api/convene', async (req, res) => {
   if (!entry?.trim()) return res.status(400).json({ error: 'entry is required' });
   if (!members?.length) return res.status(400).json({ error: 'at least one member is required' });
 
-  const { roundInstructions, artifact, shadows, notes, sourceSessionId } = req.body;
+  const { roundInstructions, artifact, notes, sourceSessionId } = req.body;
   const isTranscriptSource = !!sourceSessionId;
   const id = makeSessionId(entry);
   const date = new Date().toISOString().slice(0, 10);
-  const systemPrompt = buildSystemPrompt(members, artifact || null, shadows || [], notes || {});
+  const systemPrompt = buildSystemPrompt(members, artifact || null, notes || {});
   const roundPrompt = buildRoundPrompt(0, entry, roundInstructions, artifact || null, isTranscriptSource);
 
   openSSE(res);
@@ -443,7 +436,6 @@ app.post('/api/convene', async (req, res) => {
       id, date, entry, members, systemPrompt,
       roundInstructions: roundInstructions || null,
       artifact: artifact || null,
-      shadows: shadows || [],
       notes: notes || {},
       sourceSessionId: sourceSessionId || null,
       conversationHistory: history,
@@ -473,7 +465,7 @@ app.post('/api/round', async (req, res) => {
   const labels = ['First Movement', 'The Room Responds', 'Final Embers', 'One More Turn'];
   const label = labels[Math.min(roundIndex, labels.length - 1)];
 
-  const systemPrompt = buildSystemPromptAbbreviated(session.members, session.shadowMembers || []);
+  const systemPrompt = buildSystemPromptAbbreviated(session.members);
 
   openSSE(res);
   try {
@@ -504,7 +496,7 @@ app.post('/api/interject', async (req, res) => {
   const prompt = `A mysterious presence — an observer from outside time — has just spoken: "${text}"\n\nThe room reacts. 2-3 members respond to what was said.`;
   const recentHistory = session.conversationHistory.slice(-6);
 
-  const systemPrompt = buildSystemPromptAbbreviated(session.members, session.shadowMembers || []);
+  const systemPrompt = buildSystemPromptAbbreviated(session.members);
 
   openSSE(res);
   try {
@@ -1054,7 +1046,6 @@ function buildGraph() {
         try {
           const s = JSON.parse(fs.readFileSync(path.join(SESSIONS_DIR, f), 'utf8'));
           const members = s.members || [];
-          const shadows = s.shadowMembers || [];
           const tags = s.tags || [];
           const sid = s.id;
 
@@ -1068,10 +1059,6 @@ function buildGraph() {
             // member co-occurrence with other members
             members.forEach(mid2 => {
               if (mid < mid2) accumulateEdge(mid, mid2, 'co-convened', 'session', sid);
-            });
-            // member with shadow
-            shadows.forEach(sid2 => {
-              accumulateEdge(mid, sid2, 'shadowed-with', 'session', sid);
             });
           });
 

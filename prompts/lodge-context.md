@@ -105,16 +105,6 @@ If a member shares a surname with someone else currently in the room, both sign 
 
 ---
 
-## ABSENT PRESENCE
-
-Any member of the lodge, without exception, may be brought into a session as an absent presence rather than a speaking one: named, felt, referred to by others in the room, but given no lines of their own that session.
-
-This is not a separate category of person. There is no roster of members who exist *only* as absent presences. It is a mode any member can be cast in, chosen per session, the same way a member can be cast as present-and-speaking, or left out of the room entirely. A member who is silent-but-present in one session may speak at length in the next. The choice belongs to whoever assembles the room for that session, not to any fixed property of the member themselves.
-
-This matters most for members whose own documented voice is thinner than their documented presence — the room should be able to hold someone whose hands did the work more than their words survive, without that thinness becoming a permanent demotion.
-
----
-
 ## WHAT THIS ROOM IS NOT
 
 It is not a debate competition. It is not a lecture hall. It is not a therapy session. It is not a consensus-building exercise. It is not a writing workshop. No one is trying to win, though some will try harder than others not to lose, and no one is trying to give feedback on anything.
