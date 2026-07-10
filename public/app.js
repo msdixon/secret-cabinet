@@ -18,8 +18,6 @@ const ROUND_LABELS = ['First Movement', 'The Room Responds', 'Final Embers'];
 
 // No members selected by default — user assembles the room each session.
 let activeMembers = new Set();
-// Shadow members: named in the assembled section but never speak.
-let shadowMembers = new Set();
 let currentRound = 0;
 let currentSessionId = null;
 let currentSourceSessionId = null; // set when reconvening on a prior transcript
@@ -33,7 +31,7 @@ let lastInterjectText = '';
 // ── Render member tokens ──────────────────────────────────────────────────────
 
 function renderMembers() {
-  ['members-grid', 'shadow-grid'].forEach(id => document.getElementById(id).innerHTML = '');
+  document.getElementById('members-grid').innerHTML = '';
 
   // No core/guest distinction — one sorted, filterable roster. An already-active
   // member stays visible even when the filter no longer matches them, so casting
@@ -44,13 +42,12 @@ function renderMembers() {
   let visibleCount = 0;
 
   roster.forEach(m => {
-    if (shadowMembers.has(m.id)) return; // shadows live in the shadow section
     const isActive = activeMembers.has(m.id);
     if (filter && !isActive && !m.name.toLowerCase().includes(filter)) return;
     visibleCount++;
     const el = document.createElement('div');
     el.className = 'member-token' + (isActive ? ' active' : '');
-    el.innerHTML = `<div class="member-dot"></div><span class="member-name">${m.name}</span><button class="shadow-btn" title="Add as absent presence" onclick="event.stopPropagation();addShadow('${m.id}')">◌</button>`;
+    el.innerHTML = `<div class="member-dot"></div><span class="member-name">${m.name}</span>`;
     el.onclick = () => {
       if (isActive) activeMembers.delete(m.id);
       else activeMembers.add(m.id);
@@ -63,38 +60,9 @@ function renderMembers() {
   emptyHint.style.display = (filter && visibleCount === 0) ? 'block' : 'none';
   if (filter) document.getElementById('members-empty-hint-term').textContent = filter;
 
-  // Shadow section
-  const shadowGrid = document.getElementById('shadow-grid');
-  const shadowEmpty = document.getElementById('shadow-empty');
-  const shadowSection = document.getElementById('shadow-section');
-  shadowSection.classList.toggle('has-shadows', shadowMembers.size > 0);
-  shadowEmpty.style.display = shadowMembers.size === 0 ? 'block' : 'none';
-
-  shadowMembers.forEach(id => {
-    const m = MEMBERS.find(m => m.id === id);
-    if (!m) return;
-    const el = document.createElement('div');
-    el.className = 'member-token shadow';
-    el.title = 'Click to remove from absent presences';
-    el.innerHTML = `<div class="member-dot"></div><span class="member-name">${m.name}</span><button class="shadow-remove-btn" title="Remove" onclick="event.stopPropagation();removeShadow('${m.id}')">×</button>`;
-    el.onclick = () => removeShadow(m.id);
-    shadowGrid.appendChild(el);
-  });
-
   updateMemberCount();
   populateArtifactSelect();
   if (activeMembers.size > 0) buildDossier([...activeMembers]);
-}
-
-function addShadow(id) {
-  activeMembers.delete(id); // can't be both active and shadow
-  shadowMembers.add(id);
-  renderMembers();
-}
-
-function removeShadow(id) {
-  shadowMembers.delete(id);
-  renderMembers();
 }
 
 function populateArtifactSelect() {
@@ -113,10 +81,9 @@ function populateArtifactSelect() {
 
 function updateMemberCount() {
   const n = activeMembers.size;
-  const s = shadowMembers.size;
   const badge = document.getElementById('member-count-badge');
   if (!badge) return;
-  badge.textContent = s > 0 ? `${n} present · ${s} shadow` : `${n} present`;
+  badge.textContent = `${n} present`;
   badge.className = 'member-count-badge' + (n >= 8 ? ' over' : n >= 6 ? ' warn' : '');
   badge.title = n >= 6
     ? `${n} members active — larger casts reduce individual voice distinction and increase generation time. 4–6 recommended.`
@@ -724,7 +691,6 @@ async function convene() {
   currentRound = 0;
   sessionDate = new Date().toISOString().split('T')[0];
   const members = [...activeMembers];
-  const shadows = [...shadowMembers];
   const memberNames = members.map(id => MEMBERS.find(m => m.id === id)?.name).filter(Boolean).join(', ');
   const entryForHeader = getEntry();
   transcriptText = `THE SECRET-CABIN-ET\nMeeting Notes — ${sessionDate}\nAssembled: ${memberNames}\n\nSource material:\n${entryForHeader}\n`;
@@ -746,7 +712,7 @@ async function convene() {
     let acc = '';
     let d1;
     try {
-      d1 = await streamPost('/api/convene', { entry, members, shadows, roundInstructions, artifact, notes, sourceSessionId: currentSourceSessionId || undefined }, chunk => { acc += chunk; s1.append(chunk); });
+      d1 = await streamPost('/api/convene', { entry, members, roundInstructions, artifact, notes, sourceSessionId: currentSourceSessionId || undefined }, chunk => { acc += chunk; s1.append(chunk); });
       s1.finalize(acc);
       currentSessionId = d1.sessionId;
       buildDossier(members);
