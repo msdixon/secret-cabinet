@@ -165,6 +165,73 @@ async function selectSpeakers({ client, model, lodgeContext, presentMembers, ins
   return { speakers, reasoning: lastReasoning, source: 'fallback' };
 }
 
+// ── Per-speaker call ────────────────────────────────────────────────────────
+
+// Only this member's own character file goes in — no other present members'
+// files. That's the whole point: each speaker gets the model's full
+// attention instead of a fraction of it split across the whole cast.
+function buildSpeakerSystemPrompt({ lodgeContext, member, artifact, notes, loadMemberFile }) {
+  const memberSection = buildMemberSection(member, artifact, notes, loadMemberFile);
+
+  return `${lodgeContext}
+
+---
+
+${memberSection}
+
+---
+
+## YOUR TURN RIGHT NOW
+
+You are about to contribute your turn in this round of the salon. Generate only your own contribution — not other members' dialogue, not a transcript of the whole room, just what you say and do right now.
+
+Do not sign your own name at the start of your response — that is handled automatically, outside this call. Begin directly with your action (if any) or your speech.
+
+Actions and stage business are written in *single asterisks* and used sparingly. The default for any contribution is no action line at all — most speech should stand without physical description. An action earns its place only when it reveals something the words cannot: a gesture that contradicts the speech, a significant silence, a physical act that changes the room's temperature. Do not describe yourself looking at fires, adjusting posture, or sitting down. One action is the maximum; zero is the norm. Do not use --- as a divider.
+
+Be specific: cite real texts, real historical tensions, real scholarship (including post-period scholarship — the room is atemporal and the receipts are real). Do not invent citations. If you quote a text, that text must exist and the quotation must be substantively accurate.
+
+There is no author present. The document was read aloud by no one in particular. Do not praise, critique, address, summarize, or workshop the writer — there is no writer in the room.
+
+Do not address the user or acknowledge any observer. Proceed as if no one is watching.`;
+}
+
+function buildSpeakerUserMessage({ roundPrompt, roundSoFarText, member }) {
+  const soFar = roundSoFarText?.trim()
+    ? `\n\n--- THE ROUND SO FAR ---\n${roundSoFarText.trim()}\n`
+    : '';
+  return `${roundPrompt}${soFar}
+
+--- YOUR TURN ---
+Generate ${member.name}'s contribution now.`;
+}
+
+// Streams the response (same delta shape streamClaude already forwards to
+// the client), and still captures usage/latency via stream.finalMessage() —
+// live streaming and per-call metrics are not mutually exclusive.
+async function callSpeakerTurn({ client, model, system, conversationHistory, userMessage, onChunk }) {
+  const start = Date.now();
+  const messages = [...conversationHistory, { role: 'user', content: userMessage }];
+  const stream = client.messages.stream({
+    model,
+    max_tokens: 800,
+    system,
+    messages,
+  });
+
+  let text = '';
+  for await (const event of stream) {
+    if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+      const chunk = event.delta.text;
+      text += chunk;
+      onChunk?.(chunk);
+    }
+  }
+  const finalMessage = await stream.finalMessage();
+  const latencyMs = Date.now() - start;
+  return { text: text.trim(), usage: finalMessage.usage, latencyMs };
+}
+
 module.exports = {
   buildMemberSection,
   makeMetric,
@@ -174,4 +241,7 @@ module.exports = {
   callDirector,
   isValidSelection,
   selectSpeakers,
+  buildSpeakerSystemPrompt,
+  buildSpeakerUserMessage,
+  callSpeakerTurn,
 };
