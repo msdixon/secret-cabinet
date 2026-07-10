@@ -385,6 +385,20 @@ const DEFAULT_ROUND_INSTRUCTIONS = [
 ];
 const EXTRA_ROUND_INSTRUCTION = 'A thread unresolved, a silence wanting breaking, a late arrival to the argument, a member who passed earlier returning with something they have just thought of. 2-4 members speak.';
 
+// The exact speaker count for a round is now a hard number handed to the
+// director, not a range for it to interpret — these mirror the upper end of
+// the prose guidance above (the prose itself is left as-is; it's now soft
+// framing for the director's judgment about *who*, not an enforced count).
+// No user-facing control over this yet — a natural fit for #73's "Shape the
+// Arc" rework, not this cutover.
+const SPEAKER_COUNTS = [5, 5, 4]; // rounds 1-3
+const EXTRA_ROUND_SPEAKER_COUNT = 4;
+const INTERJECT_SPEAKER_COUNT = 3; // today's prose only ever suggested "2-3", never enforced — a new explicit assumption
+
+function speakerCountForRound(index) {
+  return SPEAKER_COUNTS[index] || EXTRA_ROUND_SPEAKER_COUNT;
+}
+
 function buildRoundPrompt(index, entry, instructions, artifact = null, isTranscriptSource = false) {
   const instr = instructions?.[index] || DEFAULT_ROUND_INSTRUCTIONS[index] || EXTRA_ROUND_INSTRUCTION;
   if (index === 0) {
@@ -412,18 +426,28 @@ app.post('/api/convene', async (req, res) => {
   const isTranscriptSource = !!sourceSessionId;
   const id = makeSessionId(entry);
   const date = new Date().toISOString().slice(0, 10);
-  const systemPrompt = buildSystemPrompt(members, artifact || null, notes || {});
   const roundPrompt = buildRoundPrompt(0, entry, roundInstructions, artifact || null, isTranscriptSource);
+  const generationMetrics = [];
 
   openSSE(res);
   try {
-    const text = await streamClaude(res, systemPrompt, [], roundPrompt);
+    const { fullRoundText: text } = await runRound({
+      client, model: 'claude-sonnet-4-6', lodgeContext, ROSTER, loadMemberFile,
+      presentMemberIds: members, artifact: artifact || null, notes: notes || {},
+      roundPrompt, conversationHistory: [],
+      speakerCount: speakerCountForRound(0), round: 0,
+      onChunk: chunk => res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`),
+      onMetric: m => {
+        generationMetrics.push(m);
+        if (m.skipped) console.warn('[degraded]', m.phase, m.memberId || '', '—', m.error);
+      },
+    });
     const history = [
       { role: 'user', content: roundPrompt },
       { role: 'assistant', content: text },
     ];
     const session = {
-      id, date, entry, members, systemPrompt,
+      id, date, entry, members,
       roundInstructions: roundInstructions || null,
       artifact: artifact || null,
       notes: notes || {},
@@ -431,9 +455,10 @@ app.post('/api/convene', async (req, res) => {
       conversationHistory: history,
       rounds: [{ label: 'First Movement', text }],
       transcriptText: buildTranscriptHeader(entry, members, date) + `\n— First Movement —\n\n${formatTranscriptText(text)}\n`,
+      generationMetrics,
     };
     saveSession(session);
-    res.write(`data: ${JSON.stringify({ done: true, sessionId: id, round: 1, label: 'First Movement' })}\n\n`);
+    res.write(`data: ${JSON.stringify({ done: true, sessionId: id, round: 1, label: 'First Movement', text })}\n\n`);
   } catch (err) {
     console.error('Convene error:', err);
     res.write(`data: ${JSON.stringify({ error: 'Failed to convene lodge' })}\n\n`);
@@ -455,11 +480,21 @@ app.post('/api/round', async (req, res) => {
   const labels = ['First Movement', 'The Room Responds', 'Final Embers', 'One More Turn'];
   const label = labels[Math.min(roundIndex, labels.length - 1)];
 
-  const systemPrompt = buildSystemPromptAbbreviated(session.members);
+  session.generationMetrics = session.generationMetrics || [];
 
   openSSE(res);
   try {
-    const text = await streamClaude(res, systemPrompt, session.conversationHistory.slice(-6), roundPrompt);
+    const { fullRoundText: text } = await runRound({
+      client, model: 'claude-sonnet-4-6', lodgeContext, ROSTER, loadMemberFile,
+      presentMemberIds: session.members, artifact: null, notes: {},
+      roundPrompt, conversationHistory: session.conversationHistory.slice(-6),
+      speakerCount: speakerCountForRound(roundIndex), round: roundIndex,
+      onChunk: chunk => res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`),
+      onMetric: m => {
+        session.generationMetrics.push(m);
+        if (m.skipped) console.warn('[degraded]', m.phase, m.memberId || '', '—', m.error);
+      },
+    });
 
     session.conversationHistory.push({ role: 'user', content: roundPrompt });
     session.conversationHistory.push({ role: 'assistant', content: text });
@@ -467,7 +502,7 @@ app.post('/api/round', async (req, res) => {
     session.transcriptText += `\n— ${label} —\n\n${formatTranscriptText(text)}\n`;
 
     saveSession(session);
-    res.write(`data: ${JSON.stringify({ done: true, round: roundIndex + 1, label })}\n\n`);
+    res.write(`data: ${JSON.stringify({ done: true, round: roundIndex + 1, label, text })}\n\n`);
   } catch (err) {
     console.error('Round error:', err);
     res.write(`data: ${JSON.stringify({ error: 'Failed to generate round' })}\n\n`);
@@ -483,21 +518,29 @@ app.post('/api/interject', async (req, res) => {
   const session = loadSession(sessionId);
   if (!session) return res.status(404).json({ error: 'Session not found' });
 
-  const prompt = `A mysterious presence — an observer from outside time — has just spoken: "${text}"\n\nThe room reacts. 2-3 members respond to what was said.`;
-  const recentHistory = session.conversationHistory.slice(-6);
-
-  const systemPrompt = buildSystemPromptAbbreviated(session.members);
+  const prompt = `A mysterious presence — an observer from outside time — has just spoken: "${text}"\n\nThe room reacts to what was said.`;
+  session.generationMetrics = session.generationMetrics || [];
 
   openSSE(res);
   try {
-    const response = await streamClaude(res, systemPrompt, session.conversationHistory.slice(-6), prompt);
+    const { fullRoundText: response } = await runRound({
+      client, model: 'claude-sonnet-4-6', lodgeContext, ROSTER, loadMemberFile,
+      presentMemberIds: session.members, artifact: null, notes: {},
+      roundPrompt: prompt, conversationHistory: session.conversationHistory.slice(-6),
+      speakerCount: Math.min(INTERJECT_SPEAKER_COUNT, session.members.length), round: session.rounds.length,
+      onChunk: chunk => res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`),
+      onMetric: m => {
+        session.generationMetrics.push(m);
+        if (m.skipped) console.warn('[degraded]', m.phase, m.memberId || '', '—', m.error);
+      },
+    });
 
     session.conversationHistory.push({ role: 'user', content: prompt });
     session.conversationHistory.push({ role: 'assistant', content: response });
     session.transcriptText += `\n— A Presence Passes Through —\n\n— a voice from elsewhere —\n${text}\n\n${formatTranscriptText(response)}\n`;
 
     saveSession(session);
-    res.write(`data: ${JSON.stringify({ done: true, label: 'A Presence Passes Through' })}\n\n`);
+    res.write(`data: ${JSON.stringify({ done: true, label: 'A Presence Passes Through', text: response })}\n\n`);
   } catch (err) {
     console.error('Interject error:', err);
     res.write(`data: ${JSON.stringify({ error: 'Failed to interject' })}\n\n`);

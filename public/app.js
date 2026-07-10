@@ -709,11 +709,15 @@ async function convene() {
     const txtBefore1 = transcriptText;
     const h1 = addRoundHeader('First Movement');
     const s1 = startStreamEntry();
+    // acc (below) is only for the live-typing view as chunks arrive — the
+    // settled render uses the server's `text` from the done event instead,
+    // since the server may post-process the raw stream (e.g. stripping
+    // blank lines the per-speaker pipeline can introduce) before storing it.
     let acc = '';
     let d1;
     try {
       d1 = await streamPost('/api/convene', { entry, members, roundInstructions, artifact, notes, sourceSessionId: currentSourceSessionId || undefined }, chunk => { acc += chunk; s1.append(chunk); });
-      s1.finalize(acc);
+      s1.finalize(d1.text);
       currentSessionId = d1.sessionId;
       buildDossier(members);
     } catch (err) {
@@ -734,8 +738,8 @@ async function convene() {
       acc = '';
       const ri = i;
       try {
-        await streamPost('/api/round', { sessionId: currentSessionId }, chunk => { acc += chunk; s.append(chunk); });
-        s.finalize(acc);
+        const d = await streamPost('/api/round', { sessionId: currentSessionId }, chunk => { acc += chunk; s.append(chunk); });
+        s.finalize(d.text);
       } catch (err) {
         s.abort(); h.remove(); transcriptText = txtBefore;
         showSessionControls();
@@ -767,8 +771,8 @@ async function resumeRounds(fromIndex) {
       let acc = '';
       const ri = i;
       try {
-        await streamPost('/api/round', { sessionId: currentSessionId }, chunk => { acc += chunk; s.append(chunk); });
-        s.finalize(acc);
+        const d = await streamPost('/api/round', { sessionId: currentSessionId }, chunk => { acc += chunk; s.append(chunk); });
+        s.finalize(d.text);
       } catch (err) {
         s.abort(); h.remove(); transcriptText = txtBefore;
         setError(`${ROUND_LABELS[ri]} could not continue.`, () => resumeRounds(ri));
@@ -803,11 +807,11 @@ async function addRound() {
   let accumulated = '';
 
   try {
-    await streamPost('/api/round', { sessionId: currentSessionId }, chunk => {
+    const d = await streamPost('/api/round', { sessionId: currentSessionId }, chunk => {
       accumulated += chunk;
       s.append(chunk);
     });
-    s.finalize(accumulated);
+    s.finalize(d.text);
     setStatus('The embers hold a while longer.', false);
   } catch (err) {
     s.abort(); h.remove(); transcriptText = txtBefore; currentRound--;
@@ -838,11 +842,11 @@ async function sendInterject(text) {
   const s = startStreamEntry();
   let accumulated = '';
   try {
-    await streamPost('/api/interject', { sessionId: currentSessionId, text }, chunk => {
+    const d = await streamPost('/api/interject', { sessionId: currentSessionId, text }, chunk => {
       accumulated += chunk;
       s.append(chunk);
     });
-    s.finalize(accumulated);
+    s.finalize(d.text);
     lastInterjectText = '';
     setStatus('The presence withdraws. The room continues.', false);
   } catch (err) {

@@ -239,7 +239,7 @@ async function callSpeakerTurn({ client, model, system, conversationHistory, use
   const messages = [...conversationHistory, { role: 'user', content: userMessage }];
   const stream = client.messages.stream({
     model,
-    max_tokens: 800,
+    max_tokens: 1500,
     system,
     messages,
   });
