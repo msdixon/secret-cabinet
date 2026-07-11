@@ -19,6 +19,8 @@ const ROUND_LABELS = ['First Movement', 'The Room Responds', 'Final Embers'];
 // No members selected by default — user assembles the room each session.
 let activeMembers = new Set();
 let currentRound = 0;
+let selectedRoundCount = 3;       // live round-count selector value
+let activeConveneRoundCount = 3;  // snapshot at convene() start; a mid-run selector change never affects an in-flight session
 let currentSessionId = null;
 let currentSourceSessionId = null; // set when reconvening on a prior transcript
 let transcriptText = '';
@@ -115,8 +117,28 @@ function updatePips() {
     const p = document.getElementById(`pip-${i}`);
     if (i < currentRound) p.className = 'round-pip complete';
     else if (i === currentRound) p.className = 'round-pip active';
+    else if (i > selectedRoundCount) p.className = 'round-pip inert';
     else p.className = 'round-pip';
   }
+}
+
+// ── Round count selector ─────────────────────────────────────────────────────
+
+function setRoundCount(n) {
+  selectedRoundCount = n;
+  document.querySelectorAll('.round-count-btn').forEach(b => {
+    b.classList.toggle('selected', Number(b.dataset.count) === n);
+  });
+  updateArcFieldAvailability();
+  updatePips();
+}
+
+function updateArcFieldAvailability() {
+  [1, 2, 3].forEach(i => {
+    const disabled = i > selectedRoundCount;
+    document.getElementById(`arc-${i}`).disabled = disabled;
+    document.getElementById(`arc-field-${i}`)?.classList.toggle('arc-field-disabled', disabled);
+  });
 }
 
 // ── Transcript rendering ──────────────────────────────────────────────────────
@@ -683,18 +705,21 @@ async function convene() {
 
   lastSpeakerId = null; currentSpeakerSide = 'right';
   document.getElementById('convene-btn').disabled = true;
+  document.querySelectorAll('.round-count-btn').forEach(b => b.disabled = true);
   document.getElementById('additional-round-btn').className = 'lodge-btn';
   document.getElementById('export-panel').className = 'export-panel';
   document.getElementById('interject-panel').className = 'interject-panel';
 
   currentSessionId = null;
   currentRound = 0;
+  activeConveneRoundCount = selectedRoundCount;
   sessionDate = new Date().toISOString().split('T')[0];
   const members = [...activeMembers];
   const memberNames = members.map(id => MEMBERS.find(m => m.id === id)?.name).filter(Boolean).join(', ');
   const entryForHeader = getEntry();
   transcriptText = `THE SECRET-CABIN-ET\nMeeting Notes — ${sessionDate}\nAssembled: ${memberNames}\n\nSource material:\n${entryForHeader}\n`;
-  const roundInstructions = [1, 2, 3].map(i => document.getElementById(`arc-${i}`)?.value.trim()).filter(Boolean);
+  const roundInstructions = Array.from({ length: activeConveneRoundCount }, (_, idx) => idx + 1)
+    .map(i => document.getElementById(`arc-${i}`)?.value.trim()).filter(Boolean);
 
   const artifactText = document.getElementById('artifact-text')?.value.trim();
   const artifactMemberId = document.getElementById('artifact-member')?.value;
@@ -716,7 +741,7 @@ async function convene() {
     let acc = '';
     let d1;
     try {
-      d1 = await streamPost('/api/convene', { entry, members, roundInstructions, artifact, notes, sourceSessionId: currentSourceSessionId || undefined }, chunk => { acc += chunk; s1.append(chunk); });
+      d1 = await streamPost('/api/convene', { entry, members, roundInstructions, roundCount: activeConveneRoundCount, artifact, notes, sourceSessionId: currentSourceSessionId || undefined }, chunk => { acc += chunk; s1.append(chunk); });
       s1.finalize(d1.text);
       currentSessionId = d1.sessionId;
       buildDossier(members);
@@ -726,8 +751,8 @@ async function convene() {
       return;
     }
 
-    // Rounds 2 and 3
-    for (let i = 1; i < ROUND_LABELS.length; i++) {
+    // Remaining rounds up to the selected round count
+    for (let i = 1; i < activeConveneRoundCount; i++) {
       currentRound = i + 1;
       updatePips();
       setStatus(`${ROUND_LABELS[i]}... the room is speaking.`, true);
@@ -752,6 +777,7 @@ async function convene() {
     setStatus('The meeting has found its natural pause. The embers hold.', false);
   } finally {
     document.getElementById('convene-btn').disabled = false;
+    document.querySelectorAll('.round-count-btn').forEach(b => b.disabled = false);
   }
 }
 
@@ -759,8 +785,9 @@ async function convene() {
 async function resumeRounds(fromIndex) {
   if (!currentSessionId) return;
   document.getElementById('convene-btn').disabled = true;
+  document.querySelectorAll('.round-count-btn').forEach(b => b.disabled = true);
   try {
-    for (let i = fromIndex; i < ROUND_LABELS.length; i++) {
+    for (let i = fromIndex; i < activeConveneRoundCount; i++) {
       currentRound = i + 1;
       updatePips();
       setStatus(`${ROUND_LABELS[i]}... the room is speaking.`, true);
@@ -782,6 +809,7 @@ async function resumeRounds(fromIndex) {
     setStatus('The meeting has found its natural pause. The embers hold.', false);
   } finally {
     document.getElementById('convene-btn').disabled = false;
+    document.querySelectorAll('.round-count-btn').forEach(b => b.disabled = false);
   }
 }
 
@@ -1548,6 +1576,8 @@ async function restoreSession(id) {
     sessionDate = session.date;
     currentEntry = session.entry || '';
     currentRound = session.rounds?.length || 0;
+    activeConveneRoundCount = session.roundCount || 3;
+    setRoundCount(activeConveneRoundCount);
 
     // Rebuild transcriptText from scratch with current formatting
     const names = (session.members || []).map(id => MEMBERS.find(m => m.id === id)?.name).filter(Boolean).join(', ');
@@ -1896,6 +1926,7 @@ function exportMd() {
 applyEnvConfig();
 fetchMembers().then(() => renderMembers());
 updateExportJournalLabel();
+updateArcFieldAvailability();
 // Restore saved Ulysses group preference
 const _savedGroup = localStorage.getItem('sc-ulysses-group');
 if (_savedGroup) { const _gi = document.getElementById('ulysses-group'); if (_gi) _gi.value = _savedGroup; }

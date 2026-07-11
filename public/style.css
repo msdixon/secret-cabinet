@@ -188,12 +188,27 @@
 .source-tag { font-size:12px; color:var(--lodge-muted); font-family:'IM Fell English',serif; font-style:italic; margin-left:6px; }
 #additional-round-btn { display:none; }
 #additional-round-btn.visible { display:inline-block; }
-/* Convene panel — arc config + convene button grouped together */
+/* Convene panel — convene button is primary; arc config sits below, demoted */
 .convene-panel { background:var(--lodge-surface); border:1px solid var(--lodge-border); border-radius:2px; display:flex; flex-direction:column; }
-.convene-row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; padding:12px 14px; border-top:1px solid var(--lodge-border); }
+.convene-row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; padding:12px 14px; }
 
-/* Arc customisation panel */
-.arc-panel { border:none; border-radius:0; background:transparent; }
+/* Round count selector */
+.round-count-selector { display:flex; gap:4px; }
+.round-count-btn { width:24px; height:24px; padding:0; font-size:12px; border:1px solid var(--lodge-amber-dim); background:transparent; color:var(--lodge-amber-dim); border-radius:2px; cursor:pointer; font-family:'IM Fell English',serif; transition:all 0.2s; }
+.round-count-btn:hover:not(:disabled) { border-color:var(--lodge-amber); color:var(--lodge-amber); }
+.round-count-btn.selected { background:rgba(200,146,42,0.2); border-color:var(--lodge-amber); color:var(--lodge-amber); }
+.round-count-btn:disabled { opacity:0.4; cursor:not-allowed; }
+.round-pip.inert { opacity:0.35; border-style:dashed; }
+
+/* Arc customisation panel — collapsed by default, visually secondary/advanced */
+.arc-panel { border:none; border-top:1px solid var(--lodge-border); border-radius:0; background:rgba(0,0,0,0.12); }
+.arc-panel .arc-summary { font-size:11px; padding:8px 14px; color:var(--lodge-ash); }
+.arc-panel .arc-summary-note { color:var(--lodge-ash); }
+.arc-panel .arc-fields { padding:0 14px 12px; gap:8px; }
+.arc-panel .arc-textarea { font-size:13px; padding:6px 10px; }
+.arc-panel .arc-field-disabled { opacity:0.4; }
+
+/* Shared arc-field styles (also used by .artifact-panel's "Bring an artifact" details) */
 .arc-summary { font-family:'IM Fell English',serif; font-size:13px; letter-spacing:2px; text-transform:uppercase; color:var(--lodge-muted); padding:10px 14px; cursor:pointer; list-style:none; user-select:none; }
 .arc-summary-note { font-size:12px; letter-spacing:1px; color:var(--lodge-muted); text-transform:none; font-style:italic; }
 .arc-summary::-webkit-details-marker { display:none; }
@@ -204,6 +219,7 @@
 .arc-field { display:flex; flex-direction:column; gap:4px; }
 .arc-textarea { background:var(--lodge-panel); border:1px solid var(--lodge-ash); border-left:3px solid var(--lodge-amber-dim); color:var(--lodge-cream); font-family:'Crimson Pro',serif; font-size:14px; font-style:italic; line-height:1.6; padding:8px 12px; border-radius:0 2px 2px 0; resize:vertical; width:100%; }
 .arc-textarea:focus { outline:none; border-left-color:var(--lodge-amber); }
+.arc-textarea:disabled { opacity:0.6; cursor:not-allowed; }
 
 .transcript-stream-live { font-family:'Crimson Pro',serif; font-size:17px; line-height:1.8; color:var(--lodge-muted); white-space:pre-wrap; padding:4px 0 12px; font-style:italic; animation:flicker 3s ease-in-out infinite; }
 
