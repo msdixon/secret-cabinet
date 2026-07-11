@@ -249,8 +249,9 @@ const EXTRA_ROUND_INSTRUCTION = 'A thread unresolved, a silence wanting breaking
 // director, not a range for it to interpret — these mirror the upper end of
 // the prose guidance above (the prose itself is left as-is; it's now soft
 // framing for the director's judgment about *who*, not an enforced count).
-// No user-facing control over this yet — a natural fit for #73's "Shape the
-// Arc" rework, not this cutover.
+// #73 exposed round *count* to the user (session.roundCount, below); per-round
+// speaker count remains this fixed default — still no user-facing control,
+// deferred as a separate follow-up.
 const SPEAKER_COUNTS = [5, 5, 4]; // rounds 1-3
 const EXTRA_ROUND_SPEAKER_COUNT = 4;
 const INTERJECT_SPEAKER_COUNT = 3; // today's prose only ever suggested "2-3", never enforced — a new explicit assumption
@@ -282,7 +283,7 @@ app.post('/api/convene', async (req, res) => {
   if (!entry?.trim()) return res.status(400).json({ error: 'entry is required' });
   if (!members?.length) return res.status(400).json({ error: 'at least one member is required' });
 
-  const { roundInstructions, artifact, notes, sourceSessionId } = req.body;
+  const { roundInstructions, roundCount, artifact, notes, sourceSessionId } = req.body;
   const isTranscriptSource = !!sourceSessionId;
   const id = makeSessionId(entry);
   const date = new Date().toISOString().slice(0, 10);
@@ -309,6 +310,7 @@ app.post('/api/convene', async (req, res) => {
     const session = {
       id, date, entry, members,
       roundInstructions: roundInstructions || null,
+      roundCount: roundCount || 3,
       artifact: artifact || null,
       notes: notes || {},
       sourceSessionId: sourceSessionId || null,
