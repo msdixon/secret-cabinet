@@ -675,6 +675,84 @@ app.patch('/api/sessions/:id/annotations', (req, res) => {
   res.json({ count: annotations.length });
 });
 
+// POST /api/sessions/:id/verify-citations — extract & judge citations across the whole session
+app.post('/api/sessions/:id/verify-citations', async (req, res) => {
+  const session = loadSession(req.params.id);
+  if (!session) return res.status(404).json({ error: 'Session not found' });
+
+  try {
+    const fullText = session.transcriptText || '';
+    const dividerIndex = fullText.indexOf('\n— ');
+    const roundsText = dividerIndex >= 0 ? fullText.slice(dividerIndex + 1) : fullText;
+
+    const libraryLookup = loadLibraryCitationLookup();
+    const libraryList = Object.entries(libraryLookup)
+      .map(([id, e]) => `${id}: ${e.title} — ${e.source}`).join('\n');
+
+    const system = `You are reviewing a transcript from a salon conversation among historical figures for citation accuracy. Members cite real texts, authors, and historical claims in free-form prose.
+
+Extract every citation of a real (or purportedly real) text, author, or historical/scholarly claim from the transcript below. For each one, judge from your own knowledge whether it refers to a real work/claim and whether it's represented accurately:
+- "verified": you're confident this is a real work/claim, accurately represented
+- "unverified": this appears to be invented, or is represented inaccurately
+- "uncertain": you can't confidently judge either way
+
+Also check this list of archival library entries; if a citation clearly refers to one of them, set libraryMatch to that entry's id, else null:
+${libraryList}
+
+The "quote" field must be a verbatim excerpt (~10-25 words) copied exactly from the transcript text below, so it can be located in the original.`;
+
+    const response = await client.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 4000,
+      system,
+      messages: [{ role: 'user', content: roundsText }],
+      tools: [{
+        name: 'report_citations',
+        description: 'Report every citation found in the transcript, with a verdict for each.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            citations: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  speaker: { type: 'string', description: 'As written in the transcript\'s "Name —" line.' },
+                  quote: { type: 'string', description: 'Verbatim ~10-25 word excerpt from the transcript containing the citation.' },
+                  work: { type: 'string', description: 'The cited work, author, or claim as named.' },
+                  verdict: { type: 'string', enum: ['verified', 'unverified', 'uncertain'] },
+                  note: { type: 'string', description: 'One-sentence reasoning for the verdict.' },
+                  libraryMatch: { type: ['string', 'null'], description: 'Matching library entry id, or null.' },
+                },
+                required: ['speaker', 'quote', 'work', 'verdict', 'note'],
+              },
+            },
+          },
+          required: ['citations'],
+        },
+      }],
+      tool_choice: { type: 'tool', name: 'report_citations' },
+    });
+
+    const block = response.content.find(b => b.type === 'tool_use');
+    const citations = (block?.input?.citations || []).map(c => {
+      const match = c.libraryMatch ? libraryLookup[c.libraryMatch] : null;
+      return {
+        ...c,
+        libraryCitation: match?.citation || null,
+        librarySourceUrl: match?.source_url || null,
+      };
+    });
+
+    session.citationFlags = citations;
+    saveSession(session);
+    res.json({ citations });
+  } catch (err) {
+    console.error('Citation verification error:', err);
+    res.status(500).json({ error: 'Failed to verify citations' });
+  }
+});
+
 // PATCH /api/sessions/:id/tags — replace tags array on a session
 app.patch('/api/sessions/:id/tags', (req, res) => {
   const { tags } = req.body;
@@ -1074,6 +1152,23 @@ app.get('/api/library/:id', (req, res) => {
     res.status(500).json({ error: 'Failed to load entry' });
   }
 });
+
+// Internal-only: read the `citation`/`source_url` frontmatter fields that
+// loadLibraryIndex()/library.json don't carry, for cross-referencing a
+// verified citation to its grounding source. Not exposed via a public route.
+function loadLibraryCitationLookup() {
+  const lookup = {};
+  for (const entry of loadLibraryIndex()) {
+    const filePath = path.join(LIBRARY_DIR, entry.file);
+    if (!fs.existsSync(filePath)) continue;
+    const raw = fs.readFileSync(filePath, 'utf8');
+    const frontmatter = raw.match(/^---\n([\s\S]*?)\n---/)?.[1] || '';
+    const citation = frontmatter.match(/^citation:\s*"?(.*?)"?$/m)?.[1];
+    const source_url = frontmatter.match(/^source_url:\s*"?(.*?)"?$/m)?.[1];
+    lookup[entry.id] = { title: entry.title, source: entry.source, citation, source_url };
+  }
+  return lookup;
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
