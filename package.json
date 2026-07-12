@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "update": "git pull origin main && npm install && lsof -ti :3132 | xargs kill -9 2>/dev/null; npm run dev"
+    "update": "git pull origin main && npm install && lsof -ti :3132 | xargs kill -9 2>/dev/null; npm run dev",
+    "citations": "node scripts/build-citation-manifest.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.52.0",
