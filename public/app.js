@@ -816,8 +816,67 @@ async function resumeRounds(fromIndex) {
 function showSessionControls() {
   document.getElementById('interject-panel').className = 'interject-panel visible';
   document.getElementById('additional-round-btn').className = 'lodge-btn visible';
+  document.getElementById('verify-citations-btn').className = 'lodge-btn visible';
   document.getElementById('export-panel').className = 'export-panel visible';
   updatePips();
+}
+
+// ── Citation verification ────────────────────────────────────────────────────
+
+// A speech turn can contain more than one citation — worst verdict wins the
+// border color (so a hallucination is never masked by a verified one in the
+// same turn), and all notes are concatenated rather than the last one clobbering
+// the rest.
+const CITATION_VERDICT_SEVERITY = { unverified: 2, uncertain: 1, verified: 0 };
+
+function applyCitationFlags(citations) {
+  // Strip markdown emphasis asterisks (renderActions() strips them from the
+  // rendered DOM, but the model quotes verbatim from the raw *marked-up*
+  // transcript) and collapse whitespace, on both sides of the comparison.
+  const norm = s => s.replace(/\*/g, '').replace(/\s+/g, ' ').trim();
+  const byEntry = new Map();
+  citations.forEach(flag => {
+    // The verification call is fed session.transcriptText, where the server's
+    // formatTranscriptText() appends " —" to speaker header lines; the
+    // client's dataset.speaker never has that suffix — strip it before matching.
+    const speaker = flag.speaker.replace(/\s*—\s*$/, '').trim();
+    const candidates = [...document.querySelectorAll('.transcript-entry')]
+      .filter(e => e.dataset.speaker === speaker)
+      .filter(e => norm(e.querySelector('.speech-text')?.textContent || '').includes(norm(flag.quote)));
+    if (candidates.length !== 1) {
+      console.warn('Citation flag did not match exactly one entry:', flag, candidates.length);
+      return;
+    }
+    const entry = candidates[0];
+    if (!byEntry.has(entry)) byEntry.set(entry, []);
+    byEntry.get(entry).push(flag);
+  });
+  byEntry.forEach((flags, entry) => {
+    const worst = flags.reduce((a, b) =>
+      CITATION_VERDICT_SEVERITY[b.verdict] > CITATION_VERDICT_SEVERITY[a.verdict] ? b : a);
+    entry.classList.add('flagged-citation', `citation-${worst.verdict}`);
+    const speechEl = entry.querySelector('.speech-text');
+    speechEl.title = flags.map(f =>
+      f.note + (f.libraryCitation ? `\nGrounded in: ${f.libraryCitation}` : '')).join('\n\n');
+  });
+}
+
+async function verifyCitations() {
+  if (!currentSessionId) return;
+  const btn = document.getElementById('verify-citations-btn');
+  btn.disabled = true;
+  setStatus('Cross-referencing citations...', true);
+  try {
+    const res = await fetch(`/api/sessions/${currentSessionId}/verify-citations`, { method: 'POST' });
+    if (!res.ok) throw new Error('Verification failed');
+    const { citations } = await res.json();
+    applyCitationFlags(citations);
+    setStatus(`${citations.length} citation${citations.length === 1 ? '' : 's'} reviewed.`, false);
+  } catch (err) {
+    setError('Citation verification failed.', verifyCitations);
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 // ── Additional round ──────────────────────────────────────────────────────────
@@ -1608,9 +1667,13 @@ async function restoreSession(id) {
     renderMembers();
     buildDossier(session.members || []);
 
+    // Restore citation flags after render (matches by speaker+quote content)
+    if (session.citationFlags?.length) applyCitationFlags(session.citationFlags);
+
     // Show controls
     document.getElementById('interject-panel').className = 'interject-panel visible';
     document.getElementById('additional-round-btn').className = 'lodge-btn visible';
+    document.getElementById('verify-citations-btn').className = 'lodge-btn visible';
     document.getElementById('export-panel').className = 'export-panel visible';
     updatePips();
     setStatus(`Meeting of ${session.date} restored. The embers hold.`, false);

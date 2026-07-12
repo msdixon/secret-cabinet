@@ -188,6 +188,8 @@
 .source-tag { font-size:12px; color:var(--lodge-muted); font-family:'IM Fell English',serif; font-style:italic; margin-left:6px; }
 #additional-round-btn { display:none; }
 #additional-round-btn.visible { display:inline-block; }
+#verify-citations-btn { display:none; }
+#verify-citations-btn.visible { display:inline-block; }
 /* Convene panel — convene button is primary; arc config sits below, demoted */
 .convene-panel { background:var(--lodge-surface); border:1px solid var(--lodge-border); border-radius:2px; display:flex; flex-direction:column; }
 .convene-row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; padding:12px 14px; }
@@ -232,6 +234,13 @@
 .annotation-input { width:100%; background:transparent; border:none; border-bottom:1px solid var(--lodge-border); color:var(--lodge-muted); font-family:'IM Fell English',serif; font-style:italic; font-size:14px; line-height:1.5; padding:4px 0; resize:none; outline:none; }
 .annotation-input:focus { border-bottom-color:var(--lodge-amber-dim); color:var(--lodge-cream); }
 .annotation-input::placeholder { color:var(--lodge-ash); }
+
+/* Citation verification — right border, distinct from .annotated's left border, color-coded by verdict */
+.transcript-entry.flagged-citation .bubble-body { border-right:2px solid var(--flag-color, var(--lodge-ash)); }
+.transcript-entry.citation-verified .bubble-body { --flag-color:#6a9a6a; }
+.transcript-entry.citation-unverified .bubble-body { --flag-color:var(--lodge-fire); }
+.transcript-entry.citation-uncertain .bubble-body { --flag-color:var(--lodge-gold); }
+.transcript-entry.flagged-citation .speech-text { cursor:help; }
 
 /* Sessions drawer */
 .sessions-btn { border-color:var(--lodge-ash); color:var(--lodge-muted); }
