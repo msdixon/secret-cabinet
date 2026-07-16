@@ -112,6 +112,43 @@
       <div style="margin-top:12px;">
         <button class="lodge-btn add-member-btn" onclick="openAddMemberModal()">+ Invite to the Lodge</button>
       </div>
+      <details class="playeras-panel" id="playeras-panel">
+        <summary class="arc-summary">Play as <span class="arc-summary-note">— optional, write a turn as a voice in the room</span></summary>
+        <div class="arc-fields">
+          <div class="arc-field">
+            <div class="panel-label">Mode</div>
+            <select class="lodge-select" id="play-as-mode-select" onchange="handlePlayAsModeChange()">
+              <option value="none" selected>— observe only —</option>
+              <option value="member">An existing member</option>
+              <option value="custom">A custom identity</option>
+            </select>
+          </div>
+          <div class="arc-field" id="play-as-member-field" style="display:none;">
+            <div class="panel-label">Which member</div>
+            <select class="lodge-select" id="play-as-member-select"></select>
+          </div>
+          <div class="arc-field" id="play-as-custom-field" style="display:none;">
+            <div class="panel-label">Name</div>
+            <input class="interject-input" id="play-as-custom-name" placeholder="e.g. yourself, or an invented persona" style="width:100%;border-left:3px solid var(--lodge-amber-dim);" />
+          </div>
+        </div>
+      </details>
+    </div>
+
+    <!-- Player turn modal -->
+    <div class="modal-overlay" id="player-turn-overlay"></div>
+    <div class="modal-drawer" id="player-turn-modal">
+      <div class="modal-header">
+        <span class="modal-title">Your Turn — <span id="player-turn-round-label"></span></span>
+      </div>
+      <div class="modal-body">
+        <div class="panel-label" style="margin-bottom:4px;">Writing as <span id="player-turn-name-label" style="text-transform:none;letter-spacing:0;color:var(--lodge-cream);"></span></div>
+        <textarea class="arc-textarea" id="player-turn-text" rows="6" placeholder="Write your turn, or pass and let the room continue without you this round."></textarea>
+        <div style="display:flex;gap:10px;margin-top:16px;">
+          <button class="lodge-btn primary" id="player-turn-speak-btn">Speak</button>
+          <button class="lodge-btn" id="player-turn-pass-btn">Pass</button>
+        </div>
+      </div>
     </div>
 
     <!-- Add member modal -->
@@ -164,6 +201,7 @@
         </div>
         <button class="lodge-btn" id="additional-round-btn" onclick="addRound()">One More Turn ↻</button>
         <button class="lodge-btn" id="verify-citations-btn" onclick="verifyCitations()">Verify Citations ⚑</button>
+        <button class="lodge-btn" id="reveal-player-turns-btn" onclick="togglePlayerTurnReveal()">Reveal Player Turns ◆</button>
         <button class="lodge-btn sessions-btn" id="dossier-btn" onclick="toggleDossier()" style="display:none;">The Assembled ↗</button>
       </div>
       <details class="arc-panel" id="arc-panel">

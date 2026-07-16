@@ -283,17 +283,28 @@ async function callSpeakerTurn({ client, model, system, conversationHistory, use
 // actually visible in practice.
 async function runRound({ client, model, lodgeContext, ROSTER, loadMemberFile,
   presentMemberIds, artifact, notes, roundPrompt, conversationHistory,
-  speakerCount, round, onChunk, onMetric }) {
+  speakerCount, round, onChunk, onMetric, precedingTurn }) {
 
   const presentMembers = ROSTER.filter(m => presentMemberIds.includes(m.id));
   const effectiveCount = Math.min(speakerCount, presentMembers.length);
+
+  // A human-written turn (player-as-member) seeded before the director
+  // decides — streamed immediately so it appears in the live view before
+  // the AI speakers even start, and folded into roundSoFar so every
+  // subsequent speaker this round reacts to it exactly as they would react
+  // to another AI speaker, via the same "THE ROUND SO FAR" mechanism.
+  let roundSoFar = '';
+  if (precedingTurn) {
+    const seed = `${precedingTurn.speakerName}\n${precedingTurn.text}`;
+    onChunk?.(`${seed}\n\n`);
+    roundSoFar = seed;
+  }
 
   const { speakers } = await selectSpeakers({
     client, model, lodgeContext, presentMembers,
     instruction: roundPrompt, conversationHistory, count: effectiveCount, round, onMetric,
   });
 
-  let roundSoFar = '';
   const speakerOrder = [];
 
   for (const memberId of speakers) {

@@ -12,7 +12,7 @@ const session = require('express-session');
 const dayOne = require('./dayone');
 const multer = require('multer');
 const PDFParser = require('pdf2json');
-const { buildMemberSection, runRound } = require('./pipeline');
+const { buildMemberSection, runRound, stripInternalBlankLines } = require('./pipeline');
 
 // ─── Environment flags ────────────────────────────────────────────────────────
 const IS_LOCAL = process.env.LOCAL === 'true' || process.env.NODE_ENV !== 'production';
@@ -275,6 +275,35 @@ function buildRoundPrompt(index, entry, instructions, artifact = null, isTranscr
   return instr;
 }
 
+// ─── Player-as-member ─────────────────────────────────────────────────────────
+// A human can write turns as one voice in the room instead of only observing.
+// Mode 'member': the human stands in for an existing roster seat — that
+// member is excluded from the AI director's selectable pool everywhere for
+// the session (convene/round/interject), so the AI never also generates
+// lines for the seat the human is voicing. Mode 'custom': a free-text
+// identity, added as an *extra* voice — nothing is excluded, since it isn't
+// standing in for a roster seat.
+
+function playerDirectorPool(memberIds, playerMode, playerMemberId) {
+  return (playerMode === 'member' && playerMemberId)
+    ? memberIds.filter(id => id !== playerMemberId)
+    : memberIds;
+}
+
+function resolvePlayerName(playerMode, playerMemberId, playerName) {
+  if (playerMode === 'member') return ROSTER.find(m => m.id === playerMemberId)?.name || null;
+  if (playerMode === 'custom') return playerName?.trim() || null;
+  return null;
+}
+
+// Builds the { speakerName, text } object runRound expects, or null if no
+// turn was submitted this round (the player passed, or isn't active).
+function buildPrecedingTurn(speakerName, playerTurn) {
+  const text = playerTurn?.text?.trim();
+  if (!speakerName || !text) return null;
+  return { speakerName, text: stripInternalBlankLines(text) };
+}
+
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
 // POST /api/convene — start a session and stream round 1
@@ -283,20 +312,27 @@ app.post('/api/convene', async (req, res) => {
   if (!entry?.trim()) return res.status(400).json({ error: 'entry is required' });
   if (!members?.length) return res.status(400).json({ error: 'at least one member is required' });
 
-  const { roundInstructions, roundCount, artifact, notes, sourceSessionId } = req.body;
+  const { roundInstructions, roundCount, artifact, notes, sourceSessionId,
+    playerMode, playerMemberId, playerName, playerTurn } = req.body;
   const isTranscriptSource = !!sourceSessionId;
   const id = makeSessionId(entry);
   const date = new Date().toISOString().slice(0, 10);
   const roundPrompt = buildRoundPrompt(0, entry, roundInstructions, artifact || null, isTranscriptSource);
   const generationMetrics = [];
 
+  const effectivePlayerMode = playerMode || 'none';
+  const effectivePlayerMemberId = effectivePlayerMode === 'member' ? (playerMemberId || null) : null;
+  const effectivePlayerName = resolvePlayerName(effectivePlayerMode, effectivePlayerMemberId, playerName);
+  const precedingTurn = buildPrecedingTurn(effectivePlayerName, playerTurn);
+
   openSSE(res);
   try {
     const { fullRoundText: text } = await runRound({
       client, model: 'claude-sonnet-4-6', lodgeContext, ROSTER, loadMemberFile,
-      presentMemberIds: members, artifact: artifact || null, notes: notes || {},
+      presentMemberIds: playerDirectorPool(members, effectivePlayerMode, effectivePlayerMemberId),
+      artifact: artifact || null, notes: notes || {},
       roundPrompt, conversationHistory: [],
-      speakerCount: speakerCountForRound(0), round: 0,
+      speakerCount: speakerCountForRound(0), round: 0, precedingTurn,
       onChunk: chunk => res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`),
       onMetric: m => {
         generationMetrics.push(m);
@@ -318,6 +354,10 @@ app.post('/api/convene', async (req, res) => {
       rounds: [{ label: 'First Movement', text }],
       transcriptText: buildTranscriptHeader(entry, members, date) + `\n— First Movement —\n\n${formatTranscriptText(text)}\n`,
       generationMetrics,
+      playerMode: effectivePlayerMode,
+      playerMemberId: effectivePlayerMemberId,
+      playerName: effectivePlayerMode === 'custom' ? effectivePlayerName : null,
+      playerTurns: precedingTurn ? [{ round: 0, speakerName: precedingTurn.speakerName, text: precedingTurn.text }] : [],
     };
     saveSession(session);
     res.write(`data: ${JSON.stringify({ done: true, sessionId: id, round: 1, label: 'First Movement', text })}\n\n`);
@@ -330,7 +370,7 @@ app.post('/api/convene', async (req, res) => {
 
 // POST /api/round — stream the next round into an existing session
 app.post('/api/round', async (req, res) => {
-  const { sessionId } = req.body;
+  const { sessionId, playerTurn } = req.body;
   if (!sessionId) return res.status(400).json({ error: 'sessionId required' });
 
   const session = loadSession(sessionId);
@@ -344,13 +384,17 @@ app.post('/api/round', async (req, res) => {
 
   session.generationMetrics = session.generationMetrics || [];
 
+  const effectivePlayerName = resolvePlayerName(session.playerMode, session.playerMemberId, session.playerName);
+  const precedingTurn = buildPrecedingTurn(effectivePlayerName, playerTurn);
+
   openSSE(res);
   try {
     const { fullRoundText: text } = await runRound({
       client, model: 'claude-sonnet-4-6', lodgeContext, ROSTER, loadMemberFile,
-      presentMemberIds: session.members, artifact: null, notes: {},
+      presentMemberIds: playerDirectorPool(session.members, session.playerMode, session.playerMemberId),
+      artifact: null, notes: {},
       roundPrompt, conversationHistory: session.conversationHistory.slice(-6),
-      speakerCount: speakerCountForRound(roundIndex), round: roundIndex,
+      speakerCount: speakerCountForRound(roundIndex), round: roundIndex, precedingTurn,
       onChunk: chunk => res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`),
       onMetric: m => {
         session.generationMetrics.push(m);
@@ -362,6 +406,10 @@ app.post('/api/round', async (req, res) => {
     session.conversationHistory.push({ role: 'assistant', content: text });
     session.rounds.push({ label, text });
     session.transcriptText += `\n— ${label} —\n\n${formatTranscriptText(text)}\n`;
+    if (precedingTurn) {
+      session.playerTurns = session.playerTurns || [];
+      session.playerTurns.push({ round: roundIndex, speakerName: precedingTurn.speakerName, text: precedingTurn.text });
+    }
 
     saveSession(session);
     res.write(`data: ${JSON.stringify({ done: true, round: roundIndex + 1, label, text })}\n\n`);
@@ -387,7 +435,8 @@ app.post('/api/interject', async (req, res) => {
   try {
     const { fullRoundText: response } = await runRound({
       client, model: 'claude-sonnet-4-6', lodgeContext, ROSTER, loadMemberFile,
-      presentMemberIds: session.members, artifact: null, notes: {},
+      presentMemberIds: playerDirectorPool(session.members, session.playerMode, session.playerMemberId),
+      artifact: null, notes: {},
       roundPrompt: prompt, conversationHistory: session.conversationHistory.slice(-6),
       speakerCount: Math.min(INTERJECT_SPEAKER_COUNT, session.members.length), round: session.rounds.length,
       onChunk: chunk => res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`),
@@ -808,6 +857,31 @@ app.get('/api/sessions/:id/transcript', (req, res) => {
           while (i + 1 < lines.length && lines[i + 1] !== '') { i++; result.push(lines[i]); }
           result.push(`  ↳ ${note}`);
         }
+      }
+      i++;
+    }
+    transcript = result.join('\n');
+  }
+
+  // Weave in a player-turn marker if present, keyed by round position (not
+  // fuzzy speaker/quote matching — the round index is precisely known).
+  const playerTurns = session.playerTurns || [];
+  if (playerTurns.length) {
+    const byRound = new Map(playerTurns.map(pt => [pt.round, pt]));
+    const lines = transcript.split('\n');
+    const result = [];
+    let roundIdx = -1, markedThisRound = false, i = 0;
+    while (i < lines.length) {
+      result.push(lines[i]);
+      // Round dividers ("— First Movement —") also match the looser
+      // speaker-header pattern below, so they must be checked first.
+      const isDivider = /^— (.+) —$/.test(lines[i]);
+      if (isDivider) { roundIdx++; markedThisRound = false; }
+      const speakerMatch = !isDivider && lines[i].match(/^(.+) —$/);
+      if (speakerMatch && !markedThisRound && byRound.has(roundIdx)) {
+        markedThisRound = true;
+        while (i + 1 < lines.length && lines[i + 1] !== '') { i++; result.push(lines[i]); }
+        result.push('  ⟡ played by a human participant, live');
       }
       i++;
     }

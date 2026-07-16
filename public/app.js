@@ -30,6 +30,14 @@ let currentEntry = '';
 let pendingRetry = null;
 let lastInterjectText = '';
 
+// ── Player-as-member ─────────────────────────────────────────────────────────
+let playerMode = 'none';             // 'none' | 'member' | 'custom' — snapshotted at convene() start
+let playerMemberId = null;
+let playerName = null;
+let currentPlayerSpeakerName = null; // resolved display name; drives parser recognition of custom identities
+let sessionPlayerTurns = [];         // [{round, speakerName, text}]
+let playerTurnsRevealed = false;
+
 // ── Render member tokens ──────────────────────────────────────────────────────
 
 function renderMembers() {
@@ -64,6 +72,7 @@ function renderMembers() {
 
   updateMemberCount();
   populateArtifactSelect();
+  populatePlayAsMemberSelect();
   if (activeMembers.size > 0) buildDossier([...activeMembers]);
 }
 
@@ -79,6 +88,97 @@ function populateArtifactSelect() {
     sel.appendChild(opt);
   });
   if (current) sel.value = current;
+}
+
+// ── Play as ───────────────────────────────────────────────────────────────────
+
+function populatePlayAsMemberSelect() {
+  const sel = document.getElementById('play-as-member-select');
+  if (!sel) return;
+  const current = sel.value;
+  const active = [...activeMembers];
+  sel.innerHTML = '<option value="">— select a present member —</option>';
+  active.map(id => MEMBERS.find(m => m.id === id)).filter(Boolean)
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .forEach(m => {
+      const opt = document.createElement('option');
+      opt.value = m.id;
+      opt.textContent = m.name;
+      sel.appendChild(opt);
+    });
+  if (current && active.includes(current)) { sel.value = current; return; }
+  // The previously "played" member is no longer present — reset defensively
+  // rather than silently keeping a stale selection.
+  const modeSel = document.getElementById('play-as-mode-select');
+  if (modeSel?.value === 'member') { modeSel.value = 'none'; handlePlayAsModeChange(); }
+}
+
+function handlePlayAsModeChange() {
+  const mode = document.getElementById('play-as-mode-select').value;
+  document.getElementById('play-as-member-field').style.display = mode === 'member' ? 'block' : 'none';
+  document.getElementById('play-as-custom-field').style.display = mode === 'custom' ? 'block' : 'none';
+}
+
+function isPlayerActive() {
+  return !!currentPlayerSpeakerName;
+}
+
+// Reflects a restored (finished) session's "Play as" choice, read-only —
+// no live turn-writing can happen for a session that already completed.
+function restorePlayAsControlDisplay() {
+  const modeSel = document.getElementById('play-as-mode-select');
+  if (!modeSel) return;
+  modeSel.value = playerMode;
+  modeSel.disabled = true;
+  handlePlayAsModeChange();
+  const memberSel = document.getElementById('play-as-member-select');
+  const customInput = document.getElementById('play-as-custom-name');
+  if (playerMode === 'member' && memberSel) {
+    if (![...memberSel.options].some(o => o.value === playerMemberId)) {
+      const opt = document.createElement('option');
+      opt.value = playerMemberId;
+      opt.textContent = currentPlayerSpeakerName || playerMemberId;
+      memberSel.appendChild(opt);
+    }
+    memberSel.value = playerMemberId;
+    memberSel.disabled = true;
+  } else if (memberSel) {
+    memberSel.disabled = false;
+  }
+  if (playerMode === 'custom' && customInput) {
+    customInput.value = playerName || '';
+    customInput.disabled = true;
+  } else if (customInput) {
+    customInput.disabled = false;
+  }
+}
+
+function awaitPlayerTurn(roundLabel) {
+  return new Promise(resolve => {
+    const overlay = document.getElementById('player-turn-overlay');
+    const modal = document.getElementById('player-turn-modal');
+    const textarea = document.getElementById('player-turn-text');
+    document.getElementById('player-turn-round-label').textContent = roundLabel;
+    document.getElementById('player-turn-name-label').textContent = currentPlayerSpeakerName;
+    textarea.value = '';
+    overlay.classList.add('open');
+    modal.classList.add('open');
+    textarea.focus();
+    const speakBtn = document.getElementById('player-turn-speak-btn');
+    const passBtn = document.getElementById('player-turn-pass-btn');
+    const cleanup = () => {
+      overlay.classList.remove('open');
+      modal.classList.remove('open');
+      speakBtn.onclick = null;
+      passBtn.onclick = null;
+    };
+    speakBtn.onclick = () => {
+      const text = textarea.value.trim();
+      cleanup();
+      resolve(text ? { text } : null);
+    };
+    passBtn.onclick = () => { cleanup(); resolve(null); };
+  });
 }
 
 function updateMemberCount() {
@@ -143,7 +243,12 @@ function updateArcFieldAvailability() {
 
 // ── Transcript rendering ──────────────────────────────────────────────────────
 
-function addRoundHeader(label) {
+// roundIndex is the session-relative round index (0-based) this header opens,
+// or null for headers that never enter session.rounds (interjections) — used
+// to tag the round's entries so player-turn markers can find them later.
+let currentRenderRound = null;
+function addRoundHeader(label, roundIndex = null) {
+  currentRenderRound = roundIndex;
   const c = document.getElementById('transcript-content');
   const h = document.createElement('div');
   h.className = 'transcript-round-header';
@@ -238,6 +343,7 @@ function addSpeech(speaker, text, isObserver, memberId, existingAnnotation) {
   e.className = `transcript-entry bubble-${side}`;
   e.dataset.entryId = entryId;
   e.dataset.speaker = speaker;
+  if (currentRenderRound != null) e.dataset.round = currentRenderRound;
   let nc;
   if (isObserver) nc = 'observer-voice';
   else if (memberId) nc = `voice-${memberId}`;
@@ -348,8 +454,11 @@ function resolveMember(speaker, members) {
 }
 
 // True if a trimmed transcript line is a recognized speaker header (full name or alias).
+// Also recognizes the active session's player-as-member identity — needed
+// for custom (non-roster) identities, which have no alias-index entry.
 function isKnownSpeakerHeader(t, members) {
   const norm = normalizeSpeaker(t.replace(/:$/, ''));
+  if (currentPlayerSpeakerName && norm === normalizeSpeaker(currentPlayerSpeakerName)) return true;
   const index = buildAliasIndex(members);
   return index.has(norm) && index.get(norm) != null;
 }
@@ -714,6 +823,26 @@ async function convene() {
   currentRound = 0;
   activeConveneRoundCount = selectedRoundCount;
   sessionDate = new Date().toISOString().split('T')[0];
+
+  // Re-enable the "Play as" controls in case the last thing shown was a
+  // restored (read-only) session — restorePlayAsControlDisplay() disables them.
+  ['play-as-mode-select', 'play-as-member-select', 'play-as-custom-name'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = false;
+  });
+
+  // Snapshot "Play as" state — a mid-session change to the (now-hidden) controls
+  // should never affect an in-flight session, same principle as round count.
+  playerMode = document.getElementById('play-as-mode-select')?.value || 'none';
+  playerMemberId = playerMode === 'member' ? (document.getElementById('play-as-member-select')?.value || null) : null;
+  playerName = playerMode === 'custom' ? (document.getElementById('play-as-custom-name')?.value.trim() || null) : null;
+  currentPlayerSpeakerName = playerMode === 'member'
+    ? MEMBERS.find(m => m.id === playerMemberId)?.name || null
+    : playerMode === 'custom' ? playerName : null;
+  sessionPlayerTurns = [];
+  playerTurnsRevealed = false;
+  document.getElementById('transcript-panel')?.classList.remove('reveal-player-turns');
+
   const members = [...activeMembers];
   const memberNames = members.map(id => MEMBERS.find(m => m.id === id)?.name).filter(Boolean).join(', ');
   const entryForHeader = getEntry();
@@ -730,9 +859,10 @@ async function convene() {
     // Round 1
     currentRound = 1;
     updatePips();
+    const playerTurn1 = isPlayerActive() ? await awaitPlayerTurn('First Movement') : null;
     setStatus('First Movement... the room is speaking.', true);
     const txtBefore1 = transcriptText;
-    const h1 = addRoundHeader('First Movement');
+    const h1 = addRoundHeader('First Movement', 0);
     const s1 = startStreamEntry();
     // acc (below) is only for the live-typing view as chunks arrive — the
     // settled render uses the server's `text` from the done event instead,
@@ -741,10 +871,14 @@ async function convene() {
     let acc = '';
     let d1;
     try {
-      d1 = await streamPost('/api/convene', { entry, members, roundInstructions, roundCount: activeConveneRoundCount, artifact, notes, sourceSessionId: currentSourceSessionId || undefined }, chunk => { acc += chunk; s1.append(chunk); });
+      d1 = await streamPost('/api/convene', { entry, members, roundInstructions, roundCount: activeConveneRoundCount, artifact, notes, sourceSessionId: currentSourceSessionId || undefined, playerMode, playerMemberId, playerName, playerTurn: playerTurn1 || undefined }, chunk => { acc += chunk; s1.append(chunk); });
       s1.finalize(d1.text);
       currentSessionId = d1.sessionId;
       buildDossier(members);
+      if (playerTurn1) {
+        sessionPlayerTurns.push({ round: 0, speakerName: currentPlayerSpeakerName, text: playerTurn1.text });
+        applyPlayerTurnMarkers(sessionPlayerTurns);
+      }
     } catch (err) {
       s1.abort(); h1.remove(); transcriptText = txtBefore1;
       setError('The first movement could not begin. The fire may be low.', convene);
@@ -755,16 +889,21 @@ async function convene() {
     for (let i = 1; i < activeConveneRoundCount; i++) {
       currentRound = i + 1;
       updatePips();
+      const playerTurnI = isPlayerActive() ? await awaitPlayerTurn(ROUND_LABELS[i]) : null;
       setStatus(`${ROUND_LABELS[i]}... the room is speaking.`, true);
       await new Promise(r => setTimeout(r, 300));
       const txtBefore = transcriptText;
-      const h = addRoundHeader(ROUND_LABELS[i]);
+      const h = addRoundHeader(ROUND_LABELS[i], i);
       const s = startStreamEntry();
       acc = '';
       const ri = i;
       try {
-        const d = await streamPost('/api/round', { sessionId: currentSessionId }, chunk => { acc += chunk; s.append(chunk); });
+        const d = await streamPost('/api/round', { sessionId: currentSessionId, playerTurn: playerTurnI || undefined }, chunk => { acc += chunk; s.append(chunk); });
         s.finalize(d.text);
+        if (playerTurnI) {
+          sessionPlayerTurns.push({ round: ri, speakerName: currentPlayerSpeakerName, text: playerTurnI.text });
+          applyPlayerTurnMarkers(sessionPlayerTurns);
+        }
       } catch (err) {
         s.abort(); h.remove(); transcriptText = txtBefore;
         showSessionControls();
@@ -790,16 +929,21 @@ async function resumeRounds(fromIndex) {
     for (let i = fromIndex; i < activeConveneRoundCount; i++) {
       currentRound = i + 1;
       updatePips();
+      const playerTurnI = isPlayerActive() ? await awaitPlayerTurn(ROUND_LABELS[i]) : null;
       setStatus(`${ROUND_LABELS[i]}... the room is speaking.`, true);
       if (i > fromIndex) await new Promise(r => setTimeout(r, 300));
       const txtBefore = transcriptText;
-      const h = addRoundHeader(ROUND_LABELS[i]);
+      const h = addRoundHeader(ROUND_LABELS[i], i);
       const s = startStreamEntry();
       let acc = '';
       const ri = i;
       try {
-        const d = await streamPost('/api/round', { sessionId: currentSessionId }, chunk => { acc += chunk; s.append(chunk); });
+        const d = await streamPost('/api/round', { sessionId: currentSessionId, playerTurn: playerTurnI || undefined }, chunk => { acc += chunk; s.append(chunk); });
         s.finalize(d.text);
+        if (playerTurnI) {
+          sessionPlayerTurns.push({ round: ri, speakerName: currentPlayerSpeakerName, text: playerTurnI.text });
+          applyPlayerTurnMarkers(sessionPlayerTurns);
+        }
       } catch (err) {
         s.abort(); h.remove(); transcriptText = txtBefore;
         setError(`${ROUND_LABELS[ri]} could not continue.`, () => resumeRounds(ri));
@@ -818,6 +962,7 @@ function showSessionControls() {
   document.getElementById('additional-round-btn').className = 'lodge-btn visible';
   document.getElementById('verify-citations-btn').className = 'lodge-btn visible';
   document.getElementById('export-panel').className = 'export-panel visible';
+  document.getElementById('reveal-player-turns-btn').className = 'lodge-btn' + (sessionPlayerTurns.length ? ' visible' : '');
   updatePips();
 }
 
@@ -879,6 +1024,26 @@ async function verifyCitations() {
   }
 }
 
+// ── Player turn markers ──────────────────────────────────────────────────────
+// Invisible during live play (full immersion — a player turn renders exactly
+// like an AI turn); tracked precisely by round index so it can be revealed
+// on demand and always included in exports. No fuzzy matching needed here,
+// unlike citation flags — the round index is exact, not inferred.
+
+function applyPlayerTurnMarkers(playerTurns) {
+  (playerTurns || []).forEach(pt => {
+    const entry = document.querySelector(`.transcript-entry[data-round="${pt.round}"]`);
+    if (entry) entry.classList.add('player-turn');
+  });
+}
+
+function togglePlayerTurnReveal() {
+  playerTurnsRevealed = !playerTurnsRevealed;
+  document.getElementById('transcript-panel').classList.toggle('reveal-player-turns', playerTurnsRevealed);
+  document.getElementById('reveal-player-turns-btn').textContent =
+    playerTurnsRevealed ? 'Hide Player Turns ◆' : 'Reveal Player Turns ◆';
+}
+
 // ── Additional round ──────────────────────────────────────────────────────────
 
 async function addRound() {
@@ -889,7 +1054,9 @@ async function addRound() {
   updatePips();
   setStatus('One More Turn... the room continues.', true);
   const txtBefore = transcriptText;
-  const h = addRoundHeader('One More Turn');
+  // Player turns are AI-only for "One More Turn" (v1 scope limit) — round
+  // index is still tagged so this round's entries are consistently addressable.
+  const h = addRoundHeader('One More Turn', currentRound - 1);
   const s = startStreamEntry();
   let accumulated = '';
 
@@ -945,11 +1112,15 @@ async function sendInterject(text) {
 // ── Export ────────────────────────────────────────────────────────────────────
 
 function buildAnnotatedTranscript() {
-  // Weave annotations into the transcript text after each annotated speech block
+  // Weave annotations and player-turn markers into the transcript text after
+  // each relevant speech block. Exports always carry the player-turn marker
+  // even though the live view never shows it (invisible-during-play is a
+  // live-viewing choice, not a data-hiding one).
   let out = transcriptText;
   const annotated = [...document.querySelectorAll('.transcript-entry.annotated')];
-  if (!annotated.length) return out;
-  // Rebuild line-by-line, inserting annotations after each speaker's block
+  const playerTurnEntries = [...document.querySelectorAll('.transcript-entry.player-turn')];
+  if (!annotated.length && !playerTurnEntries.length) return out;
+  // Rebuild line-by-line, inserting markers after each matching speaker's block
   const lines = out.split('\n');
   const result = [];
   let i = 0;
@@ -961,14 +1132,21 @@ function buildAnnotatedTranscript() {
       const speaker = match[1];
       const entry = annotated.find(e => e.dataset.speaker === speaker);
       const note = entry?.querySelector('.annotation-input')?.value.trim();
-      if (note && entry) {
+      const playerEntry = playerTurnEntries.find(e => e.dataset.speaker === speaker);
+      if ((note && entry) || playerEntry) {
         // Collect the speech block (next non-empty lines until blank)
         while (i + 1 < lines.length && lines[i + 1] !== '') {
           i++;
           result.push(lines[i]);
         }
-        result.push(`  ↳ ${note}`);
-        annotated.splice(annotated.indexOf(entry), 1); // consume so dupes don't re-match
+        if (note && entry) {
+          result.push(`  ↳ ${note}`);
+          annotated.splice(annotated.indexOf(entry), 1); // consume so dupes don't re-match
+        }
+        if (playerEntry) {
+          result.push('  ⟡ played by a human participant, live');
+          playerTurnEntries.splice(playerTurnEntries.indexOf(playerEntry), 1);
+        }
       }
     }
     i++;
@@ -1638,6 +1816,19 @@ async function restoreSession(id) {
     activeConveneRoundCount = session.roundCount || 3;
     setRoundCount(activeConveneRoundCount);
 
+    // Restore player-as-member state before re-parsing rounds — the parser's
+    // custom-identity recognition (isKnownSpeakerHeader) reads currentPlayerSpeakerName.
+    playerMode = session.playerMode || 'none';
+    playerMemberId = session.playerMemberId || null;
+    playerName = session.playerName || null;
+    currentPlayerSpeakerName = playerMode === 'member'
+      ? MEMBERS.find(m => m.id === playerMemberId)?.name || null
+      : playerMode === 'custom' ? playerName : null;
+    sessionPlayerTurns = session.playerTurns || [];
+    playerTurnsRevealed = false;
+    document.getElementById('transcript-panel')?.classList.remove('reveal-player-turns');
+    restorePlayAsControlDisplay();
+
     // Rebuild transcriptText from scratch with current formatting
     const names = (session.members || []).map(id => MEMBERS.find(m => m.id === id)?.name).filter(Boolean).join(', ');
     transcriptText = `THE SECRET-CABIN-ET\nMeeting Notes — ${session.date}\nAssembled: ${names}\n\nSource material:\n${session.entry || ''}\n`;
@@ -1647,8 +1838,8 @@ async function restoreSession(id) {
     (session.annotations || []).forEach(a => { annotationMap[a.entryId] = a.note; });
 
     // Re-render rounds from stored data
-    (session.rounds || []).forEach(round => {
-      addRoundHeader(round.label);
+    (session.rounds || []).forEach((round, idx) => {
+      addRoundHeader(round.label, idx);
       parseAndRenderTranscript(round.text);
     });
 
@@ -1670,10 +1861,14 @@ async function restoreSession(id) {
     // Restore citation flags after render (matches by speaker+quote content)
     if (session.citationFlags?.length) applyCitationFlags(session.citationFlags);
 
+    // Restore player-turn markers after render (matches by exact round index)
+    if (sessionPlayerTurns.length) applyPlayerTurnMarkers(sessionPlayerTurns);
+
     // Show controls
     document.getElementById('interject-panel').className = 'interject-panel visible';
     document.getElementById('additional-round-btn').className = 'lodge-btn visible';
     document.getElementById('verify-citations-btn').className = 'lodge-btn visible';
+    document.getElementById('reveal-player-turns-btn').className = 'lodge-btn' + (sessionPlayerTurns.length ? ' visible' : '');
     document.getElementById('export-panel').className = 'export-panel visible';
     updatePips();
     setStatus(`Meeting of ${session.date} restored. The embers hold.`, false);
@@ -1990,6 +2185,7 @@ applyEnvConfig();
 fetchMembers().then(() => renderMembers());
 updateExportJournalLabel();
 updateArcFieldAvailability();
+handlePlayAsModeChange();
 // Restore saved Ulysses group preference
 const _savedGroup = localStorage.getItem('sc-ulysses-group');
 if (_savedGroup) { const _gi = document.getElementById('ulysses-group'); if (_gi) _gi.value = _savedGroup; }
