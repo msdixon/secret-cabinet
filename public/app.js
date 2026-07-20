@@ -258,6 +258,39 @@ function addRoundHeader(label, roundIndex = null) {
   return h;
 }
 
+// #33: lets the user fork a new meeting sharing everything up to this round,
+// without disturbing the one they're viewing. Only offered on restored/saved
+// meetings (currentSessionId is set) — branching mid-generation isn't a case
+// the UI supports.
+function addBranchControl(headerEl, roundIndex) {
+  const btn = document.createElement('button');
+  btn.className = 'branch-from-here-btn';
+  btn.title = 'Branch from here — explore an alternate path from this point';
+  btn.textContent = '⑂ Branch';
+  btn.onclick = () => branchFromRound(roundIndex);
+  headerEl.appendChild(btn);
+}
+
+async function branchFromRound(roundIndex) {
+  if (!currentSessionId) return;
+  if (!confirm('Branch from this round? A new meeting is created sharing everything up to here, and you continue from there — the original stays untouched.')) return;
+  setStatus('Branching...', true);
+  try {
+    const res = await fetch(`/api/sessions/${currentSessionId}/branch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ roundIndex }),
+    });
+    if (!res.ok) throw new Error('Branch failed');
+    const { sessionId } = await res.json();
+    await restoreSession(sessionId);
+    if (document.getElementById('sessions-drawer')?.classList.contains('open')) loadSessionsList();
+    setStatus('New branch created. The room continues from here.', false);
+  } catch (e) {
+    setStatus('Could not create the branch.', false);
+  }
+}
+
 // Escape HTML to avoid injecting from model output, then transform asterisk-actions.
 function escapeHTML(s) {
   return s.replace(/&/g, '&amp;')
@@ -1627,20 +1660,39 @@ async function loadSessionsList(q = '', tag = '', thread = '') {
       list.appendChild(hdr);
     }
 
+    // #33: nest branch children under their parent when the parent is also
+    // in this (possibly filtered/paginated) batch. A child whose parent fell
+    // outside the current batch just renders flat with its branch badge —
+    // no extra fetch to go find an off-screen parent.
+    const byId = {};
+    sessions.forEach(s => { byId[s.id] = s; });
+    const childrenOf = {};
     sessions.forEach(s => {
+      if (s.parentId && byId[s.parentId]) {
+        (childrenOf[s.parentId] = childrenOf[s.parentId] || []).push(s);
+      }
+    });
+    const isNestedChild = s => s.parentId && byId[s.parentId];
+
+    const renderSessionItem = (s, depth) => {
       const el = document.createElement('div');
       el.className = 'session-item';
+      if (depth > 0) el.style.marginLeft = `${depth * 20}px`;
       const tagsHtml = (s.tags || []).map(t =>
         `<span class="session-tag" onclick="filterByTag('${escapeHTML(t)}')">${escapeHTML(t)}<span class="tag-remove" onclick="event.stopPropagation();removeTagById('${s.id}','${escapeHTML(t)}',this)">×</span></span>`
       ).join('');
       const threadBadge = s.threadId
         ? `<span class="session-thread-badge" onclick="filterByThread('${escapeHTML(s.threadId)}','${escapeHTML(s.threadName || '')}')" title="View thread: ${escapeHTML(s.threadName || '')}">⬡ ${escapeHTML(s.threadName || s.threadId)}</span>`
         : '';
+      const branchBadge = s.parentId
+        ? `<span class="session-branch-badge" title="Branched from round ${(s.branchRound ?? 0) + 1} of another meeting">⑂ branch</span>`
+        : '';
       el.innerHTML = `
         <div class="session-item-date">
           ${s.date}
           <span class="session-item-rounds">${s.rounds} round${s.rounds !== 1 ? 's' : ''}</span>
           ${threadBadge}
+          ${branchBadge}
         </div>
         <div class="session-item-entry">${escapeHTML(s.entry || '—')}</div>
         <div class="session-item-members">${(s.members || []).map(escapeHTML).join(' · ')}</div>
@@ -1654,6 +1706,12 @@ async function loadSessionsList(q = '', tag = '', thread = '') {
           <button class="session-delete-btn" onclick="deleteSession('${s.id}', this)">Delete</button>
         </div>`;
       list.appendChild(el);
+      (childrenOf[s.id] || []).forEach(child => renderSessionItem(child, depth + 1));
+    };
+
+    sessions.forEach(s => {
+      if (isNestedChild(s)) return; // rendered under its parent instead
+      renderSessionItem(s, 0);
     });
   } catch (e) {
     list.innerHTML = '<div class="sessions-empty">Could not load past meetings.</div>';
@@ -1839,7 +1897,8 @@ async function restoreSession(id) {
 
     // Re-render rounds from stored data
     (session.rounds || []).forEach((round, idx) => {
-      addRoundHeader(round.label, idx);
+      const header = addRoundHeader(round.label, idx);
+      addBranchControl(header, idx);
       parseAndRenderTranscript(round.text);
     });
 
