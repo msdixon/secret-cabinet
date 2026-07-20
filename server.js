@@ -158,6 +158,16 @@ function makeSessionId(entry) {
   return `${date}-${slug}-${hash}`;
 }
 
+// Branch IDs can't reuse makeSessionId's hash-of-entry-text — the entry is
+// identical to the parent's, so same-day branches would collide. Mix in the
+// parent id, branch point, and wall-clock time for uniqueness.
+function makeBranchId(parent, roundIndex) {
+  const date = new Date().toISOString().slice(0, 10);
+  const slug = parent.entry.trim().slice(0, 40).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+  const hash = crypto.createHash('md5').update(`${parent.id}:${roundIndex}:${Date.now()}:${Math.random()}`).digest('hex').slice(0, 6);
+  return `${date}-${slug}-branch-${hash}`;
+}
+
 function saveSession(session) {
   fs.writeFileSync(path.join(SESSIONS_DIR, `${session.id}.json`), JSON.stringify(session, null, 2));
 }
@@ -351,7 +361,7 @@ app.post('/api/convene', async (req, res) => {
       notes: notes || {},
       sourceSessionId: sourceSessionId || null,
       conversationHistory: history,
-      rounds: [{ label: 'First Movement', text }],
+      rounds: [{ label: 'First Movement', text, historyLength: history.length }],
       transcriptText: buildTranscriptHeader(entry, members, date) + `\n— First Movement —\n\n${formatTranscriptText(text)}\n`,
       generationMetrics,
       playerMode: effectivePlayerMode,
@@ -404,7 +414,7 @@ app.post('/api/round', async (req, res) => {
 
     session.conversationHistory.push({ role: 'user', content: roundPrompt });
     session.conversationHistory.push({ role: 'assistant', content: text });
-    session.rounds.push({ label, text });
+    session.rounds.push({ label, text, historyLength: session.conversationHistory.length });
     session.transcriptText += `\n— ${label} —\n\n${formatTranscriptText(text)}\n`;
     if (precedingTurn) {
       session.playerTurns = session.playerTurns || [];
@@ -652,6 +662,8 @@ app.get('/api/sessions', (req, res) => {
           tags: d.tags || [],
           threadId: d.threadId || null,
           threadName: d.threadName || null,
+          parentId: d.parentId || null,
+          branchRound: d.branchRound ?? null,
           _entry: (d.entry || '').toLowerCase(),
           _transcript: (d.transcriptText || '').toLowerCase(),
         };
@@ -830,6 +842,55 @@ app.get('/api/sessions/:id', (req, res) => {
   const session = loadSession(req.params.id);
   if (!session) return res.status(404).json({ error: 'Session not found' });
   res.json(session);
+});
+
+// POST /api/sessions/:id/branch — fork a new session sharing history up to roundIndex
+// #33: lets the user explore an alternative path from any round boundary without
+// losing the original thread. No Claude call — a pure copy-and-truncate.
+app.post('/api/sessions/:id/branch', (req, res) => {
+  const { roundIndex } = req.body;
+  const parent = loadSession(req.params.id);
+  if (!parent) return res.status(404).json({ error: 'Session not found' });
+  if (!Number.isInteger(roundIndex) || roundIndex < 0 || roundIndex >= (parent.rounds?.length || 0)) {
+    return res.status(400).json({ error: 'roundIndex out of range' });
+  }
+
+  // Legacy sessions predate the historyLength field — best-guess assuming no
+  // interjections happened before the branch point (2 history entries/round).
+  const historyLength = parent.rounds[roundIndex].historyLength ?? (roundIndex + 1) * 2;
+  const branchedRounds = parent.rounds.slice(0, roundIndex + 1).map(r => ({ ...r }));
+  const branchedHistory = parent.conversationHistory.slice(0, historyLength).map(h => ({ ...h }));
+
+  const date = new Date().toISOString().slice(0, 10);
+  const id = makeBranchId(parent, roundIndex);
+
+  let transcriptText = buildTranscriptHeader(parent.entry, parent.members, date);
+  branchedRounds.forEach(r => {
+    transcriptText += `\n— ${r.label} —\n\n${formatTranscriptText(r.text)}\n`;
+  });
+
+  const branch = {
+    id, date,
+    entry: parent.entry,
+    members: [...parent.members],
+    roundInstructions: parent.roundInstructions || null,
+    roundCount: parent.roundCount || 3,
+    artifact: parent.artifact || null,
+    notes: parent.notes || {},
+    sourceSessionId: parent.sourceSessionId || null,
+    conversationHistory: branchedHistory,
+    rounds: branchedRounds,
+    transcriptText,
+    generationMetrics: [],
+    playerMode: parent.playerMode || 'none',
+    playerMemberId: parent.playerMemberId || null,
+    playerName: parent.playerName || null,
+    playerTurns: (parent.playerTurns || []).filter(pt => pt.round <= roundIndex).map(pt => ({ ...pt })),
+    parentId: parent.id,
+    branchRound: roundIndex,
+  };
+  saveSession(branch);
+  res.json({ sessionId: id });
 });
 
 // GET /api/sessions/:id/transcript — return annotated transcript text for reconvening
