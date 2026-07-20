@@ -112,7 +112,9 @@ app.get('/logout', (req, res) => {
   req.session.destroy(() => res.redirect('/login'));
 });
 
-// Auth guard — applied to all routes except login/logout/static assets
+// Auth guard — applied to all routes except login/logout
+// Must run before express.static: static previously short-circuited the gate,
+// serving index.html to anyone while only the API calls it makes 401'd.
 function requireAuth(req, res, next) {
   if (!PASSPHRASE) return next(); // no passphrase set = open
   if (req.path === '/api/config') return next(); // health check — always public
@@ -121,8 +123,8 @@ function requireAuth(req, res, next) {
   res.redirect('/login');
 }
 
-app.use(express.static(path.join(__dirname, 'public')));
 app.use(requireAuth);
+app.use(express.static(path.join(__dirname, 'public')));
 
 // ─── Lodge roster ────────────────────────────────────────────────────────────
 // Loaded from roster.json; reloadRoster() refreshes in-memory copy after writes.
