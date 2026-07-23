@@ -914,7 +914,10 @@ async function convene() {
       }
     } catch (err) {
       s1.abort(); h1.remove(); transcriptText = txtBefore1;
-      setError('The first movement could not begin. The fire may be low.', convene);
+      const msg = err.message && !err.message.startsWith('Server error')
+        ? err.message
+        : 'The first movement could not begin. The fire may be low.';
+      setError(msg, convene);
       return;
     }
 
