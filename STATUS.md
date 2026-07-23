@@ -1,0 +1,20 @@
+# STATUS.md
+
+Dated, one-line-per-entry log of what shipped or changed. Newest first. Append a new entry whenever something ships, a decision gets made, or a notable bug gets found/fixed — don't rewrite history above it.
+
+For the *why* behind any entry, check the linked PR/issue first; deeper narrative context (what was tried, what was rejected, collaboration notes) lives in Claude's memory, not here. For current direction and open decisions, see [PROJECT.md](PROJECT.md).
+
+---
+
+- **2026-07-20** — [#33](https://github.com/msdixon/secret-cabinet/issues/33) Branching session trees shipped. [PR #122](https://github.com/msdixon/secret-cabinet/pull/122)
+- **2026-07-20** — Railway production deploy found unauthenticated at `/` since day one, fixed. [#120](https://github.com/msdixon/secret-cabinet/issues/120), [PR #121](https://github.com/msdixon/secret-cabinet/pull/121)
+- **2026-07-16** — [#31](https://github.com/msdixon/secret-cabinet/issues/31) Player-as-member mode shipped — first Tier 3 item to ship. [PR #119](https://github.com/msdixon/secret-cabinet/pull/119)
+- **2026-07-13** — Tier 3 roadmap audit: three threads mapped, art-pipeline (#116) and 3D-engine (#117) decisions split out as their own blocking issues. [#118](https://github.com/msdixon/secret-cabinet/issues/118)
+- **2026-07-12** — [#113](https://github.com/msdixon/secret-cabinet/issues/113) Cumulative cross-session citation manifest shipped. [PR #114](https://github.com/msdixon/secret-cabinet/pull/114)
+- **2026-07-12** — [#36](https://github.com/msdixon/secret-cabinet/issues/36) Citation verification layer shipped. [PR #112](https://github.com/msdixon/secret-cabinet/pull/112)
+- **2026-07-11** — [#73](https://github.com/msdixon/secret-cabinet/issues/73) Shape the Arc UX (round-count selector) shipped. [PR #110](https://github.com/msdixon/secret-cabinet/pull/110)
+- **2026-07-11** — [#51](https://github.com/msdixon/secret-cabinet/issues/51) Per-member agent architecture shipped, staged across 6 PRs (#99, #104–#109).
+- **2026-07-09** — Guest/core roster distinction removed entirely — one flat 22-member roster. [#101](https://github.com/msdixon/secret-cabinet/issues/101)
+- **2026-07-09** — Speaker attribution bug (Wave 1 guests with formal names broke rendering) fixed; alias derivation now automatic from roster data. [#96](https://github.com/msdixon/secret-cabinet/issues/96), [PR #102](https://github.com/msdixon/secret-cabinet/pull/102)
+- **2026-06-22** — Status snapshot: Wave 1 roster, archival material library, knowledge graph, speaker glyphs, "Lodge Beyond the Lodge," Witness mode, Railway deploy. Full detail in [SECRET-CABINET-UPDATE-2026-06-22.md](SECRET-CABINET-UPDATE-2026-06-22.md) (historical snapshot, superseded by this file going forward).
+- **~2026-05** — Wave 1 roster bundle (10 new guest members) landed. [PR #95](https://github.com/msdixon/secret-cabinet/pull/95)
