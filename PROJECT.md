@@ -6,7 +6,7 @@ The living project doc. Answers what this is, why it exists, where it's heading,
 
 ## What this is
 
-A local/private web app that convenes a salon of historical esotericists — currently a 22-member roster (see [MANIFEST.md](MANIFEST.md)) — to discuss a document the user provides, across multiple rounds of in-character cross-talk. Sessions are saved, searchable, taggable, and exportable to Day One, Obsidian, or Ulysses.
+A local/private web app that convenes a salon of historical esotericists — see [MANIFEST.md](MANIFEST.md) for the current full roster — to discuss a document the user provides, across multiple rounds of in-character cross-talk. Sessions are saved, searchable, taggable, and exportable to Day One, Obsidian, or Ulysses.
 
 ## Why it exists
 
