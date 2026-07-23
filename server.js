@@ -1,10 +1,23 @@
 'use strict';
 
-require('dotenv').config({ override: true });
-const express = require('express');
-const Anthropic = require('@anthropic-ai/sdk');
 const fs = require('fs');
 const path = require('path');
+
+// Walk up from __dirname to find the nearest .env file (supports git worktrees
+// where the .env lives in the main project root, not the worktree directory).
+(function loadEnv() {
+  let dir = __dirname;
+  while (true) {
+    const candidate = path.join(dir, '.env');
+    if (fs.existsSync(candidate)) { require('dotenv').config({ path: candidate, override: true }); return; }
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+})();
+
+const express = require('express');
+const Anthropic = require('@anthropic-ai/sdk');
 const crypto = require('crypto');
 
 const session = require('express-session');
@@ -375,7 +388,7 @@ app.post('/api/convene', async (req, res) => {
     res.write(`data: ${JSON.stringify({ done: true, sessionId: id, round: 1, label: 'First Movement', text })}\n\n`);
   } catch (err) {
     console.error('Convene error:', err);
-    res.write(`data: ${JSON.stringify({ error: 'Failed to convene lodge' })}\n\n`);
+    res.write(`data: ${JSON.stringify({ error: err.message || 'Failed to convene lodge' })}\n\n`);
   }
   res.end();
 });
