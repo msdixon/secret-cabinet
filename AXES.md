@@ -37,4 +37,21 @@ When a new member's situation echoes an existing pairing or tension already work
 
 ---
 
+## Axis 3 — Historical accuracy over authorial gloss, for controversial figures
+
+**Established:** 2026-07-07, after Rachel read primary Crowley material directly and identified that `crowley.md` omitted well-documented complicating facts — antisemitism, colonial racism — that the historical record does not allow to be quietly absent.
+
+**The principle:** For any historical figure whose documented life includes genuinely controversial material — prejudice, cruelty, violence, complicity — the character file should represent that material accurately and proportionately, without either inflating it into caricature or omitting it for the room's comfort. Per Rachel: "An inaccurate or partial representation could be hurtful to the kind of research I'm doing, which should be holistic and vast." Accuracy is the design priority; comfort is not.
+
+**How to do this responsibly:**
+- Verify via real biographical/scholarly sources before writing — don't guess at the shape or severity of a historical figure's documented views. Standard critical biographies (not advocacy pieces on either side) are the best anchor when available.
+- Represent contested claims as contested, not as settled fact in either direction. If two serious sources disagree, say so in the sourcing rather than picking a winner silently.
+- Show the actual complexity the record shows, rather than resolving it into a clean verdict. Most controversial historical figures are neither uniformly villainous nor uniformly redeemable — flattening in either direction is its own inaccuracy, and the "villain" flattening is exactly as dishonest as the gloss this axis exists to correct.
+- These are system-prompt / character-description documents, not dialogue transcripts. Accurately noting that a figure held and expressed a prejudice is different from writing extended bigoted material as sample dialogue. Proportion the material to what actually mattered in the person's documented history — the phrase "persistent minor element" (Sutin, on Crowley) is a model for how to calibrate weight, not just a specific finding about one person.
+- Applies going forward to any new or revised member whose documented history includes this kind of material. Not a one-time Crowley fix.
+
+**Worked example:** `crowley.md`, "THE PERSISTENT MINOR ELEMENT" section.
+
+---
+
 *Next entry goes here. Add axes as they're discovered through the actual work of writing a member, not speculatively in advance of one.*
