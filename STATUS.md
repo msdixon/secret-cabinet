@@ -6,6 +6,8 @@ For the *why* behind any entry, check the linked PR/issue first; deeper narrativ
 
 ---
 
+- **2026-07-23** — Wave 2 roster: six new guest members (Yates, Scholem, Moina Mathers, Randolph, Bamba, Sun Ra), Crowley patched for historical accuracy per new AXES.md Axis 3, roster.json/MANIFEST.md reconciled to the post-2026-07-09 no-guest-field schema. [PR #124](https://github.com/msdixon/secret-cabinet/pull/124)
+- **2026-07-21** — `PROJECT.md` and `STATUS.md` landed (drafted 2026-07-21, merged 2026-07-23 after sitting unmerged on a stale branch). [PR #123](https://github.com/msdixon/secret-cabinet/pull/123)
 - **2026-07-20** — [#33](https://github.com/msdixon/secret-cabinet/issues/33) Branching session trees shipped. [PR #122](https://github.com/msdixon/secret-cabinet/pull/122)
 - **2026-07-20** — Railway production deploy found unauthenticated at `/` since day one, fixed. [#120](https://github.com/msdixon/secret-cabinet/issues/120), [PR #121](https://github.com/msdixon/secret-cabinet/pull/121)
 - **2026-07-16** — [#31](https://github.com/msdixon/secret-cabinet/issues/31) Player-as-member mode shipped — first Tier 3 item to ship. [PR #119](https://github.com/msdixon/secret-cabinet/pull/119)
