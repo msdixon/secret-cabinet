@@ -20,5 +20,11 @@
   { "id": "frieda-harris",  "name": "Lady Frieda Harris", "file": "frieda-harris.md" },
   { "id": "dion-fortune",   "name": "Dion Fortune",       "file": "dion-fortune.md" },
   { "id": "william-blake",  "name": "William Blake",      "file": "william-blake.md" },
-  { "id": "catherine-blake","name": "Catherine Blake",    "file": "catherine-blake.md", "aliases": ["Kate"] }
+  { "id": "catherine-blake","name": "Catherine Blake",    "file": "catherine-blake.md", "aliases": ["Kate"] },
+  { "id": "yates",          "name": "Frances Yates",      "file": "yates.md" },
+  { "id": "scholem",        "name": "Gershom Scholem",    "file": "scholem.md" },
+  { "id": "moina-mathers",  "name": "Moina Mathers",      "file": "moina-mathers.md" },
+  { "id": "randolph",       "name": "Paschal Beverly Randolph", "file": "randolph.md" },
+  { "id": "bamba",          "name": "Amadou Bamba",       "file": "bamba.md" },
+  { "id": "sun-ra",         "name": "Sun Ra",             "file": "sun-ra.md" }
 ]

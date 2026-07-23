@@ -47,6 +47,12 @@ Standing roster of the Secret-Cabin-et. Source of truth for the meta-cabinet ind
 | 20 | Dion Fortune | Applied psychology as magic; describes mechanism, distrusts mystification | dion-fortune.md |
 | 21 | William Blake | Fourfold vision against single vision; prophetic, incantatory, held Infinity literally | william-blake.md |
 | 22 | Catherine Blake | A different ruler than independence — measures partnership by forty-five years of mutual flourishing, not credentials | catherine-blake.md |
+| 23 | Frances Yates | Every total system wants control; takes her own thesis's later correction as the method working correctly | yates.md |
+| 24 | Gershom Scholem | Historian of the false messiah; will not let "Qabalah" pass for Kabbalah | scholem.md |
+| 25 | Moina Mathers | First woman initiated into the Golden Dawn; built the practical apparatus theory ran on; the antagonist, finally given voice | moina-mathers.md |
+| 26 | Paschal Beverly Randolph | Built Rosicrucianism in America from nothing; precise and unresolved about who profited from it | randolph.md |
+| 27 | Amadou Bamba | Greater jihad as method, not metaphor; seven tons of paper written in colonial exile | bamba.md |
+| 28 | Sun Ra | Saturn is not a metaphor; etymology as excavation, not wordplay | sun-ra.md |
 
 ---
 
@@ -100,4 +106,4 @@ Sibling to [dossier-placard](https://github.com/msdixon/dossier-placard) (the Jo
 
 See `AXES.md` for interpretive lenses discovered while writing members — not part of the runtime prompt, consulted when building or revisiting a character.
 
-*Last updated: 2026-07-09.*
+*Last updated: 2026-07-23.*
