@@ -6,6 +6,7 @@ For the *why* behind any entry, check the linked PR/issue first; deeper narrativ
 
 ---
 
+- **2026-07-23** — Added `CLAUDE.md`: standing instructions to log STATUS.md entries at merge time and to treat worktree cleanup as part of wrapping up a task. [PR #128](https://github.com/msdixon/secret-cabinet/pull/128)
 - **2026-07-23** — Worktree audit: pruned stale worktrees, rescued a ~2-month-old uncommitted fix (worktree-aware `.env` loader; real convene error messages instead of a generic string) that would otherwise have been lost. [PR #126](https://github.com/msdixon/secret-cabinet/pull/126)
 - **2026-07-23** — Wave 2 roster: six new guest members (Yates, Scholem, Moina Mathers, Randolph, Bamba, Sun Ra), Crowley patched for historical accuracy per new AXES.md Axis 3, roster.json/MANIFEST.md reconciled to the post-2026-07-09 no-guest-field schema. [PR #124](https://github.com/msdixon/secret-cabinet/pull/124)
 - **2026-07-21** — `PROJECT.md` and `STATUS.md` landed (drafted 2026-07-21, merged 2026-07-23 after sitting unmerged on a stale branch). [PR #123](https://github.com/msdixon/secret-cabinet/pull/123)
