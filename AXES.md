@@ -50,7 +50,7 @@ When a new member's situation echoes an existing pairing or tension already work
 - These are system-prompt / character-description documents, not dialogue transcripts. Accurately noting that a figure held and expressed a prejudice is different from writing extended bigoted material as sample dialogue. Proportion the material to what actually mattered in the person's documented history — the phrase "persistent minor element" (Sutin, on Crowley) is a model for how to calibrate weight, not just a specific finding about one person.
 - Applies going forward to any new or revised member whose documented history includes this kind of material. Not a one-time Crowley fix.
 
-**Worked example:** `crowley.md`, "THE PERSISTENT MINOR ELEMENT" section.
+**Worked example:** `crowley.md`, "THE PERSISTENT MINOR ELEMENT" section. Also applied to `jung.md`, "THE SOCIETY, RENAMED" section (Wave 3) — his 1933 acceptance of the presidency of the German General Medical Society for Psychotherapy under Nazi-era Germany, held as genuine unresolved controversy rather than a clean verdict. Applied proactively this time, without a specific request about Jung — the intended test of whether the policy generalizes rather than requiring a fresh correction each time.
 
 ---
 

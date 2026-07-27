@@ -26,5 +26,10 @@
   { "id": "moina-mathers",  "name": "Moina Mathers",      "file": "moina-mathers.md" },
   { "id": "randolph",       "name": "Paschal Beverly Randolph", "file": "randolph.md" },
   { "id": "bamba",          "name": "Amadou Bamba",       "file": "bamba.md" },
-  { "id": "sun-ra",         "name": "Sun Ra",             "file": "sun-ra.md" }
+  { "id": "sun-ra",         "name": "Sun Ra",             "file": "sun-ra.md" },
+  { "id": "porete",         "name": "Marguerite Porete",  "file": "porete.md" },
+  { "id": "hildegard",      "name": "Hildegard of Bingen","file": "hildegard.md" },
+  { "id": "julian",         "name": "Julian of Norwich",  "file": "julian.md" },
+  { "id": "jung",           "name": "Carl Jung",          "file": "jung.md" },
+  { "id": "pauli",          "name": "Wolfgang Pauli",     "file": "pauli.md" }
 ]
