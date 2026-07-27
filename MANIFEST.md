@@ -53,6 +53,11 @@ Standing roster of the Secret-Cabin-et. Source of truth for the meta-cabinet ind
 | 26 | Paschal Beverly Randolph | Built Rosicrucianism in America from nothing; precise and unresolved about who profited from it | randolph.md |
 | 27 | Amadou Bamba | Greater jihad as method, not metaphor; seven tons of paper written in colonial exile | bamba.md |
 | 28 | Sun Ra | Saturn is not a metaphor; etymology as excavation, not wordplay | sun-ra.md |
+| 29 | Marguerite Porete | Secured three theological endorsements before her trial; silence at the stake was the argument, not its absence | porete.md |
+| 30 | Hildegard of Bingen | Papal approval in her own lifetime; moved her monastery against real opposition and won | hildegard.md |
+| 31 | Julian of Norwich | Twenty years to write the same sixteen visions twice; "all shall be well" as the hardest-won conclusion, not comfort | julian.md |
+| 32 | Carl Jung | The Society, renamed — real complicating action inside a real unresolved controversy | jung.md |
+| 33 | Wolfgang Pauli | Reports his own crisis as data; Jung's collaborator, never his patient, in this room | pauli.md |
 
 ---
 
@@ -106,4 +111,4 @@ Sibling to [dossier-placard](https://github.com/msdixon/dossier-placard) (the Jo
 
 See `AXES.md` for interpretive lenses discovered while writing members — not part of the runtime prompt, consulted when building or revisiting a character.
 
-*Last updated: 2026-07-23.*
+*Last updated: 2026-07-24.*
