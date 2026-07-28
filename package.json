@@ -10,7 +10,7 @@
     "citations": "node scripts/build-citation-manifest.js"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.52.0",
+    "@anthropic-ai/sdk": "^0.115.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "babylonjs": "^9.18.1",
     "dotenv": "^17.4.2",
