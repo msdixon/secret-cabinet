@@ -91,7 +91,9 @@
 
 .lodge-body { display:flex; flex-direction:column; flex:1; padding:20px 24px; gap:20px; max-width:960px; width:100%; margin:0 auto; }
 .panel-label { font-family:'IM Fell English',serif; font-size:13px; letter-spacing:2px; text-transform:uppercase; color:var(--lodge-muted); margin-bottom:8px; }
-.journal-panel, .member-panel, .transcript-panel, .interject-panel, .export-panel { background:var(--lodge-surface); border:1px solid var(--lodge-border); border-radius:2px; padding:16px; }
+.journal-panel, .member-panel, .transcript-panel, .interject-panel, .export-panel, .scene-panel { background:var(--lodge-surface); border:1px solid var(--lodge-border); border-radius:2px; padding:16px; }
+.scene-panel canvas { width:100%; aspect-ratio:16/9; display:block; outline:none; }
+.scene-panel.scene-failed { display:none; }
 .journal-controls { display:flex; gap:10px; margin-bottom:12px; flex-wrap:wrap; }
 .lodge-select { background:var(--lodge-panel); border:1px solid var(--lodge-border); color:var(--lodge-cream); font-family:'Crimson Pro',serif; font-size:15px; padding:7px 12px; border-radius:2px; cursor:pointer; flex:1; min-width:140px; appearance:none; }
 .lodge-select option { background:var(--lodge-panel); }

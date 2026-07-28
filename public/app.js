@@ -2241,9 +2241,29 @@ function exportMd() {
   URL.revokeObjectURL(url);
 }
 
+// ── Scene (3D) ──────────────────────────────────────────────────────────────
+// Phase 0 (#26): pure atmosphere, no member sync yet — see public/scene/scene.js.
+
+function initSceneLayer() {
+  try {
+    if (new URLSearchParams(location.search).get('noscene')) return;
+    if (localStorage.getItem('sc-scene-disabled')) return;
+    if (typeof BABYLON === 'undefined' || !window.LodgeScene) return;
+    const canvas = document.getElementById('scene-canvas');
+    if (!canvas) return;
+    if (!LodgeScene.init(canvas)) {
+      document.getElementById('scene-panel')?.classList.add('scene-failed');
+    }
+  } catch (e) {
+    console.error('[scene] failed to initialize, continuing without it', e);
+    document.getElementById('scene-panel')?.classList.add('scene-failed');
+  }
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 applyEnvConfig();
+initSceneLayer();
 fetchMembers().then(() => renderMembers());
 updateExportJournalLabel();
 updateArcFieldAvailability();
