@@ -138,6 +138,7 @@ function requireAuth(req, res, next) {
 
 app.use(requireAuth);
 app.use(express.static(path.join(__dirname, 'public')));
+app.use('/vendor/babylonjs', express.static(path.join(__dirname, 'node_modules/babylonjs')));
 
 // ─── Lodge roster ────────────────────────────────────────────────────────────
 // Loaded from roster.json; reloadRoster() refreshes in-memory copy after writes.
