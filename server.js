@@ -46,6 +46,11 @@ function extractPdfText(buffer) {
 }
 
 const app = express();
+// Railway (and any single-hop PaaS proxy) terminates TLS at the edge and
+// forwards plain HTTP internally — without this, Express never sees the
+// connection as secure, so express-session's `cookie.secure: true` silently
+// refuses to send Set-Cookie at all. Harmless locally (no proxy in front).
+app.set('trust proxy', 1);
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const PORT = process.env.PORT || 3132;
