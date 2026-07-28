@@ -26,8 +26,8 @@ Tier 3 (the current architectural frontier) splits into three mostly-independent
 
 | Thread | Status | Items |
 |---|---|---|
-| **Interactivity / agency** | 2 of 3 shipped | #31 player-as-member (done), #33 branching sessions (done), #32 investigation mode (blocked — see below) |
-| **Atmosphere / presence — the north-star thread** | blocked on 2 decisions | #26 3D salon, #27 portraits, #28 avatar presence, #29 voice synth, #17 ambient audio |
+| **Interactivity / agency** | 2 of 3 shipped | #31 player-as-member (done), #33 branching sessions (done), #32 investigation mode (parked — see below) |
+| **Atmosphere / presence — the north-star thread** | #116 + #117 both decided | #26 3D salon (unblocked, engine=Babylon.js), #27 portraits (unblocked by #116), #28 avatar presence, #29 voice synth, #17 ambient audio |
 | **Research-grounding** | actively unblocking | #36 citation verification (done), #37 scholarly export (unblocked by #36), #30 archival image integration (unblocked, easier than scoped) |
 
 [#24 multi-user](https://github.com/msdixon/secret-cabinet/issues/24) is explicitly **orthogonal** to Tier 3 — a large infra decision with its own cost/benefit case, not to be pulled in opportunistically just because it's adjacent. (It would matter a great deal *if* the platform-pitch path in purpose #2 above is ever pursued seriously — a shared room is part of what makes a playable archive a platform rather than a solo tool — but that's a future-scope note, not a reason to start it now.)
@@ -36,12 +36,10 @@ Full sequencing rationale lives in [issue #118](https://github.com/msdixon/secre
 
 ## What needs to happen to get there
 
-**Against the north star specifically:** the atmosphere/presence thread is currently stalled behind two undecided, non-technical questions — not a lack of scheduling, an actual absence of a decision:
+**Against the north star specifically:** the atmosphere/presence thread was stalled behind two undecided, non-technical questions since 2026-07-13. Both were decided 2026-07-27:
 
-- [#116](https://github.com/msdixon/secret-cabinet/issues/116) — how portrait art actually gets produced (commission, generate, license?), which blocks #27 and, downstream, #26 and #28.
-- [#117](https://github.com/msdixon/secret-cabinet/issues/117) — which 3D rendering approach, which blocks #26 outright.
-
-Neither has a default answer, and both have been sitting in Backlog since 2026-07-13. If the north star is meant to be real rather than aspirational, these two need an actual decision session at some point — not more Tier-3 polish shipped around them. That's the fork in the road: keep shipping Todo-list items indefinitely (real, useful, but adjacent to the north star), or deliberately spend a session resolving #116/#117 to unstick the thread that actually leads there.
+- [#116](https://github.com/msdixon/secret-cabinet/issues/116) — **decided: phased AI-generation.** Batch 1 generates portraits for the full current roster against a checked-in baseline ([public/portraits/STYLE_GUIDE.md](public/portraits/STYLE_GUIDE.md)), reconvene to human-validate before generating anything further (including portraits for members added after batch 1). AI-generated placeholders for this stage, not commissioned/licensed art — disclosed in [MANIFEST.md](MANIFEST.md). Post-MVP path to move beyond AI generation is intentionally still open, tracked as a follow-up to revisit rather than decided now. Unblocks #27; #26/#28 (3D texture use) still wait on #117 for format requirements.
+- [#117](https://github.com/msdixon/secret-cabinet/issues/117) — **decided: Babylon.js.** Taken deliberately over Three.js for its built-in physics/WebXR/character-animation tooling — a bet that pays off as the Atmosphere/presence thread continues into #28 and beyond, accepted against ~8-9x Three.js's bundle size since this is a local/personal tool, not a public product. A real architectural step-change for a codebase that's otherwise stayed framework-free; taken on purpose because the north star is being treated as a real target. Unblocks #26 outright. Engineering (dependency add, `public/scene/` scaffold) not yet started.
 
 Current Todo-status backlog (no ranking implied — pick next tranche with Rachel; note none of these advance the north star directly):
 
@@ -57,9 +55,9 @@ The full workflow/priority tracker — including Backlog-status items, bugs, and
 
 ## Other open decisions
 
-(#116 and #117, the two north-star-blocking decisions, are covered above rather than repeated here.)
+(#116 and #117 are covered above.)
 
-- **[#32](https://github.com/msdixon/secret-cabinet/issues/32) — investigation mode scoping.** Not blocked technically, blocked on a design conversation: who authors the hidden "truth state," what granularity clue-evaluation runs at, and how it reads a player's own turns (per #31's mechanism).
+- **[#32](https://github.com/msdixon/secret-cabinet/issues/32) — investigation mode scoping.** Not blocked technically, blocked on a design conversation: who authors the hidden "truth state," what granularity clue-evaluation runs at, and how it reads a player's own turns (per #31's mechanism). **Deliberately parked (2026-07-27):** large scope, one complex mechanic, not required to unlock the playable-archive concept — stays on the back burner until well after #116/#117 land.
 
 ## How this doc relates to everything else
 
@@ -71,4 +69,4 @@ The full workflow/priority tracker — including Backlog-status items, bugs, and
 
 ---
 
-*Last updated: 2026-07-21 (purpose and north star expanded same day).*
+*Last updated: 2026-07-27 (#116 and #117 both decided, #32 parked — both north-star blockers now clear).*
