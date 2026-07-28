@@ -9,7 +9,7 @@ const path = require('path');
   let dir = __dirname;
   while (true) {
     const candidate = path.join(dir, '.env');
-    if (fs.existsSync(candidate)) { require('dotenv').config({ path: candidate, override: true }); return; }
+    if (fs.existsSync(candidate)) { require('dotenv').config({ path: candidate, override: true, quiet: true }); return; }
     const parent = path.dirname(dir);
     if (parent === dir) break;
     dir = parent;
