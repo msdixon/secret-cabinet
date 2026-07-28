@@ -19,6 +19,8 @@ Standing roster of the Secret-Cabin-et. Source of truth for the meta-cabinet ind
 
 (The roster also briefly supported an "Absent Presence" mode — a member named but not speaking in a given session. Removed 2026-07-10: it had been broken since it shipped — the field a session read to check who was silently present never matched the field a session wrote — so it silently applied to at most one round per session, and wasn't used enough to be worth fixing. See git history for the fuller account.)
 
+**Portraits (decided 2026-07-27, see [#116](https://github.com/msdixon/secret-cabinet/issues/116)):** member portraits, once generated, are AI-generated placeholders for this proof-of-concept stage — not commissioned or licensed illustration. Style baseline lives in [public/portraits/STYLE_GUIDE.md](public/portraits/STYLE_GUIDE.md). The plan is to move beyond AI generation after initial MVP validation; the concrete post-MVP path is still undecided (tracked as a follow-up).
+
 ---
 
 ## Members
