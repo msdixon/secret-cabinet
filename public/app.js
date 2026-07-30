@@ -429,6 +429,7 @@ async function saveAnnotation(textarea) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ annotations: all }),
   }).catch(() => {});
+  updateScholarlyExportButton();
 }
 
 // ── Speaker attribution ────────────────────────────────────────────────────
@@ -999,6 +1000,7 @@ function showSessionControls() {
   document.getElementById('verify-citations-btn').className = 'lodge-btn visible';
   document.getElementById('export-panel').className = 'export-panel visible';
   document.getElementById('reveal-player-turns-btn').className = 'lodge-btn' + (sessionPlayerTurns.length ? ' visible' : '');
+  updateScholarlyExportButton();
   updatePips();
 }
 
@@ -1188,6 +1190,90 @@ function buildAnnotatedTranscript() {
     i++;
   }
   return result.join('\n');
+}
+
+// Annotated passages in document order — DOM order matches speech order since
+// entries are appended sequentially by addSpeech()/parseAndRenderTranscript(),
+// so no round-grouping or re-sorting is needed.
+function getAnnotatedPassages() {
+  return [...document.querySelectorAll('.transcript-entry.annotated')].map(e => ({
+    speaker: e.dataset.speaker,
+    text: e.querySelector('.speech-text')?.textContent.trim() || '',
+    note: e.querySelector('.annotation-input')?.value.trim() || '',
+  }));
+}
+
+function updateScholarlyExportButton() {
+  const btn = document.getElementById('export-scholarly-btn');
+  if (btn) btn.disabled = getAnnotatedPassages().length === 0;
+}
+
+// Groups a session's citationFlags by cited work, same convention as
+// scripts/build-citation-manifest.js, so the per-session bibliography reads
+// consistently with the cumulative cross-session one.
+function renderBibliography(citations) {
+  if (!citations.length) {
+    return '_No citations verified for this session. Run **Verify Citations ⚑** above, then re-export to include a bibliography._\n';
+  }
+  const byWork = new Map();
+  citations.forEach(c => {
+    if (!byWork.has(c.work)) byWork.set(c.work, []);
+    byWork.get(c.work).push(c);
+  });
+  const lines = [];
+  [...byWork.entries()].sort((a, b) => a[0].localeCompare(b[0])).forEach(([work, occurrences]) => {
+    lines.push(`### ${work}`, '');
+    occurrences.forEach(o => {
+      const grounding = o.libraryCitation ? ` — grounded in: ${o.libraryCitation}` : '';
+      lines.push(`- **${o.verdict}** — ${(o.speaker || '').replace(/\s*—\s*$/, '').trim()}`);
+      lines.push(`  > "${o.quote}"`);
+      lines.push(`  ${o.note}${grounding}`, '');
+    });
+  });
+  return lines.join('\n');
+}
+
+async function exportScholarly() {
+  const passages = getAnnotatedPassages();
+  if (!passages.length || !currentSessionId) return;
+  const statusEl = document.getElementById('export-status');
+  statusEl.textContent = 'Building scholarly note...';
+  try {
+    const res = await fetch(`/api/sessions/${currentSessionId}`);
+    if (!res.ok) throw new Error(`Server error ${res.status}`);
+    const session = await res.json();
+
+    const names = [...activeMembers].map(id => MEMBERS.find(m => m.id === id)?.name).filter(Boolean).join(', ');
+    const source = (currentEntry || '').trim();
+    const sourceExcerpt = source.length > 300 ? source.slice(0, 300) + '…' : source;
+
+    const lines = [
+      '# Secret-Cabin-et — Scholarly Note',
+      '',
+      `**Date:** ${sessionDate}`,
+      `**Members:** ${names}`,
+      `**Source:** ${sourceExcerpt}`,
+      '',
+      '## Selected Passages',
+      '',
+    ];
+    passages.forEach(p => {
+      lines.push(`**${p.speaker}** —`, '', p.text, '', `> ${p.note}`, '');
+    });
+    lines.push('## Bibliography', '', renderBibliography(session.citationFlags || []));
+
+    const blob = new Blob([lines.join('\n')], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `secret-cabinet-scholarly-${sessionDate}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+    statusEl.textContent = 'Scholarly note downloaded.';
+  } catch (err) {
+    console.error(err);
+    statusEl.textContent = 'Scholarly export failed.';
+  }
 }
 
 function reconveneOnCurrentSession() {
@@ -1932,6 +2018,7 @@ async function restoreSession(id) {
     document.getElementById('verify-citations-btn').className = 'lodge-btn visible';
     document.getElementById('reveal-player-turns-btn').className = 'lodge-btn' + (sessionPlayerTurns.length ? ' visible' : '');
     document.getElementById('export-panel').className = 'export-panel visible';
+    updateScholarlyExportButton();
     updatePips();
     setStatus(`Meeting of ${session.date} restored. The embers hold.`, false);
   } catch (e) {
