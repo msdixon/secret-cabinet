@@ -248,6 +248,10 @@
         <span class="export-note">The meeting has concluded. Preserve the transcript.</span>
         <button class="lodge-btn export-txt" onclick="exportTxt()">↓ Download .txt</button>
       </div>
+      <div class="export-row">
+        <span class="export-note">A structured note: annotated passages plus a bibliography of cited works.</span>
+        <button class="lodge-btn export-scholarly" id="export-scholarly-btn" onclick="exportScholarly()" disabled title="Annotate at least one passage to enable">↓ Scholarly Note (.md)</button>
+      </div>
       <div class="export-journal-row">
         <span class="export-note" style="font-style:normal;color:var(--lodge-muted);font-size:12px;" id="export-journal-name">No journal selected</span>
         <button class="lodge-btn export-dayone" onclick="exportDayOne()">→ Save to Day One</button>
