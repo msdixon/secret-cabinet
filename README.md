@@ -10,7 +10,7 @@ A document is read aloud. The lodge responds.
 
 ## The Lodge
 
-Eight core members, always present:
+The founding eight — cast per session like everyone else, not permanently seated (see below):
 
 | Member | Register |
 |--------|----------|
