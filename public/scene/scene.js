@@ -1,12 +1,12 @@
 'use strict';
 
-// Phase 0 (#26): pure atmosphere. Phase 1 (this file, current): a table and
-// a fixed ring of seats synced to activeMembers via updateSeats() — occupied
-// vs. empty only, no per-member identity yet. Phase 2 (#26, next): occupied
-// seats get a portrait-textured billboard card per member (decided
-// 2026-07-31 in issue #26 — flat cards are the deliberate MVP, not a
-// placeholder; a more sculptural avatar is the intended later direction,
-// full 3D character models are long-horizon, not a near-term target).
+// Phase 0 (#26): pure atmosphere. Phase 1: a table and a fixed ring of seats
+// synced to activeMembers via updateSeats() — occupied vs. empty only.
+// Phase 2 (this file, current): occupied seats get a portrait-textured
+// billboard card per member (decided 2026-07-31 in issue #26 — flat cards
+// are the deliberate MVP, not a placeholder; a more sculptural avatar is the
+// intended later direction, full 3D character models are long-horizon, not
+// a near-term target).
 window.LodgeScene = (function () {
   const LODGE_BG = '#0e0b08';
   const LODGE_FIRE = '#d4621a';
@@ -21,9 +21,13 @@ window.LodgeScene = (function () {
   const SEAT_COUNT = 8;
   const TABLE_RADIUS = 2.6;
   const SEAT_RING_RADIUS = 4.4;
+  const AVATAR_WIDTH = 1.0;
+  const AVATAR_HEIGHT = 1.4;
+  const AVATAR_Y = 1.3; // hovers above the seat marker, roughly head height
 
   let sceneRef = null;
   let seatMeshes = [];
+  const portraitTextures = {}; // memberId -> BABYLON.Texture, cached across seat reassignment
 
   function buildTableAndSeats(scene) {
     const table = BABYLON.MeshBuilder.CreateCylinder('table', {
@@ -47,15 +51,55 @@ window.LodgeScene = (function () {
     seatMeshes = [];
     for (let i = 0; i < SEAT_COUNT; i++) {
       const angle = (i / SEAT_COUNT) * Math.PI * 2;
+      const x = Math.cos(angle) * SEAT_RING_RADIUS;
+      const z = Math.sin(angle) * SEAT_RING_RADIUS;
+
       const seat = BABYLON.MeshBuilder.CreateCylinder(`seat-${i}`, {
         diameter: 0.6, height: 0.6, tessellation: 12,
       }, scene);
-      seat.position.x = Math.cos(angle) * SEAT_RING_RADIUS;
-      seat.position.z = Math.sin(angle) * SEAT_RING_RADIUS;
+      seat.position.x = x;
+      seat.position.z = z;
       seat.position.y = 0.3;
       seat.material = emptyMat;
-      seatMeshes.push({ mesh: seat, emptyMat, occupiedMat, memberId: null });
+
+      // Portrait billboard, hidden until a member occupies this seat.
+      // BILLBOARDMODE_Y (not full billboarding) keeps the card upright as
+      // it turns to face the camera, rather than tilting with elevation.
+      const avatar = BABYLON.MeshBuilder.CreatePlane(`avatar-${i}`, {
+        width: AVATAR_WIDTH, height: AVATAR_HEIGHT,
+      }, scene);
+      avatar.position.x = x;
+      avatar.position.z = z;
+      avatar.position.y = AVATAR_Y;
+      avatar.billboardMode = BABYLON.Mesh.BILLBOARDMODE_Y;
+      avatar.isVisible = false;
+      const avatarMat = new BABYLON.StandardMaterial(`avatarMat-${i}`, scene);
+      avatarMat.disableLighting = true; // read the portrait at its own brightness, not scene-lit
+      avatarMat.emissiveColor = new BABYLON.Color3(1, 1, 1);
+      avatarMat.backFaceCulling = false;
+      avatar.material = avatarMat;
+
+      seatMeshes.push({ mesh: seat, avatar, avatarMat, emptyMat, occupiedMat, memberId: null });
     }
+  }
+
+  // On load failure (a member added after batch 1, with no portrait yet),
+  // hide whichever seat currently holds this memberId -- the load is async
+  // and updateSeats() has already made the plane visible by the time this
+  // fires, so we look the seat up by memberId rather than by closure.
+  function getPortraitTexture(scene, memberId) {
+    if (!portraitTextures[memberId]) {
+      portraitTextures[memberId] = new BABYLON.Texture(
+        `/portraits/${memberId}.png`, scene, false, false,
+        BABYLON.Texture.TRILINEAR_SAMPLINGMODE, null,
+        () => {
+          console.warn(`[scene] no portrait for ${memberId} yet`);
+          const seat = seatMeshes.find(s => s.memberId === memberId);
+          if (seat) seat.avatar.isVisible = false;
+        }
+      );
+    }
+    return portraitTextures[memberId];
   }
 
   // Assigns the given member ids to seats in order, up to SEAT_COUNT.
@@ -68,6 +112,12 @@ window.LodgeScene = (function () {
       const id = ids[i] || null;
       seat.memberId = id;
       seat.mesh.material = id ? seat.occupiedMat : seat.emptyMat;
+      if (id) {
+        seat.avatarMat.emissiveTexture = getPortraitTexture(sceneRef, id);
+        seat.avatar.isVisible = true;
+      } else {
+        seat.avatar.isVisible = false;
+      }
     });
   }
 
