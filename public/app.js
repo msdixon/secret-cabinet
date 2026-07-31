@@ -2216,7 +2216,10 @@ async function buildDossier(memberIds) {
     el.id = `dossier-${d.id}`;
     const existingNote = sessionNotes[d.id] || '';
     el.innerHTML = `
-      <div class="dossier-name">${escapeHTML(d.name)}</div>
+      <div class="dossier-header">
+        <img class="dossier-portrait" src="/portraits/${d.id}.png" alt="" loading="lazy" onerror="this.remove()">
+        <div class="dossier-name">${escapeHTML(d.name)}</div>
+      </div>
       ${d.bio ? `<div class="dossier-section-label">Who they are</div>
       <div class="dossier-text">${escapeHTML(d.bio)}</div>` : ''}
       ${d.voice ? `<button class="dossier-toggle" onclick="this.nextElementSibling.classList.toggle('open');this.textContent=this.nextElementSibling.classList.contains('open')?'▲ Voice':'▼ Voice'">▼ Voice</button>
