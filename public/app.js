@@ -74,6 +74,7 @@ function renderMembers() {
   populateArtifactSelect();
   populatePlayAsMemberSelect();
   if (activeMembers.size > 0) buildDossier([...activeMembers]);
+  window.LodgeScene?.updateSeats([...activeMembers]);
 }
 
 function populateArtifactSelect() {

@@ -20,7 +20,7 @@ AI-generated, proof-of-concept register for this stage of the project. Not commi
 
 ## Downstream use and format
 
-Per #116, the dossier thumbnail and the eventual 3D avatar texture (#26/#28, blocked on #117) likely need different crops/resolutions. Until #117 resolves, generate for the dossier-sidebar use case only (`public/portraits/<id>.png`, portrait-oriented, thumbnail-appropriate resolution). Treat 3D-texture suitability as unverified until the rendering approach is chosen — don't assume today's crop drops straight into a texture later.
+**Decided 2026-07-31** (see [#26](https://github.com/msdixon/secret-cabinet/issues/26)): the existing batch-1 crop (`public/portraits/<id>.png`, portrait-oriented rectangle) is used as-is for the 3D avatar's Phase 2 billboard cards — no new crop or generation needed. Billboards (camera-facing textured planes) are the deliberate MVP, not a placeholder for something else already planned; a more sculptural avatar representation is the intended eventual direction, and full 3D character models are explicitly a long-horizon idea, not a near-term target — so don't assume billboards need re-doing once the "next" avatar phase starts. If a genuinely different rendering approach (true 3D geometry) is ever taken up, that would need its own crop/format decision at that time.
 
 ## Process
 
