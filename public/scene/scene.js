@@ -119,8 +119,10 @@ window.LodgeScene = (function () {
       sceneRef = scene;
 
       // Slow fixed rotation — reads as "alive" without being a navigation feature.
+      // Cut to a third of the original rate (was 0.0015) -- the initial speed
+      // read as a spinning top rather than a slow drift.
       scene.onBeforeRenderObservable.add(() => {
-        camera.alpha += 0.0015 * engine.getDeltaTime();
+        camera.alpha += 0.0005 * engine.getDeltaTime();
       });
 
       engine.runRenderLoop(() => scene.render());
