@@ -564,20 +564,28 @@ async function streamPost(url, body, onChunk) {
   let buf = '';
   let donePayload = null;
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buf += decoder.decode(value, { stream: true });
-    let idx;
-    while ((idx = buf.indexOf('\n\n')) !== -1) {
-      const raw = buf.slice(0, idx).trim();
-      buf = buf.slice(idx + 2);
-      if (!raw.startsWith('data: ')) continue;
-      const data = JSON.parse(raw.slice(6));
-      if (data.error) throw new Error(data.error);
-      if (data.done) { donePayload = data; }
-      else if (data.text) { onChunk(data.text); }
+  // finally, not just the data.done branch -- a thrown mid-stream error
+  // (data.error, or the reader itself failing) must not leave a seat stuck
+  // glowing as "speaking" with no generation actually in flight.
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      let idx;
+      while ((idx = buf.indexOf('\n\n')) !== -1) {
+        const raw = buf.slice(0, idx).trim();
+        buf = buf.slice(idx + 2);
+        if (!raw.startsWith('data: ')) continue;
+        const data = JSON.parse(raw.slice(6));
+        if (data.error) throw new Error(data.error);
+        if (data.done) { donePayload = data; }
+        else if (data.text) { onChunk(data.text); }
+        else if (data.speaking) { window.LodgeScene?.setSpeaking(data.speaking); }
+      }
     }
+  } finally {
+    window.LodgeScene?.setSpeaking(null);
   }
   return donePayload;
 }
