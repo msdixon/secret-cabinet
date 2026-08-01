@@ -283,7 +283,7 @@ async function callSpeakerTurn({ client, model, system, conversationHistory, use
 // actually visible in practice.
 async function runRound({ client, model, lodgeContext, ROSTER, loadMemberFile,
   presentMemberIds, artifact, notes, roundPrompt, conversationHistory,
-  speakerCount, round, onChunk, onMetric, onSpeakerStart, precedingTurn }) {
+  speakerCount, round, onChunk, onMetric, onSpeakerStart, onSpeakerEnd, precedingTurn }) {
 
   const presentMembers = ROSTER.filter(m => presentMemberIds.includes(m.id));
   const effectiveCount = Math.min(speakerCount, presentMembers.length);
@@ -297,6 +297,12 @@ async function runRound({ client, model, lodgeContext, ROSTER, loadMemberFile,
   if (precedingTurn) {
     const seed = `${precedingTurn.speakerName}\n${precedingTurn.text}`;
     onChunk?.(`${seed}\n\n`);
+    // No memberId to offer here -- precedingTurn only ever carries a display
+    // name (see server.js's buildPrecedingTurn), same as the final settled
+    // parse today, which resolves the player's turn by name match rather
+    // than a stored id. #115: still worth a speaker-end signal so the live
+    // view renders it as a proper attributed block instead of raw text.
+    onSpeakerEnd?.(null, precedingTurn.speakerName, precedingTurn.text);
     roundSoFar = seed;
   }
 
@@ -321,8 +327,10 @@ async function runRound({ client, model, lodgeContext, ROSTER, loadMemberFile,
         callSpeakerTurn({ client, model, system, conversationHistory, userMessage, onChunk }));
       onMetric?.(makeMetric('speaker', { round, memberId, attempts, usage: result.usage, latencyMs: result.latencyMs }));
 
-      roundSoFar += (roundSoFar ? '\n\n' : '') + `${member.name}\n${stripInternalBlankLines(result.text)}`;
+      const settledText = stripInternalBlankLines(result.text);
+      roundSoFar += (roundSoFar ? '\n\n' : '') + `${member.name}\n${settledText}`;
       speakerOrder.push(memberId);
+      onSpeakerEnd?.(memberId, member.name, settledText);
       onChunk?.('\n\n');
     } catch (err) {
       onMetric?.(makeMetric('speaker', { round, memberId, attempts: err.attempts || 1, skipped: true, error: err.message }));

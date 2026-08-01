@@ -250,6 +250,13 @@
 
 .transcript-stream-live { font-family:'Crimson Pro',serif; font-size:17px; line-height:1.8; color:var(--lodge-muted); white-space:pre-wrap; padding:4px 0 12px; font-style:italic; animation:flicker 3s ease-in-out infinite; }
 
+/* #115: per-speaker placeholder shown while their turn is still generating,
+   swapped for a real addSpeech bubble the instant it settles. Reuses
+   .speaker-name and .transcript-stream-live so it reads as a rough draft of
+   the bubble it's about to become, not an unrelated UI element. */
+.transcript-typing { padding:4px 0 12px; opacity:0.85; }
+.transcript-typing .typing-text { padding:0; }
+
 /* Annotations */
 .transcript-entry .speech-text { cursor:pointer; }
 .transcript-entry .speech-text:hover { background:rgba(200,146,42,0.04); border-radius:2px; }

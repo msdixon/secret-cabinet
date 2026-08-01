@@ -551,7 +551,10 @@ function parseAndRenderTranscript(response) {
 // ── Streaming ─────────────────────────────────────────────────────────────────
 
 // Opens a streaming POST, yields chunks to onChunk, returns the done payload.
-async function streamPost(url, body, onChunk) {
+// onSpeaking/onSpeakerDone are optional (#115) -- the transcript panel's
+// per-speaker live rendering; the 3D scene's own reaction to `speaking` is
+// unconditional below, independent of whether a caller passes onSpeaking.
+async function streamPost(url, body, onChunk, onSpeaking, onSpeakerDone) {
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -581,7 +584,8 @@ async function streamPost(url, body, onChunk) {
         if (data.error) throw new Error(data.error);
         if (data.done) { donePayload = data; }
         else if (data.text) { onChunk(data.text); }
-        else if (data.speaking) { window.LodgeScene?.setSpeaking(data.speaking); }
+        else if (data.speaking) { window.LodgeScene?.setSpeaking(data.speaking); onSpeaking?.(data.speaking); }
+        else if (data.speakerDone) { onSpeakerDone?.(data.speakerDone); }
       }
     }
   } finally {
@@ -590,23 +594,53 @@ async function streamPost(url, body, onChunk) {
   return donePayload;
 }
 
-// Attaches a live-streaming div to the transcript; returns { append, finalize, abort }.
+// #115: each speaker's turn renders as a proper attributed bubble the
+// instant it settles (onSpeakerDone), not just after the whole round
+// finishes. A lightweight "typing" placeholder shows raw text growing for
+// whoever's currently generating (onSpeaking creates it, named via the
+// roster; append grows it) -- then gets swapped for the real addSpeech
+// bubble the moment that speaker's settled text arrives, since only then do
+// we know whether the block is a normal turn or a pure-action line (addSpeech
+// decides that from the complete text, which isn't knowable mid-stream).
+//
+// finalize() only falls back to the old whole-text reparse if nothing
+// rendered live this round -- a safety net, not the normal path, so a
+// missed or malformed speakerDone event can't silently drop content.
 function startStreamEntry() {
   const c = document.getElementById('transcript-content');
-  const live = document.createElement('div');
-  live.className = 'transcript-stream-live';
-  c.appendChild(live);
+  let typingEl = null;
+  let renderedLive = false;
+
+  function clearTyping() {
+    if (typingEl) { typingEl.remove(); typingEl = null; }
+  }
+
   return {
     append(chunk) {
-      live.textContent += chunk;
+      if (!typingEl) return; // nothing streaming yet worth showing raw (e.g. the name-header chunk before onSpeaking fires)
+      typingEl.querySelector('.typing-text').textContent += chunk;
       c.scrollTop = c.scrollHeight;
     },
+    onSpeaking(memberId) {
+      clearTyping();
+      const m = MEMBERS.find(mm => mm.id === memberId);
+      typingEl = document.createElement('div');
+      typingEl.className = 'transcript-typing';
+      typingEl.innerHTML = `<div class="speaker-name">${escapeHTML(m?.name || '…')}</div><div class="typing-text transcript-stream-live"></div>`;
+      c.appendChild(typingEl);
+      c.scrollTop = c.scrollHeight;
+    },
+    onSpeakerDone({ memberId, name, text }) {
+      clearTyping();
+      addSpeech(name, text, false, memberId || undefined);
+      renderedLive = true;
+    },
     finalize(fullText) {
-      live.remove();
-      parseAndRenderTranscript(fullText);
+      clearTyping();
+      if (!renderedLive) parseAndRenderTranscript(fullText);
     },
     abort() {
-      live.remove();
+      clearTyping();
     },
   };
 }
@@ -907,14 +941,9 @@ async function convene() {
     const txtBefore1 = transcriptText;
     const h1 = addRoundHeader('First Movement', 0);
     const s1 = startStreamEntry();
-    // acc (below) is only for the live-typing view as chunks arrive — the
-    // settled render uses the server's `text` from the done event instead,
-    // since the server may post-process the raw stream (e.g. stripping
-    // blank lines the per-speaker pipeline can introduce) before storing it.
-    let acc = '';
     let d1;
     try {
-      d1 = await streamPost('/api/convene', { entry, members, roundInstructions, roundCount: activeConveneRoundCount, artifact, notes, sourceSessionId: currentSourceSessionId || undefined, playerMode, playerMemberId, playerName, playerTurn: playerTurn1 || undefined }, chunk => { acc += chunk; s1.append(chunk); });
+      d1 = await streamPost('/api/convene', { entry, members, roundInstructions, roundCount: activeConveneRoundCount, artifact, notes, sourceSessionId: currentSourceSessionId || undefined, playerMode, playerMemberId, playerName, playerTurn: playerTurn1 || undefined }, chunk => s1.append(chunk), s1.onSpeaking, s1.onSpeakerDone);
       s1.finalize(d1.text);
       currentSessionId = d1.sessionId;
       buildDossier(members);
@@ -941,10 +970,9 @@ async function convene() {
       const txtBefore = transcriptText;
       const h = addRoundHeader(ROUND_LABELS[i], i);
       const s = startStreamEntry();
-      acc = '';
       const ri = i;
       try {
-        const d = await streamPost('/api/round', { sessionId: currentSessionId, playerTurn: playerTurnI || undefined }, chunk => { acc += chunk; s.append(chunk); });
+        const d = await streamPost('/api/round', { sessionId: currentSessionId, playerTurn: playerTurnI || undefined }, chunk => s.append(chunk), s.onSpeaking, s.onSpeakerDone);
         s.finalize(d.text);
         if (playerTurnI) {
           sessionPlayerTurns.push({ round: ri, speakerName: currentPlayerSpeakerName, text: playerTurnI.text });
@@ -981,10 +1009,9 @@ async function resumeRounds(fromIndex) {
       const txtBefore = transcriptText;
       const h = addRoundHeader(ROUND_LABELS[i], i);
       const s = startStreamEntry();
-      let acc = '';
       const ri = i;
       try {
-        const d = await streamPost('/api/round', { sessionId: currentSessionId, playerTurn: playerTurnI || undefined }, chunk => { acc += chunk; s.append(chunk); });
+        const d = await streamPost('/api/round', { sessionId: currentSessionId, playerTurn: playerTurnI || undefined }, chunk => s.append(chunk), s.onSpeaking, s.onSpeakerDone);
         s.finalize(d.text);
         if (playerTurnI) {
           sessionPlayerTurns.push({ round: ri, speakerName: currentPlayerSpeakerName, text: playerTurnI.text });
@@ -1105,13 +1132,9 @@ async function addRound() {
   // index is still tagged so this round's entries are consistently addressable.
   const h = addRoundHeader('One More Turn', currentRound - 1);
   const s = startStreamEntry();
-  let accumulated = '';
 
   try {
-    const d = await streamPost('/api/round', { sessionId: currentSessionId }, chunk => {
-      accumulated += chunk;
-      s.append(chunk);
-    });
+    const d = await streamPost('/api/round', { sessionId: currentSessionId }, chunk => s.append(chunk), s.onSpeaking, s.onSpeakerDone);
     s.finalize(d.text);
     setStatus('The embers hold a while longer.', false);
   } catch (err) {
@@ -1141,12 +1164,8 @@ async function interject() {
 
 async function sendInterject(text) {
   const s = startStreamEntry();
-  let accumulated = '';
   try {
-    const d = await streamPost('/api/interject', { sessionId: currentSessionId, text }, chunk => {
-      accumulated += chunk;
-      s.append(chunk);
-    });
+    const d = await streamPost('/api/interject', { sessionId: currentSessionId, text }, chunk => s.append(chunk), s.onSpeaking, s.onSpeakerDone);
     s.finalize(d.text);
     lastInterjectText = '';
     setStatus('The presence withdraws. The room continues.', false);
