@@ -2,11 +2,14 @@
 
 // Phase 0 (#26): pure atmosphere. Phase 1: a table and a fixed ring of seats
 // synced to activeMembers via updateSeats() — occupied vs. empty only.
-// Phase 2 (this file, current): occupied seats get a portrait-textured
-// billboard card per member (decided 2026-07-31 in issue #26 — flat cards
-// are the deliberate MVP, not a placeholder; a more sculptural avatar is the
-// intended later direction, full 3D character models are long-horizon, not
-// a near-term target).
+// Phase 2: occupied seats get a portrait-textured billboard card per member
+// (decided 2026-07-31 in issue #26 — flat cards are the deliberate MVP, not
+// a placeholder; a more sculptural avatar is the intended later direction,
+// full 3D character models are long-horizon, not a near-term target).
+// #28 (this file, current): setSpeaking(memberId) drives a brighter glow +
+// slight scale-up on whichever seated member is currently generating —
+// server-side signal added in pipeline.js's runRound (onSpeakerStart),
+// carried over SSE as a `speaking` field, consumed in app.js's streamPost.
 window.LodgeScene = (function () {
   const LODGE_BG = '#0e0b08';
   const LODGE_FIRE = '#d4621a';
@@ -39,15 +42,6 @@ window.LodgeScene = (function () {
     tableMat.specularColor = new BABYLON.Color3(0.1, 0.08, 0.05);
     table.material = tableMat;
 
-    const emptyMat = new BABYLON.StandardMaterial('seatEmptyMat', scene);
-    emptyMat.diffuseColor = BABYLON.Color3.FromHexString(LODGE_BORDER);
-    emptyMat.specularColor = new BABYLON.Color3(0, 0, 0);
-
-    const occupiedMat = new BABYLON.StandardMaterial('seatOccupiedMat', scene);
-    occupiedMat.diffuseColor = BABYLON.Color3.FromHexString(LODGE_AMBER);
-    occupiedMat.emissiveColor = BABYLON.Color3.FromHexString(LODGE_AMBER).scale(0.35);
-    occupiedMat.specularColor = new BABYLON.Color3(0.2, 0.15, 0.08);
-
     seatMeshes = [];
     for (let i = 0; i < SEAT_COUNT; i++) {
       const angle = (i / SEAT_COUNT) * Math.PI * 2;
@@ -60,7 +54,11 @@ window.LodgeScene = (function () {
       seat.position.x = x;
       seat.position.z = z;
       seat.position.y = 0.3;
-      seat.material = emptyMat;
+      // Own material per seat (not shared) so #28's speaking-glow can vary
+      // one seat's brightness independently of the others.
+      const seatMat = new BABYLON.StandardMaterial(`seatMat-${i}`, scene);
+      seatMat.specularColor = new BABYLON.Color3(0.2, 0.15, 0.08);
+      seat.material = seatMat;
 
       // Portrait billboard, hidden until a member occupies this seat.
       // BILLBOARDMODE_Y (not full billboarding) keeps the card upright as
@@ -79,7 +77,29 @@ window.LodgeScene = (function () {
       avatarMat.backFaceCulling = false;
       avatar.material = avatarMat;
 
-      seatMeshes.push({ mesh: seat, avatar, avatarMat, emptyMat, occupiedMat, memberId: null });
+      const seatEntry = { mesh: seat, seatMat, avatar, avatarMat, memberId: null };
+      applySeatState(seatEntry, 'empty');
+      seatMeshes.push(seatEntry);
+    }
+  }
+
+  // Three states per seat: empty (no one there), occupied (present, not
+  // currently generating), speaking (#28 -- brighter glow + a slight
+  // scale-up, "leaning in"). Applied directly to each seat's own material
+  // rather than swapping between shared material instances.
+  function applySeatState(seat, state) {
+    if (state === 'empty') {
+      seat.seatMat.diffuseColor = BABYLON.Color3.FromHexString(LODGE_BORDER);
+      seat.seatMat.emissiveColor = new BABYLON.Color3(0, 0, 0);
+      seat.avatar.scaling.set(1, 1, 1);
+    } else if (state === 'occupied') {
+      seat.seatMat.diffuseColor = BABYLON.Color3.FromHexString(LODGE_AMBER);
+      seat.seatMat.emissiveColor = BABYLON.Color3.FromHexString(LODGE_AMBER).scale(0.35);
+      seat.avatar.scaling.set(1, 1, 1);
+    } else if (state === 'speaking') {
+      seat.seatMat.diffuseColor = BABYLON.Color3.FromHexString(LODGE_AMBER);
+      seat.seatMat.emissiveColor = BABYLON.Color3.FromHexString(LODGE_GOLD).scale(0.9);
+      seat.avatar.scaling.set(1.08, 1.08, 1.08);
     }
   }
 
@@ -102,22 +122,40 @@ window.LodgeScene = (function () {
     return portraitTextures[memberId];
   }
 
+  let currentSpeakingId = null;
+
   // Assigns the given member ids to seats in order, up to SEAT_COUNT.
   // Extra members beyond the seat count are silently not seated at this
   // phase — same practical ceiling the member picker already warns about.
   function updateSeats(memberIds) {
     if (!sceneRef || !seatMeshes.length) return;
     const ids = memberIds || [];
+    // Occupancy changed -- whatever was mid-generation before this render
+    // is no longer meaningful (round ended, session switched, etc).
+    currentSpeakingId = null;
     seatMeshes.forEach((seat, i) => {
       const id = ids[i] || null;
       seat.memberId = id;
-      seat.mesh.material = id ? seat.occupiedMat : seat.emptyMat;
+      applySeatState(seat, id ? 'occupied' : 'empty');
       if (id) {
         seat.avatarMat.emissiveTexture = getPortraitTexture(sceneRef, id);
         seat.avatar.isVisible = true;
       } else {
         seat.avatar.isVisible = false;
       }
+    });
+  }
+
+  // #28: brightens whichever seated member is currently generating a turn,
+  // returns everyone else (including the previous speaker) to neutral.
+  // memberId null/absent just clears back to neutral across the board --
+  // used both when a round finishes and when a stream errors mid-generation.
+  function setSpeaking(memberId) {
+    if (!sceneRef || !seatMeshes.length) return;
+    currentSpeakingId = memberId || null;
+    seatMeshes.forEach(seat => {
+      if (!seat.memberId) return; // empty seats aren't affected either way
+      applySeatState(seat, seat.memberId === currentSpeakingId ? 'speaking' : 'occupied');
     });
   }
 
@@ -187,5 +225,5 @@ window.LodgeScene = (function () {
     }
   }
 
-  return { init, updateSeats };
+  return { init, updateSeats, setSpeaking };
 })();

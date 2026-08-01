@@ -283,7 +283,7 @@ async function callSpeakerTurn({ client, model, system, conversationHistory, use
 // actually visible in practice.
 async function runRound({ client, model, lodgeContext, ROSTER, loadMemberFile,
   presentMemberIds, artifact, notes, roundPrompt, conversationHistory,
-  speakerCount, round, onChunk, onMetric, precedingTurn }) {
+  speakerCount, round, onChunk, onMetric, onSpeakerStart, precedingTurn }) {
 
   const presentMembers = ROSTER.filter(m => presentMemberIds.includes(m.id));
   const effectiveCount = Math.min(speakerCount, presentMembers.length);
@@ -315,6 +315,7 @@ async function runRound({ client, model, lodgeContext, ROSTER, loadMemberFile,
     const userMessage = buildSpeakerUserMessage({ roundPrompt, roundSoFarText: roundSoFar, member });
 
     onChunk?.(`${member.name}\n`);
+    onSpeakerStart?.(memberId);
     try {
       const { result, attempts } = await withOneRetry(() =>
         callSpeakerTurn({ client, model, system, conversationHistory, userMessage, onChunk }));
