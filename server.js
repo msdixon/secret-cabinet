@@ -366,6 +366,7 @@ app.post('/api/convene', async (req, res) => {
       speakerCount: speakerCountForRound(0), round: 0, precedingTurn,
       onChunk: chunk => res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`),
       onSpeakerStart: memberId => res.write(`data: ${JSON.stringify({ speaking: memberId })}\n\n`),
+      onSpeakerEnd: (memberId, name, text) => res.write(`data: ${JSON.stringify({ speakerDone: { memberId, name, text } })}\n\n`),
       onMetric: m => {
         generationMetrics.push(m);
         if (m.skipped) console.warn('[degraded]', m.phase, m.memberId || '', '—', m.error);
@@ -429,6 +430,7 @@ app.post('/api/round', async (req, res) => {
       speakerCount: speakerCountForRound(roundIndex), round: roundIndex, precedingTurn,
       onChunk: chunk => res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`),
       onSpeakerStart: memberId => res.write(`data: ${JSON.stringify({ speaking: memberId })}\n\n`),
+      onSpeakerEnd: (memberId, name, text) => res.write(`data: ${JSON.stringify({ speakerDone: { memberId, name, text } })}\n\n`),
       onMetric: m => {
         session.generationMetrics.push(m);
         if (m.skipped) console.warn('[degraded]', m.phase, m.memberId || '', '—', m.error);
@@ -474,6 +476,7 @@ app.post('/api/interject', async (req, res) => {
       speakerCount: Math.min(INTERJECT_SPEAKER_COUNT, session.members.length), round: session.rounds.length,
       onChunk: chunk => res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`),
       onSpeakerStart: memberId => res.write(`data: ${JSON.stringify({ speaking: memberId })}\n\n`),
+      onSpeakerEnd: (memberId, name, text) => res.write(`data: ${JSON.stringify({ speakerDone: { memberId, name, text } })}\n\n`),
       onMetric: m => {
         session.generationMetrics.push(m);
         if (m.skipped) console.warn('[degraded]', m.phase, m.memberId || '', '—', m.error);
