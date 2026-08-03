@@ -28,11 +28,13 @@ Tier 3 (the current architectural frontier) splits into three mostly-independent
 |---|---|---|
 | **Interactivity / agency** | 2 of 3 shipped | #31 player-as-member (done), #33 branching sessions (done), #32 investigation mode (parked — see below) |
 | **Atmosphere / presence — the north-star thread** | #116 + #117 both decided | #26 3D salon (unblocked, engine=Babylon.js), #27 portraits (unblocked by #116), #28 avatar presence, #29 voice synth, #17 ambient audio |
-| **Research-grounding** | actively unblocking | #36 citation verification (done), #37 scholarly export (unblocked by #36), #30 archival image integration (unblocked, easier than scoped) |
+| **Research-grounding** | actively unblocking | #36 citation verification (done, v1), #153 retrieval-grounded verification v2 (next priority, depends on #35a), #37 scholarly export (unblocked by #36; will surface #153's provenance data), #30 archival image integration (unblocked, easier than scoped) |
 
 [#24 multi-user](https://github.com/msdixon/secret-cabinet/issues/24) is explicitly **orthogonal** to Tier 3 — a large infra decision with its own cost/benefit case, not to be pulled in opportunistically just because it's adjacent. (It would matter a great deal *if* the platform-pitch path in purpose #2 above is ever pursued seriously — a shared room is part of what makes a playable archive a platform rather than a solo tool — but that's a future-scope note, not a reason to start it now.)
 
 Full sequencing rationale lives in [issue #118](https://github.com/msdixon/secret-cabinet/issues/118) — treat it as the detail view under this doc's summary, not a competing source of truth.
+
+**Idea provenance (2026-08-03):** the retrieval-grounded verification work (#153) was directly inspired by reading [MOiRA](https://github.com/tajhlande/moira), an open-source research agent that verifies claims against retrieved evidence with visible provenance rather than model self-recall. Noted here rather than left implicit, for a future bibliography of the project's own making — see #153 and the revised #35 for what actually transfers and what doesn't.
 
 ## What needs to happen to get there
 
@@ -43,7 +45,8 @@ Full sequencing rationale lives in [issue #118](https://github.com/msdixon/secre
 
 Current Todo-status backlog (no ranking implied — pick next tranche with Rachel; note none of these advance the north star directly):
 
-- [#35](https://github.com/msdixon/secret-cabinet/issues/35) archival ingestion pipeline
+- [#35](https://github.com/msdixon/secret-cabinet/issues/35) archival ingestion pipeline (split 2026-08-03 into 35a hand-curated library growth / 35b bulk ingestion tooling)
+- [#153](https://github.com/msdixon/secret-cabinet/issues/153) retrieval-grounded citation verification (v2 of #36)
 - [#37](https://github.com/msdixon/secret-cabinet/issues/37) scholarly export
 - [#69](https://github.com/msdixon/secret-cabinet/issues/69) Ulysses subfolder targeting
 - [#74](https://github.com/msdixon/secret-cabinet/issues/74) consolidate post-session actions
