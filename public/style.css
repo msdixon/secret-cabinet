@@ -145,6 +145,10 @@
 .round-pip.active { border-color:var(--lodge-amber); background:rgba(200,146,42,0.3); }
 .round-label { font-family:'IM Fell English',serif; font-size:13px; color:var(--lodge-muted); letter-spacing:2px; text-transform:uppercase; }
 .transcript-panel { min-height:200px; }
+.transcript-toolbar { display:flex; justify-content:flex-end; margin-bottom:8px; }
+.witness-live-toggle-btn { background:transparent; border:1px solid var(--lodge-border); color:var(--lodge-ash); font-family:'IM Fell English',serif; font-size:11px; padding:4px 10px; border-radius:2px; cursor:pointer; letter-spacing:1px; transition:all 0.15s; }
+.witness-live-toggle-btn:hover:not(:disabled) { border-color:var(--lodge-ash); color:var(--lodge-muted); background:rgba(154,138,116,0.08); }
+.witness-live-toggle-btn:disabled { opacity:0.4; cursor:default; }
 .transcript-empty { text-align:center; padding:40px 20px; color:var(--lodge-muted); font-family:'IM Fell English',serif; font-style:italic; font-size:15px; line-height:1.8; }
 .transcript-round-header { display:flex; align-items:center; gap:12px; margin:20px 0 14px; }
 .transcript-round-header:first-child { margin-top:0; }
@@ -405,6 +409,18 @@
 .witness-round-header { display:flex; align-items:center; gap:12px; opacity:0; animation:witnessfade 0.6s ease forwards; }
 .witness-rule { flex:1; height:1px; background:var(--lodge-border); }
 .witness-round-label { font-family:'IM Fell English',serif; font-size:11px; letter-spacing:3px; text-transform:uppercase; color:var(--lodge-ash); white-space:nowrap; }
+/* #87: live rounds append the same .transcript-round-header/.round-rule markup
+   the Reading view uses (rather than a separate witness-only header), so a
+   round rendered before Witness was toggled on still looks native to this
+   stage once toggleWitnessLive() moves it over. */
+.witness-stage .transcript-round-header { opacity:0; animation:witnessfade 0.6s ease forwards; }
+.witness-stage .round-rule { background:var(--lodge-border); }
+.witness-stage .round-rule-label { font-family:'IM Fell English',serif; font-size:11px; letter-spacing:3px; text-transform:uppercase; color:var(--lodge-ash); white-space:nowrap; }
+.witness-stage .transcript-typing .speaker-name { opacity:0.9; }
+.witness-stage .transcript-typing .typing-text { font-family:'Crimson Pro',serif; font-size:17px; line-height:1.8; color:var(--lodge-cream); }
+.witness-stage .transcript-typing .typing-text::after { content:'▍'; opacity:0.6; animation:witnessCursorBlink 1s step-end infinite; }
+@keyframes witnessCursorBlink { 50% { opacity:0; } }
+.witness-stage:empty::before { content:'The room is quiet. Convene to begin.'; display:block; text-align:center; margin-top:60px; font-family:'IM Fell English',serif; font-style:italic; font-size:14px; color:var(--lodge-muted); }
 .witness-speaker { font-family:'UnifrakturMaguntia',serif; font-size:22px; color:var(--lodge-amber); letter-spacing:1px; display:flex; align-items:baseline; gap:8px; opacity:0; animation:witnessslide 0.5s ease forwards; }
 .witness-speech { font-family:'Crimson Pro',serif; font-size:17px; line-height:1.8; color:var(--lodge-cream); max-width:680px; opacity:0; animation:witnessslide 0.5s ease 0.15s forwards; }
 .witness-annotation { font-family:'Crimson Pro',serif; font-size:14px; font-style:italic; color:var(--lodge-ash); margin-top:4px; padding-left:16px; border-left:2px solid var(--lodge-border); opacity:0; animation:witnessslide 0.5s ease 0.3s forwards; }

@@ -224,6 +224,9 @@
     </div>
 
     <div class="transcript-panel" id="transcript-panel">
+      <div class="transcript-toolbar">
+        <button class="witness-live-toggle-btn" id="witness-live-toggle" onclick="toggleWitnessLive()" title="Watch the room live, in Witness's theatrical presentation">◎ Witness</button>
+      </div>
       <div class="transcript-empty" id="transcript-empty">
         The chairs are arranged.<br>
         The fire throws its light against the panelling.<br>
@@ -232,6 +235,21 @@
         When the document is read aloud, the meeting begins.
       </div>
       <div id="transcript-content"></div>
+    </div>
+
+    <!-- Witness mode panel — inline alternate view. Serves two modes: replay
+         (a past session played back at reading-time pacing, entered from
+         "◎ Watch this meeting" or the Past Meetings drawer) and live (#87,
+         the active convene's rounds rendered here as they stream, toggled
+         via #witness-live-toggle above). -->
+    <div class="witness-panel" id="witness-panel" style="display:none;">
+      <div class="witness-controls">
+        <span class="witness-label">◎ Witness</span>
+        <span class="witness-hint" id="witness-hint">Space or click to advance</span>
+        <button class="witness-exit-btn" onclick="witnessExitClicked()">✕ Exit</button>
+      </div>
+      <div class="witness-stage" id="witness-stage" onclick="witnessAdvance()"></div>
+      <div class="witness-progress" id="witness-progress"></div>
     </div>
 
     <div class="interject-panel" id="interject-panel">
@@ -291,17 +309,6 @@
       <div style="margin-top:8px;">
         <span class="source-tag" id="export-status"></span>
       </div>
-    </div>
-
-    <!-- Witness mode panel — inline alternate view -->
-    <div class="witness-panel" id="witness-panel" style="display:none;">
-      <div class="witness-controls">
-        <span class="witness-label">◎ Witness</span>
-        <span class="witness-hint" id="witness-hint">Space or click to advance</span>
-        <button class="witness-exit-btn" onclick="exitWitness()">✕ Exit</button>
-      </div>
-      <div class="witness-stage" id="witness-stage" onclick="witnessAdvance()"></div>
-      <div class="witness-progress" id="witness-progress"></div>
     </div>
 
     <div class="scene-panel" id="scene-panel">

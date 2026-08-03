@@ -250,7 +250,7 @@ function updateArcFieldAvailability() {
 let currentRenderRound = null;
 function addRoundHeader(label, roundIndex = null) {
   currentRenderRound = roundIndex;
-  const c = document.getElementById('transcript-content');
+  const c = getLiveStageEl();
   const h = document.createElement('div');
   h.className = 'transcript-round-header';
   h.innerHTML = `<div class="round-rule"></div><span class="round-rule-label">${label}</span><div class="round-rule"></div>`;
@@ -354,8 +354,8 @@ function getSpeakerSide(speakerId) {
   return currentSpeakerSide;
 }
 
-function addSpeech(speaker, text, isObserver, memberId, existingAnnotation) {
-  const c = document.getElementById('transcript-content');
+function addSpeech(speaker, text, isObserver, memberId, existingAnnotation, targetEl) {
+  const c = targetEl || document.getElementById('transcript-content');
   // If every non-empty line is wrapped in *...*, render as centered action line(s) with
   // no bubble and no speaker-side update. Handles both single and multi-line action blocks.
   const nonEmptyLines = text.trim().split('\n').map(l => l.trim()).filter(Boolean);
@@ -498,7 +498,8 @@ function isKnownSpeakerHeader(t, members) {
   return index.has(norm) && index.get(norm) != null;
 }
 
-function parseAndRenderTranscript(response) {
+function parseAndRenderTranscript(response, targetEl) {
+  const c0 = targetEl || document.getElementById('transcript-content');
   const lines = response.split('\n');
   let speaker = null, textLines = [];
 
@@ -506,7 +507,7 @@ function parseAndRenderTranscript(response) {
     if (speaker && textLines.length) {
       const text = textLines.join('\n').trim();
       const m = resolveMember(speaker, MEMBERS);
-      addSpeech(speaker, text, false, m?.id);
+      addSpeech(speaker, text, false, m?.id, null, c0);
       // If the block was pure action, preserve speaker so the next speech
       // (without a repeated header) still gets attributed correctly.
       const nonEmpty = text.split('\n').map(l => l.trim()).filter(Boolean);
@@ -524,7 +525,7 @@ function parseAndRenderTranscript(response) {
     // Unattributed action line between speakers — render directly, no speaker needed
     const isActionLine = /^\*[^*\n]+\*$/.test(t);
     if (isActionLine && !speaker) {
-      const c = document.getElementById('transcript-content');
+      const c = c0;
       const d = document.createElement('div');
       d.className = 'action-line';
       d.textContent = t.slice(1, -1);
@@ -606,8 +607,14 @@ async function streamPost(url, body, onChunk, onSpeaking, onSpeakerDone) {
 // finalize() only falls back to the old whole-text reparse if nothing
 // rendered live this round -- a safety net, not the normal path, so a
 // missed or malformed speakerDone event can't silently drop content.
+// The stage a round streams into is decided once, at the start of that round
+// (getLiveStageEl(), #87) -- not re-checked chunk-by-chunk. Toggling Witness
+// mid-round would otherwise split one speaker's turn across two containers,
+// so the toggle button is disabled while any round is in flight (see
+// convene/resumeRounds/addRound/sendInterject) and this only ever changes
+// stage between rounds.
 function startStreamEntry() {
-  const c = document.getElementById('transcript-content');
+  const c = getLiveStageEl();
   let typingEl = null;
   let renderedLive = false;
 
@@ -632,12 +639,12 @@ function startStreamEntry() {
     },
     onSpeakerDone({ memberId, name, text }) {
       clearTyping();
-      addSpeech(name, text, false, memberId || undefined);
+      addSpeech(name, text, false, memberId || undefined, null, c);
       renderedLive = true;
     },
     finalize(fullText) {
       clearTyping();
-      if (!renderedLive) parseAndRenderTranscript(fullText);
+      if (!renderedLive) parseAndRenderTranscript(fullText, c);
     },
     abort() {
       clearTyping();
@@ -887,11 +894,13 @@ async function convene() {
 
   document.getElementById('transcript-empty').style.display = 'none';
   document.getElementById('transcript-content').innerHTML = '';
+  document.getElementById('witness-stage').innerHTML = '';
   _entryCounter = 0;
 
   lastSpeakerId = null; currentSpeakerSide = 'right';
   document.getElementById('convene-btn').disabled = true;
   document.querySelectorAll('.round-count-btn').forEach(b => b.disabled = true);
+  document.getElementById('witness-live-toggle').disabled = true;
   document.getElementById('additional-round-btn').className = 'lodge-btn';
   document.getElementById('export-panel').className = 'export-panel';
   document.getElementById('interject-panel').className = 'interject-panel';
@@ -991,6 +1000,7 @@ async function convene() {
   } finally {
     document.getElementById('convene-btn').disabled = false;
     document.querySelectorAll('.round-count-btn').forEach(b => b.disabled = false);
+    document.getElementById('witness-live-toggle').disabled = false;
   }
 }
 
@@ -999,6 +1009,7 @@ async function resumeRounds(fromIndex) {
   if (!currentSessionId) return;
   document.getElementById('convene-btn').disabled = true;
   document.querySelectorAll('.round-count-btn').forEach(b => b.disabled = true);
+  document.getElementById('witness-live-toggle').disabled = true;
   try {
     for (let i = fromIndex; i < activeConveneRoundCount; i++) {
       currentRound = i + 1;
@@ -1027,6 +1038,7 @@ async function resumeRounds(fromIndex) {
   } finally {
     document.getElementById('convene-btn').disabled = false;
     document.querySelectorAll('.round-count-btn').forEach(b => b.disabled = false);
+    document.getElementById('witness-live-toggle').disabled = false;
   }
 }
 
@@ -1124,6 +1136,7 @@ async function addRound() {
   if (!currentSessionId) return;
   const btn = document.getElementById('additional-round-btn');
   btn.disabled = true;
+  document.getElementById('witness-live-toggle').disabled = true;
   currentRound++;
   updatePips();
   setStatus('One More Turn... the room continues.', true);
@@ -1143,6 +1156,7 @@ async function addRound() {
     setError('The turn could not complete.', addRound);
   } finally {
     btn.disabled = false;
+    document.getElementById('witness-live-toggle').disabled = false;
   }
 }
 
@@ -1157,13 +1171,14 @@ async function interject() {
   lastInterjectText = text;
 
   addRoundHeader('A Presence Passes Through');
-  addSpeech('— a voice from elsewhere —', text, true);
+  addSpeech('— a voice from elsewhere —', text, true, undefined, undefined, getLiveStageEl());
   setStatus('The room notices...', true);
   await sendInterject(text);
 }
 
 async function sendInterject(text) {
   const s = startStreamEntry();
+  document.getElementById('witness-live-toggle').disabled = true;
   try {
     const d = await streamPost('/api/interject', { sessionId: currentSessionId, text }, chunk => s.append(chunk), s.onSpeaking, s.onSpeakerDone);
     s.finalize(d.text);
@@ -1172,6 +1187,8 @@ async function sendInterject(text) {
   } catch (err) {
     s.abort();
     setError('The interjection went unheard.', () => sendInterject(lastInterjectText));
+  } finally {
+    document.getElementById('witness-live-toggle').disabled = false;
   }
 }
 
@@ -1345,6 +1362,65 @@ function reconveneOnCurrentSession() {
 }
 
 // ── Witness mode ──────────────────────────────────────────────────────────────
+
+// #87: live rounds render into #witness-stage using the exact same markup/CSS
+// as replay (renderWitnessBlock below) instead of a parallel implementation --
+// addRoundHeader/addSpeech/startStreamEntry all target whichever container
+// getLiveStageEl() returns. This is independent of witnessActive/witnessBlocks
+// below, which remain the replay-only state machine (past-session playback,
+// auto-advance pacing). The two never run at once: restoreSession() and
+// startWitness() both force witnessLiveActive off, since restoring or
+// replaying a stored session is never "the room speaking right now."
+let witnessLiveActive = false;
+
+function getLiveStageEl() {
+  return witnessLiveActive
+    ? document.getElementById('witness-stage')
+    : document.getElementById('transcript-content');
+}
+
+// Entry point: the ◎ Witness toggle beside the live transcript. Swaps which
+// panel is visible, *moving* (not cloning) each rendered entry across --
+// annotation state and click handlers are read via querySelectorAll on
+// .transcript-entry globally (saveAnnotation, buildAnnotatedTranscript), so
+// a clone would leave two nodes sharing one entryId and double up on save.
+// Moving keeps exactly one DOM copy of each entry, just reparented, so
+// toggling back and forth any number of times never loses or duplicates
+// anything either side rendered. Disabled while a round is streaming (see
+// convene() etc.) so a round never gets split mid-turn across containers.
+function toggleWitnessLive() {
+  witnessLiveActive = !witnessLiveActive;
+  const stage = document.getElementById('witness-stage');
+  const reading = document.getElementById('transcript-content');
+  const panel = document.getElementById('witness-panel');
+  const readingPanel = document.getElementById('transcript-panel');
+  const btn = document.getElementById('witness-live-toggle');
+  const from = witnessLiveActive ? reading : stage;
+  const to = witnessLiveActive ? stage : reading;
+  while (from.firstChild) to.appendChild(from.firstChild);
+
+  if (witnessLiveActive) {
+    readingPanel.style.display = 'none';
+    panel.style.display = 'block';
+    document.getElementById('witness-hint').textContent = '◉ Live — watching the room';
+    document.getElementById('witness-progress').style.display = 'none';
+    stage.scrollTop = stage.scrollHeight;
+    if (btn) { btn.textContent = '✕ Reading view'; btn.title = 'Return to the annotated reading view'; }
+  } else {
+    panel.style.display = 'none';
+    readingPanel.style.display = '';
+    document.getElementById('witness-progress').style.display = '';
+    reading.scrollTop = reading.scrollHeight;
+    if (btn) { btn.textContent = '◎ Witness'; btn.title = "Watch the room live, in Witness's theatrical presentation"; }
+  }
+}
+
+// The shared panel's Exit button serves both modes -- dispatch to whichever
+// state machine is actually active.
+function witnessExitClicked() {
+  if (witnessLiveActive) toggleWitnessLive();
+  else exitWitness();
+}
 
 let witnessBlocks = [];      // parsed sequence of blocks to play
 let witnessIndex = 0;        // current block position
@@ -1538,6 +1614,11 @@ function startWitness(sessionData) {
     return;
   }
 
+  // Replay always wins over live mode -- watching a stored session is never
+  // "the room speaking right now."
+  witnessLiveActive = false;
+  document.getElementById('transcript-panel').style.display = '';
+
   witnessBlocks = parseWitnessBlocks(session);
   witnessIndex = 0;
   witnessActive = true;
@@ -1547,6 +1628,7 @@ function startWitness(sessionData) {
 
   lastSpeakerId = null; currentSpeakerSide = 'right';
   document.getElementById('witness-stage').innerHTML = '';
+  document.getElementById('witness-progress').style.display = '';
 
   // Show witness panel
   document.getElementById('witness-panel').style.display = 'block';
@@ -1977,6 +2059,19 @@ async function restoreSession(id) {
     const res = await fetch(`/api/sessions/${id}`);
     if (!res.ok) throw new Error('Not found');
     const session = await res.json();
+
+    // A restored session is static, read-only history -- never render it into
+    // the live Witness stage even if that toggle happened to be left on. Also
+    // clear the stage itself: _entryCounter resets below, so a stale node left
+    // over from a *previous* session could collide on entryId with a freshly
+    // restored one, and the global .transcript-entry queries annotation/export
+    // logic runs (saveAnnotation, buildAnnotatedTranscript) would pick it up.
+    witnessLiveActive = false;
+    document.getElementById('witness-panel').style.display = 'none';
+    document.getElementById('witness-stage').innerHTML = '';
+    document.getElementById('transcript-panel').style.display = '';
+    const wbtn = document.getElementById('witness-live-toggle');
+    if (wbtn) { wbtn.textContent = '◎ Witness'; wbtn.title = "Watch the room live, in Witness's theatrical presentation"; }
 
     // Reset UI state
     document.getElementById('transcript-empty').style.display = 'none';
