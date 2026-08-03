@@ -16,6 +16,12 @@ This project accumulates a git worktree per task under `.claude/worktrees/`. Lef
   - Merged + uncommitted changes → **do not delete.** Surface the diff to the user — it may be real work that never got committed (this happened once already; see `STATUS.md`, 2026-07-23). Only remove after the user confirms it's rescued, discarded, or not needed.
   - Not merged → leave it; it's active work, not clutter.
 
+## Dependencies in new worktrees
+
+Each worktree gets its own `node_modules` — it is **not** shared with the main checkout, and a missing dependency fails silently rather than erroring (e.g. `babylonjs` missing just makes the 3D room never render, no console error; hit this twice — see `STATUS.md` 2026-07-30 and PR #152).
+
+A tracked `post-checkout` hook at `.githooks/post-checkout` now runs `npm install` automatically whenever a checkout leaves `node_modules` missing, which covers `git worktree add`. It only takes effect once `core.hooksPath` is pointed at it — already set for this clone, but **a fresh clone needs it set once**: `git config core.hooksPath .githooks`. If a worktree ever turns up with 3D/scene features silently not working, check `node_modules/babylonjs` exists and that `core.hooksPath` is actually set before assuming it's a code bug.
+
 ## Before ending a session that touched issues or merged PRs
 
 Confirm every issue referenced this session is in the right state — closed if genuinely done, left open with a progress comment if partially done. Don't leave "decide X" tickets open once the decision's recorded (this happened to #116/#117: decided and commented on 2026-07-28, but not closed until a later housekeeping pass caught it).

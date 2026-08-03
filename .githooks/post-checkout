@@ -1,0 +1,11 @@
+#!/bin/sh
+# Fires on any checkout, including `git worktree add` (which performs an
+# implicit checkout into the new worktree). Worktrees don't share
+# node_modules with the main checkout -- a missing dependency fails
+# silently here (babylonjs missing => the 3D room just never renders, no
+# console error -- see STATUS.md 2026-07-30 and PR #152), so install
+# whenever node_modules isn't already present.
+if [ -f package.json ] && [ ! -d node_modules ]; then
+  echo "post-checkout: node_modules missing in $(pwd), running npm install..."
+  npm install
+fi
