@@ -822,13 +822,16 @@ The "quote" field must be a verbatim excerpt (~10-25 words) copied exactly from 
       tool_choice: { type: 'tool', name: 'report_citations' },
     });
 
+    const archiveImages = loadArchiveImageIndex();
     const block = response.content.find(b => b.type === 'tool_use');
     const citations = (block?.input?.citations || []).map(c => {
       const match = c.libraryMatch ? libraryLookup[c.libraryMatch] : null;
+      const image = c.libraryMatch ? archiveImages[c.libraryMatch] : null;
       return {
         ...c,
         libraryCitation: match?.citation || null,
         librarySourceUrl: match?.source_url || null,
+        libraryImage: image?.image || null,
       };
     });
 
@@ -1267,10 +1270,18 @@ app.get('/api/graph', (req, res) => {
 
 const LIBRARY_DIR = path.join(PROMPTS_DIR, 'library');
 const LIBRARY_FILE = path.join(LIBRARY_DIR, 'library.json');
+const ARCHIVE_IMAGE_FILE = path.join(__dirname, 'public', 'archive', 'metadata.json');
 
 function loadLibraryIndex() {
   if (!fs.existsSync(LIBRARY_FILE)) return [];
   return JSON.parse(fs.readFileSync(LIBRARY_FILE, 'utf8'));
+}
+
+// Archival images (#30) keyed by library entry id — see public/archive/metadata.json.
+// Kept separate from library.json/frontmatter since not every entry has an image yet.
+function loadArchiveImageIndex() {
+  if (!fs.existsSync(ARCHIVE_IMAGE_FILE)) return {};
+  return JSON.parse(fs.readFileSync(ARCHIVE_IMAGE_FILE, 'utf8')).entries || {};
 }
 
 // GET /api/library — list all entries (index only, no full text)
@@ -1292,6 +1303,8 @@ app.get('/api/library', (req, res) => {
         )
       );
     }
+    const images = loadArchiveImageIndex();
+    entries = entries.map(e => ({ ...e, image: images[e.id]?.image || null }));
     res.json(entries);
   } catch (err) {
     res.status(500).json({ error: 'Failed to load library' });
@@ -1309,7 +1322,8 @@ app.get('/api/library/:id', (req, res) => {
     const raw = fs.readFileSync(filePath, 'utf8');
     // Strip YAML frontmatter, return plain text
     const text = raw.replace(/^---[\s\S]*?---\n/, '').trim();
-    res.json({ ...entry, text });
+    const image = loadArchiveImageIndex()[entry.id]?.image || null;
+    res.json({ ...entry, text, image });
   } catch (err) {
     res.status(500).json({ error: 'Failed to load entry' });
   }

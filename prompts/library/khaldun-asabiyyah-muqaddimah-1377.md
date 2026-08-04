@@ -6,7 +6,7 @@ date: "1377"
 members: [khaldun, arabi]
 themes: [history, civilisation, decline, solidarity, cycles]
 citation: "Ibn Khaldun, The Muqaddimah: An Introduction to History, trans. Franz Rosenthal, abridged and ed. N.J. Dawood (Princeton: Princeton University Press, 1967), Part Two, Chapters 1–2, pp. 97–101. Originally composed 1377."
-source_url: "https://archive.org/details/muqaddimahintrod0000ibna"
+source_url: "https://archive.org/details/muqaddimahintrod0000ibnk"
 ---
 
 Royal authority and dynasties are attained through groups and asabiyyah. Group feeling produces the ability to defend oneself, to press one's claims, and, if God wills it, to gain supreme control. Anyone who loses his group feeling is too weak to accomplish any of these things.
