@@ -43,6 +43,10 @@ Full sequencing rationale lives in [issue #118](https://github.com/msdixon/secre
 - [#116](https://github.com/msdixon/secret-cabinet/issues/116) — **decided: phased AI-generation.** Batch 1 generates portraits for the full current roster against a checked-in baseline ([public/portraits/STYLE_GUIDE.md](public/portraits/STYLE_GUIDE.md)), reconvene to human-validate before generating anything further (including portraits for members added after batch 1). AI-generated placeholders for this stage, not commissioned/licensed art — disclosed in [MANIFEST.md](MANIFEST.md). Post-MVP path to move beyond AI generation is intentionally still open, tracked as a follow-up to revisit rather than decided now. Unblocks #27; #26/#28 (3D texture use) still wait on #117 for format requirements.
 - [#117](https://github.com/msdixon/secret-cabinet/issues/117) — **decided: Babylon.js.** Taken deliberately over Three.js for its built-in physics/WebXR/character-animation tooling — a bet that pays off as the Atmosphere/presence thread continues into #28 and beyond, accepted against ~8-9x Three.js's bundle size since this is a local/personal tool, not a public product. A real architectural step-change for a codebase that's otherwise stayed framework-free; taken on purpose because the north star is being treated as a real target. Unblocked #26, which shipped through three phases (2026-07-28 → 2026-07-31); #28 avatar presence followed 2026-08-01.
 
+**Separately, codebase health:**
+
+- [#142](https://github.com/msdixon/secret-cabinet/issues/142) — **decided: extend the existing `scene.js` script-tag/IIFE module convention to `app.js`.** No bundler needed — that pattern already runs in production (`window.LodgeScene`, loaded via a plain `<script>` tag before `app.js`). Seams mapped 2026-08-05 (see [issue comment](https://github.com/msdixon/secret-cabinet/issues/142#issuecomment-5197135471)): extract `witness.js` first (self-contained, lowest risk), then `export.js`, then `sessions.js`; core session/member state stays in `app.js` as sole owner, with extracted modules receiving state via function arguments rather than reaching into shared globals directly. Sequenced ahead of #137 (frontend tests) — Witness is the first target for both.
+
 Current Todo-status backlog (no ranking implied — pick next tranche with Rachel; note none of these advance the north star directly):
 
 - [#35](https://github.com/msdixon/secret-cabinet/issues/35) archival ingestion pipeline (split 2026-08-03 into 35a hand-curated library growth / 35b bulk ingestion tooling)
@@ -55,10 +59,9 @@ The full workflow/priority tracker — including Backlog-status items, bugs, and
 
 ## Other open decisions
 
-(#116 and #117 are covered above.)
+(#116, #117, and #142 are covered above.)
 
 - **[#32](https://github.com/msdixon/secret-cabinet/issues/32) — investigation mode scoping.** Not blocked technically, blocked on a design conversation: who authors the hidden "truth state," what granularity clue-evaluation runs at, and how it reads a player's own turns (per #31's mechanism). **Deliberately parked (2026-07-27):** large scope, one complex mechanic, not required to unlock the playable-archive concept — stays on the back burner until well after #116/#117 land.
-- **[#142](https://github.com/msdixon/secret-cabinet/issues/142) — module boundary convention for `app.js`.** Filed 2026-07-28: `app.js` has grown past 2200 lines as a global-state monolith. Not yet decided whether/how to split it — flagged here because it reads like the same kind of blocking-decision pattern #116/#117 were before this doc named them explicitly.
 
 ## How this doc relates to everything else
 
@@ -71,4 +74,4 @@ The full workflow/priority tracker — including Backlog-status items, bugs, and
 
 ---
 
-*Last updated: 2026-08-05 (label system overhaul: `tier-0`–`tier-3` retired in favor of `complexity: small/moderate/large/unscoped` plus a new Icebox Status swimlane — see "How this doc relates to everything else" and STATUS.md).*
+*Last updated: 2026-08-05 (#142 module-boundary convention decided — extend the `scene.js` pattern, Witness extracted first; label system overhaul earlier the same day: `tier-0`–`tier-3` retired in favor of `complexity: small/moderate/large/unscoped` plus a new Icebox Status swimlane — see "How this doc relates to everything else" and STATUS.md).*
