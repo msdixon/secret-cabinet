@@ -1756,6 +1756,7 @@ async function exportObsidian() {
 async function exportUlysses() {
   const statusEl = document.getElementById('export-status');
   const group = document.getElementById('ulysses-group')?.value.trim() || '';
+  const groupId = document.getElementById('ulysses-group-id')?.value.trim() || '';
   statusEl.textContent = 'Opening Ulysses…';
   try {
     const res = await fetch('/api/ulysses/export', {
@@ -1766,11 +1767,12 @@ async function exportUlysses() {
         sessionDate,
         title: currentEntry?.slice(0, 60) || sessionDate,
         group,
+        groupId,
       }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error);
-    statusEl.textContent = group ? `Sent to Ulysses — ${group}.` : 'Sent to Ulysses.';
+    statusEl.textContent = groupId ? `Sent to Ulysses — ${group || 'identifier'} (by ID).` : group ? `Sent to Ulysses — ${group}.` : 'Sent to Ulysses.';
   } catch (err) {
     statusEl.textContent = err.message || 'Ulysses export failed.';
   }
@@ -2497,6 +2499,8 @@ handlePlayAsModeChange();
 // Restore saved Ulysses group preference
 const _savedGroup = localStorage.getItem('sc-ulysses-group');
 if (_savedGroup) { const _gi = document.getElementById('ulysses-group'); if (_gi) _gi.value = _savedGroup; }
+const _savedGroupId = localStorage.getItem('sc-ulysses-group-id');
+if (_savedGroupId) { const _gid = document.getElementById('ulysses-group-id'); if (_gid) _gid.value = _savedGroupId; }
 const _savedVault = localStorage.getItem('sc-obsidian-vault');
 if (_savedVault) { const _vi = document.getElementById('obsidian-vault'); if (_vi) _vi.value = _savedVault; }
 

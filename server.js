@@ -630,7 +630,7 @@ app.post('/api/dayone/export', async (req, res) => {
 // POST /api/ulysses/export — create a new Ulysses sheet via URL scheme (local only)
 app.post('/api/ulysses/export', (req, res) => {
   if (!IS_LOCAL) return res.status(404).json({ error: 'Not available in deployed mode' });
-  const { transcriptText, sessionDate, title, group } = req.body;
+  const { transcriptText, sessionDate, title, group, groupId } = req.body;
   if (!transcriptText) return res.status(400).json({ error: 'transcriptText required' });
 
   const sheetTitle = `[Secret-Cabin-et] ${title || sessionDate || 'Meeting Notes'}`;
@@ -638,7 +638,12 @@ app.post('/api/ulysses/export', (req, res) => {
 
   // Build URL using new-sheet scheme — no temp file, no shell quoting issues
   const params = new URLSearchParams({ text: markdown });
-  if (group?.trim()) params.set('group', group.trim());
+  // Ulysses' group= param resolves a bare name to whichever group matches first,
+  // regardless of hierarchy — unreliable for subfolders. A callback identifier
+  // (copied from Ulysses via Option+right-click → Copy Callback Identifier)
+  // targets the exact group, so prefer it when supplied.
+  const targetGroup = groupId?.trim() || group?.trim();
+  if (targetGroup) params.set('group', targetGroup);
   // URLSearchParams uses + for spaces; Ulysses needs %20 — replace manually
   const url = `ulysses://x-callback-url/new-sheet?${params.toString().replace(/\+/g, '%20')}`;
 
