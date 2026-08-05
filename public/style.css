@@ -179,7 +179,7 @@
 .after-panel.visible { display:block; }
 .after-row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
 .after-row + .after-row { margin-top:10px; padding-top:10px; border-top:1px solid var(--lodge-border); }
-.interject-inline { display:flex; gap:10px; flex:1; min-width:240px; }
+.interject-form { display:flex; gap:10px; }
 .interject-row { display:flex; gap:10px; }
 .interject-input { background:var(--lodge-panel); border:1px solid var(--lodge-ash); border-left:3px solid #a0c8a0; color:var(--lodge-cream); font-family:'Crimson Pro',serif; font-size:15px; font-style:italic; padding:8px 12px; border-radius:0 2px 2px 0; flex:1; }
 .interject-input:focus { outline:none; border-left-color:#c0e0c0; }
@@ -217,20 +217,11 @@
 .round-count-btn:disabled { opacity:0.4; cursor:not-allowed; }
 .round-pip.inert { opacity:0.35; border-style:dashed; }
 
-/* Arc customisation panel — collapsed by default, visually secondary/advanced */
-.arc-panel { border:none; border-top:1px solid var(--lodge-border); border-radius:0; background:rgba(0,0,0,0.12); }
-.arc-panel .arc-summary { font-size:11px; padding:8px 14px; color:var(--lodge-ash); }
-.arc-panel .arc-summary-note { color:var(--lodge-ash); }
-.arc-panel .arc-fields { padding:0 14px 12px; gap:8px; }
-.arc-panel .arc-textarea { font-size:13px; padding:6px 10px; }
-.arc-panel .arc-field-disabled { opacity:0.4; }
-
-/* Shared arc-field styles (also used by .artifact-panel's "Bring an artifact" details) */
+/* Shared arc-field styles (used by .artifact-panel's "Bring an artifact" and .playeras-panel's "Play as" details) */
 .arc-summary { font-family:'IM Fell English',serif; font-size:13px; letter-spacing:2px; text-transform:uppercase; color:var(--lodge-muted); padding:10px 14px; cursor:pointer; list-style:none; user-select:none; }
 .arc-summary-note { font-size:12px; letter-spacing:1px; color:var(--lodge-muted); text-transform:none; font-style:italic; }
 .arc-summary::-webkit-details-marker { display:none; }
 .arc-summary::before { content:'↳ '; color:var(--lodge-amber-dim); }
-.arc-panel[open] .arc-summary::before { content:'↑ '; }
 .arc-summary:hover { color:var(--lodge-muted); }
 .arc-fields { display:flex; flex-direction:column; gap:10px; padding:0 14px 14px; }
 .arc-field { display:flex; flex-direction:column; gap:4px; }
@@ -238,7 +229,7 @@
 .arc-textarea:focus { outline:none; border-left-color:var(--lodge-amber); }
 .arc-textarea:disabled { opacity:0.6; cursor:not-allowed; }
 
-/* Play-as panel — lives with roster state in .member-panel, same demoted/optional treatment as .arc-panel */
+/* Play-as panel — lives with roster state in .member-panel, same demoted/optional treatment as .artifact-panel */
 .playeras-panel { border:none; border-top:1px solid var(--lodge-border); border-radius:0; background:rgba(0,0,0,0.12); margin-top:12px; }
 .playeras-panel .arc-summary { font-size:11px; padding:8px 14px; color:var(--lodge-ash); }
 .playeras-panel .arc-summary-note { color:var(--lodge-ash); }

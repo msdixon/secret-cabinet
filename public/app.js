@@ -230,16 +230,7 @@ function setRoundCount(n) {
   document.querySelectorAll('.round-count-btn').forEach(b => {
     b.classList.toggle('selected', Number(b.dataset.count) === n);
   });
-  updateArcFieldAvailability();
   updatePips();
-}
-
-function updateArcFieldAvailability() {
-  [1, 2, 3].forEach(i => {
-    const disabled = i > selectedRoundCount;
-    document.getElementById(`arc-${i}`).disabled = disabled;
-    document.getElementById(`arc-field-${i}`)?.classList.toggle('arc-field-disabled', disabled);
-  });
 }
 
 // ── Transcript rendering ──────────────────────────────────────────────────────
@@ -895,6 +886,7 @@ async function convene() {
   document.getElementById('witness-live-toggle').disabled = true;
   document.getElementById('additional-round-btn').className = 'lodge-btn';
   document.getElementById('after-panel').className = 'after-panel';
+  document.getElementById('interject-form').style.display = 'none';
 
   currentSessionId = null;
   currentRound = 0;
@@ -924,8 +916,6 @@ async function convene() {
   const memberNames = members.map(id => MEMBERS.find(m => m.id === id)?.name).filter(Boolean).join(', ');
   const entryForHeader = getEntry();
   transcriptText = `THE SECRET-CABIN-ET\nMeeting Notes — ${sessionDate}\nAssembled: ${memberNames}\n\nSource material:\n${entryForHeader}\n`;
-  const roundInstructions = Array.from({ length: activeConveneRoundCount }, (_, idx) => idx + 1)
-    .map(i => document.getElementById(`arc-${i}`)?.value.trim()).filter(Boolean);
 
   const artifactText = document.getElementById('artifact-text')?.value.trim();
   const artifactMemberId = document.getElementById('artifact-member')?.value;
@@ -943,7 +933,7 @@ async function convene() {
     const s1 = startStreamEntry();
     let d1;
     try {
-      d1 = await streamPost('/api/convene', { entry, members, roundInstructions, roundCount: activeConveneRoundCount, artifact, notes, sourceSessionId: currentSourceSessionId || undefined, playerMode, playerMemberId, playerName, playerTurn: playerTurn1 || undefined }, chunk => s1.append(chunk), s1.onSpeaking, s1.onSpeakerDone);
+      d1 = await streamPost('/api/convene', { entry, members, roundCount: activeConveneRoundCount, artifact, notes, sourceSessionId: currentSourceSessionId || undefined, playerMode, playerMemberId, playerName, playerTurn: playerTurn1 || undefined }, chunk => s1.append(chunk), s1.onSpeaking, s1.onSpeakerDone);
       s1.finalize(d1.text);
       currentSessionId = d1.sessionId;
       buildDossier(members);
@@ -1173,12 +1163,20 @@ async function addRound() {
 
 // ── Interject ─────────────────────────────────────────────────────────────────
 
+function toggleInterjectForm() {
+  const form = document.getElementById('interject-form');
+  const showing = form.style.display !== 'none';
+  form.style.display = showing ? 'none' : 'flex';
+  if (!showing) document.getElementById('interject-input').focus();
+}
+
 async function interject() {
   if (!currentSessionId) return;
   const input = document.getElementById('interject-input');
   const text = input.value.trim();
   if (!text) return;
   input.value = '';
+  document.getElementById('interject-form').style.display = 'none';
   lastInterjectText = text;
 
   addRoundHeader('A Presence Passes Through');
@@ -1364,6 +1362,7 @@ function reconveneOnCurrentSession() {
   document.getElementById('transcript-content').innerHTML = '';
   document.getElementById('after-panel').className = 'after-panel';
   document.getElementById('additional-round-btn').className = 'lodge-btn';
+  document.getElementById('interject-form').style.display = 'none';
   currentRound = 0;
   currentSessionId = null;
   transcriptText = '';
@@ -2487,7 +2486,6 @@ applyEnvConfig();
 initSceneLayer();
 fetchMembers().then(() => renderMembers());
 updateExportJournalLabel();
-updateArcFieldAvailability();
 handlePlayAsModeChange();
 // Restore saved Ulysses group preference
 const _savedGroup = localStorage.getItem('sc-ulysses-group');
