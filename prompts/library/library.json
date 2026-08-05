@@ -106,5 +106,23 @@
     "members": ["jung", "corbin"],
     "themes": ["dream-symbolism", "unconscious", "interpretation", "mythology", "hidden-meaning"],
     "file": "jung-dream-symbolism-1916.md"
+  },
+  {
+    "id": "blake-voice-of-the-devil-1790",
+    "title": "The Voice of the Devil — The Marriage of Heaven and Hell",
+    "source": "The Marriage of Heaven and Hell",
+    "date": "1790",
+    "members": ["william-blake", "yeats"],
+    "themes": ["contraries", "energy", "reason", "imagination", "prophecy"],
+    "file": "blake-voice-of-the-devil-1790.md"
+  },
+  {
+    "id": "randolph-clairvoyance-birthright-1870",
+    "title": "The Birthright of Every Human Being — Seership! The Magnetic Mirror",
+    "source": "Seership! The Magnetic Mirror",
+    "date": "1870",
+    "members": ["randolph", "blavatsky"],
+    "themes": ["clairvoyance", "astral-light", "ether", "inner-vision", "seership"],
+    "file": "randolph-clairvoyance-birthright-1870.md"
   }
 ]
