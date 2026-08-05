@@ -321,22 +321,14 @@ function renderActions(text) {
 }
 
 // ── Speaker glyphs ────────────────────────────────────────────────────────────
-// Historically grounded symbols rendered beside each speaker's name.
+// Symbols rendered beside each speaker's name. Sourced from roster.json (via
+// MEMBERS, fetched from /api/members) so every member has one, including
+// those added through the character workflow — see #80.
 
-const MEMBER_GLYPHS = {
-  crowley:   '☿',  // Mercury / Thoth — his magical motto and Thoth correspondence
-  waite:     '✡',  // Hexagram — Kabbalistic centre of his work
-  pixie:     '♃',  // Jupiter — abundance, vision, her Tarot suits
-  yeats:     '☽',  // Crescent moon — A Vision, lunar obsession
-  blavatsky: '☸',  // Dharma wheel — Theosophical Society seal
-  levi:      '△',  // Upward triangle — Baphomet, elemental fire
-  teresa:    '✦',  // Four-pointed star — the Interior Castle
-  arabi:     '◯',  // Circle — wahdat al-wujud, unity of being
-  maud:      '✿',  // Flower / rose — Irish nationalism, beauty as weapon
-  llull:     '✺',  // Asterisk — the Lullian combinatory wheel
-  khaldun:   '⬡',  // Hexagon — asabiyyah cycles, civilisational geometry
-  dee:       '✧',  // Four-pointed star — Monas Hieroglyphica
-};
+function memberGlyph(memberId) {
+  const m = memberId && MEMBERS.find(mm => mm.id === memberId);
+  return m?.glyph || '';
+}
 
 let _entryCounter = 0;
 let lastSpeakerId = null;
@@ -382,8 +374,8 @@ function addSpeech(speaker, text, isObserver, memberId, existingAnnotation, targ
   if (isObserver) nc = 'observer-voice';
   else if (memberId) nc = `voice-${memberId}`;
   else nc = '';
-  const glyph = memberId && MEMBER_GLYPHS[memberId]
-    ? `<span class="speaker-glyph">${MEMBER_GLYPHS[memberId]}</span>`
+  const glyph = memberGlyph(memberId)
+    ? `<span class="speaker-glyph">${memberGlyph(memberId)}</span>`
     : '';
   const nameEl = `<div class="speaker-name ${nc}" ${memberId ? `onclick="highlightDossierEntry('${memberId}')" style="cursor:pointer"` : ''}>${glyph}${escapeHTML(speaker)}</div>`;
   e.innerHTML = `${nameEl}<div class="bubble-body"><div class="speech-text" onclick="toggleAnnotation(this.closest('.transcript-entry'))">${renderActions(text)}</div><div class="annotation-area" style="display:none"><textarea class="annotation-input" placeholder="Note…" onblur="saveAnnotation(this)" onkeydown="if(event.key==='Escape')closeAnnotation(this.closest('.transcript-entry'))"></textarea></div></div>`;
@@ -1548,8 +1540,8 @@ function renderWitnessBlock(block) {
       return witnessReadingTime(block.text);
     }
     const nc = block.memberId ? `voice-${block.memberId}` : '';
-    const glyph = block.memberId && MEMBER_GLYPHS[block.memberId]
-      ? `<span class="speaker-glyph">${MEMBER_GLYPHS[block.memberId]}</span>` : '';
+    const glyph = memberGlyph(block.memberId)
+      ? `<span class="speaker-glyph">${memberGlyph(block.memberId)}</span>` : '';
     const side = getSpeakerSide(block.memberId || block.speaker);
 
     const e = document.createElement('div');
