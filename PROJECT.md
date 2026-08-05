@@ -22,7 +22,7 @@ Because of (1) and (2), research/citation/export-adjacent features should be sco
 
 **North star:** a fully 3D, inhabited interactive experience — a "Second Life" or "The Sims" for the archive/library, not a chat window. The lodge members exist as embodied presences in a persistent room the researcher can actually walk into, not just a transcript to read. This is the ambitious, easy-to-let-quietly-die version of the vision, so it's stated here explicitly rather than left implicit — most real projects don't die from a bad decision, they die from the ambitious version never getting named as the target and just fading into whatever the current text-based tool already does.
 
-Tier 3 (the current architectural frontier) splits into three mostly-independent threads. The middle one is the direct path toward the north star:
+The architectural frontier (previously tracked under the now-retired `tier-3` label — see the labeling note below) splits into three mostly-independent threads. The middle one is the direct path toward the north star:
 
 | Thread | Status | Items |
 |---|---|---|
@@ -30,7 +30,7 @@ Tier 3 (the current architectural frontier) splits into three mostly-independent
 | **Atmosphere / presence — the north-star thread** | #26/#27/#28 shipped | #26 3D salon ✅, #27 portraits ✅, #28 avatar presence ✅ — remaining: #29 voice synth, #17 ambient audio |
 | **Research-grounding** | actively unblocking | #36 citation verification (done, v1), #153 retrieval-grounded verification v2 (next priority, depends on #35a), #37 scholarly export (done; will incorporate #153's provenance data once that ships), #30 archival image integration (unblocked, easier than scoped) |
 
-[#24 multi-user](https://github.com/msdixon/secret-cabinet/issues/24) is explicitly **orthogonal** to Tier 3 — a large infra decision with its own cost/benefit case, not to be pulled in opportunistically just because it's adjacent. (It would matter a great deal *if* the platform-pitch path in purpose #2 above is ever pursued seriously — a shared room is part of what makes a playable archive a platform rather than a solo tool — but that's a future-scope note, not a reason to start it now.)
+[#24 multi-user](https://github.com/msdixon/secret-cabinet/issues/24) is explicitly **orthogonal** to this frontier work — a large infra decision with its own cost/benefit case, not to be pulled in opportunistically just because it's adjacent. (It would matter a great deal *if* the platform-pitch path in purpose #2 above is ever pursued seriously — a shared room is part of what makes a playable archive a platform rather than a solo tool — but that's a future-scope note, not a reason to start it now.)
 
 Full sequencing rationale lives in [issue #118](https://github.com/msdixon/secret-cabinet/issues/118) — treat it as the detail view under this doc's summary, not a competing source of truth.
 
@@ -65,9 +65,10 @@ The full workflow/priority tracker — including Backlog-status items, bugs, and
 - **[README.md](README.md)** — setup and usage for actually running the app. User-facing, not a planning doc. (Currently stale on roster size — flagged, not yet fixed.)
 - **[MANIFEST.md](MANIFEST.md)** — standing member roster, kept current, same format as sibling repos for the meta-cabinet index.
 - **[GitHub Project board #2](https://github.com/msdixon/secret-cabinet/projects/2)** — workflow and priority tracker. Houses bugs, milestone markers, and parked "spikes" (investigation issues like #118 that surface a decision or non-urgent finding mid-work, get filed, and wait in Backlog rather than blocking the thing in progress). **Review at a high level weekly** to catch stale or unprioritized issues — that review is a standing responsibility, not a one-off.
+  **Labeling (revised 2026-08-05):** priority lives entirely in the **Status** field — `Icebox → Backlog → Todo → In Progress → Done`, arranged left-to-right by readiness to be worked, Eisenhower-style (urgency × importance), not by technical horizon. Issue labels carry a separate, orthogonal signal — `complexity: small | moderate | large | unscoped` — an effort/maturity estimate decoupled from both timing and priority; `unscoped` marks work that's important enough to keep but not yet estimable (needs a scoping pass/spike first), which is where most of the old long-horizon vision items landed. This replaced the old `tier-0`–`tier-3` labels, which had drifted stale by binding scope to fixed time windows ("months 3-9") in a project with no fixed start date — see STATUS.md, 2026-08-05.
 - **[STATUS.md](STATUS.md)** — dated, one-line-per-entry log of what shipped or changed, appended to as it happens.
 - **Claude's memory files** — narrative context: why a decision was made, what was tried and rejected, collaboration-style notes. Not authoritative for current state — if memory and this doc disagree, this doc (and the board) win.
 
 ---
 
-*Last updated: 2026-08-03 (#26/#27/#28 shipped — north-star atmosphere/presence thread now mostly live; #37 scholarly export shipped; #142 module-boundary decision flagged; #153 retrieval-grounded citation verification filed, #35 split into 35a/35b).*
+*Last updated: 2026-08-05 (label system overhaul: `tier-0`–`tier-3` retired in favor of `complexity: small/moderate/large/unscoped` plus a new Icebox Status swimlane — see "How this doc relates to everything else" and STATUS.md).*
