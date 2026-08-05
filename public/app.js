@@ -241,7 +241,7 @@ function setRoundCount(n) {
 let currentRenderRound = null;
 function addRoundHeader(label, roundIndex = null) {
   currentRenderRound = roundIndex;
-  const c = getLiveStageEl();
+  const c = window.Witness.getLiveStageEl();
   const h = document.createElement('div');
   h.className = 'transcript-round-header';
   h.innerHTML = `<div class="round-rule"></div><span class="round-rule-label">${label}</span><div class="round-rule"></div>`;
@@ -591,13 +591,13 @@ async function streamPost(url, body, onChunk, onSpeaking, onSpeakerDone) {
 // rendered live this round -- a safety net, not the normal path, so a
 // missed or malformed speakerDone event can't silently drop content.
 // The stage a round streams into is decided once, at the start of that round
-// (getLiveStageEl(), #87) -- not re-checked chunk-by-chunk. Toggling Witness
-// mid-round would otherwise split one speaker's turn across two containers,
-// so the toggle button is disabled while any round is in flight (see
-// convene/resumeRounds/addRound/sendInterject) and this only ever changes
-// stage between rounds.
+// (window.Witness.getLiveStageEl(), #87) -- not re-checked chunk-by-chunk.
+// Toggling Witness mid-round would otherwise split one speaker's turn across
+// two containers, so the toggle button is disabled while any round is in
+// flight (see convene/resumeRounds/addRound/sendInterject) and this only
+// ever changes stage between rounds.
 function startStreamEntry() {
-  const c = getLiveStageEl();
+  const c = window.Witness.getLiveStageEl();
   let typingEl = null;
   let renderedLive = false;
 
@@ -1180,7 +1180,7 @@ async function interject() {
   lastInterjectText = text;
 
   addRoundHeader('A Presence Passes Through');
-  addSpeech('— a voice from elsewhere —', text, true, undefined, undefined, getLiveStageEl());
+  addSpeech('— a voice from elsewhere —', text, true, undefined, undefined, window.Witness.getLiveStageEl());
   setStatus('The room notices...', true);
   await sendInterject(text);
 }
@@ -1373,308 +1373,53 @@ function reconveneOnCurrentSession() {
 }
 
 // ── Witness mode ──────────────────────────────────────────────────────────────
+// The Witness UI/state machine lives in public/witness.js (#142), following
+// the scene.js script-tag/IIFE convention -- window.Witness. What's left here
+// is the bridge: resolving session data + live annotations (core
+// transcript/session concerns app.js still owns) before handing off, and the
+// handful of core helpers (member resolution, markup escaping, session
+// restore) the module needs but doesn't own, passed in as arguments the same
+// way updateSeats([...activeMembers]) hands scene.js a ready-made snapshot.
 
-// #87: live rounds render into #witness-stage using the exact same markup/CSS
-// as replay (renderWitnessBlock below) instead of a parallel implementation --
-// addRoundHeader/addSpeech/startStreamEntry all target whichever container
-// getLiveStageEl() returns. This is independent of witnessActive/witnessBlocks
-// below, which remain the replay-only state machine (past-session playback,
-// auto-advance pacing). The two never run at once: restoreSession() and
-// startWitness() both force witnessLiveActive off, since restoring or
-// replaying a stored session is never "the room speaking right now."
-let witnessLiveActive = false;
-
-function getLiveStageEl() {
-  return witnessLiveActive
-    ? document.getElementById('witness-stage')
-    : document.getElementById('transcript-content');
-}
-
-// Entry point: the ◎ Witness toggle beside the live transcript. Swaps which
-// panel is visible, *moving* (not cloning) each rendered entry across --
-// annotation state and click handlers are read via querySelectorAll on
-// .transcript-entry globally (saveAnnotation, buildAnnotatedTranscript), so
-// a clone would leave two nodes sharing one entryId and double up on save.
-// Moving keeps exactly one DOM copy of each entry, just reparented, so
-// toggling back and forth any number of times never loses or duplicates
-// anything either side rendered. Disabled while a round is streaming (see
-// convene() etc.) so a round never gets split mid-turn across containers.
-function toggleWitnessLive() {
-  witnessLiveActive = !witnessLiveActive;
-  const stage = document.getElementById('witness-stage');
-  const reading = document.getElementById('transcript-content');
-  const panel = document.getElementById('witness-panel');
-  const readingPanel = document.getElementById('transcript-panel');
-  const btn = document.getElementById('witness-live-toggle');
-  const from = witnessLiveActive ? reading : stage;
-  const to = witnessLiveActive ? stage : reading;
-  while (from.firstChild) to.appendChild(from.firstChild);
-
-  if (witnessLiveActive) {
-    readingPanel.style.display = 'none';
-    panel.style.display = 'block';
-    document.getElementById('witness-hint').textContent = '◉ Live — watching the room';
-    document.getElementById('witness-progress').style.display = 'none';
-    stage.scrollTop = stage.scrollHeight;
-    if (btn) { btn.textContent = '✕ Reading view'; btn.title = 'Return to the annotated reading view'; }
-  } else {
-    panel.style.display = 'none';
-    readingPanel.style.display = '';
-    document.getElementById('witness-progress').style.display = '';
-    reading.scrollTop = reading.scrollHeight;
-    if (btn) { btn.textContent = '◎ Witness'; btn.title = "Watch the room live, in Witness's theatrical presentation"; }
-  }
-}
-
-// The shared panel's Exit button serves both modes -- dispatch to whichever
-// state machine is actually active.
-function witnessExitClicked() {
-  if (witnessLiveActive) toggleWitnessLive();
-  else exitWitness();
-}
-
-let witnessBlocks = [];      // parsed sequence of blocks to play
-let witnessIndex = 0;        // current block position
-let witnessTimer = null;     // auto-advance timer
-let witnessActive = false;
-let witnessSourceSessionId = null; // session being witnessed (for restore on exit)
-
-const WITNESS_WPM = 180;     // reading speed for auto-advance pacing
-const WITNESS_PAUSE_AFTER_HEADER = 1800;   // ms pause after round headers
-const WITNESS_MIN_PAUSE = 1200;            // minimum ms between blocks
-const WITNESS_MAX_PAUSE = 12000;           // cap on auto-advance delay
-
-/**
- * Parse a session's rounds + annotations into a flat sequence of playback blocks.
- * Block types: { type: 'header', label }
- *              { type: 'speech', speaker, text, memberId, annotation }
- *              { type: 'action', text }
- */
-function parseWitnessBlocks(session) {
-  const blocks = [];
-  const annotations = session.annotations || {};
-
-  (session.rounds || []).forEach(round => {
-    blocks.push({ type: 'header', label: round.label });
-
-    const lines = (round.text || '').split('\n');
-    let speaker = null, textLines = [];
-
-    const flush = (keepSpeaker = false) => {
-      if (!speaker || !textLines.length) return;
-      const m = resolveMember(speaker, MEMBERS);
-      const annotation = Object.values(annotations).find(a => a.speaker === speaker)?.note || null;
-      blocks.push({
-        type: 'speech',
-        speaker,
-        text: textLines.join('\n').trim(),
-        memberId: m?.id || null,
-        annotation,
-      });
-      // Keep speaker across blank lines so multi-paragraph speeches aren't dropped
-      if (!keepSpeaker) speaker = null;
-      textLines = [];
-    };
-
-    lines.forEach(line => {
-      const t = line.trim();
-      if (!t) { flush(true); return; } // keepSpeaker=true: blank line is paragraph break, not speaker change
-      if (t === '---' || t === '—' || t === '--') return;
-      const isActionLine = /^\*[^*\n]+\*$/.test(t);
-      if (isActionLine && !speaker) {
-        flush();
-        blocks.push({ type: 'action', text: t.slice(1, -1) });
-        return;
-      }
-      const isKnownName = isKnownSpeakerHeader(t, MEMBERS);
-      const looksLikeName = !t.includes(' ') && t.endsWith(':') && t.length < 30;
-      if (isKnownName || looksLikeName) { flush(); speaker = t.replace(/:$/, ''); textLines = []; }
-      else if (speaker) textLines.push(t);
-    });
-    flush();
+function collectLiveAnnotations() {
+  const result = {};
+  document.querySelectorAll('.transcript-entry.annotated').forEach(e => {
+    const note = e.querySelector('.annotation-input')?.value.trim();
+    const speaker = e.dataset.speaker;
+    if (note && speaker) result[e.dataset.entryId] = { speaker, note };
   });
-
-  return blocks;
+  return result;
 }
 
-function witnessReadingTime(text) {
-  const words = text.trim().split(/\s+/).length;
-  const ms = (words / WITNESS_WPM) * 60 * 1000;
-  return Math.min(Math.max(ms, WITNESS_MIN_PAUSE), WITNESS_MAX_PAUSE);
+// A no-op if the session being restored is already the one loaded -- avoids
+// a redundant fetch/rerender when Witness exits back into the same session
+// it was launched from (mirrors exitWitness's old in-module check).
+function restoreSessionIfDifferent(id) {
+  if (id !== currentSessionId) restoreSession(id);
 }
 
-function renderWitnessBlock(block) {
-  const stage = document.getElementById('witness-stage');
-
-  if (block.type === 'header') {
-    const el = document.createElement('div');
-    el.className = 'witness-round-header';
-    el.innerHTML = `<div class="witness-rule"></div><span class="witness-round-label">${escapeHTML(block.label)}</span><div class="witness-rule"></div>`;
-    stage.appendChild(el);
-    stage.scrollTop = stage.scrollHeight;
-    return WITNESS_PAUSE_AFTER_HEADER;
-  }
-
-  if (block.type === 'action') {
-    const el = document.createElement('div');
-    el.className = 'action-line';
-    el.textContent = block.text;
-    stage.appendChild(el);
-    stage.scrollTop = stage.scrollHeight;
-    return witnessReadingTime(block.text);
-  }
-
-  if (block.type === 'speech') {
-    const nonEmptyLines = block.text.trim().split('\n').map(l => l.trim()).filter(Boolean);
-    const allAction = nonEmptyLines.length > 0 && nonEmptyLines.every(l => /^\*[^*]+\*$/.test(l));
-    if (allAction) {
-      nonEmptyLines.forEach(l => {
-        const el = document.createElement('div');
-        el.className = 'action-line';
-        el.textContent = l.slice(1, -1);
-        stage.appendChild(el);
-      });
-      stage.scrollTop = stage.scrollHeight;
-      return witnessReadingTime(block.text);
-    }
-    const nc = block.memberId ? `voice-${block.memberId}` : '';
-    const glyph = memberGlyph(block.memberId)
-      ? `<span class="speaker-glyph">${memberGlyph(block.memberId)}</span>` : '';
-    const side = getSpeakerSide(block.memberId || block.speaker);
-
-    const e = document.createElement('div');
-    e.className = `transcript-entry bubble-${side}`;
-    const nameHtml = `<div class="speaker-name ${nc}">${glyph}${escapeHTML(block.speaker)}</div>`;
-    let bodyHtml = `<div class="bubble-body"><div class="speech-text">${renderActions(block.text)}</div>`;
-    if (block.annotation) bodyHtml += `<div class="witness-annotation">↳ ${escapeHTML(block.annotation)}</div>`;
-    bodyHtml += '</div>';
-    e.innerHTML = nameHtml + bodyHtml;
-    stage.appendChild(e);
-    stage.scrollTop = stage.scrollHeight;
-    return witnessReadingTime(block.text);
-  }
-
-  return WITNESS_MIN_PAUSE;
-}
-
-function witnessAdvance() {
-  if (!witnessActive) return;
-  clearTimeout(witnessTimer);
-
-  if (witnessIndex >= witnessBlocks.length) {
-    const stage = document.getElementById('witness-stage');
-    const endEl = document.createElement('div');
-    endEl.className = 'witness-end';
-    endEl.textContent = 'The room falls silent.';
-    stage.appendChild(endEl);
-    stage.scrollTop = stage.scrollHeight;
-    document.getElementById('witness-hint').textContent = 'Click Exit to return';
-    document.getElementById('witness-progress').style.width = '100%';
-    return;
-  }
-
-  const block = witnessBlocks[witnessIndex];
-  const delay = renderWitnessBlock(block);
-  witnessIndex++;
-
-  // Update progress bar
-  const pct = (witnessIndex / witnessBlocks.length) * 100;
-  document.getElementById('witness-progress').style.width = `${pct}%`;
-  document.getElementById('witness-hint').textContent =
-    `${witnessIndex} / ${witnessBlocks.length} — space or click to advance`;
-
-  // Schedule auto-advance
-  witnessTimer = setTimeout(witnessAdvance, delay);
-}
-
-function startWitness(sessionData) {
-  // sessionData is optional — if omitted, use the current in-memory session
-  const session = sessionData || {
-    rounds: (() => {
-      // Reconstruct rounds from the current live transcript
-      // We don't have rounds split out in memory, so use the stored session
-      return null;
-    })(),
-    annotations: (() => {
-      const result = {};
-      document.querySelectorAll('.transcript-entry.annotated').forEach(e => {
-        const note = e.querySelector('.annotation-input')?.value.trim();
-        const speaker = e.dataset.speaker;
-        if (note && speaker) result[e.dataset.entryId] = { speaker, note };
-      });
-      return result;
-    })(),
+function witnessDeps() {
+  return {
+    members: MEMBERS,
+    resolveMember,
+    isKnownSpeakerHeader,
+    escapeHTML,
+    renderActions,
+    restoreSession: restoreSessionIfDifferent,
   };
+}
 
-  if (!session.rounds) {
-    // No rounds yet — need to fetch from server
+// "◎ Watch" button in the after-panel -- replays the session currently on
+// screen. sessionData is only ever passed when called internally (never from
+// the button, which always calls this with no arguments).
+async function startWitness(sessionData) {
+  let session = sessionData;
+  if (!session) {
     if (!currentSessionId) return;
-    fetch(`/api/sessions/${currentSessionId}`)
-      .then(r => r.json())
-      .then(s => {
-        // Merge live annotations into stored session
-        const liveAnnotations = {};
-        document.querySelectorAll('.transcript-entry.annotated').forEach(e => {
-          const note = e.querySelector('.annotation-input')?.value.trim();
-          const speaker = e.dataset.speaker;
-          if (note && speaker) liveAnnotations[e.dataset.entryId] = { speaker, note };
-        });
-        s.annotations = { ...( s.annotations || {}), ...liveAnnotations };
-        startWitness(s);
-      });
-    return;
+    session = await fetch(`/api/sessions/${currentSessionId}`).then(r => r.json());
+    session.annotations = { ...(session.annotations || {}), ...collectLiveAnnotations() };
   }
-
-  // Replay always wins over live mode -- watching a stored session is never
-  // "the room speaking right now."
-  witnessLiveActive = false;
-  document.getElementById('transcript-panel').style.display = '';
-
-  witnessBlocks = parseWitnessBlocks(session);
-  witnessIndex = 0;
-  witnessActive = true;
-  witnessSourceSessionId = session.id || null;
-
-  // Reset side map for a clean Witness run
-
-  lastSpeakerId = null; currentSpeakerSide = 'right';
-  document.getElementById('witness-stage').innerHTML = '';
-  document.getElementById('witness-progress').style.display = '';
-
-  // Show witness panel
-  document.getElementById('witness-panel').style.display = 'block';
-  document.getElementById('witness-panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
-  document.getElementById('witness-progress').style.width = '0%';
-  document.getElementById('witness-hint').textContent = 'Space or click to advance';
-
-  // Keyboard handler
-  document.addEventListener('keydown', witnessKeyHandler);
-
-  witnessAdvance();
-}
-
-function witnessKeyHandler(e) {
-  if (e.code === 'Space' && witnessActive) {
-    e.preventDefault();
-    witnessAdvance();
-  }
-  if (e.code === 'Escape' && witnessActive) {
-    exitWitness();
-  }
-}
-
-function exitWitness() {
-  const sessionToRestore = witnessSourceSessionId;
-  witnessActive = false;
-  witnessSourceSessionId = null;
-  clearTimeout(witnessTimer);
-  document.removeEventListener('keydown', witnessKeyHandler);
-  document.getElementById('witness-panel').style.display = 'none';
-  document.getElementById('witness-stage').innerHTML = '';
-  // Restore the session transcript so the user lands back in the full view
-  if (sessionToRestore && sessionToRestore !== currentSessionId) {
-    restoreSession(sessionToRestore);
-  }
+  window.Witness.start(session, witnessDeps());
 }
 
 // Entry point from Past Meetings drawer
@@ -1682,7 +1427,7 @@ async function startWitnessFromSession(id) {
   try {
     const session = await fetch(`/api/sessions/${id}`).then(r => r.json());
     closeSessionsDrawer();
-    startWitness(session);
+    window.Witness.start(session, witnessDeps());
   } catch (e) {
     alert('Could not load session for playback.');
   }
@@ -2079,12 +1824,7 @@ async function restoreSession(id) {
     // over from a *previous* session could collide on entryId with a freshly
     // restored one, and the global .transcript-entry queries annotation/export
     // logic runs (saveAnnotation, buildAnnotatedTranscript) would pick it up.
-    witnessLiveActive = false;
-    document.getElementById('witness-panel').style.display = 'none';
-    document.getElementById('witness-stage').innerHTML = '';
-    document.getElementById('transcript-panel').style.display = '';
-    const wbtn = document.getElementById('witness-live-toggle');
-    if (wbtn) { wbtn.textContent = '◎ Witness'; wbtn.title = "Watch the room live, in Witness's theatrical presentation"; }
+    window.Witness.forceLiveOff();
 
     // Reset UI state
     document.getElementById('transcript-empty').style.display = 'none';
