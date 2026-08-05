@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: npm audit
+        run: npm audit --audit-level=high
+
+      - name: Scene scaffold smoke test
+        env:
+          PORT: 3132
+          LOCAL: 'true'
+          ANTHROPIC_API_KEY: unused-in-ci
+          SESSION_SECRET: unused-in-ci
+        run: |
+          npm run dev &
+          SERVER_PID=$!
+          for i in $(seq 1 30); do
+            curl -sf "http://localhost:$PORT/" > /dev/null && break
+            sleep 1
+          done
+          node scripts/test-scene-scaffold.js
+          kill $SERVER_PID
