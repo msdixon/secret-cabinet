@@ -17,6 +17,10 @@ const OUTPUT_FILE = path.join(ROOT, 'CITATION-MANIFEST.md');
 
 const VERDICT_SEVERITY = { unverified: 2, uncertain: 1, verified: 0 };
 const VERDICT_LABEL = { unverified: 'unverified', uncertain: 'uncertain', verified: 'verified' };
+// #153 part 3 — same convention as public/app.js's CITATION_SOURCE_LABEL.
+// Missing on pre-#153 sessions — default to 'model-knowledge' there, since
+// that was the only method available at the time.
+const SOURCE_LABEL = { library: 'checked against curated text', web: 'checked via live lookup', 'model-knowledge': "Claude's own knowledge" };
 
 function normalizeWorkKey(work) {
   return work.replace(/[*"']/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
@@ -53,6 +57,7 @@ function buildManifest(sessions) {
         note: flag.note,
         quote: flag.quote,
         libraryCitation: flag.libraryCitation || null,
+        source: flag.source || 'model-knowledge',
       });
     });
   });
@@ -69,13 +74,14 @@ function buildManifest(sessions) {
 
   const totalCitations = groups.reduce((n, g) => n + g.occurrences.length, 0);
   const verdictCounts = { verified: 0, unverified: 0, uncertain: 0 };
-  groups.forEach(g => g.occurrences.forEach(o => verdictCounts[o.verdict]++));
+  const sourceCounts = { library: 0, web: 0, 'model-knowledge': 0 };
+  groups.forEach(g => g.occurrences.forEach(o => { verdictCounts[o.verdict]++; sourceCounts[o.source]++; }));
 
   const renderGroup = g => {
     const lines = [`### ${g.displayWork}`, ''];
     g.occurrences.forEach(o => {
       const grounding = o.libraryCitation ? ` — grounded in: ${o.libraryCitation}` : '';
-      lines.push(`- **${VERDICT_LABEL[o.verdict]}** — ${o.speaker}, session \`${o.sessionId}\` (${o.date})`);
+      lines.push(`- **${VERDICT_LABEL[o.verdict]}** (${SOURCE_LABEL[o.source]}) — ${o.speaker}, session \`${o.sessionId}\` (${o.date})`);
       lines.push(`  > "${o.quote}"`);
       lines.push(`  ${o.note}${grounding}`);
       lines.push('');
@@ -90,6 +96,9 @@ function buildManifest(sessions) {
     '',
     `**${groups.length}** distinct works cited, **${totalCitations}** total citations — ` +
       `${verdictCounts.verified} verified, ${verdictCounts.unverified} unverified, ${verdictCounts.uncertain} uncertain.`,
+    '',
+    `**Grounding:** ${sourceCounts.library} checked against curated library text, ${sourceCounts.web} via live lookup, ` +
+      `${sourceCounts['model-knowledge']} from Claude's own knowledge only — the volume signal #153's scheduled check-in (~2026-08-19) uses to weigh manual vs. automated library promotion.`,
     '',
   ];
 
