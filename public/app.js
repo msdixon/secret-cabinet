@@ -894,8 +894,7 @@ async function convene() {
   document.querySelectorAll('.round-count-btn').forEach(b => b.disabled = true);
   document.getElementById('witness-live-toggle').disabled = true;
   document.getElementById('additional-round-btn').className = 'lodge-btn';
-  document.getElementById('export-panel').className = 'export-panel';
-  document.getElementById('interject-panel').className = 'interject-panel';
+  document.getElementById('after-panel').className = 'after-panel';
 
   currentSessionId = null;
   currentRound = 0;
@@ -1035,10 +1034,9 @@ async function resumeRounds(fromIndex) {
 }
 
 function showSessionControls() {
-  document.getElementById('interject-panel').className = 'interject-panel visible';
+  document.getElementById('after-panel').className = 'after-panel visible';
   document.getElementById('additional-round-btn').className = 'lodge-btn visible';
   document.getElementById('verify-citations-btn').className = 'lodge-btn visible';
-  document.getElementById('export-panel').className = 'export-panel visible';
   document.getElementById('reveal-player-turns-btn').className = 'lodge-btn' + (sessionPlayerTurns.length ? ' visible' : '');
   updateScholarlyExportButton();
   updatePips();
@@ -1364,7 +1362,8 @@ function reconveneOnCurrentSession() {
 
   // Clear transcript view so user starts fresh
   document.getElementById('transcript-content').innerHTML = '';
-  document.getElementById('export-panel').className = 'export-panel';
+  document.getElementById('after-panel').className = 'after-panel';
+  document.getElementById('additional-round-btn').className = 'lodge-btn';
   currentRound = 0;
   currentSessionId = null;
   transcriptText = '';
@@ -2151,13 +2150,7 @@ async function restoreSession(id) {
     if (sessionPlayerTurns.length) applyPlayerTurnMarkers(sessionPlayerTurns);
 
     // Show controls
-    document.getElementById('interject-panel').className = 'interject-panel visible';
-    document.getElementById('additional-round-btn').className = 'lodge-btn visible';
-    document.getElementById('verify-citations-btn').className = 'lodge-btn visible';
-    document.getElementById('reveal-player-turns-btn').className = 'lodge-btn' + (sessionPlayerTurns.length ? ' visible' : '');
-    document.getElementById('export-panel').className = 'export-panel visible';
-    updateScholarlyExportButton();
-    updatePips();
+    showSessionControls();
     setStatus(`Meeting of ${session.date} restored. The embers hold.`, false);
   } catch (e) {
     setStatus('Could not restore the meeting.', false);
@@ -2450,9 +2443,9 @@ async function applyEnvConfig() {
   try {
     const { isLocal } = await fetch('/api/config').then(r => r.json());
     if (!isLocal) {
-      document.getElementById('export-ulysses-row')?.style.setProperty('display', 'none');
-      document.getElementById('export-obsidian-row')?.style.setProperty('display', 'none');
-      document.getElementById('export-md-row')?.style.setProperty('display', 'flex');
+      ['export-ulysses-row', 'export-ulysses-config', 'export-ulysses-id-config', 'export-obsidian-row', 'export-obsidian-config']
+        .forEach(id => document.getElementById(id)?.style.setProperty('display', 'none'));
+      document.getElementById('export-md-row')?.style.setProperty('display', 'inline-flex');
     }
   } catch (_) {}
 }

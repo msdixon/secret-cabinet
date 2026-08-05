@@ -91,7 +91,7 @@
 
 .lodge-body { display:flex; flex-direction:column; flex:1; padding:20px 24px; gap:20px; max-width:960px; width:100%; margin:0 auto; }
 .panel-label { font-family:'IM Fell English',serif; font-size:13px; letter-spacing:2px; text-transform:uppercase; color:var(--lodge-muted); margin-bottom:8px; }
-.journal-panel, .member-panel, .transcript-panel, .interject-panel, .export-panel, .scene-panel { background:var(--lodge-surface); border:1px solid var(--lodge-border); border-radius:2px; padding:16px; }
+.journal-panel, .member-panel, .transcript-panel, .after-panel, .scene-panel { background:var(--lodge-surface); border:1px solid var(--lodge-border); border-radius:2px; padding:16px; }
 .scene-panel canvas { width:100%; aspect-ratio:16/9; display:block; outline:none; }
 .scene-panel.scene-failed { display:none; }
 .journal-controls { display:flex; gap:10px; margin-bottom:12px; flex-wrap:wrap; }
@@ -175,17 +175,22 @@
 .action-line { font-family:'IM Fell English','Crimson Pro',serif; font-style:italic; font-size:13px; color:var(--lodge-ash); text-align:center; align-self:center; max-width:55%; margin:14px 0 16px; letter-spacing:0.03em; opacity:0.8; }
 .bubble-body .action-line { align-self:auto; max-width:none; margin:6px 0 2px; opacity:1; }
 .action-inline { font-style:italic; color:var(--lodge-muted); }
-.interject-panel { display:none; }
-.interject-panel.visible { display:block; }
+.after-panel { display:none; }
+.after-panel.visible { display:block; }
+.after-row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+.after-row + .after-row { margin-top:10px; padding-top:10px; border-top:1px solid var(--lodge-border); }
+.interject-inline { display:flex; gap:10px; flex:1; min-width:240px; }
 .interject-row { display:flex; gap:10px; }
 .interject-input { background:var(--lodge-panel); border:1px solid var(--lodge-ash); border-left:3px solid #a0c8a0; color:var(--lodge-cream); font-family:'Crimson Pro',serif; font-size:15px; font-style:italic; padding:8px 12px; border-radius:0 2px 2px 0; flex:1; }
 .interject-input:focus { outline:none; border-left-color:#c0e0c0; }
 .interject-input::placeholder { color:var(--lodge-ash); }
-.export-panel { display:none; }
-.export-panel.visible { display:block; }
 .export-row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
 .export-note { font-family:'IM Fell English',serif; font-style:italic; font-size:14px; color:var(--lodge-muted); flex:1; min-width:200px; }
+.after-export-row { row-gap:8px; }
+.after-export-row .export-note { flex:0 0 auto; min-width:0; font-size:13px; }
 .export-journal-row { display:flex; gap:10px; margin-top:10px; flex-wrap:wrap; align-items:center; }
+.after-export-config { row-gap:8px; }
+.export-config-field { display:flex; align-items:center; gap:6px; font-family:'IM Fell English',serif; font-size:11px; font-style:italic; color:var(--lodge-muted); white-space:nowrap; }
 .status-bar { text-align:center; padding:10px; font-family:'IM Fell English',serif; font-style:italic; font-size:14px; color:var(--lodge-muted); min-height:36px; display:flex; align-items:center; justify-content:center; gap:12px; }
 .status-bar.thinking { color:var(--lodge-amber); animation:flicker 2s ease-in-out infinite; }
 .status-bar.error { color:#a06060; }

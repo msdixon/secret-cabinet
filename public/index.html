@@ -199,7 +199,6 @@
             <div class="round-pip" id="pip-3"></div>
           </div>
         </div>
-        <button class="lodge-btn" id="additional-round-btn" onclick="addRound()">One More Turn ↻</button>
         <button class="lodge-btn" id="verify-citations-btn" onclick="verifyCitations()">Verify Citations ⚑</button>
         <button class="lodge-btn" id="reveal-player-turns-btn" onclick="togglePlayerTurnReveal()">Reveal Player Turns ◆</button>
         <button class="lodge-btn sessions-btn" id="dossier-btn" onclick="toggleDossier()" style="display:none;">The Assembled ↗</button>
@@ -252,65 +251,46 @@
       <div class="witness-progress" id="witness-progress"></div>
     </div>
 
-    <div class="interject-panel" id="interject-panel">
-      <div class="panel-label" style="color:#a0c8a0;margin-bottom:8px;">III. Your Voice — Silent Bob Protocol</div>
-      <div class="interject-row">
-        <input type="text" class="interject-input" id="interject-input" placeholder="A presence moves through the room. It has something to say..." />
-        <button class="lodge-btn" style="border-color:#a0c8a0;color:#a0c8a0;" onclick="interject()">Interject</button>
-      </div>
-    </div>
+    <div class="after-panel" id="after-panel">
+      <div class="panel-label" style="margin-bottom:10px;">III. After the Meeting</div>
 
-    <div class="export-panel" id="export-panel">
-      <div class="panel-label" style="margin-bottom:10px;">IV. The Record</div>
-      <div class="export-row">
-        <span class="export-note">The meeting has concluded. Preserve the transcript.</span>
-        <button class="lodge-btn export-txt" onclick="exportTxt()">↓ Download .txt</button>
+      <div class="after-row">
+        <button class="lodge-btn" id="additional-round-btn" onclick="addRound()">One More Turn ↻</button>
+        <div class="interject-inline">
+          <input type="text" class="interject-input" id="interject-input" placeholder="A presence moves through the room. It has something to say..." />
+          <button class="lodge-btn" style="border-color:#a0c8a0;color:#a0c8a0;" onclick="interject()">Interject</button>
+        </div>
       </div>
-      <div class="export-row">
-        <span class="export-note">A structured note: annotated passages plus a bibliography of cited works.</span>
+
+      <div class="after-row after-export-row">
+        <span class="export-note">Preserve the transcript:</span>
+        <button class="lodge-btn export-txt" onclick="exportTxt()">↓ .txt</button>
         <button class="lodge-btn export-scholarly" id="export-scholarly-btn" onclick="exportScholarly()" disabled title="Annotate at least one passage to enable">↓ Scholarly Note (.md)</button>
+        <button class="lodge-btn export-dayone" onclick="exportDayOne()">→ Day One</button>
+        <span id="export-ulysses-row"><button class="lodge-btn export-ulysses" onclick="exportUlysses()">→ Ulysses</button></span>
+        <span id="export-obsidian-row"><button class="lodge-btn export-obsidian" onclick="exportObsidian()">→ Obsidian</button></span>
+        <span id="export-md-row" style="display:none;"><button class="lodge-btn" onclick="exportMd()">↓ .md</button></span>
+        <button class="lodge-btn" style="border-color:var(--lodge-ash);color:var(--lodge-ash);" onclick="startWitness()" title="Watch the transcript play back with reading-time pacing">◎ Watch</button>
+        <button class="lodge-btn" style="border-color:var(--lodge-ash);color:var(--lodge-ash);" onclick="reconveneOnCurrentSession()" title="Use this transcript as the document for a new session">↩ Reconvene</button>
       </div>
-      <div class="export-journal-row">
-        <span class="export-note" style="font-style:normal;color:var(--lodge-muted);font-size:12px;" id="export-journal-name">No journal selected</span>
-        <button class="lodge-btn export-dayone" onclick="exportDayOne()">→ Save to Day One</button>
-      </div>
-      <div class="export-journal-row" id="export-ulysses-row" style="flex-direction:column;align-items:flex-start;gap:6px;">
-        <div style="display:flex;align-items:center;gap:10px;width:100%;">
-          <span class="export-note" style="font-style:normal;color:var(--lodge-muted);font-size:12px;">Ulysses (macOS)</span>
-          <button class="lodge-btn export-ulysses" onclick="exportUlysses()">→ Save to Ulysses</button>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;">
-          <span class="export-note" style="font-size:11px;font-style:italic;white-space:nowrap;">Group / project:</span>
+
+      <div class="after-row after-export-config">
+        <span class="export-note" id="export-journal-name">No journal selected</span>
+        <label class="export-config-field" id="export-ulysses-config">
+          <span>Ulysses group</span>
           <input class="ulysses-group-input" id="ulysses-group" placeholder="e.g. The Affected" value="" oninput="localStorage.setItem('sc-ulysses-group',this.value)" />
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;">
-          <span class="export-note" style="font-size:11px;font-style:italic;white-space:nowrap;">Group identifier (optional, subfolders):</span>
-          <input class="ulysses-group-input" id="ulysses-group-id" placeholder="Option+right-click group in Ulysses → Copy Callback Identifier" value="" oninput="localStorage.setItem('sc-ulysses-group-id',this.value)" />
-        </div>
-      </div>
-      <div class="export-journal-row" id="export-obsidian-row" style="flex-direction:column;align-items:flex-start;gap:6px;">
-        <div style="display:flex;align-items:center;gap:10px;width:100%;">
-          <span class="export-note" style="font-style:normal;color:var(--lodge-muted);font-size:12px;">Obsidian vault</span>
-          <button class="lodge-btn export-obsidian" onclick="exportObsidian()">→ Save to Obsidian</button>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;">
-          <span class="export-note" style="font-size:11px;font-style:italic;white-space:nowrap;">Vault path:</span>
+        </label>
+        <label class="export-config-field" id="export-ulysses-id-config">
+          <span>Group identifier (optional, subfolders)</span>
+          <input class="ulysses-group-input" id="ulysses-group-id" placeholder="Option+right-click group → Copy Callback Identifier" value="" oninput="localStorage.setItem('sc-ulysses-group-id',this.value)" />
+        </label>
+        <label class="export-config-field" id="export-obsidian-config">
+          <span>Obsidian vault</span>
           <input class="ulysses-group-input" id="obsidian-vault" placeholder="~/Documents/My Vault" value="" oninput="localStorage.setItem('sc-obsidian-vault',this.value)" />
-        </div>
+        </label>
       </div>
-      <div class="export-journal-row" id="export-md-row" style="display:none;">
-        <span class="export-note" style="font-style:normal;color:var(--lodge-muted);font-size:12px;">Markdown</span>
-        <button class="lodge-btn" onclick="exportMd()">↓ Download .md</button>
-      </div>
-      <div class="export-journal-row" style="margin-top:4px;border-top:1px solid var(--lodge-border);padding-top:10px;">
-        <span class="export-note" style="font-style:italic;color:var(--lodge-ash);font-size:12px;">Witness</span>
-        <button class="lodge-btn" style="border-color:var(--lodge-ash);color:var(--lodge-ash);" onclick="startWitness()" title="Watch the transcript play back with reading-time pacing">◎ Watch this meeting</button>
-      </div>
-      <div class="export-journal-row" style="margin-top:4px;">
-        <span class="export-note" style="font-style:italic;color:var(--lodge-ash);font-size:12px;">The Lodge Beyond the Lodge</span>
-        <button class="lodge-btn" style="border-color:var(--lodge-ash);color:var(--lodge-ash);" onclick="reconveneOnCurrentSession()" title="Use this transcript as the document for a new session">↩ Reconvene on this transcript</button>
-      </div>
-      <div style="margin-top:8px;">
+
+      <div class="after-row">
         <span class="source-tag" id="export-status"></span>
       </div>
     </div>
