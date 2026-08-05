@@ -151,12 +151,39 @@ app.use('/vendor/babylonjs', express.static(path.join(__dirname, 'node_modules/b
 const ROSTER_FILE = path.join(MEMBERS_DIR, 'roster.json');
 let ROSTER = [];
 
+// Small pool of neutral symbols for members without a hand-picked glyph (the
+// original 12 carry meaningful ones set by hand in roster.json). Cycles once
+// exhausted — see #80.
+const FALLBACK_GLYPHS = [
+  '☉', '♀', '♂', '♄', '♅', '♆', '♇', '☄',
+  '★', '☆', '✪', '✴', '✷', '✹', '✵', '❋',
+  '◆', '◇', '▲', '▽', '⬟', '⬢', '⌖', '✻',
+];
+
+// Deterministic-ish: picks the first pool symbol not already in use by the
+// roster, so glyphs stay distinct as long as the pool has room; cycles by
+// roster size once it doesn't.
+function assignGlyph(roster) {
+  const used = new Set(roster.map(m => m.glyph).filter(Boolean));
+  const free = FALLBACK_GLYPHS.find(g => !used.has(g));
+  return free || FALLBACK_GLYPHS[roster.length % FALLBACK_GLYPHS.length];
+}
+
 function reloadRoster() {
   const all = JSON.parse(fs.readFileSync(ROSTER_FILE, 'utf8'));
   // Filter out any entry whose character file no longer exists on disk
   ROSTER = all.filter(m => !m.file || fs.existsSync(path.join(MEMBERS_DIR, m.file)));
-  // Also rewrite roster.json to remove stale entries
-  if (ROSTER.length < all.length) {
+  // Backfill glyphs for any member who doesn't have one yet (e.g. members
+  // added to roster.json before glyphs existed, or by hand without one)
+  let backfilled = false;
+  for (const m of ROSTER) {
+    if (!m.glyph) {
+      m.glyph = assignGlyph(ROSTER);
+      backfilled = true;
+    }
+  }
+  // Rewrite roster.json if entries were removed or glyphs were backfilled
+  if (ROSTER.length < all.length || backfilled) {
     fs.writeFileSync(ROSTER_FILE, JSON.stringify(ROSTER, null, 2) + '\n', 'utf8');
   }
 }
@@ -1087,7 +1114,7 @@ ${relationships || '(not specified — infer from historical record)'}`;
 
     fs.writeFileSync(filePath, characterFile, 'utf8');
 
-    const newMember = { id, name: name.trim(), file };
+    const newMember = { id, name: name.trim(), file, glyph: assignGlyph(ROSTER) };
     ROSTER.push(newMember);
     fs.writeFileSync(ROSTER_FILE, JSON.stringify(ROSTER, null, 2), 'utf8');
 

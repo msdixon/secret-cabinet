@@ -1,35 +1,213 @@
 [
-  { "id": "crowley",   "name": "Crowley",        "file": "crowley.md" },
-  { "id": "waite",     "name": "Waite",           "file": "waite.md" },
-  { "id": "pixie",     "name": "Coleman-Smith",   "file": "coleman-smith.md", "aliases": ["Pamela"] },
-  { "id": "yeats",     "name": "Yeats",           "file": "yeats.md" },
-  { "id": "blavatsky", "name": "Blavatsky",       "file": "blavatsky.md" },
-  { "id": "levi",      "name": "Lévi",            "file": "levi.md" },
-  { "id": "teresa",    "name": "Teresa of Ávila", "file": "teresa.md" },
-  { "id": "arabi",     "name": "Ibn Arabi",       "file": "ibn-arabi.md" },
-  { "id": "maud",      "name": "Maud Gonne",      "file": "maud-gonne.md" },
-  { "id": "llull",     "name": "Llull",           "file": "llull.md" },
-  { "id": "khaldun",   "name": "Ibn Khaldun",     "file": "ibn-khaldun.md" },
-  { "id": "dee",       "name": "John Dee",        "file": "john-dee.md" },
-  { "id": "warburg",        "name": "Aby Warburg",        "file": "warburg.md" },
-  { "id": "corbin",         "name": "Henri Corbin",       "file": "corbin.md" },
-  { "id": "adorno",         "name": "Theodor Adorno",     "file": "adorno.md" },
-  { "id": "bruno",          "name": "Giordano Bruno",     "file": "bruno.md",          "aliases": ["The Nolan", "Nolan"] },
-  { "id": "al-hallaj",      "name": "Al-Hallaj",          "file": "al-hallaj.md",      "aliases": ["Husayn"] },
-  { "id": "abulafia",       "name": "Abraham Abulafia",   "file": "abulafia.md" },
-  { "id": "frieda-harris",  "name": "Lady Frieda Harris", "file": "frieda-harris.md" },
-  { "id": "dion-fortune",   "name": "Dion Fortune",       "file": "dion-fortune.md" },
-  { "id": "william-blake",  "name": "William Blake",      "file": "william-blake.md" },
-  { "id": "catherine-blake","name": "Catherine Blake",    "file": "catherine-blake.md", "aliases": ["Kate"] },
-  { "id": "yates",          "name": "Frances Yates",      "file": "yates.md" },
-  { "id": "scholem",        "name": "Gershom Scholem",    "file": "scholem.md" },
-  { "id": "moina-mathers",  "name": "Moina Mathers",      "file": "moina-mathers.md" },
-  { "id": "randolph",       "name": "Paschal Beverly Randolph", "file": "randolph.md" },
-  { "id": "bamba",          "name": "Amadou Bamba",       "file": "bamba.md" },
-  { "id": "sun-ra",         "name": "Sun Ra",             "file": "sun-ra.md" },
-  { "id": "porete",         "name": "Marguerite Porete",  "file": "porete.md" },
-  { "id": "hildegard",      "name": "Hildegard of Bingen","file": "hildegard.md" },
-  { "id": "julian",         "name": "Julian of Norwich",  "file": "julian.md" },
-  { "id": "jung",           "name": "Carl Jung",          "file": "jung.md" },
-  { "id": "pauli",          "name": "Wolfgang Pauli",     "file": "pauli.md" }
+  {
+    "id": "crowley",
+    "name": "Crowley",
+    "file": "crowley.md",
+    "glyph": "☿"
+  },
+  {
+    "id": "waite",
+    "name": "Waite",
+    "file": "waite.md",
+    "glyph": "✡"
+  },
+  {
+    "id": "pixie",
+    "name": "Coleman-Smith",
+    "file": "coleman-smith.md",
+    "aliases": [
+      "Pamela"
+    ],
+    "glyph": "♃"
+  },
+  {
+    "id": "yeats",
+    "name": "Yeats",
+    "file": "yeats.md",
+    "glyph": "☽"
+  },
+  {
+    "id": "blavatsky",
+    "name": "Blavatsky",
+    "file": "blavatsky.md",
+    "glyph": "☸"
+  },
+  {
+    "id": "levi",
+    "name": "Lévi",
+    "file": "levi.md",
+    "glyph": "△"
+  },
+  {
+    "id": "teresa",
+    "name": "Teresa of Ávila",
+    "file": "teresa.md",
+    "glyph": "✦"
+  },
+  {
+    "id": "arabi",
+    "name": "Ibn Arabi",
+    "file": "ibn-arabi.md",
+    "glyph": "◯"
+  },
+  {
+    "id": "maud",
+    "name": "Maud Gonne",
+    "file": "maud-gonne.md",
+    "glyph": "✿"
+  },
+  {
+    "id": "llull",
+    "name": "Llull",
+    "file": "llull.md",
+    "glyph": "✺"
+  },
+  {
+    "id": "khaldun",
+    "name": "Ibn Khaldun",
+    "file": "ibn-khaldun.md",
+    "glyph": "⬡"
+  },
+  {
+    "id": "dee",
+    "name": "John Dee",
+    "file": "john-dee.md",
+    "glyph": "✧"
+  },
+  {
+    "id": "warburg",
+    "name": "Aby Warburg",
+    "file": "warburg.md",
+    "glyph": "☉"
+  },
+  {
+    "id": "corbin",
+    "name": "Henri Corbin",
+    "file": "corbin.md",
+    "glyph": "♀"
+  },
+  {
+    "id": "adorno",
+    "name": "Theodor Adorno",
+    "file": "adorno.md",
+    "glyph": "♂"
+  },
+  {
+    "id": "bruno",
+    "name": "Giordano Bruno",
+    "file": "bruno.md",
+    "aliases": [
+      "The Nolan",
+      "Nolan"
+    ],
+    "glyph": "♄"
+  },
+  {
+    "id": "al-hallaj",
+    "name": "Al-Hallaj",
+    "file": "al-hallaj.md",
+    "aliases": [
+      "Husayn"
+    ],
+    "glyph": "♅"
+  },
+  {
+    "id": "abulafia",
+    "name": "Abraham Abulafia",
+    "file": "abulafia.md",
+    "glyph": "♆"
+  },
+  {
+    "id": "frieda-harris",
+    "name": "Lady Frieda Harris",
+    "file": "frieda-harris.md",
+    "glyph": "♇"
+  },
+  {
+    "id": "dion-fortune",
+    "name": "Dion Fortune",
+    "file": "dion-fortune.md",
+    "glyph": "☄"
+  },
+  {
+    "id": "william-blake",
+    "name": "William Blake",
+    "file": "william-blake.md",
+    "glyph": "★"
+  },
+  {
+    "id": "catherine-blake",
+    "name": "Catherine Blake",
+    "file": "catherine-blake.md",
+    "aliases": [
+      "Kate"
+    ],
+    "glyph": "☆"
+  },
+  {
+    "id": "yates",
+    "name": "Frances Yates",
+    "file": "yates.md",
+    "glyph": "✪"
+  },
+  {
+    "id": "scholem",
+    "name": "Gershom Scholem",
+    "file": "scholem.md",
+    "glyph": "✴"
+  },
+  {
+    "id": "moina-mathers",
+    "name": "Moina Mathers",
+    "file": "moina-mathers.md",
+    "glyph": "✷"
+  },
+  {
+    "id": "randolph",
+    "name": "Paschal Beverly Randolph",
+    "file": "randolph.md",
+    "glyph": "✹"
+  },
+  {
+    "id": "bamba",
+    "name": "Amadou Bamba",
+    "file": "bamba.md",
+    "glyph": "✵"
+  },
+  {
+    "id": "sun-ra",
+    "name": "Sun Ra",
+    "file": "sun-ra.md",
+    "glyph": "❋"
+  },
+  {
+    "id": "porete",
+    "name": "Marguerite Porete",
+    "file": "porete.md",
+    "glyph": "◆"
+  },
+  {
+    "id": "hildegard",
+    "name": "Hildegard of Bingen",
+    "file": "hildegard.md",
+    "glyph": "◇"
+  },
+  {
+    "id": "julian",
+    "name": "Julian of Norwich",
+    "file": "julian.md",
+    "glyph": "▲"
+  },
+  {
+    "id": "jung",
+    "name": "Carl Jung",
+    "file": "jung.md",
+    "glyph": "▽"
+  },
+  {
+    "id": "pauli",
+    "name": "Wolfgang Pauli",
+    "file": "pauli.md",
+    "glyph": "⬟"
+  }
 ]
