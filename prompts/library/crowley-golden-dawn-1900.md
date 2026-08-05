@@ -6,7 +6,7 @@ date: "1929"
 members: [crowley, waite, yeats]
 themes: [golden-dawn, schism, authority, initiation]
 citation: "Aleister Crowley, The Confessions of Aleister Crowley: An Autohagiography, ed. John Symonds and Kenneth Grant (London: Jonathan Cape, 1969), chapters 18–19. First composed c. 1929."
-source_url: "https://archive.org/details/confessionsofalei00crow"
+source_url: "https://archive.org/details/symonds-grant-the-confessions-of-aleister-crowley-1989"
 ---
 
 I presented myself at the vault and demanded my initiation into the grade of Adeptus Minor. The London adepts refused. Their grounds were various and, to my mind, frivolous: that my moral character was unsuitable, that my sponsor Mathers had acted without authority, that the Second Order had voted against my advancement. What they could not say — what not one of them had the courage to say openly — was that they feared what I carried in me.

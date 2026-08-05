@@ -278,6 +278,12 @@
 .transcript-entry.citation-uncertain .bubble-body { --flag-color:var(--lodge-gold); }
 .transcript-entry.flagged-citation .speech-text { cursor:help; }
 
+/* Archival image (#30) — cover/title-page of the cited work, synced to its speech block */
+.archival-image { margin-top:10px; }
+.archival-image-link { display:inline-block; border:1px solid var(--lodge-border); border-radius:2px; padding:3px; background:rgba(0,0,0,0.2); transition:border-color 0.15s ease; }
+a.archival-image-link:hover { border-color:var(--lodge-amber-dim); cursor:pointer; }
+.archival-image-link img { display:block; max-height:120px; width:auto; border-radius:1px; filter:sepia(0.15); }
+
 /* Sessions drawer */
 .sessions-btn { border-color:var(--lodge-ash); color:var(--lodge-muted); }
 .sessions-btn:hover { border-color:var(--lodge-amber-dim); color:var(--lodge-cream); }

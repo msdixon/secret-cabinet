@@ -1089,7 +1089,28 @@ function applyCitationFlags(citations) {
     const speechEl = entry.querySelector('.speech-text');
     speechEl.title = flags.map(f =>
       f.note + (f.libraryCitation ? `\nGrounded in: ${f.libraryCitation}` : '')).join('\n\n');
+    // #30 — archival image synced to whichever cited work has one, alongside the speech block.
+    const withImage = flags.find(f => f.libraryImage);
+    if (withImage) attachArchivalImage(entry, withImage);
   });
+}
+
+// Appends a thumbnail of the cited work's archival image, linked out to its
+// archive.org source. One per speech block — if several citations in the same
+// turn have images, the first (see byEntry ordering above) wins rather than
+// stacking a gallery.
+function attachArchivalImage(entry, flag) {
+  const body = entry.querySelector('.bubble-body');
+  if (!body || body.querySelector('.archival-image')) return;
+  const caption = escapeHTML(flag.libraryCitation || flag.work || 'Archival source');
+  const href = flag.librarySourceUrl ? ` href="${escapeHTML(flag.librarySourceUrl)}" target="_blank" rel="noopener"` : '';
+  const tag = flag.librarySourceUrl ? 'a' : 'span';
+  const fig = document.createElement('div');
+  fig.className = 'archival-image';
+  fig.innerHTML = `<${tag} class="archival-image-link"${href} title="${caption}">
+      <img src="/${escapeHTML(flag.libraryImage)}" alt="${caption}" loading="lazy">
+    </${tag}>`;
+  body.appendChild(fig);
 }
 
 async function verifyCitations() {

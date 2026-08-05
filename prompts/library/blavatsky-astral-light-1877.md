@@ -6,7 +6,7 @@ date: "1877"
 members: [blavatsky, levi]
 themes: [astral, occult-science, will, ether, plagiarism]
 citation: "Helena Petrovna Blavatsky, Isis Unveiled: A Master-Key to the Mysteries of Ancient and Modern Science and Theology, Vol. I (New York: J.W. Bouton, 1877), pp. 57–58."
-source_url: "https://archive.org/details/isisunveiledmast01blav"
+source_url: "https://archive.org/details/cu31924092304587"
 ---
 
 The astral light is the life-principle of our planet. It is the storehouse of all forms and all occurrences; the mirror of everything that has existed, exists, or will exist; the living source of prophecy, clairvoyance, and vision. It does not vanish; it preserves all things, including the intimate records of every human life — every thought left its trace, every deed its mark, every passion its impress upon this subtle medium.

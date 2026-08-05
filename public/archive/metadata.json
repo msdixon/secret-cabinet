@@ -1,0 +1,57 @@
+{
+  "_comment": "Archival cover images synchronized to library citations (#30). One entry per prompts/library/*.md id. `image` is a path under public/archive/, served statically. `archiveOrgIdentifier` is the actual Internet Archive item the cover was pulled from — verified via https://archive.org/metadata/<id> before download, since several `source_url` values already in the library frontmatter turned out to be fabricated identifiers that 404 (fixed alongside this issue; see STATUS.md).",
+  "credit": "Internet Archive (archive.org) — cover/title-page thumbnail via the archive.org img service.",
+  "license": "Public domain or no-known-restrictions per the source item's own archive.org listing; verify per-item before any use outside this app.",
+  "entries": {
+    "arabi-imagination-fusus": {
+      "image": "archive/arabi-imagination-fusus.jpg",
+      "archiveOrgIdentifier": "bezelsofwisdom00ibna",
+      "archiveOrgUrl": "https://archive.org/details/bezelsofwisdom00ibna"
+    },
+    "blavatsky-astral-light-1877": {
+      "image": "archive/blavatsky-astral-light-1877.jpg",
+      "archiveOrgIdentifier": "cu31924092304587",
+      "archiveOrgUrl": "https://archive.org/details/cu31924092304587"
+    },
+    "crowley-golden-dawn-1900": {
+      "image": "archive/crowley-golden-dawn-1900.jpg",
+      "archiveOrgIdentifier": "symonds-grant-the-confessions-of-aleister-crowley-1989",
+      "archiveOrgUrl": "https://archive.org/details/symonds-grant-the-confessions-of-aleister-crowley-1989"
+    },
+    "dee-monas-hieroglyphica-1564": {
+      "image": "archive/dee-monas-hieroglyphica-1564.jpg",
+      "archiveOrgIdentifier": "b33350838",
+      "archiveOrgUrl": "https://archive.org/details/b33350838"
+    },
+    "khaldun-asabiyyah-muqaddimah-1377": {
+      "image": "archive/khaldun-asabiyyah-muqaddimah-1377.jpg",
+      "archiveOrgIdentifier": "muqaddimahintrod0000ibnk",
+      "archiveOrgUrl": "https://archive.org/details/muqaddimahintrod0000ibnk"
+    },
+    "levi-great-arcanum-1856": {
+      "image": "archive/levi-great-arcanum-1856.jpg",
+      "archiveOrgIdentifier": "transcendentalma00leviuoft",
+      "archiveOrgUrl": "https://archive.org/details/transcendentalma00leviuoft"
+    },
+    "maud-gonne-servant-of-queen-1938": {
+      "image": "archive/maud-gonne-servant-of-queen-1938.jpg",
+      "archiveOrgIdentifier": "servantofqueenre0000macb",
+      "archiveOrgUrl": "https://archive.org/details/servantofqueenre0000macb"
+    },
+    "teresa-fourth-mansion-1577": {
+      "image": "archive/teresa-fourth-mansion-1577.jpg",
+      "archiveOrgIdentifier": "bwb_T5-CUV-291",
+      "archiveOrgUrl": "https://archive.org/details/bwb_T5-CUV-291"
+    },
+    "waite-pictorial-key-preface-1911": {
+      "image": "archive/waite-pictorial-key-preface-1911.jpg",
+      "archiveOrgIdentifier": "pictorialkeytota0000wait",
+      "archiveOrgUrl": "https://archive.org/details/pictorialkeytota0000wait"
+    },
+    "yeats-automatic-writing-1917": {
+      "image": "archive/yeats-automatic-writing-1917.jpg",
+      "archiveOrgIdentifier": "vision0000yeat",
+      "archiveOrgUrl": "https://archive.org/details/vision0000yeat"
+    }
+  }
+}

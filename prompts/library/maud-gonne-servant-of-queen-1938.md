@@ -6,7 +6,7 @@ date: "1938"
 members: [maud, yeats]
 themes: [ireland, nationalism, vision, mysticism, sacrifice]
 citation: "Maud Gonne MacBride, A Servant of the Queen: Reminiscences (London: Victor Gollancz, 1938), Chapter XII, 'Willie Yeats and His Mystical Marriage with Erin,' pp. 148–152."
-source_url: ""
+source_url: "https://archive.org/details/servantofqueenre0000macb"
 ---
 
 Willie talked to me of his magical work as though it were continuous with his poems — as though the two were one effort, conducted by different means. I did not think they were separate things either, but I thought he did not yet understand what the work demanded. He was still trying to have his vision and his comfort both. You cannot do that. Ireland did not want a poet who visited her in ecstasy and then went back to his supper. She wanted servants who stayed.

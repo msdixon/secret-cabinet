@@ -6,7 +6,7 @@ date: "1911"
 members: [waite, pixie]
 themes: [tarot, symbolism, authorship, hermeticism, pictorial-tradition]
 citation: "Arthur Edward Waite, The Pictorial Key to the Tarot (London: William Rider & Son, 1911), Preface, pp. v–viii."
-source_url: "https://archive.org/details/pictorialkeytota00wait"
+source_url: "https://archive.org/details/pictorialkeytota0000wait"
 ---
 
 The Tarot embodies symbolical presentations of universal ideas, behind which lie all the implicits of the human mind, and it is in this sense that they contain secret doctrine, which is the realization by the few of truths embedded in the consciousness of all. The cards are a work of art — I say this carefully — and a work of doctrinal art, which is something rarer.
