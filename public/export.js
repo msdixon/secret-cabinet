@@ -1,0 +1,516 @@
+'use strict';
+
+// #142: extracted from app.js's "Day One" / "File import" / "Export" /
+// "Environment config" sections (in that order in the seam mapping —
+// witness.js first, this second), following the same script-tag/IIFE
+// convention as scene.js and witness.js. window.Export exposes a small API;
+// app.js calls into it and never touches these internals directly.
+//
+// This module has more core-state coupling than witness.js did (the seam
+// mapping called this "moderate coupling: reads transcript/session state,
+// doesn't own it") -- nearly every function here reads currentEntry,
+// currentJournal, currentSessionId, sessionDate, transcriptText, or the
+// roster, and a few write currentEntry/currentJournal/currentSourceSessionId
+// as the user picks a document source. Rather than reach into app.js's
+// globals directly, app.js hands this module a `deps` bag once via
+// configure() -- a live getCore() accessor plus setters for the fields this
+// module needs to write -- called during app.js's own Init section, the same
+// place initSceneLayer() calls LodgeScene.init().
+window.Export = (function () {
+  let deps = null; // set by configure(); see app.js's exportDeps()
+
+  function configure(injectedDeps) {
+    deps = injectedDeps;
+  }
+
+  // ── Day One ────────────────────────────────────────────────────────────────
+  const entryCache = new Map(); // key: "dayone:journalId:idx" → { text, date, journalId, journalName }
+  let sourceOptionsLoaded = false;
+
+  function updateExportJournalLabel() {
+    const el = document.getElementById('export-journal-name');
+    if (el) el.textContent = deps.getCore().currentJournal.name || 'No journal selected';
+  }
+
+  // Called on mousedown of source-select — loads journals + 3 recent entries per
+  // journal into optgroups. Runs once; subsequent mousedowns are no-ops.
+  async function loadSourceOptions() {
+    if (sourceOptionsLoaded) return;
+    sourceOptionsLoaded = true; // prevent double-load
+
+    const sel = document.getElementById('source-select');
+    const loadingGroup = document.getElementById('source-loading-group');
+
+    try {
+      const res = await fetch('/api/dayone/journals', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+      });
+      const data = await res.json();
+      const journals = data.journals || [];
+      if (!journals.length) {
+        if (loadingGroup) loadingGroup.label = 'No Day One journals found';
+        return;
+      }
+
+      // Float PreSeedings to top
+      const isPreferred = j => /preseedings|secret.cabin/i.test(j.name);
+      const sorted = [...journals].sort((a, b) => isPreferred(b) - isPreferred(a));
+
+      // Remove the placeholder loading group
+      if (loadingGroup) loadingGroup.remove();
+
+      // Pre-create groups in sorted order so the DOM order is guaranteed
+      const groups = sorted.map(journal => {
+        const group = document.createElement('optgroup');
+        group.label = journal.name;
+        sel.appendChild(group);
+        return { journal, group };
+      });
+
+      // Load entries for each journal in parallel, fill the pre-created groups
+      await Promise.all(groups.map(async ({ journal, group }) => {
+        try {
+          const er = await fetch('/api/dayone/entries', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ journalId: journal.id, limit: 3 }),
+          });
+          const ed = await er.json();
+          const entries = ed.entries || [];
+
+          entries.forEach((entry, idx) => {
+            const key = `dayone:${journal.id}:${idx}`;
+            entryCache.set(key, { ...entry, journalId: journal.id, journalName: journal.name });
+            const opt = document.createElement('option');
+            opt.value = key;
+            opt.textContent = `${entry.date}  ${entry.preview}`;
+            group.appendChild(opt);
+          });
+
+          if (!entries.length) {
+            const opt = document.createElement('option');
+            opt.disabled = true;
+            opt.textContent = 'No entries found';
+            group.appendChild(opt);
+          }
+        } catch {
+          const opt = document.createElement('option');
+          opt.disabled = true;
+          opt.textContent = 'Could not load entries';
+          group.appendChild(opt);
+        }
+      }));
+
+      // If we had a saved journal preference, try to pre-select its first entry
+      const savedJournalId = deps.getCore().currentJournal.id;
+      if (savedJournalId) {
+        const key = `dayone:${savedJournalId}:0`;
+        if (entryCache.has(key)) {
+          sel.value = key;
+          handleSourceChange(); // load entry text into state
+        }
+      }
+
+    } catch (e) {
+      if (loadingGroup) loadingGroup.label = 'Could not connect to Day One';
+    }
+
+    // Add library entries as an optgroup
+    try {
+      const libRes = await fetch('/api/library');
+      const libEntries = await libRes.json();
+      if (Array.isArray(libEntries) && libEntries.length) {
+        const libGroup = document.createElement('optgroup');
+        libGroup.label = 'Archival Library';
+        libEntries.forEach(entry => {
+          const opt = document.createElement('option');
+          opt.value = `library:${entry.id}`;
+          opt.textContent = `${entry.date}  ${entry.title}`;
+          libGroup.appendChild(opt);
+        });
+        sel.appendChild(libGroup);
+      }
+    } catch (_) {}
+  }
+
+  function handleSourceChange() {
+    const v = document.getElementById('source-select').value;
+    const isPaste = v === 'paste';
+    document.getElementById('paste-area-container').style.display = isPaste ? 'block' : 'none';
+    document.getElementById('fetched-display').style.display = isPaste ? 'none' : 'block';
+
+    // Changing source clears any prior transcript reconvene state
+    if (!v.startsWith('transcript:')) deps.setCurrentSourceSessionId(null);
+
+    if (v.startsWith('library:')) {
+      const id = v.slice('library:'.length);
+      deps.setCurrentEntry('');
+      const display = document.getElementById('entry-display');
+      display.textContent = 'Loading…';
+      display.classList.add('placeholder');
+      fetch(`/api/library/${id}`)
+        .then(r => r.json())
+        .then(entry => {
+          deps.setCurrentEntry(entry.text);
+          display.textContent = entry.text;
+          display.classList.remove('placeholder');
+          document.getElementById('entry-date-tag').textContent = entry.date || '';
+          document.getElementById('entry-journal-tag').textContent = entry.source || 'Library';
+          deps.setStatus('The document has been read aloud. The room has heard it.', false);
+        })
+        .catch(() => {
+          display.textContent = 'Could not load entry.';
+        });
+    } else if (!isPaste && entryCache.has(v)) {
+      const cached = entryCache.get(v);
+      deps.setCurrentEntry(cached.text);
+      deps.setCurrentJournal({ id: cached.journalId, name: cached.journalName });
+      updateExportJournalLabel();
+
+      const display = document.getElementById('entry-display');
+      display.textContent = cached.text;
+      display.classList.remove('placeholder');
+      document.getElementById('entry-date-tag').textContent = cached.date || '';
+      document.getElementById('entry-journal-tag').textContent = cached.journalName;
+      deps.setStatus('The document has been read aloud. The room has heard it.', false);
+    } else if (isPaste) {
+      deps.setCurrentEntry('');
+    }
+  }
+
+  function getEntry() {
+    return document.getElementById('source-select').value === 'paste'
+      ? document.getElementById('paste-area').value.trim()
+      : deps.getCore().currentEntry;
+  }
+
+  // ── File import ────────────────────────────────────────────────────────────
+  async function handleFileSelect(input) {
+    const file = input.files[0];
+    if (!file) return;
+    const nameEl = document.getElementById('file-pick-name');
+    nameEl.textContent = 'Reading…';
+
+    const ext = file.name.split('.').pop().toLowerCase();
+
+    if (ext === 'txt' || ext === 'md') {
+      // Read client-side — no server round-trip
+      const text = await file.text();
+      fillFromFile(text.trim(), file.name);
+    } else if (ext === 'pdf') {
+      // Send to server for extraction
+      const form = new FormData();
+      form.append('file', file);
+      try {
+        const res = await fetch('/api/upload', { method: 'POST', body: form });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Upload failed');
+        fillFromFile(data.text, data.filename);
+      } catch (e) {
+        nameEl.textContent = `Error: ${e.message}`;
+      }
+    }
+    // Reset input so the same file can be re-selected
+    input.value = '';
+  }
+
+  const FILE_TEXT_LIMIT = 4000; // chars — keeps context manageable across rounds
+
+  function fillFromFile(text, filename) {
+    const area = document.getElementById('paste-area');
+    let notice = '';
+    if (text.length > FILE_TEXT_LIMIT) {
+      text = text.slice(0, FILE_TEXT_LIMIT);
+      // Trim to last complete sentence
+      const lastStop = Math.max(text.lastIndexOf('. '), text.lastIndexOf('.\n'), text.lastIndexOf('? '), text.lastIndexOf('! '));
+      if (lastStop > FILE_TEXT_LIMIT * 0.7) text = text.slice(0, lastStop + 1);
+      notice = ' (trimmed to first ~4,000 chars — paste a specific passage for longer texts)';
+    }
+    area.value = text;
+    document.getElementById('file-pick-name').textContent = filename + notice;
+    // Ensure paste mode is active
+    const sel = document.getElementById('source-select');
+    sel.value = 'paste';
+    handleSourceChange();
+    deps.setStatus(`"${filename}" loaded.${notice ? ' Long document trimmed.' : ' The room has heard it.'}`, false);
+  }
+
+  // ── Export ─────────────────────────────────────────────────────────────────
+  function buildAnnotatedTranscript() {
+    // Weave annotations and player-turn markers into the transcript text after
+    // each relevant speech block. Exports always carry the player-turn marker
+    // even though the live view never shows it (invisible-during-play is a
+    // live-viewing choice, not a data-hiding one).
+    let out = deps.getCore().transcriptText;
+    const annotated = [...document.querySelectorAll('.transcript-entry.annotated')];
+    const playerTurnEntries = [...document.querySelectorAll('.transcript-entry.player-turn')];
+    if (!annotated.length && !playerTurnEntries.length) return out;
+    // Rebuild line-by-line, inserting markers after each matching speaker's block
+    const lines = out.split('\n');
+    const result = [];
+    let i = 0;
+    while (i < lines.length) {
+      result.push(lines[i]);
+      // Check if this is a speaker — line ending in " —" followed by speech
+      const match = lines[i].match(/^(.+) —$/);
+      if (match) {
+        const speaker = match[1];
+        const entry = annotated.find(e => e.dataset.speaker === speaker);
+        const note = entry?.querySelector('.annotation-input')?.value.trim();
+        const playerEntry = playerTurnEntries.find(e => e.dataset.speaker === speaker);
+        if ((note && entry) || playerEntry) {
+          // Collect the speech block (next non-empty lines until blank)
+          while (i + 1 < lines.length && lines[i + 1] !== '') {
+            i++;
+            result.push(lines[i]);
+          }
+          if (note && entry) {
+            result.push(`  ↳ ${note}`);
+            annotated.splice(annotated.indexOf(entry), 1); // consume so dupes don't re-match
+          }
+          if (playerEntry) {
+            result.push('  ⟡ played by a human participant, live');
+            playerTurnEntries.splice(playerTurnEntries.indexOf(playerEntry), 1);
+          }
+        }
+      }
+      i++;
+    }
+    return result.join('\n');
+  }
+
+  // Annotated passages in document order — DOM order matches speech order since
+  // entries are appended sequentially by addSpeech()/parseAndRenderTranscript(),
+  // so no round-grouping or re-sorting is needed.
+  function getAnnotatedPassages() {
+    return [...document.querySelectorAll('.transcript-entry.annotated')].map(e => ({
+      speaker: e.dataset.speaker,
+      text: e.querySelector('.speech-text')?.textContent.trim() || '',
+      note: e.querySelector('.annotation-input')?.value.trim() || '',
+    }));
+  }
+
+  function updateScholarlyExportButton() {
+    const btn = document.getElementById('export-scholarly-btn');
+    if (btn) btn.disabled = getAnnotatedPassages().length === 0;
+  }
+
+  // Groups a session's citationFlags by cited work, same convention as
+  // scripts/build-citation-manifest.js, so the per-session bibliography reads
+  // consistently with the cumulative cross-session one.
+  function renderBibliography(citations) {
+    if (!citations.length) {
+      return '_No citations verified for this session. Run **Verify Citations ⚑** above, then re-export to include a bibliography._\n';
+    }
+    const byWork = new Map();
+    citations.forEach(c => {
+      if (!byWork.has(c.work)) byWork.set(c.work, []);
+      byWork.get(c.work).push(c);
+    });
+    const lines = [];
+    [...byWork.entries()].sort((a, b) => a[0].localeCompare(b[0])).forEach(([work, occurrences]) => {
+      lines.push(`### ${work}`, '');
+      occurrences.forEach(o => {
+        const grounding = o.libraryCitation ? ` — grounded in: ${o.libraryCitation}` : '';
+        lines.push(`- **${o.verdict}** — ${(o.speaker || '').replace(/\s*—\s*$/, '').trim()}`);
+        lines.push(`  > "${o.quote}"`);
+        lines.push(`  ${o.note}${grounding}`, '');
+      });
+    });
+    return lines.join('\n');
+  }
+
+  async function exportScholarly() {
+    const passages = getAnnotatedPassages();
+    if (!passages.length || !deps.getCore().currentSessionId) return;
+    const statusEl = document.getElementById('export-status');
+    statusEl.textContent = 'Building scholarly note...';
+    try {
+      const res = await fetch(`/api/sessions/${deps.getCore().currentSessionId}`);
+      if (!res.ok) throw new Error(`Server error ${res.status}`);
+      const session = await res.json();
+
+      const { activeMembers, MEMBERS, currentEntry, sessionDate } = deps.getCore();
+      const names = [...activeMembers].map(id => MEMBERS.find(m => m.id === id)?.name).filter(Boolean).join(', ');
+      const source = (currentEntry || '').trim();
+      const sourceExcerpt = source.length > 300 ? source.slice(0, 300) + '…' : source;
+
+      const lines = [
+        '# Secret-Cabin-et — Scholarly Note',
+        '',
+        `**Date:** ${sessionDate}`,
+        `**Members:** ${names}`,
+        `**Source:** ${sourceExcerpt}`,
+        '',
+        '## Selected Passages',
+        '',
+      ];
+      passages.forEach(p => {
+        lines.push(`**${p.speaker}** —`, '', p.text, '', `> ${p.note}`, '');
+      });
+      lines.push('## Bibliography', '', renderBibliography(session.citationFlags || []));
+
+      const blob = new Blob([lines.join('\n')], { type: 'text/markdown' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `secret-cabinet-scholarly-${sessionDate}.md`;
+      a.click();
+      URL.revokeObjectURL(url);
+      statusEl.textContent = 'Scholarly note downloaded.';
+    } catch (err) {
+      console.error(err);
+      statusEl.textContent = 'Scholarly export failed.';
+    }
+  }
+
+  function exportTxt() {
+    const blob = new Blob([buildAnnotatedTranscript()], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `secret-cabinets-${deps.getCore().sessionDate}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+    document.getElementById('export-status').textContent = 'Downloaded.';
+  }
+
+  async function exportDayOne() {
+    const { currentJournal } = deps.getCore();
+    if (!currentJournal.id) {
+      document.getElementById('export-status').textContent = 'Select a Day One journal first.';
+      return;
+    }
+    document.getElementById('export-status').textContent = `Saving to ${currentJournal.name}...`;
+    try {
+      const res = await fetch('/api/dayone/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          journalId: currentJournal.id,
+          journalName: currentJournal.name,
+          transcriptText: buildAnnotatedTranscript(),
+          sessionDate: deps.getCore().sessionDate,
+        }),
+      });
+      if (!res.ok) throw new Error(`Server error ${res.status}`);
+      document.getElementById('export-status').textContent = `Saved to ${currentJournal.name}.`;
+    } catch (err) {
+      console.error(err);
+      document.getElementById('export-status').textContent = 'Export failed. Try .txt download.';
+    }
+  }
+
+  async function exportObsidian() {
+    const statusEl = document.getElementById('export-status');
+    const vaultPath = document.getElementById('obsidian-vault')?.value.trim();
+    if (!vaultPath) { statusEl.textContent = 'Enter your Obsidian vault path first.'; return; }
+    statusEl.textContent = 'Writing to Obsidian…';
+    try {
+      const { sessionDate, activeMembers, MEMBERS, currentEntry, currentSessionId } = deps.getCore();
+      const res = await fetch('/api/export/obsidian', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vaultPath,
+          transcriptText: buildAnnotatedTranscript(),
+          sessionDate,
+          members: [...activeMembers].map(id => MEMBERS.find(m => m.id === id)?.name).filter(Boolean),
+          tags: [],
+          sourceExcerpt: currentEntry?.slice(0, 120) || '',
+          sessionId: currentSessionId,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      statusEl.textContent = `Saved to Obsidian — ${data.filename}`;
+    } catch (err) {
+      statusEl.textContent = err.message || 'Obsidian export failed.';
+    }
+  }
+
+  async function exportUlysses() {
+    const statusEl = document.getElementById('export-status');
+    const group = document.getElementById('ulysses-group')?.value.trim() || '';
+    const groupId = document.getElementById('ulysses-group-id')?.value.trim() || '';
+    statusEl.textContent = 'Opening Ulysses…';
+    try {
+      const { sessionDate, currentEntry } = deps.getCore();
+      const res = await fetch('/api/ulysses/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          transcriptText: buildAnnotatedTranscript(),
+          sessionDate,
+          title: currentEntry?.slice(0, 60) || sessionDate,
+          group,
+          groupId,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      statusEl.textContent = groupId ? `Sent to Ulysses — ${group || 'identifier'} (by ID).` : group ? `Sent to Ulysses — ${group}.` : 'Sent to Ulysses.';
+    } catch (err) {
+      statusEl.textContent = err.message || 'Ulysses export failed.';
+    }
+  }
+
+  // NB: references currentTranscript/currentSession, which are not core
+  // globals anywhere in this app (a pre-existing bug carried over verbatim
+  // from app.js -- this button has always thrown when clicked). Not fixed
+  // here; out of scope for a mechanical extraction. Flagged separately.
+  function exportMd() {
+    if (!currentTranscript) return;
+    const text = buildAnnotatedTranscript();
+    const blob = new Blob([text], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `secret-cabinet-${currentSession?.date || new Date().toISOString().slice(0,10)}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  // ── Environment config ─────────────────────────────────────────────────────
+  async function applyEnvConfig() {
+    try {
+      const { isLocal } = await fetch('/api/config').then(r => r.json());
+      if (!isLocal) {
+        ['export-ulysses-row', 'export-ulysses-config', 'export-ulysses-id-config', 'export-obsidian-row', 'export-obsidian-config']
+          .forEach(id => document.getElementById(id)?.style.setProperty('display', 'none'));
+        document.getElementById('export-md-row')?.style.setProperty('display', 'inline-flex');
+      }
+    } catch (_) {}
+  }
+
+  // Restores the Ulysses group/group-id and Obsidian vault path fields from
+  // localStorage on load -- the fields themselves save on every keystroke via
+  // inline oninput handlers in index.html, so this is the read-back half only.
+  function restoreSavedSettings() {
+    const savedGroup = localStorage.getItem('sc-ulysses-group');
+    if (savedGroup) { const gi = document.getElementById('ulysses-group'); if (gi) gi.value = savedGroup; }
+    const savedGroupId = localStorage.getItem('sc-ulysses-group-id');
+    if (savedGroupId) { const gid = document.getElementById('ulysses-group-id'); if (gid) gid.value = savedGroupId; }
+    const savedVault = localStorage.getItem('sc-obsidian-vault');
+    if (savedVault) { const vi = document.getElementById('obsidian-vault'); if (vi) vi.value = savedVault; }
+  }
+
+  return {
+    configure,
+    updateExportJournalLabel,
+    loadSourceOptions,
+    handleSourceChange,
+    getEntry,
+    handleFileSelect,
+    buildAnnotatedTranscript,
+    updateScholarlyExportButton,
+    exportScholarly,
+    exportTxt,
+    exportDayOne,
+    exportObsidian,
+    exportUlysses,
+    exportMd,
+    applyEnvConfig,
+    restoreSavedSettings,
+  };
+})();
