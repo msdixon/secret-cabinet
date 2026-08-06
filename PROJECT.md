@@ -45,7 +45,7 @@ Full sequencing rationale lives in [issue #118](https://github.com/msdixon/secre
 
 **Separately, codebase health:**
 
-- [#142](https://github.com/msdixon/secret-cabinet/issues/142) — **decided: extend the existing `scene.js` script-tag/IIFE module convention to `app.js`.** No bundler needed — that pattern already runs in production (`window.LodgeScene`, loaded via a plain `<script>` tag before `app.js`). Seams mapped 2026-08-05 (see [issue comment](https://github.com/msdixon/secret-cabinet/issues/142#issuecomment-5197135471)): extract `witness.js` first (self-contained, lowest risk), then `export.js`, then `sessions.js`; core session/member state stays in `app.js` as sole owner, with extracted modules receiving state via function arguments rather than reaching into shared globals directly. Sequenced ahead of #137 (frontend tests) — Witness is the first target for both.
+- [#142](https://github.com/msdixon/secret-cabinet/issues/142) — **all three extractions now shipped or in review; closes on merge of PR #182.** Extended the existing `scene.js` script-tag/IIFE module convention (`window.LodgeScene`) to the rest of `app.js` — no bundler needed. `witness.js` first (PR #169), `export.js` second (PR #172), `sessions.js` (drawer + comparative mode + dossier drawer) third and last ([PR #182](https://github.com/msdixon/secret-cabinet/pull/182), open) — each following the same `window.X` + `configure(deps)` shape: core session/member state stays in `app.js` as sole owner, extracted modules receive it via a deps bag rather than reaching into shared globals directly. `sessions.js` turned out the most coupled of the three, as the seam mapping predicted — `restoreSession()` alone hydrates most of app.js's session/player state. Once #182 merges, #137 (frontend tests, sequenced to follow this) is unblocked.
 
 Current Todo-status backlog (no ranking implied — pick next tranche with Rachel; note none of these advance the north star directly):
 
@@ -74,4 +74,4 @@ The full workflow/priority tracker — including Backlog-status items, bugs, and
 
 ---
 
-*Last updated: 2026-08-05 (#142 module-boundary convention decided — extend the `scene.js` pattern, Witness extracted first; label system overhaul earlier the same day: `tier-0`–`tier-3` retired in favor of `complexity: small/moderate/large/unscoped` plus a new Icebox Status swimlane — see "How this doc relates to everything else" and STATUS.md).*
+*Last updated: 2026-08-06 (#142's third and final `app.js` module extraction, sessions.js, opened as PR #182 — closes #142 on merge; see STATUS.md).*
