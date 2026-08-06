@@ -413,7 +413,7 @@ async function saveAnnotation(textarea) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ annotations: all }),
   }).catch(() => {});
-  updateScholarlyExportButton();
+  window.Export.updateScholarlyExportButton();
 }
 
 // ── Speaker attribution ────────────────────────────────────────────────────
@@ -653,225 +653,14 @@ async function retryFromError() {
   await fn();
 }
 
-// ── Day One ───────────────────────────────────────────────────────────────────
-
-const entryCache = new Map(); // key: "dayone:journalId:idx" → { text, date, journalId, journalName }
-let sourceOptionsLoaded = false;
-
-function updateExportJournalLabel() {
-  const el = document.getElementById('export-journal-name');
-  if (el) el.textContent = currentJournal.name || 'No journal selected';
-}
-
-// Called on mousedown of source-select — loads journals + 3 recent entries per
-// journal into optgroups. Runs once; subsequent mousedowns are no-ops.
-async function loadSourceOptions() {
-  if (sourceOptionsLoaded) return;
-  sourceOptionsLoaded = true; // prevent double-load
-
-  const sel = document.getElementById('source-select');
-  const loadingGroup = document.getElementById('source-loading-group');
-
-  try {
-    const res = await fetch('/api/dayone/journals', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
-    });
-    const data = await res.json();
-    const journals = data.journals || [];
-    if (!journals.length) {
-      if (loadingGroup) loadingGroup.label = 'No Day One journals found';
-      return;
-    }
-
-    // Float PreSeedings to top
-    const isPreferred = j => /preseedings|secret.cabin/i.test(j.name);
-    const sorted = [...journals].sort((a, b) => isPreferred(b) - isPreferred(a));
-
-    // Remove the placeholder loading group
-    if (loadingGroup) loadingGroup.remove();
-
-    // Pre-create groups in sorted order so the DOM order is guaranteed
-    const groups = sorted.map(journal => {
-      const group = document.createElement('optgroup');
-      group.label = journal.name;
-      sel.appendChild(group);
-      return { journal, group };
-    });
-
-    // Load entries for each journal in parallel, fill the pre-created groups
-    await Promise.all(groups.map(async ({ journal, group }) => {
-      try {
-        const er = await fetch('/api/dayone/entries', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ journalId: journal.id, limit: 3 }),
-        });
-        const ed = await er.json();
-        const entries = ed.entries || [];
-
-        entries.forEach((entry, idx) => {
-          const key = `dayone:${journal.id}:${idx}`;
-          entryCache.set(key, { ...entry, journalId: journal.id, journalName: journal.name });
-          const opt = document.createElement('option');
-          opt.value = key;
-          opt.textContent = `${entry.date}  ${entry.preview}`;
-          group.appendChild(opt);
-        });
-
-        if (!entries.length) {
-          const opt = document.createElement('option');
-          opt.disabled = true;
-          opt.textContent = 'No entries found';
-          group.appendChild(opt);
-        }
-      } catch {
-        const opt = document.createElement('option');
-        opt.disabled = true;
-        opt.textContent = 'Could not load entries';
-        group.appendChild(opt);
-      }
-    }));
-
-    // If we had a saved journal preference, try to pre-select its first entry
-    if (currentJournal.id) {
-      const key = `dayone:${currentJournal.id}:0`;
-      if (entryCache.has(key)) {
-        sel.value = key;
-        handleSourceChange(); // load entry text into state
-      }
-    }
-
-  } catch (e) {
-    if (loadingGroup) loadingGroup.label = 'Could not connect to Day One';
-  }
-
-  // Add library entries as an optgroup
-  try {
-    const libRes = await fetch('/api/library');
-    const libEntries = await libRes.json();
-    if (Array.isArray(libEntries) && libEntries.length) {
-      const libGroup = document.createElement('optgroup');
-      libGroup.label = 'Archival Library';
-      libEntries.forEach(entry => {
-        const opt = document.createElement('option');
-        opt.value = `library:${entry.id}`;
-        opt.textContent = `${entry.date}  ${entry.title}`;
-        libGroup.appendChild(opt);
-      });
-      sel.appendChild(libGroup);
-    }
-  } catch (_) {}
-}
-
-function handleSourceChange() {
-  const v = document.getElementById('source-select').value;
-  const isPaste = v === 'paste';
-  document.getElementById('paste-area-container').style.display = isPaste ? 'block' : 'none';
-  document.getElementById('fetched-display').style.display = isPaste ? 'none' : 'block';
-
-  // Changing source clears any prior transcript reconvene state
-  if (!v.startsWith('transcript:')) currentSourceSessionId = null;
-
-  if (v.startsWith('library:')) {
-    const id = v.slice('library:'.length);
-    currentEntry = '';
-    const display = document.getElementById('entry-display');
-    display.textContent = 'Loading…';
-    display.classList.add('placeholder');
-    fetch(`/api/library/${id}`)
-      .then(r => r.json())
-      .then(entry => {
-        currentEntry = entry.text;
-        display.textContent = entry.text;
-        display.classList.remove('placeholder');
-        document.getElementById('entry-date-tag').textContent = entry.date || '';
-        document.getElementById('entry-journal-tag').textContent = entry.source || 'Library';
-        setStatus('The document has been read aloud. The room has heard it.', false);
-      })
-      .catch(() => {
-        display.textContent = 'Could not load entry.';
-      });
-  } else if (!isPaste && entryCache.has(v)) {
-    const cached = entryCache.get(v);
-    currentEntry = cached.text;
-    currentJournal = { id: cached.journalId, name: cached.journalName };
-    localStorage.setItem('sc-journal', JSON.stringify(currentJournal));
-    updateExportJournalLabel();
-
-    const display = document.getElementById('entry-display');
-    display.textContent = cached.text;
-    display.classList.remove('placeholder');
-    document.getElementById('entry-date-tag').textContent = cached.date || '';
-    document.getElementById('entry-journal-tag').textContent = cached.journalName;
-    setStatus('The document has been read aloud. The room has heard it.', false);
-  } else if (isPaste) {
-    currentEntry = '';
-  }
-}
-
-function getEntry() {
-  return document.getElementById('source-select').value === 'paste'
-    ? document.getElementById('paste-area').value.trim()
-    : currentEntry;
-}
-
-
-// ── File import ───────────────────────────────────────────────────────────────
-
-async function handleFileSelect(input) {
-  const file = input.files[0];
-  if (!file) return;
-  const nameEl = document.getElementById('file-pick-name');
-  nameEl.textContent = 'Reading…';
-
-  const ext = file.name.split('.').pop().toLowerCase();
-
-  if (ext === 'txt' || ext === 'md') {
-    // Read client-side — no server round-trip
-    const text = await file.text();
-    fillFromFile(text.trim(), file.name);
-  } else if (ext === 'pdf') {
-    // Send to server for extraction
-    const form = new FormData();
-    form.append('file', file);
-    try {
-      const res = await fetch('/api/upload', { method: 'POST', body: form });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Upload failed');
-      fillFromFile(data.text, data.filename);
-    } catch (e) {
-      nameEl.textContent = `Error: ${e.message}`;
-    }
-  }
-  // Reset input so the same file can be re-selected
-  input.value = '';
-}
-
-const FILE_TEXT_LIMIT = 4000; // chars — keeps context manageable across rounds
-
-function fillFromFile(text, filename) {
-  const area = document.getElementById('paste-area');
-  let notice = '';
-  if (text.length > FILE_TEXT_LIMIT) {
-    text = text.slice(0, FILE_TEXT_LIMIT);
-    // Trim to last complete sentence
-    const lastStop = Math.max(text.lastIndexOf('. '), text.lastIndexOf('.\n'), text.lastIndexOf('? '), text.lastIndexOf('! '));
-    if (lastStop > FILE_TEXT_LIMIT * 0.7) text = text.slice(0, lastStop + 1);
-    notice = ' (trimmed to first ~4,000 chars — paste a specific passage for longer texts)';
-  }
-  area.value = text;
-  document.getElementById('file-pick-name').textContent = filename + notice;
-  // Ensure paste mode is active
-  const sel = document.getElementById('source-select');
-  sel.value = 'paste';
-  handleSourceChange();
-  setStatus(`"${filename}" loaded.${notice ? ' Long document trimmed.' : ' The room has heard it.'}`, false);
-}
+// ── Day One / File import / Export ───────────────────────────────────────────
+// Extracted to public/export.js (#142) -- window.Export. getEntry() is called
+// from convene() below via window.Export.getEntry().
 
 // ── Convene ───────────────────────────────────────────────────────────────────
 
 async function convene() {
-  const entry = getEntry();
+  const entry = window.Export.getEntry();
   if (!entry) { setStatus('The room requires a document.', false); return; }
   if (activeMembers.size < 2) { setStatus('At least two must be present.', false); return; }
 
@@ -914,7 +703,7 @@ async function convene() {
 
   const members = [...activeMembers];
   const memberNames = members.map(id => MEMBERS.find(m => m.id === id)?.name).filter(Boolean).join(', ');
-  const entryForHeader = getEntry();
+  const entryForHeader = window.Export.getEntry();
   transcriptText = `THE SECRET-CABIN-ET\nMeeting Notes — ${sessionDate}\nAssembled: ${memberNames}\n\nSource material:\n${entryForHeader}\n`;
 
   const artifactText = document.getElementById('artifact-text')?.value.trim();
@@ -1028,7 +817,7 @@ function showSessionControls() {
   document.getElementById('additional-round-btn').className = 'lodge-btn visible';
   document.getElementById('verify-citations-btn').className = 'lodge-btn visible';
   document.getElementById('reveal-player-turns-btn').className = 'lodge-btn' + (sessionPlayerTurns.length ? ' visible' : '');
-  updateScholarlyExportButton();
+  window.Export.updateScholarlyExportButton();
   updatePips();
 }
 
@@ -1210,139 +999,15 @@ async function sendInterject(text) {
 }
 
 // ── Export ────────────────────────────────────────────────────────────────────
-
-function buildAnnotatedTranscript() {
-  // Weave annotations and player-turn markers into the transcript text after
-  // each relevant speech block. Exports always carry the player-turn marker
-  // even though the live view never shows it (invisible-during-play is a
-  // live-viewing choice, not a data-hiding one).
-  let out = transcriptText;
-  const annotated = [...document.querySelectorAll('.transcript-entry.annotated')];
-  const playerTurnEntries = [...document.querySelectorAll('.transcript-entry.player-turn')];
-  if (!annotated.length && !playerTurnEntries.length) return out;
-  // Rebuild line-by-line, inserting markers after each matching speaker's block
-  const lines = out.split('\n');
-  const result = [];
-  let i = 0;
-  while (i < lines.length) {
-    result.push(lines[i]);
-    // Check if this is a speaker — line ending in " —" followed by speech
-    const match = lines[i].match(/^(.+) —$/);
-    if (match) {
-      const speaker = match[1];
-      const entry = annotated.find(e => e.dataset.speaker === speaker);
-      const note = entry?.querySelector('.annotation-input')?.value.trim();
-      const playerEntry = playerTurnEntries.find(e => e.dataset.speaker === speaker);
-      if ((note && entry) || playerEntry) {
-        // Collect the speech block (next non-empty lines until blank)
-        while (i + 1 < lines.length && lines[i + 1] !== '') {
-          i++;
-          result.push(lines[i]);
-        }
-        if (note && entry) {
-          result.push(`  ↳ ${note}`);
-          annotated.splice(annotated.indexOf(entry), 1); // consume so dupes don't re-match
-        }
-        if (playerEntry) {
-          result.push('  ⟡ played by a human participant, live');
-          playerTurnEntries.splice(playerTurnEntries.indexOf(playerEntry), 1);
-        }
-      }
-    }
-    i++;
-  }
-  return result.join('\n');
-}
-
-// Annotated passages in document order — DOM order matches speech order since
-// entries are appended sequentially by addSpeech()/parseAndRenderTranscript(),
-// so no round-grouping or re-sorting is needed.
-function getAnnotatedPassages() {
-  return [...document.querySelectorAll('.transcript-entry.annotated')].map(e => ({
-    speaker: e.dataset.speaker,
-    text: e.querySelector('.speech-text')?.textContent.trim() || '',
-    note: e.querySelector('.annotation-input')?.value.trim() || '',
-  }));
-}
-
-function updateScholarlyExportButton() {
-  const btn = document.getElementById('export-scholarly-btn');
-  if (btn) btn.disabled = getAnnotatedPassages().length === 0;
-}
-
-// Groups a session's citationFlags by cited work, same convention as
-// scripts/build-citation-manifest.js, so the per-session bibliography reads
-// consistently with the cumulative cross-session one.
-function renderBibliography(citations) {
-  if (!citations.length) {
-    return '_No citations verified for this session. Run **Verify Citations ⚑** above, then re-export to include a bibliography._\n';
-  }
-  const byWork = new Map();
-  citations.forEach(c => {
-    if (!byWork.has(c.work)) byWork.set(c.work, []);
-    byWork.get(c.work).push(c);
-  });
-  const lines = [];
-  [...byWork.entries()].sort((a, b) => a[0].localeCompare(b[0])).forEach(([work, occurrences]) => {
-    lines.push(`### ${work}`, '');
-    occurrences.forEach(o => {
-      const grounding = o.libraryCitation ? ` — grounded in: ${o.libraryCitation}` : '';
-      const sourceLabel = CITATION_SOURCE_LABEL[o.source || 'model-knowledge'];
-      lines.push(`- **${o.verdict}** (${sourceLabel}) — ${(o.speaker || '').replace(/\s*—\s*$/, '').trim()}`);
-      lines.push(`  > "${o.quote}"`);
-      lines.push(`  ${o.note}${grounding}`, '');
-    });
-  });
-  return lines.join('\n');
-}
-
-async function exportScholarly() {
-  const passages = getAnnotatedPassages();
-  if (!passages.length || !currentSessionId) return;
-  const statusEl = document.getElementById('export-status');
-  statusEl.textContent = 'Building scholarly note...';
-  try {
-    const res = await fetch(`/api/sessions/${currentSessionId}`);
-    if (!res.ok) throw new Error(`Server error ${res.status}`);
-    const session = await res.json();
-
-    const names = [...activeMembers].map(id => MEMBERS.find(m => m.id === id)?.name).filter(Boolean).join(', ');
-    const source = (currentEntry || '').trim();
-    const sourceExcerpt = source.length > 300 ? source.slice(0, 300) + '…' : source;
-
-    const lines = [
-      '# Secret-Cabin-et — Scholarly Note',
-      '',
-      `**Date:** ${sessionDate}`,
-      `**Members:** ${names}`,
-      `**Source:** ${sourceExcerpt}`,
-      '',
-      '## Selected Passages',
-      '',
-    ];
-    passages.forEach(p => {
-      lines.push(`**${p.speaker}** —`, '', p.text, '', `> ${p.note}`, '');
-    });
-    lines.push('## Bibliography', '', renderBibliography(session.citationFlags || []));
-
-    const blob = new Blob([lines.join('\n')], { type: 'text/markdown' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `secret-cabinet-scholarly-${sessionDate}.md`;
-    a.click();
-    URL.revokeObjectURL(url);
-    statusEl.textContent = 'Scholarly note downloaded.';
-  } catch (err) {
-    console.error(err);
-    statusEl.textContent = 'Scholarly export failed.';
-  }
-}
+// buildAnnotatedTranscript/getAnnotatedPassages/updateScholarlyExportButton/
+// renderBibliography/exportScholarly moved to public/export.js (#142) --
+// window.Export. reconveneOnCurrentSession below stays here (core convene-flow
+// state) and calls window.Export.buildAnnotatedTranscript().
 
 function reconveneOnCurrentSession() {
   if (!currentSessionId || !transcriptText) return;
   const FILE_TEXT_LIMIT = 4000;
-  const full = buildAnnotatedTranscript();
+  const full = window.Export.buildAnnotatedTranscript();
   const truncated = full.length > FILE_TEXT_LIMIT
     ? full.slice(0, FILE_TEXT_LIMIT) + '\n\n[transcript truncated]'
     : full;
@@ -1442,93 +1107,8 @@ async function startWitnessFromSession(id) {
   }
 }
 
-function exportTxt() {
-  const blob = new Blob([buildAnnotatedTranscript()], { type: 'text/plain' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `secret-cabinets-${sessionDate}.txt`;
-  a.click();
-  URL.revokeObjectURL(url);
-  document.getElementById('export-status').textContent = 'Downloaded.';
-}
-
-async function exportDayOne() {
-  if (!currentJournal.id) {
-    document.getElementById('export-status').textContent = 'Select a Day One journal first.';
-    return;
-  }
-  document.getElementById('export-status').textContent = `Saving to ${currentJournal.name}...`;
-  try {
-    const res = await fetch('/api/dayone/export', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        journalId: currentJournal.id,
-        journalName: currentJournal.name,
-        transcriptText: buildAnnotatedTranscript(),
-        sessionDate,
-      }),
-    });
-    if (!res.ok) throw new Error(`Server error ${res.status}`);
-    document.getElementById('export-status').textContent = `Saved to ${currentJournal.name}.`;
-  } catch (err) {
-    console.error(err);
-    document.getElementById('export-status').textContent = 'Export failed. Try .txt download.';
-  }
-}
-
-async function exportObsidian() {
-  const statusEl = document.getElementById('export-status');
-  const vaultPath = document.getElementById('obsidian-vault')?.value.trim();
-  if (!vaultPath) { statusEl.textContent = 'Enter your Obsidian vault path first.'; return; }
-  statusEl.textContent = 'Writing to Obsidian…';
-  try {
-    const res = await fetch('/api/export/obsidian', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        vaultPath,
-        transcriptText: buildAnnotatedTranscript(),
-        sessionDate,
-        members: [...activeMembers].map(id => MEMBERS.find(m => m.id === id)?.name).filter(Boolean),
-        tags: [],
-        sourceExcerpt: currentEntry?.slice(0, 120) || '',
-        sessionId: currentSessionId,
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error);
-    statusEl.textContent = `Saved to Obsidian — ${data.filename}`;
-  } catch (err) {
-    statusEl.textContent = err.message || 'Obsidian export failed.';
-  }
-}
-
-async function exportUlysses() {
-  const statusEl = document.getElementById('export-status');
-  const group = document.getElementById('ulysses-group')?.value.trim() || '';
-  const groupId = document.getElementById('ulysses-group-id')?.value.trim() || '';
-  statusEl.textContent = 'Opening Ulysses…';
-  try {
-    const res = await fetch('/api/ulysses/export', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        transcriptText: buildAnnotatedTranscript(),
-        sessionDate,
-        title: currentEntry?.slice(0, 60) || sessionDate,
-        group,
-        groupId,
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error);
-    statusEl.textContent = groupId ? `Sent to Ulysses — ${group || 'identifier'} (by ID).` : group ? `Sent to Ulysses — ${group}.` : 'Sent to Ulysses.';
-  } catch (err) {
-    statusEl.textContent = err.message || 'Ulysses export failed.';
-  }
-}
+// exportTxt/exportDayOne/exportObsidian/exportUlysses moved to
+// public/export.js (#142) -- window.Export.
 
 // ── Sessions drawer ───────────────────────────────────────────────────────────
 
@@ -2185,30 +1765,7 @@ async function submitNewMember() {
   }
 }
 
-// ── Environment config ────────────────────────────────────────────────────────
-
-async function applyEnvConfig() {
-  try {
-    const { isLocal } = await fetch('/api/config').then(r => r.json());
-    if (!isLocal) {
-      ['export-ulysses-row', 'export-ulysses-config', 'export-ulysses-id-config', 'export-obsidian-row', 'export-obsidian-config']
-        .forEach(id => document.getElementById(id)?.style.setProperty('display', 'none'));
-      document.getElementById('export-md-row')?.style.setProperty('display', 'inline-flex');
-    }
-  } catch (_) {}
-}
-
-function exportMd() {
-  if (!currentTranscript) return;
-  const text = buildAnnotatedTranscript();
-  const blob = new Blob([text], { type: 'text/markdown' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `secret-cabinet-${currentSession?.date || new Date().toISOString().slice(0,10)}.md`;
-  a.click();
-  URL.revokeObjectURL(url);
-}
+// applyEnvConfig/exportMd moved to public/export.js (#142) -- window.Export.
 
 // ── Scene (3D) ──────────────────────────────────────────────────────────────
 // Phase 0 (#26): pure atmosphere, no member sync yet — see public/scene/scene.js.
@@ -2231,18 +1788,33 @@ function initSceneLayer() {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 
-applyEnvConfig();
+// Live core-state accessors handed to window.Export (#142) -- getCore()
+// returns a fresh snapshot on every call, so the module always reads current
+// values; the setters are the only way it writes back to app.js's own
+// currentEntry/currentJournal/currentSourceSessionId.
+function exportDeps() {
+  return {
+    getCore: () => ({
+      currentEntry, currentJournal, currentSessionId, sessionDate,
+      transcriptText, activeMembers, MEMBERS,
+    }),
+    setCurrentEntry: (text) => { currentEntry = text; },
+    setCurrentJournal: (journal) => {
+      currentJournal = journal;
+      localStorage.setItem('sc-journal', JSON.stringify(currentJournal));
+    },
+    setCurrentSourceSessionId: (id) => { currentSourceSessionId = id; },
+    setStatus,
+  };
+}
+window.Export.configure(exportDeps());
+
+window.Export.applyEnvConfig();
 initSceneLayer();
 fetchMembers().then(() => renderMembers());
-updateExportJournalLabel();
+window.Export.updateExportJournalLabel();
 handlePlayAsModeChange();
-// Restore saved Ulysses group preference
-const _savedGroup = localStorage.getItem('sc-ulysses-group');
-if (_savedGroup) { const _gi = document.getElementById('ulysses-group'); if (_gi) _gi.value = _savedGroup; }
-const _savedGroupId = localStorage.getItem('sc-ulysses-group-id');
-if (_savedGroupId) { const _gid = document.getElementById('ulysses-group-id'); if (_gid) _gid.value = _savedGroupId; }
-const _savedVault = localStorage.getItem('sc-obsidian-vault');
-if (_savedVault) { const _vi = document.getElementById('obsidian-vault'); if (_vi) _vi.value = _savedVault; }
+window.Export.restoreSavedSettings();
 
 // Load session from URL param if present (e.g. ?session=<id>)
 const _urlSession = new URLSearchParams(location.search).get('session');
