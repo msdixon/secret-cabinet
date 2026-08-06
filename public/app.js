@@ -1233,12 +1233,16 @@ async function loadSessionsList(q = '', tag = '', thread = '') {
       const branchBadge = s.parentId
         ? `<span class="session-branch-badge" title="Branched from round ${(s.branchRound ?? 0) + 1} of another meeting">⑂ branch</span>`
         : '';
+      const publishedBadge = s.published
+        ? `<a class="session-published-badge" href="/reading-room/${s.id}" target="_blank" rel="noopener" title="View the public reading-room page">★ Public</a>`
+        : '';
       el.innerHTML = `
         <div class="session-item-date">
           ${s.date}
           <span class="session-item-rounds">${s.rounds} round${s.rounds !== 1 ? 's' : ''}</span>
           ${threadBadge}
           ${branchBadge}
+          ${publishedBadge}
         </div>
         <div class="session-item-entry">${escapeHTML(s.entry || '—')}</div>
         <div class="session-item-members">${(s.members || []).map(escapeHTML).join(' · ')}</div>
@@ -1249,6 +1253,7 @@ async function loadSessionsList(q = '', tag = '', thread = '') {
           <button class="session-reconvene-btn" onclick="reconveneOnSession('${s.id}')" title="Use this transcript as the document for a new session">↩ Reconvene</button>
           <button class="session-thread-btn" onclick="assignThreadUI('${s.id}', '${escapeHTML(s.threadId||'')}', '${escapeHTML(s.threadName||'')}', this)">⬡ Thread</button>
           <button class="session-compare-btn" id="compare-btn-${s.id}" onclick="toggleCompareSelect('${s.id}', this)">⊕ Compare</button>
+          <button class="session-publish-btn${s.published ? ' is-published' : ''}" onclick="togglePublish('${s.id}', ${!!s.published}, this)" title="${s.published ? 'Unpublish from the public reading room' : 'Publish to the public reading room'}">${s.published ? '★ Unpublish' : '☆ Publish'}</button>
           <button class="session-delete-btn" onclick="deleteSession('${s.id}', this)">Delete</button>
         </div>`;
       list.appendChild(el);
@@ -1482,6 +1487,48 @@ async function restoreSession(id) {
     setStatus(`Meeting of ${session.date} restored. The embers hold.`, false);
   } catch (e) {
     setStatus('Could not restore the meeting.', false);
+  }
+}
+
+// #38: toggles a session's public reading-room page. Publishing exposes the
+// source document (often a personal journal entry pulled from Day One) and
+// the full transcript at an unauthenticated URL — confirm plainly rather
+// than treating it as a low-stakes flip, unlike this row's other toggles.
+async function togglePublish(id, currentlyPublished, btn) {
+  const confirmMsg = currentlyPublished
+    ? 'Unpublish this meeting? Its public reading-room page will stop working.'
+    : 'Publish this meeting?\n\nThe source document and full transcript will become viewable by anyone with the link — no login required. (Portraits and researcher notes are not included.)';
+  if (!confirm(confirmMsg)) return;
+  try {
+    const res = await fetch(`/api/sessions/${id}/publish`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ published: !currentlyPublished }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to update publish status');
+
+    btn.outerHTML = `<button class="session-publish-btn${data.published ? ' is-published' : ''}" onclick="togglePublish('${id}', ${data.published}, this)" title="${data.published ? 'Unpublish from the public reading room' : 'Publish to the public reading room'}">${data.published ? '★ Unpublish' : '☆ Publish'}</button>`;
+
+    const dateRow = document.getElementById(`compare-btn-${id}`)?.closest('.session-item')?.querySelector('.session-item-date');
+    const existingBadge = dateRow?.querySelector('.session-published-badge');
+    if (data.published) {
+      if (!existingBadge && dateRow) {
+        const badge = document.createElement('a');
+        badge.className = 'session-published-badge';
+        badge.href = data.url;
+        badge.target = '_blank';
+        badge.rel = 'noopener';
+        badge.title = 'View the public reading-room page';
+        badge.textContent = '★ Public';
+        dateRow.appendChild(badge);
+      }
+      prompt('Published. Public URL:', `${location.origin}${data.url}`);
+    } else {
+      existingBadge?.remove();
+    }
+  } catch (e) {
+    alert('Could not update publish status.');
   }
 }
 
