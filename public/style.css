@@ -358,6 +358,7 @@ a.archival-image-link:hover { border-color:var(--lodge-amber-dim); cursor:pointe
 .session-publish-btn.is-published { border-color:var(--lodge-amber); color:var(--lodge-amber); }
 .session-published-badge { font-family:'IM Fell English',serif; font-size:10px; letter-spacing:1px; background:rgba(200,146,42,0.15); border:1px solid var(--lodge-amber); color:var(--lodge-amber); padding:1px 6px; border-radius:2px; margin-left:4px; text-decoration:none; }
 .session-published-badge:hover { background:rgba(200,146,42,0.28); }
+.session-publish-hint { font-family:'Crimson Pro',serif; font-style:italic; font-size:11px; color:var(--lodge-ash); margin-top:6px; line-height:1.5; }
 .compare-overlay { position:fixed; inset:0; background:var(--lodge-bg); z-index:200; display:flex; flex-direction:column; }
 .compare-header { display:flex; align-items:center; justify-content:space-between; padding:14px 20px; border-bottom:1px solid var(--lodge-border); flex-shrink:0; }
 .compare-title { font-family:'IM Fell English',serif; font-size:14px; letter-spacing:2px; text-transform:uppercase; color:var(--lodge-amber); }
