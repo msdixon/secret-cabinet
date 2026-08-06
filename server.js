@@ -796,6 +796,66 @@ app.patch('/api/sessions/:id/annotations', (req, res) => {
   res.json({ count: annotations.length });
 });
 
+// #153 part 1 — for citations the extraction pass matched to a library entry,
+// re-judge the verdict against that entry's actual excerpt text instead of
+// trusting a title/source-only match against the model's memory. Memory can
+// be wrong even when the title matches (see #157: fabricated source_urls
+// slipped past exactly this kind of surface-level check). One batched call
+// covering every matched citation in the round, not one call each; skipped
+// entirely (no extra call) if nothing matched.
+async function groundAgainstLibraryText(citations, libraryLookup) {
+  const matched = citations
+    .map((c, index) => ({ c, index }))
+    .filter(({ c }) => c.libraryMatch && libraryLookup[c.libraryMatch]?.text);
+  if (!matched.length) return new Map();
+
+  const system = `You are checking whether citations from a transcript are actually supported by the real source text they were matched to. This is a stricter check than general knowledge — treat each "Excerpt" below as ground truth, not your training data.
+
+For each numbered item, judge whether its "Transcript quote" is genuinely consistent with its "Excerpt":
+- "verified": the excerpt clearly supports the quote/claim as attributed
+- "unverified": the excerpt contradicts it, or doesn't contain/support what's being attributed to it
+- "uncertain": the excerpt doesn't clearly settle it either way (e.g. adjacent material, but not this specific claim)`;
+
+  const itemsText = matched.map(({ c, index }) => {
+    const entry = libraryLookup[c.libraryMatch];
+    return `### Item ${index}\nWork cited: ${c.work}\nTranscript quote: "${c.quote}"\n\nExcerpt from "${entry.title}" (${entry.source}):\n${entry.text}`;
+  }).join('\n\n---\n\n');
+
+  const response = await client.messages.create({
+    model: 'claude-sonnet-4-6',
+    max_tokens: 2000,
+    system,
+    messages: [{ role: 'user', content: itemsText }],
+    tools: [{
+      name: 'report_grounded_verdicts',
+      description: 'Report a text-grounded verdict for each numbered item.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          verdicts: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                index: { type: 'integer', description: 'The item number from the prompt.' },
+                verdict: { type: 'string', enum: ['verified', 'unverified', 'uncertain'] },
+                note: { type: 'string', description: 'One-sentence reasoning, referencing the excerpt directly.' },
+              },
+              required: ['index', 'verdict', 'note'],
+            },
+          },
+        },
+        required: ['verdicts'],
+      },
+    }],
+    tool_choice: { type: 'tool', name: 'report_grounded_verdicts' },
+  });
+
+  const block = response.content.find(b => b.type === 'tool_use');
+  const verdicts = block?.input?.verdicts || [];
+  return new Map(verdicts.map(v => [v.index, v]));
+}
+
 // POST /api/sessions/:id/verify-citations — extract & judge citations across the whole session
 app.post('/api/sessions/:id/verify-citations', async (req, res) => {
   const session = loadSession(req.params.id);
@@ -857,11 +917,18 @@ The "quote" field must be a verbatim excerpt (~10-25 words) copied exactly from 
 
     const archiveImages = loadArchiveImageIndex();
     const block = response.content.find(b => b.type === 'tool_use');
-    const citations = (block?.input?.citations || []).map(c => {
+    const rawCitations = block?.input?.citations || [];
+    // #153 part 1 — re-check library-matched citations against the entry's
+    // actual text, rather than trusting the extraction pass's title/source
+    // match. Skipped (no extra call) when nothing matched this round.
+    const grounded = await groundAgainstLibraryText(rawCitations, libraryLookup);
+    const citations = rawCitations.map((c, index) => {
       const match = c.libraryMatch ? libraryLookup[c.libraryMatch] : null;
       const image = c.libraryMatch ? archiveImages[c.libraryMatch] : null;
+      const refined = grounded.get(index);
       return {
         ...c,
+        ...(refined ? { verdict: refined.verdict, note: refined.note } : {}),
         libraryCitation: match?.citation || null,
         librarySourceUrl: match?.source_url || null,
         libraryImage: image?.image || null,
@@ -1377,7 +1444,8 @@ app.get('/api/library/:id', (req, res) => {
   }
 });
 
-// Internal-only: read the `citation`/`source_url` frontmatter fields that
+// Internal-only: read the `citation`/`source_url` frontmatter fields (plus
+// the full excerpt body, for #153 part 1's text-grounded re-check) that
 // loadLibraryIndex()/library.json don't carry, for cross-referencing a
 // verified citation to its grounding source. Not exposed via a public route.
 function loadLibraryCitationLookup() {
@@ -1389,7 +1457,8 @@ function loadLibraryCitationLookup() {
     const frontmatter = raw.match(/^---\n([\s\S]*?)\n---/)?.[1] || '';
     const citation = frontmatter.match(/^citation:\s*"?(.*?)"?$/m)?.[1];
     const source_url = frontmatter.match(/^source_url:\s*"?(.*?)"?$/m)?.[1];
-    lookup[entry.id] = { title: entry.title, source: entry.source, citation, source_url };
+    const text = raw.replace(/^---[\s\S]*?---\n/, '').trim();
+    lookup[entry.id] = { title: entry.title, source: entry.source, citation, source_url, text };
   }
   return lookup;
 }
