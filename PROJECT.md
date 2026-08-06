@@ -45,7 +45,7 @@ Full sequencing rationale lives in [issue #118](https://github.com/msdixon/secre
 
 **Separately, codebase health:**
 
-- [#142](https://github.com/msdixon/secret-cabinet/issues/142) — **closed 2026-08-06: all three extractions shipped.** Extended the existing `scene.js` script-tag/IIFE module convention (`window.LodgeScene`) to the rest of `app.js` — no bundler needed. `witness.js` first (PR #169), `export.js` second (PR #172), `sessions.js` (drawer + comparative mode + dossier drawer) third and last (PR pending) — each following the same `window.X` + `configure(deps)` shape: core session/member state stays in `app.js` as sole owner, extracted modules receive it via a deps bag rather than reaching into shared globals directly. `sessions.js` ended up the most coupled of the three, as the seam mapping predicted — `restoreSession()` alone hydrates most of app.js's session/player state. Now that all three are done, #137 (frontend tests, sequenced to follow this) is unblocked.
+- [#142](https://github.com/msdixon/secret-cabinet/issues/142) — **all three extractions now shipped or in review; closes on merge of PR #182.** Extended the existing `scene.js` script-tag/IIFE module convention (`window.LodgeScene`) to the rest of `app.js` — no bundler needed. `witness.js` first (PR #169), `export.js` second (PR #172), `sessions.js` (drawer + comparative mode + dossier drawer) third and last ([PR #182](https://github.com/msdixon/secret-cabinet/pull/182), open) — each following the same `window.X` + `configure(deps)` shape: core session/member state stays in `app.js` as sole owner, extracted modules receive it via a deps bag rather than reaching into shared globals directly. `sessions.js` turned out the most coupled of the three, as the seam mapping predicted — `restoreSession()` alone hydrates most of app.js's session/player state. Once #182 merges, #137 (frontend tests, sequenced to follow this) is unblocked.
 
 Current Todo-status backlog (no ranking implied — pick next tranche with Rachel; note none of these advance the north star directly):
 
@@ -74,4 +74,4 @@ The full workflow/priority tracker — including Backlog-status items, bugs, and
 
 ---
 
-*Last updated: 2026-08-06 (#142 closed — all three `app.js` module extractions shipped: witness.js, export.js, sessions.js; see STATUS.md).*
+*Last updated: 2026-08-06 (#142's third and final `app.js` module extraction, sessions.js, opened as PR #182 — closes #142 on merge; see STATUS.md).*
