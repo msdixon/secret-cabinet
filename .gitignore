@@ -3,3 +3,4 @@ node_modules/
 sessions/*
 !sessions/.gitkeep
 CITATION-MANIFEST.md
+.DS_Store
