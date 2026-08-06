@@ -44,7 +44,7 @@
     <div class="lodge-divider"></div>
     <div class="mantel-tagline">The fire is lit. The room remembers nothing. The document waits.</div>
     <div class="mantel-nav">
-      <button class="lodge-btn sessions-btn mantel-sessions-btn" onclick="openSessionsDrawer()">Past Meetings <span id="sessions-count" class="sessions-count"></span></button>
+      <button class="lodge-btn sessions-btn mantel-sessions-btn" onclick="window.Sessions.openSessionsDrawer()">Past Meetings <span id="sessions-count" class="sessions-count"></span></button>
     </div>
     <div class="hearth-glow">
       <div class="ember-bar" id="ember-bar"></div>
@@ -200,7 +200,7 @@
           </div>
         </div>
         <button class="lodge-btn" id="reveal-player-turns-btn" onclick="togglePlayerTurnReveal()">Reveal Player Turns ◆</button>
-        <button class="lodge-btn sessions-btn" id="dossier-btn" onclick="toggleDossier()" style="display:none;">The Assembled ↗</button>
+        <button class="lodge-btn sessions-btn" id="dossier-btn" onclick="window.Sessions.toggleDossier()" style="display:none;">The Assembled ↗</button>
       </div>
     </div>
 
@@ -289,14 +289,14 @@
   </div>
 </div>
 <!-- Sessions drawer -->
-<div class="sessions-overlay" id="sessions-overlay" onclick="closeSessionsDrawer()"></div>
+<div class="sessions-overlay" id="sessions-overlay" onclick="window.Sessions.closeSessionsDrawer()"></div>
 <div class="sessions-drawer" id="sessions-drawer">
   <div class="sessions-drawer-header">
     <span class="sessions-drawer-title">Past Meetings</span>
-    <button class="sessions-close-btn" onclick="closeSessionsDrawer()">✕</button>
+    <button class="sessions-close-btn" onclick="window.Sessions.closeSessionsDrawer()">✕</button>
   </div>
   <div class="sessions-search-row">
-    <input class="sessions-search-input" id="sessions-search" placeholder="Search entries, #tags, @threads…" oninput="onSessionsSearch(this.value)" />
+    <input class="sessions-search-input" id="sessions-search" placeholder="Search entries, #tags, @threads…" oninput="window.Sessions.onSessionsSearch(this.value)" />
   </div>
   <div class="sessions-drawer-body" id="sessions-list">
     <div class="sessions-empty">No past meetings found.</div>
@@ -304,11 +304,11 @@
 </div>
 
 <!-- Dossier drawer -->
-<div class="dossier-overlay" id="dossier-overlay" onclick="toggleDossier()"></div>
+<div class="dossier-overlay" id="dossier-overlay" onclick="window.Sessions.toggleDossier()"></div>
 <div class="dossier-drawer" id="dossier-drawer">
   <div class="sessions-drawer-header">
     <span class="sessions-drawer-title">The Assembled</span>
-    <button class="sessions-close-btn" onclick="toggleDossier()">✕</button>
+    <button class="sessions-close-btn" onclick="window.Sessions.toggleDossier()">✕</button>
   </div>
   <div class="dossier-body" id="dossier-body">
     <div class="sessions-empty">Convene a meeting to see the assembled.</div>
@@ -319,6 +319,7 @@
 <script src="scene/scene.js"></script>
 <script src="witness.js"></script>
 <script src="export.js"></script>
+<script src="sessions.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
