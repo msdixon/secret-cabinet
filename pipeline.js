@@ -69,24 +69,31 @@ async function withOneRetry(fn) {
 
 // ── Director ────────────────────────────────────────────────────────────────
 
-function buildDirectorToolSchema(presentIds, count) {
+// #164: the director no longer casts an exact, ordered roster for the whole
+// round. It proposes a candidate POOL — between minCount and maxCount present
+// members, ordered by priority — that the local hybrid selector (see
+// pickNextSpeaker below) draws from beat by beat. This keeps the director's
+// per-round API cost the same (still one call, absent a mid-round
+// re-consult) while letting who-actually-speaks-next respond to pacing that
+// only exists once the round is underway.
+function buildDirectorToolSchema(presentIds, minCount, maxCount) {
   return {
     name: 'select_speakers',
-    description: 'Choose exactly which present lodge members speak this round, and in what order.',
+    description: 'Choose a candidate pool of present lodge members who may speak this round, ordered by priority.',
     input_schema: {
       type: 'object',
       properties: {
         speakers: {
           type: 'array',
           items: { type: 'string', enum: presentIds },
-          minItems: count,
-          maxItems: count,
+          minItems: minCount,
+          maxItems: maxCount,
           uniqueItems: true,
-          description: `Member ids, in speaking order, drawn only from the present roster: ${presentIds.join(', ')}.`,
+          description: `Member ids, in priority order, drawn only from the present roster: ${presentIds.join(', ')}.`,
         },
         reasoning: {
           type: 'string',
-          description: 'Brief internal rationale for this ordering — not shown to users, for review/logging only.',
+          description: 'Brief internal rationale for this pool — not shown to users, for review/logging only.',
         },
       },
       required: ['speakers', 'reasoning'],
@@ -94,8 +101,12 @@ function buildDirectorToolSchema(presentIds, count) {
   };
 }
 
-function buildDirectorPrompt({ lodgeContext, presentMembers, instruction, count }) {
+function buildDirectorPrompt({ lodgeContext, presentMembers, instruction, minCount, maxCount, roundSoFar }) {
   const rosterLines = presentMembers.map(m => `- ${m.name}`).join('\n');
+
+  const soFarBlock = roundSoFar?.trim()
+    ? `\n\nTHE ROUND SO FAR:\n${roundSoFar.trim()}\n\nYou are being asked again mid-round — the earlier candidate pool ran dry, or the round has gone on long enough to want fresh judgment. Choose the next pool considering what's already happened above: who hasn't been heard from, who has something left to react to, whether the room needs a new voice or more from someone already in it.`
+    : '';
 
   const system = `${lodgeContext}
 
@@ -103,22 +114,22 @@ function buildDirectorPrompt({ lodgeContext, presentMembers, instruction, count 
 
 ## YOUR ROLE RIGHT NOW
 
-You are not writing dialogue. You are deciding who speaks next in this round of the salon, and in what order — a casting decision, not a performance. You will not write any of their words.
+You are not writing dialogue. You are proposing a candidate pool of who might speak next in this round of the salon — a shortlist and rough priority order, not a fixed cast or an exact script. You will not write any of their words.
 
 PRESENT TONIGHT:
 ${rosterLines}
 
 THIS ROUND'S INSTRUCTION:
-${instruction}
+${instruction}${soFarBlock}
 
-Choose exactly ${count} of the present members to speak this round, in the order they should speak. Base the choice on who has something to react to, who hasn't been heard from, and what this round's instruction calls for — not on alphabetical or arbitrary order.`;
+Choose between ${minCount} and ${maxCount} of the present members as this round's candidate pool, ordered by priority. Not everyone in the pool is guaranteed to speak, and someone in the pool may end up speaking more than once — the room decides who actually goes, beat by beat, from among them. Base the pool on who has something to react to, who hasn't been heard from, and what this round's instruction calls for — not on alphabetical or arbitrary order.`;
 
-  const userMessage = 'Choose this round\'s speakers.';
+  const userMessage = 'Choose this round\'s candidate pool.';
 
   return { system, userMessage };
 }
 
-async function callDirector({ client, model, system, conversationHistory, userMessage, presentIds, count }) {
+async function callDirector({ client, model, system, conversationHistory, userMessage, presentIds, minCount, maxCount }) {
   const start = Date.now();
   const messages = [...conversationHistory, { role: 'user', content: userMessage }];
   const response = await client.messages.create({
@@ -126,7 +137,7 @@ async function callDirector({ client, model, system, conversationHistory, userMe
     max_tokens: 500,
     system,
     messages,
-    tools: [buildDirectorToolSchema(presentIds, count)],
+    tools: [buildDirectorToolSchema(presentIds, minCount, maxCount)],
     tool_choice: { type: 'tool', name: 'select_speakers' },
   });
   const latencyMs = Date.now() - start;
@@ -135,34 +146,35 @@ async function callDirector({ client, model, system, conversationHistory, userMe
   return { speakers, reasoning, usage: response.usage, latencyMs };
 }
 
-function isValidSelection(speakers, presentIds, count) {
+function isValidSelection(speakers, presentIds, minCount, maxCount) {
   return Array.isArray(speakers)
-    && speakers.length === count
+    && speakers.length >= minCount
+    && speakers.length <= maxCount
     && new Set(speakers).size === speakers.length
     && speakers.every(id => presentIds.includes(id));
 }
 
 // Retry-once + deterministic-fallback wrapper around callDirector.
 // presentMembers must already be in roster order — the fallback pick
-// (first `count` present members) relies on that ordering.
-async function selectSpeakers({ client, model, lodgeContext, presentMembers, instruction, conversationHistory, count, round, onMetric }) {
+// (first `maxCount` present members) relies on that ordering.
+async function selectSpeakers({ client, model, lodgeContext, presentMembers, instruction, conversationHistory, minCount, maxCount, round, onMetric, roundSoFar }) {
   const presentIds = presentMembers.map(m => m.id);
-  const { system, userMessage } = buildDirectorPrompt({ lodgeContext, presentMembers, instruction, count });
+  const { system, userMessage } = buildDirectorPrompt({ lodgeContext, presentMembers, instruction, minCount, maxCount, roundSoFar });
 
   let lastReasoning = null;
   for (let attempt = 1; attempt <= 2; attempt++) {
     const correctiveNote = attempt === 2
-      ? ` Your previous selection was invalid — it must be exactly ${count} present member ids, no duplicates, drawn only from: ${presentIds.join(', ')}. Choose again.`
+      ? ` Your previous selection was invalid — it must be between ${minCount} and ${maxCount} present member ids, no duplicates, drawn only from: ${presentIds.join(', ')}. Choose again.`
       : '';
     try {
       const { speakers, reasoning, usage, latencyMs } = await callDirector({
         client, model, system, conversationHistory,
         userMessage: userMessage + correctiveNote,
-        presentIds, count,
+        presentIds, minCount, maxCount,
       });
       lastReasoning = reasoning || lastReasoning;
       onMetric?.(makeMetric('director', { round, attempts: attempt, usage, latencyMs, reasoning }));
-      if (isValidSelection(speakers, presentIds, count)) {
+      if (isValidSelection(speakers, presentIds, minCount, maxCount)) {
         return { speakers, reasoning, source: attempt === 1 ? 'director' : 'director-retry' };
       }
     } catch (err) {
@@ -170,10 +182,72 @@ async function selectSpeakers({ client, model, lodgeContext, presentMembers, ins
     }
   }
 
-  // Deterministic fallback: first `count` present members, in roster order.
-  const speakers = presentMembers.slice(0, count).map(m => m.id);
+  // Deterministic fallback: first `maxCount` present members, in roster order.
+  const speakers = presentMembers.slice(0, maxCount).map(m => m.id);
   onMetric?.(makeMetric('director', { round, attempts: 2, skipped: true, error: 'director failed twice — used deterministic fallback', reasoning: lastReasoning }));
   return { speakers, reasoning: lastReasoning, source: 'fallback' };
+}
+
+// ── Local hybrid speaker pacing (#164) ─────────────────────────────────────
+//
+// Who speaks next, beat by beat, is a cheap local weighted pick — no API
+// call — drawing from the director's candidate pool. This is what makes the
+// round feel like back-and-forth rather than a queue of monologues: it can
+// send the same voice back in (rare, weighted low — reads as an
+// interruption when it happens) and it paces against the round's remaining
+// word budget rather than a fixed per-member turn count.
+
+// Seed data, not a researched claim about every historical figure's real
+// prose style — only the two personas the #164 design doc named explicitly
+// as needing room to run long. Expand this as real sessions surface more
+// per-member tendencies (see the 2026-08-19 follow-up).
+const LENGTH_TENDENCY_OVERRIDES = {
+  crowley: 'expansive',
+  yeats: 'expansive',
+};
+const LENGTH_WEIGHT = { terse: 0.7, medium: 1, expansive: 1.35 };
+
+function lengthTendencyOf(memberId) {
+  return LENGTH_TENDENCY_OVERRIDES[memberId] || 'medium';
+}
+
+const MAX_TURNS_PER_POOL_MEMBER = 2; // a 3rd turn for anyone needs a fresh director consult, not another local pick
+const REPEAT_BACK_TO_BACK_WEIGHT = 0.12; // rare but real — reads as an interruption/quick reply when it happens
+const REPEAT_DECAY = 0.45; // each earlier appearance this round further discounts a repeat pick
+const LOW_BUDGET_WORDS = 120; // below this, favor members who tend to land a short beat and let the round close
+
+// Returns a memberId from `pool`, or null if every pool member has already
+// hit MAX_TURNS_PER_POOL_MEMBER (the caller should re-consult the director).
+function pickNextSpeaker({ pool, spokenCounts, lastSpeakerId, remainingBudget, rng = Math.random }) {
+  const weights = pool.map(id => {
+    const timesSpoken = spokenCounts.get(id) || 0;
+    if (timesSpoken >= MAX_TURNS_PER_POOL_MEMBER) return 0;
+    const tendency = lengthTendencyOf(id);
+    let w = LENGTH_WEIGHT[tendency];
+    if (id === lastSpeakerId) w *= REPEAT_BACK_TO_BACK_WEIGHT;
+    else if (timesSpoken > 0) w *= Math.pow(REPEAT_DECAY, timesSpoken);
+    if (remainingBudget < LOW_BUDGET_WORDS && tendency === 'expansive') w *= 0.4;
+    return w;
+  });
+
+  const total = weights.reduce((a, b) => a + b, 0);
+  if (total <= 0) return null;
+
+  let roll = rng() * total;
+  for (let i = 0; i < pool.length; i++) {
+    roll -= weights[i];
+    if (roll <= 0) return pool[i];
+  }
+  return pool[pool.length - 1]; // floating-point fallback
+}
+
+function isPoolExhausted(pool, spokenCounts) {
+  return pool.every(id => (spokenCounts.get(id) || 0) >= MAX_TURNS_PER_POOL_MEMBER);
+}
+
+function countWords(text) {
+  const trimmed = text.trim();
+  return trimmed ? trimmed.split(/\s+/).length : 0;
 }
 
 // ── Per-speaker call ────────────────────────────────────────────────────────
@@ -200,6 +274,8 @@ Do not sign your own name at the start of your response — that is handled auto
 
 Write your entire turn as one continuous block — no blank line anywhere inside it, even across multiple sentences or beats. A blank line marks a change of speaker to whoever reads this afterward; leaving one in the middle of your own turn would read as someone else taking over mid-thought. If you need a pause or a shift, use a single line break, never a blank one.
 
+There is no default length for a turn — let who you are and what's just happened decide it. Some members think out loud at length once something has actually engaged them; others cut in with a single line and let it land. Both are complete turns. If you have a lot to say, say it — but the round has a shared, finite amount of room, so notice you're leaving less of it for whoever speaks after you. A one-line interjection is not a lesser contribution than a paragraph.
+
 Actions and stage business are written in *single asterisks* and used sparingly. The default for any contribution is no action line at all — most speech should stand without physical description. An action earns its place only when it reveals something the words cannot: a gesture that contradicts the speech, a significant silence, a physical act that changes the room's temperature. Do not describe yourself looking at fires, adjusting posture, or sitting down. One action is the maximum; zero is the norm. Do not use --- as a divider.
 
 Be specific: cite real texts, real historical tensions, real scholarship (including post-period scholarship — the room is atemporal and the receipts are real). Do not invent citations. If you quote a text, that text must exist and the quotation must be substantively accurate.
@@ -221,15 +297,47 @@ function stripInternalBlankLines(text) {
   return text.replace(/\n[ \t]*\n+/g, '\n');
 }
 
-function buildSpeakerUserMessage({ roundPrompt, roundSoFarText, member }) {
+// Below this words-per-remaining-voice ratio, the round is "crowded" — there
+// isn't room for everyone still waiting to get a full turn at the length
+// speakers have been running. A vague "leave room for others" didn't move
+// real turn length (see #164's 2026-08-06 live tests — 900-token+ turns
+// regardless of how many voices were still unheard); naming the actual
+// headcount is a concrete constraint the model can react to instead of an
+// abstraction it can shrug off. Set above the even split for a full 5-voice
+// pool on the default 1000-word budget (1000/5 = 200 words/voice) — those
+// live tests were exactly that shape, and the *first* speaker (the one most
+// responsible for spending the budget) needs the pressure too, not just
+// whoever's left once it's already gone.
+const CROWDED_WORDS_PER_VOICE = 220;
+
+function buildSpeakerUserMessage({ roundPrompt, roundSoFarText, member, remainingBudgetWords, unheardCount }) {
   const soFar = roundSoFarText?.trim()
     ? `\n\n--- THE ROUND SO FAR ---\n${roundSoFarText.trim()}\n`
     : '';
-  return `${roundPrompt}${soFar}
+  let budgetHint = '';
+  if (typeof remainingBudgetWords === 'number') {
+    const crowded = typeof unheardCount === 'number' && unheardCount > 0
+      && remainingBudgetWords / (unheardCount + 1) < CROWDED_WORDS_PER_VOICE;
+    budgetHint = crowded
+      ? `\n\n(Roughly ${remainingBudgetWords} words of room left in the round, and ${unheardCount} other${unheardCount === 1 ? '' : 's'} who haven't spoken yet still waiting on it. If everyone's going to fit, this is a moment where a line lands harder than a paragraph — but read the room; don't cut yourself off if something genuinely needs the space.)`
+      : `\n\n(The round has roughly ${remainingBudgetWords} words of room left before it should start wrapping up — a felt sense of how much space remains, not a hard limit. A short reaction is as valid a turn as a long one.)`;
+  }
+  return `${roundPrompt}${soFar}${budgetHint}
 
 --- YOUR TURN ---
 Generate ${member.name}'s contribution now.`;
 }
+
+// #164: still well under the pre-#164 1500-token cap, but raised from an
+// initial 900 after a live convene showed 900 gets hit routinely — not just
+// by designated-expansive personas (Crowley, Yeats) but by default-tendency
+// members too (Waite and Lévi both hit 900 in one round of that test,
+// Lévi's turn visibly cut off mid-sentence). The model's baseline verbosity
+// for this salon's philosophical-debate register runs long across the
+// board; 1100 buys more headroom against mid-sentence truncation while
+// still sitting well below the old cap. Expect this to need more tuning at
+// the 2026-08-19 follow-up.
+const SPEAKER_MAX_TOKENS = 1100;
 
 // Streams the response (same delta shape streamClaude already forwards to
 // the client), and still captures usage/latency via stream.finalMessage() —
@@ -239,7 +347,7 @@ async function callSpeakerTurn({ client, model, system, conversationHistory, use
   const messages = [...conversationHistory, { role: 'user', content: userMessage }];
   const stream = client.messages.stream({
     model,
-    max_tokens: 1500,
+    max_tokens: SPEAKER_MAX_TOKENS,
     system,
     messages,
   });
@@ -259,6 +367,17 @@ async function callSpeakerTurn({ client, model, system, conversationHistory, use
 
 // ── Orchestrator ──────────────────────────────────────────────────────────
 
+// #164: total words a round budgets for itself — the actual stopping
+// condition now (the round ends when this is spent, not when a fixed
+// roster of speakers has each gone once). Rachel's calibration: "about the
+// length of a writer's morning pages." A starting number, not a hard
+// requirement — due for review against real sessions at the 2026-08-19
+// follow-up.
+const ROUND_WORD_BUDGET = 1000;
+const MIN_WORDS_FOR_ANOTHER_BEAT = 40; // below this, not enough room left for a meaningful beat
+const POOL_SLACK = 2; // the director's candidate pool runs a little larger than the round's target speaker count
+const MAX_TOTAL_BEATS = 16; // hard safety net — budget/pool logic should always end the round before this binds
+
 // Ties the director and per-speaker calls together into one round. Returns
 // { fullRoundText, speakerOrder } in the exact shape the caller already
 // persists today (one rolled-up round of text) — this function is the only
@@ -269,6 +388,15 @@ async function callSpeakerTurn({ client, model, system, conversationHistory, use
 // receives the same `conversationHistory` slice (prior rounds); roundSoFar
 // is threaded separately via buildSpeakerUserMessage so a mid-round retry
 // can't contaminate the across-round history.
+//
+// #164: speakers are no longer a fixed, director-ordered roster played
+// straight through once each. The director proposes a candidate pool once
+// (same API cost as before, absent a re-consult); after every beat,
+// pickNextSpeaker() draws the next speaker from that pool locally — no API
+// call — weighted by recency and length tendency, against a shrinking round
+// word budget. The director is only re-consulted mid-round if the pool
+// runs dry before the budget is spent, or the round has gone on long
+// enough to want fresh judgment.
 //
 // Known accepted risk: onChunk forwards each speaker's text live as it
 // streams. If a first attempt fails partway through (after some chunks
@@ -306,19 +434,47 @@ async function runRound({ client, model, lodgeContext, ROSTER, loadMemberFile,
     roundSoFar = seed;
   }
 
-  const { speakers } = await selectSpeakers({
-    client, model, lodgeContext, presentMembers,
-    instruction: roundPrompt, conversationHistory, count: effectiveCount, round, onMetric,
+  const initialPoolTarget = Math.min(presentMembers.length, effectiveCount + POOL_SLACK);
+  const { speakers: initialPool } = await selectSpeakers({
+    client, model, lodgeContext, presentMembers, instruction: roundPrompt, conversationHistory,
+    minCount: effectiveCount, maxCount: initialPoolTarget, round, onMetric,
   });
+
+  let pool = initialPool;
+  let spokenCounts = new Map();
+  let lastSpeakerId = null;
+  let beatsSinceConsult = 0;
+  let remainingBudget = ROUND_WORD_BUDGET;
+  let beats = 0;
 
   const speakerOrder = [];
 
-  for (const memberId of speakers) {
-    const member = presentMembers.find(m => m.id === memberId);
-    if (!member) continue; // shouldn't happen — selectSpeakers validates against presentIds
+  while (remainingBudget >= MIN_WORDS_FOR_ANOTHER_BEAT && beats < MAX_TOTAL_BEATS) {
+    if (isPoolExhausted(pool, spokenCounts) || beatsSinceConsult >= pool.length + 3) {
+      // Fresh director judgment: estimate how many more speakers the
+      // remaining budget realistically holds (a rough 150 words/beat
+      // assumption), rather than re-asking for the round's original count.
+      const nextCount = Math.max(1, Math.min(presentMembers.length, Math.ceil(remainingBudget / 150)));
+      const nextPoolTarget = Math.min(presentMembers.length, nextCount + POOL_SLACK);
+      const { speakers: freshPool } = await selectSpeakers({
+        client, model, lodgeContext, presentMembers, instruction: roundPrompt, conversationHistory,
+        minCount: nextCount, maxCount: nextPoolTarget, round, onMetric, roundSoFar,
+      });
+      pool = freshPool;
+      spokenCounts = new Map();
+      beatsSinceConsult = 0;
+      if (!pool.length) break;
+    }
 
+    const memberId = pickNextSpeaker({ pool, spokenCounts, lastSpeakerId, remainingBudget });
+    if (!memberId) break; // no viable candidate even after a fresh consult — end the round here
+
+    const member = presentMembers.find(m => m.id === memberId);
+    if (!member) break; // shouldn't happen — selectSpeakers validates against presentIds
+
+    const unheardCount = pool.filter(id => id !== memberId && !(spokenCounts.get(id) > 0)).length;
     const system = buildSpeakerSystemPrompt({ lodgeContext, member, artifact, notes, loadMemberFile });
-    const userMessage = buildSpeakerUserMessage({ roundPrompt, roundSoFarText: roundSoFar, member });
+    const userMessage = buildSpeakerUserMessage({ roundPrompt, roundSoFarText: roundSoFar, member, remainingBudgetWords: remainingBudget, unheardCount });
 
     onChunk?.(`${member.name}\n`);
     onSpeakerStart?.(memberId);
@@ -332,10 +488,19 @@ async function runRound({ client, model, lodgeContext, ROSTER, loadMemberFile,
       speakerOrder.push(memberId);
       onSpeakerEnd?.(memberId, member.name, settledText);
       onChunk?.('\n\n');
+      remainingBudget -= countWords(settledText);
     } catch (err) {
       onMetric?.(makeMetric('speaker', { round, memberId, attempts: err.attempts || 1, skipped: true, error: err.message }));
       // Skip this speaker, keep the round going with fewer voices.
     }
+
+    // Recorded whether the beat succeeded or failed — a failing member
+    // still needs the recency/cap discount, or local picking would hammer
+    // the same broken speaker until the round's beat safety net kicks in.
+    spokenCounts.set(memberId, (spokenCounts.get(memberId) || 0) + 1);
+    lastSpeakerId = memberId;
+    beatsSinceConsult++;
+    beats++;
   }
 
   if (!roundSoFar) {
@@ -354,6 +519,10 @@ module.exports = {
   callDirector,
   isValidSelection,
   selectSpeakers,
+  lengthTendencyOf,
+  pickNextSpeaker,
+  isPoolExhausted,
+  countWords,
   buildSpeakerSystemPrompt,
   buildSpeakerUserMessage,
   stripInternalBlankLines,
