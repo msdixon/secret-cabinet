@@ -320,7 +320,8 @@ window.Export = (function () {
     [...byWork.entries()].sort((a, b) => a[0].localeCompare(b[0])).forEach(([work, occurrences]) => {
       lines.push(`### ${work}`, '');
       occurrences.forEach(o => {
-        const grounding = o.libraryCitation ? ` — grounded in: ${o.libraryCitation}` : '';
+        const groundedIn = o.libraryCitation || (o.webSourceUrl ? `[${o.webSourceTitle}](${o.webSourceUrl})` : o.webSourceTitle);
+        const grounding = groundedIn ? ` — grounded in: ${groundedIn}` : '';
         const sourceLabel = CITATION_SOURCE_LABEL[o.source || 'model-knowledge'];
         lines.push(`- **${o.verdict}** (${sourceLabel}) — ${(o.speaker || '').replace(/\s*—\s*$/, '').trim()}`);
         lines.push(`  > "${o.quote}"`);

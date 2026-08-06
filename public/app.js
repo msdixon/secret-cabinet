@@ -873,7 +873,8 @@ function applyCitationFlags(citations) {
     const speechEl = entry.querySelector('.speech-text');
     speechEl.title = flags.map(f => {
       const sourceLabel = CITATION_SOURCE_LABEL[f.source || 'model-knowledge'];
-      return `[${sourceLabel}] ${f.note}` + (f.libraryCitation ? `\nGrounded in: ${f.libraryCitation}` : '');
+      const groundedIn = f.libraryCitation || f.webSourceTitle;
+      return `[${sourceLabel}] ${f.note}` + (groundedIn ? `\nGrounded in: ${groundedIn}` : '');
     }).join('\n\n');
     // #30 — archival image synced to whichever cited work has one, alongside the speech block.
     const withImage = flags.find(f => f.libraryImage);

@@ -57,6 +57,8 @@ function buildManifest(sessions) {
         note: flag.note,
         quote: flag.quote,
         libraryCitation: flag.libraryCitation || null,
+        webSourceUrl: flag.webSourceUrl || null,
+        webSourceTitle: flag.webSourceTitle || null,
         source: flag.source || 'model-knowledge',
       });
     });
@@ -80,7 +82,8 @@ function buildManifest(sessions) {
   const renderGroup = g => {
     const lines = [`### ${g.displayWork}`, ''];
     g.occurrences.forEach(o => {
-      const grounding = o.libraryCitation ? ` — grounded in: ${o.libraryCitation}` : '';
+      const groundedIn = o.libraryCitation || (o.webSourceUrl ? `[${o.webSourceTitle}](${o.webSourceUrl})` : o.webSourceTitle);
+      const grounding = groundedIn ? ` — grounded in: ${groundedIn}` : '';
       lines.push(`- **${VERDICT_LABEL[o.verdict]}** (${SOURCE_LABEL[o.source]}) — ${o.speaker}, session \`${o.sessionId}\` (${o.date})`);
       lines.push(`  > "${o.quote}"`);
       lines.push(`  ${o.note}${grounding}`);
