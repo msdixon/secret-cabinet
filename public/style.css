@@ -99,6 +99,7 @@
 .lodge-select option { background:var(--lodge-panel); }
 .lodge-btn { background:transparent; border:1px solid var(--lodge-amber-dim); color:var(--lodge-amber); font-family:'IM Fell English',serif; font-size:13px; padding:7px 16px; border-radius:2px; cursor:pointer; letter-spacing:1px; transition:all 0.2s; white-space:nowrap; }
 .lodge-btn:hover { background:rgba(200,146,42,0.1); border-color:var(--lodge-amber); }
+a.lodge-btn { display:inline-block; text-decoration:none; }
 .lodge-btn:disabled { opacity:0.4; cursor:not-allowed; }
 .lodge-btn.primary { background:rgba(200,146,42,0.15); border-color:var(--lodge-amber); }
 .lodge-btn.primary:hover { background:rgba(200,146,42,0.25); }
@@ -443,4 +444,96 @@ a.archival-image-link:hover { border-color:var(--lodge-amber-dim); cursor:pointe
 }
 @keyframes witnessface {
   from { opacity:0; } to { opacity:1; }
+}
+
+/* ─── Lodge page (#84 — member page + knowledge graph) ─────────────────── */
+
+.lodge-page-root { min-height:100vh; display:flex; flex-direction:column; }
+.lodge-page-header { display:flex; align-items:center; gap:20px; padding:18px 24px; border-bottom:1px solid var(--lodge-border); background:linear-gradient(180deg,#0a0704 0%,var(--lodge-panel) 100%); }
+.lodge-page-back { font-family:'IM Fell English',serif; font-size:13px; color:var(--lodge-muted); text-decoration:none; letter-spacing:0.5px; white-space:nowrap; }
+.lodge-page-back:hover { color:var(--lodge-amber); }
+.lodge-page-title-block { flex:1; }
+.lodge-page-title { font-size:22px; }
+.lodge-page-stats { font-family:'Crimson Pro',serif; font-size:12px; color:var(--lodge-ash); white-space:nowrap; }
+
+.lodge-page-graph-wrap { padding:16px 24px 0; }
+.graph-toolbar { display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin-bottom:10px; }
+.graph-search-input { max-width:280px; flex:none; }
+.graph-type-toggles { display:flex; gap:14px; flex-wrap:wrap; }
+.graph-type-toggle { font-family:'Crimson Pro',serif; font-size:13px; color:var(--lodge-muted); display:flex; align-items:center; gap:5px; cursor:pointer; user-select:none; }
+.graph-type-toggle input { accent-color:var(--lodge-amber); }
+.graph-reset-btn { margin-left:auto; }
+
+.graph-svg-container { position:relative; width:100%; height:520px; background:var(--lodge-panel); border:1px solid var(--lodge-border); border-radius:2px; overflow:hidden; }
+#graph-svg { width:100%; height:100%; cursor:grab; }
+#graph-svg:active { cursor:grabbing; }
+.graph-empty-hint { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-family:'IM Fell English',serif; font-style:italic; color:var(--lodge-muted); pointer-events:none; }
+.graph-tooltip { position:absolute; z-index:5; background:var(--lodge-panel); border:1px solid var(--lodge-amber-dim); color:var(--lodge-cream); font-family:'Crimson Pro',serif; font-size:12px; line-height:1.5; padding:6px 10px; border-radius:2px; max-width:280px; pointer-events:none; box-shadow:0 4px 12px rgba(0,0,0,0.4); }
+
+.graph-edge { stroke:var(--lodge-border); opacity:0.55; transition:opacity 0.15s; }
+.graph-edge-historical { stroke:var(--lodge-fire); opacity:0.65; }
+.graph-edge-session { stroke:var(--lodge-muted); opacity:0.5; }
+.graph-edge-library { stroke:var(--lodge-amber-dim); opacity:0.45; }
+.graph-edge.dim { opacity:0.06; }
+
+.graph-node { cursor:pointer; }
+.graph-node:focus-visible .graph-node-shape,
+.lodge-roster-card:focus-visible,
+.lodge-chip:focus-visible,
+.lodge-text-item:focus-visible { outline:2px solid var(--lodge-amber); outline-offset:2px; }
+.graph-node-shape { fill:var(--lodge-surface); stroke-width:1.5; transition:fill 0.15s, stroke 0.15s; }
+.graph-node-member .graph-node-shape { fill:var(--lodge-amber-dim); stroke:var(--lodge-amber); }
+.graph-node-text .graph-node-shape { fill:#3a3220; stroke:var(--lodge-parchment); }
+.graph-node-theme .graph-node-shape { fill:#2a2436; stroke:#9a86c0; }
+.graph-node.selected .graph-node-shape { fill:var(--lodge-amber); stroke:var(--lodge-gold); filter:drop-shadow(0 0 6px rgba(200,146,42,0.7)); }
+.graph-node.dim { opacity:0.18; }
+.graph-node-label { font-family:'Crimson Pro',serif; font-size:10px; fill:var(--lodge-muted); pointer-events:none; user-select:none; }
+.graph-node-member .graph-node-label { font-size:11px; fill:var(--lodge-cream); }
+.graph-node.selected .graph-node-label { fill:var(--lodge-gold); }
+
+.lodge-page-body { flex:1; display:flex; gap:0; min-height:0; padding:16px 24px 24px; gap:20px; }
+.lodge-page-roster { width:280px; flex-shrink:0; background:var(--lodge-surface); border:1px solid var(--lodge-border); border-radius:2px; padding:14px; display:flex; flex-direction:column; gap:10px; max-height:calc(100vh - 260px); }
+.lodge-roster-filter { width:100%; }
+.lodge-roster-grid { overflow-y:auto; display:flex; flex-direction:column; gap:4px; }
+.lodge-roster-card { display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:2px; cursor:pointer; transition:background 0.15s; }
+.lodge-roster-card:hover { background:rgba(200,146,42,0.08); }
+.lodge-roster-card.selected { background:rgba(200,146,42,0.16); }
+.lodge-roster-portrait { width:28px; height:28px; border-radius:50%; object-fit:cover; border:1px solid var(--lodge-border); flex-shrink:0; }
+.lodge-roster-glyph { color:var(--lodge-amber); font-size:13px; width:16px; text-align:center; flex-shrink:0; }
+.lodge-roster-name { font-family:'Crimson Pro',serif; font-size:14px; color:var(--lodge-cream); }
+
+.lodge-page-detail { flex:1; min-width:0; background:var(--lodge-surface); border:1px solid var(--lodge-border); border-radius:2px; padding:20px; overflow-y:auto; max-height:calc(100vh - 260px); }
+.lodge-detail-empty { font-family:'IM Fell English',serif; font-style:italic; color:var(--lodge-muted); text-align:center; margin-top:40px; }
+.lodge-detail-header { display:flex; align-items:center; gap:14px; margin-bottom:14px; }
+.lodge-detail-portrait { width:64px; height:64px; border-radius:50%; object-fit:cover; border:1px solid var(--lodge-border); flex-shrink:0; }
+.lodge-detail-archive-image { border-radius:2px; }
+.lodge-detail-name { font-family:'UnifrakturMaguntia',serif; font-size:24px; color:var(--lodge-amber); letter-spacing:1px; }
+.lodge-detail-kind { font-family:'IM Fell English',serif; font-size:12px; letter-spacing:1px; text-transform:uppercase; color:var(--lodge-muted); margin-top:2px; }
+.lodge-detail-section { margin-top:18px; }
+.lodge-citation { font-style:italic; }
+.lodge-source-link { display:inline-block; margin-top:6px; font-family:'Crimson Pro',serif; font-size:13px; color:var(--lodge-amber); text-decoration:none; }
+.lodge-source-link:hover { text-decoration:underline; }
+.lodge-excerpt { margin-top:6px; }
+
+.lodge-chip-row { display:flex; flex-wrap:wrap; gap:6px; margin-top:4px; }
+.lodge-chip { font-family:'Crimson Pro',serif; font-size:12px; padding:3px 10px; border-radius:12px; cursor:pointer; border:1px solid var(--lodge-border); transition:border-color 0.15s, color 0.15s; }
+.lodge-chip-member { color:var(--lodge-amber); border-color:var(--lodge-amber-dim); }
+.lodge-chip-member:hover { border-color:var(--lodge-amber); }
+.lodge-chip-theme { color:#b0a0d8; border-color:#4a3f66; }
+.lodge-chip-theme:hover { border-color:#9a86c0; }
+
+.lodge-relationship-list { display:flex; flex-direction:column; gap:10px; margin-top:6px; }
+.lodge-relationship { padding:8px 10px; background:var(--lodge-panel); border-left:2px solid var(--lodge-fire); border-radius:0 2px 2px 0; }
+.lodge-relationship-type { font-family:'IM Fell English',serif; font-size:11px; letter-spacing:1px; text-transform:uppercase; color:var(--lodge-ash); }
+
+.lodge-text-list { display:flex; flex-direction:column; gap:6px; margin-top:6px; }
+.lodge-text-item { padding:8px 10px; background:var(--lodge-panel); border-radius:2px; cursor:pointer; transition:background 0.15s; }
+.lodge-text-item:hover { background:rgba(200,146,42,0.08); }
+.lodge-text-item-title { font-family:'Crimson Pro',serif; font-size:14px; color:var(--lodge-cream); }
+.lodge-text-item-meta { font-family:'IM Fell English',serif; font-size:11px; font-style:italic; color:var(--lodge-ash); margin-top:2px; }
+
+@media (max-width: 800px) {
+  .lodge-page-body { flex-direction:column; }
+  .lodge-page-roster { width:100%; max-height:220px; }
+  .lodge-page-detail { max-height:none; }
 }

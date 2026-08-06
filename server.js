@@ -152,6 +152,13 @@ function requireAuth(req, res, next) {
 }
 
 app.use(requireAuth);
+
+// #84 — member page + knowledge-graph visualization, a clean URL for the
+// meta-level research view (not tucked in a drawer, per the issue).
+app.get('/lodge', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'lodge.html'));
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/vendor/babylonjs', express.static(path.join(__dirname, 'node_modules/babylonjs')));
 
@@ -1606,11 +1613,22 @@ app.get('/api/library/:id', (req, res) => {
     // Strip YAML frontmatter, return plain text
     const text = raw.replace(/^---[\s\S]*?---\n/, '').trim();
     const image = loadArchiveImageIndex()[entry.id]?.image || null;
-    res.json({ ...entry, text, image });
+    const { citation, source_url } = parseLibraryFrontmatter(raw);
+    res.json({ ...entry, text, image, citation, source_url });
   } catch (err) {
     res.status(500).json({ error: 'Failed to load entry' });
   }
 });
+
+// `citation`/`source_url` live only in each entry's .md frontmatter, not in
+// library.json's index — this reads them out. Shared by the internal
+// citation-grounding lookup below and GET /api/library/:id (#84).
+function parseLibraryFrontmatter(raw) {
+  const frontmatter = raw.match(/^---\n([\s\S]*?)\n---/)?.[1] || '';
+  const citation = frontmatter.match(/^citation:\s*"?(.*?)"?$/m)?.[1] || null;
+  const source_url = frontmatter.match(/^source_url:\s*"?(.*?)"?$/m)?.[1] || null;
+  return { citation, source_url };
+}
 
 // Internal-only: read the `citation`/`source_url` frontmatter fields (plus
 // the full excerpt body, for #153 part 1's text-grounded re-check) that
@@ -1622,9 +1640,7 @@ function loadLibraryCitationLookup() {
     const filePath = path.join(LIBRARY_DIR, entry.file);
     if (!fs.existsSync(filePath)) continue;
     const raw = fs.readFileSync(filePath, 'utf8');
-    const frontmatter = raw.match(/^---\n([\s\S]*?)\n---/)?.[1] || '';
-    const citation = frontmatter.match(/^citation:\s*"?(.*?)"?$/m)?.[1];
-    const source_url = frontmatter.match(/^source_url:\s*"?(.*?)"?$/m)?.[1];
+    const { citation, source_url } = parseLibraryFrontmatter(raw);
     const text = raw.replace(/^---[\s\S]*?---\n/, '').trim();
     lookup[entry.id] = { title: entry.title, source: entry.source, citation, source_url, text };
   }
