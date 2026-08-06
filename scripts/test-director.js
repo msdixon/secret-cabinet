@@ -27,18 +27,18 @@ function loadRealSession() {
   return sessions.sort((a, b) => (b.members?.length || 0) - (a.members?.length || 0))[0];
 }
 
-async function runCase(label, { presentMembers, count, conversationHistory = [] }) {
-  console.log(`\n--- ${label} (present=${presentMembers.length}, count=${count}) ---`);
+async function runCase(label, { presentMembers, minCount, maxCount, conversationHistory = [] }) {
+  console.log(`\n--- ${label} (present=${presentMembers.length}, pool=${minCount}-${maxCount}) ---`);
   const metrics = [];
   const result = await selectSpeakers({
     client, model: MODEL, lodgeContext, presentMembers,
     instruction: 'The room stirs. Write the first movement — initial reactions to whatever the material woke up.',
-    conversationHistory, count, round: 0,
+    conversationHistory, minCount, maxCount, round: 0,
     onMetric: m => metrics.push(m),
   });
 
   const presentIds = presentMembers.map(m => m.id);
-  const valid = isValidSelection(result.speakers, presentIds, count);
+  const valid = isValidSelection(result.speakers, presentIds, minCount, maxCount);
   console.log('speakers:', result.speakers);
   console.log('reasoning:', result.reasoning);
   console.log('source:', result.source);
@@ -55,19 +55,22 @@ async function main() {
 
   const results = [];
 
-  // Small cast — count equals present size, trivial correctness check.
+  // Small cast — pool covers the whole present set, trivial correctness check.
   results.push(await runCase('small cast (2 present)', {
     presentMembers: ROSTER.slice(0, 2),
-    count: 2,
+    minCount: 2,
+    maxCount: 2,
   }));
 
   // Medium cast, using a real session's actual members + conversation history.
   const realSession = loadRealSession();
   if (realSession) {
     const presentMembers = ROSTER.filter(m => realSession.members.includes(m.id));
+    const minCount = Math.min(3, presentMembers.length);
     results.push(await runCase(`real session cast (${realSession.id})`, {
       presentMembers,
-      count: Math.min(3, presentMembers.length),
+      minCount,
+      maxCount: Math.min(presentMembers.length, minCount + 2),
       conversationHistory: (realSession.conversationHistory || []).slice(-6),
     }));
   } else {
@@ -77,7 +80,8 @@ async function main() {
   // Large cast — full roster.
   results.push(await runCase('large cast (full roster)', {
     presentMembers: ROSTER,
-    count: 5,
+    minCount: 5,
+    maxCount: 7,
   }));
 
   // Retry + fallback path, stubbed client (no real API call) — the director
@@ -97,7 +101,7 @@ async function main() {
   const fallbackMetrics = [];
   const fallbackResult = await selectSpeakers({
     client: stubClient, model: MODEL, lodgeContext, presentMembers: fallbackPresent,
-    instruction: 'test', conversationHistory: [], count: 3, round: 0,
+    instruction: 'test', conversationHistory: [], minCount: 3, maxCount: 3, round: 0,
     onMetric: m => fallbackMetrics.push(m),
   });
   console.log('speakers:', fallbackResult.speakers);

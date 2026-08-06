@@ -228,22 +228,6 @@ function loadSession(id) {
 
 // ─── Anthropic call helpers ───────────────────────────────────────────────────
 
-// Non-streaming call (Day One MCP routes only)
-async function callClaude(systemPrompt, conversationHistory, userMessage, useDayOneMCP = false) {
-  const messages = [...conversationHistory, { role: 'user', content: userMessage }];
-  const params = {
-    model: 'claude-sonnet-4-6',
-    max_tokens: 2400,
-    system: systemPrompt,
-    messages,
-  };
-  if (useDayOneMCP) {
-    params.mcp_servers = [{ type: 'url', url: 'https://mcp.day-one.app/mcp', name: 'day-one' }];
-  }
-  const response = await client.messages.create(params);
-  return response.content.filter(b => b.type === 'text').map(b => b.text).join('');
-}
-
 function openSSE(res) {
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
