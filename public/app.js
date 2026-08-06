@@ -829,6 +829,12 @@ function showSessionControls() {
 // the rest.
 const CITATION_VERDICT_SEVERITY = { unverified: 2, uncertain: 1, verified: 0 };
 
+// #153 part 3 — how a verdict was actually reached, not just what it landed
+// on. Missing on pre-#153 sessions (citationFlags saved before this field
+// existed) — default to 'model-knowledge' there, since that was the only
+// method available at the time, not 'library' (which would overstate it).
+const CITATION_SOURCE_LABEL = { library: 'checked against curated text', web: 'checked via live lookup', 'model-knowledge': "Claude's own knowledge" };
+
 function applyCitationFlags(citations) {
   // Strip markdown emphasis asterisks (renderActions() strips them from the
   // rendered DOM, but the model quotes verbatim from the raw *marked-up*
@@ -856,8 +862,10 @@ function applyCitationFlags(citations) {
       CITATION_VERDICT_SEVERITY[b.verdict] > CITATION_VERDICT_SEVERITY[a.verdict] ? b : a);
     entry.classList.add('flagged-citation', `citation-${worst.verdict}`);
     const speechEl = entry.querySelector('.speech-text');
-    speechEl.title = flags.map(f =>
-      f.note + (f.libraryCitation ? `\nGrounded in: ${f.libraryCitation}` : '')).join('\n\n');
+    speechEl.title = flags.map(f => {
+      const sourceLabel = CITATION_SOURCE_LABEL[f.source || 'model-knowledge'];
+      return `[${sourceLabel}] ${f.note}` + (f.libraryCitation ? `\nGrounded in: ${f.libraryCitation}` : '');
+    }).join('\n\n');
     // #30 — archival image synced to whichever cited work has one, alongside the speech block.
     const withImage = flags.find(f => f.libraryImage);
     if (withImage) attachArchivalImage(entry, withImage);

@@ -295,6 +295,15 @@ window.Export = (function () {
     if (btn) btn.disabled = getAnnotatedPassages().length === 0;
   }
 
+  // #153 part 3 — how a verdict was actually reached. Own copy rather than
+  // reaching across script tags into app.js's CITATION_SOURCE_LABEL, matching
+  // this module's stated preference for explicit boundaries (see the deps-bag
+  // note at the top of this file) — same duplication convention already used
+  // between app.js and scripts/build-citation-manifest.js. Missing on
+  // pre-#153 sessions — default to 'model-knowledge' there, since that was
+  // the only method available at the time.
+  const CITATION_SOURCE_LABEL = { library: 'checked against curated text', web: 'checked via live lookup', 'model-knowledge': "Claude's own knowledge" };
+
   // Groups a session's citationFlags by cited work, same convention as
   // scripts/build-citation-manifest.js, so the per-session bibliography reads
   // consistently with the cumulative cross-session one.
@@ -312,7 +321,8 @@ window.Export = (function () {
       lines.push(`### ${work}`, '');
       occurrences.forEach(o => {
         const grounding = o.libraryCitation ? ` — grounded in: ${o.libraryCitation}` : '';
-        lines.push(`- **${o.verdict}** — ${(o.speaker || '').replace(/\s*—\s*$/, '').trim()}`);
+        const sourceLabel = CITATION_SOURCE_LABEL[o.source || 'model-knowledge'];
+        lines.push(`- **${o.verdict}** (${sourceLabel}) — ${(o.speaker || '').replace(/\s*—\s*$/, '').trim()}`);
         lines.push(`  > "${o.quote}"`);
         lines.push(`  ${o.note}${grounding}`, '');
       });

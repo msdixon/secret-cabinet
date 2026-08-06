@@ -929,6 +929,12 @@ The "quote" field must be a verbatim excerpt (~10-25 words) copied exactly from 
       return {
         ...c,
         ...(refined ? { verdict: refined.verdict, note: refined.note } : {}),
+        // #153 part 3 — reflects what was actually checked, not what merely
+        // matched: a libraryMatch that didn't make it through grounding (e.g.
+        // the entry was missing text) stays "model-knowledge", same failure
+        // mode #157 found in treating "has a link" as "was verified". No
+        // "web" branch yet — part 2 (web-escalation) will add one.
+        source: refined ? 'library' : 'model-knowledge',
         libraryCitation: match?.citation || null,
         librarySourceUrl: match?.source_url || null,
         libraryImage: image?.image || null,
