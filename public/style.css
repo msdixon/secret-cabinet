@@ -131,6 +131,8 @@
 .member-token.active { border-color:var(--lodge-amber); background:rgba(200,146,42,0.08); }
 .member-dot { width:7px; height:7px; border-radius:50%; background:var(--lodge-ash); flex-shrink:0; }
 .member-token.active .member-dot { background:var(--lodge-amber); box-shadow:0 0 6px rgba(200,146,42,0.6); }
+.member-portrait { width:22px; height:22px; border-radius:50%; object-fit:cover; border:1px solid var(--lodge-border); flex-shrink:0; }
+.member-token.active .member-portrait { border-color:var(--lodge-amber); box-shadow:0 0 6px rgba(200,146,42,0.6); }
 .member-name { font-family:'IM Fell English',serif; font-size:14px; color:var(--lodge-muted); flex:1; }
 .member-token.active .member-name { color:var(--lodge-cream); }
 
@@ -164,10 +166,11 @@
 .bubble-body { background:rgba(23,18,13,0.5); border:1px solid var(--lodge-border); border-radius:2px 8px 8px 8px; padding:10px 14px; }
 .bubble-right .bubble-body { border-radius:8px 2px 8px 8px; }
 @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
-.speaker-name { font-family:'UnifrakturMaguntia',serif; font-size:19px; color:var(--lodge-amber); margin-bottom:5px; letter-spacing:1px; display:flex; align-items:baseline; gap:6px; }
+.speaker-name { font-family:'UnifrakturMaguntia',serif; font-size:19px; color:var(--lodge-amber); margin-bottom:5px; letter-spacing:1px; display:flex; align-items:center; gap:6px; }
 .speaker-name.observer-voice { color:#a0c8a0; }
 .transcript-entry.bubble-right .speaker-name { justify-content:flex-end; }
 .speaker-glyph { font-family:'Georgia',serif; font-size:13px; opacity:0.6; letter-spacing:0; line-height:1; flex-shrink:0; }
+.speaker-avatar { width:20px; height:20px; border-radius:50%; object-fit:cover; border:1px solid var(--lodge-border); flex-shrink:0; }
 
 /* ── Per-member voice classes (reserved for future avatar/identity work) ───── */
 /* Typography is intentionally uniform — voice-{id} classes are hooks only.   */

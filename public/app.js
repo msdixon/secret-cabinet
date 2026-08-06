@@ -57,7 +57,7 @@ function renderMembers() {
     visibleCount++;
     const el = document.createElement('div');
     el.className = 'member-token' + (isActive ? ' active' : '');
-    el.innerHTML = `<div class="member-dot"></div><span class="member-name">${m.name}</span>`;
+    el.innerHTML = `<img class="member-portrait" src="/portraits/${m.id}.png" alt="" loading="lazy" onerror="portraitFallback(this,'dot')"><span class="member-name">${m.name}</span>`;
     el.onclick = () => {
       if (isActive) activeMembers.delete(m.id);
       else activeMembers.add(m.id);
@@ -292,6 +292,15 @@ function escapeHTML(s) {
           .replace(/'/g, '&#39;');
 }
 
+// Swaps a broken <img class="...-portrait"> for its pre-portrait placeholder
+// (dot or glyph) in place, so a member missing a portrait still reads fine.
+function portraitFallback(img, kind, glyph) {
+  const el = document.createElement(kind === 'dot' ? 'div' : 'span');
+  el.className = kind === 'dot' ? 'member-dot' : 'speaker-glyph';
+  if (glyph) el.textContent = glyph;
+  img.replaceWith(el);
+}
+
 // Two passes:
 //   1. A whole line wrapped in *...* becomes a block-level action (own paragraph).
 //   2. Inline *...* becomes inline action italics.
@@ -365,8 +374,8 @@ function addSpeech(speaker, text, isObserver, memberId, existingAnnotation, targ
   if (isObserver) nc = 'observer-voice';
   else if (memberId) nc = `voice-${memberId}`;
   else nc = '';
-  const glyph = memberGlyph(memberId)
-    ? `<span class="speaker-glyph">${memberGlyph(memberId)}</span>`
+  const glyph = memberId
+    ? `<img class="speaker-avatar" src="/portraits/${memberId}.png" alt="" loading="lazy" onerror="portraitFallback(this,'glyph','${memberGlyph(memberId)}')">`
     : '';
   const nameEl = `<div class="speaker-name ${nc}" ${memberId ? `onclick="highlightDossierEntry('${memberId}')" style="cursor:pointer"` : ''}>${glyph}${escapeHTML(speaker)}</div>`;
   e.innerHTML = `${nameEl}<div class="bubble-body"><div class="speech-text" onclick="toggleAnnotation(this.closest('.transcript-entry'))">${renderActions(text)}</div><div class="annotation-area" style="display:none"><textarea class="annotation-input" placeholder="Note…" onblur="saveAnnotation(this)" onkeydown="if(event.key==='Escape')closeAnnotation(this.closest('.transcript-entry'))"></textarea></div></div>`;
