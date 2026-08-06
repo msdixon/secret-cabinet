@@ -62,6 +62,8 @@ The full workflow/priority tracker — including Backlog-status items, bugs, and
 (#116, #117, and #142 are covered above.)
 
 - **[#32](https://github.com/msdixon/secret-cabinet/issues/32) — investigation mode scoping.** Not blocked technically, blocked on a design conversation: who authors the hidden "truth state," what granularity clue-evaluation runs at, and how it reads a player's own turns (per #31's mechanism). **Deliberately parked (2026-07-27):** large scope, one complex mechanic, not required to unlock the playable-archive concept — stays on the back burner until well after #116/#117 land.
+- **[#194](https://github.com/msdixon/secret-cabinet/issues/194) — do rounds still earn their place?** Day-0 constraint under active reevaluation (2026-08-06): rounds were adopted for performance, and #164's word-budget beat loop already dissolved the *inside* of a round — what remains is the boundary, and it's no longer clear what it's for ("it's not a boxing match — not intentionally"). Spike scopes three directions (continuous stream with diegetic lulls, coarse movements, or rounds kept as invisible internal pacing) and enumerates what currently hangs off the boundary (#73's selector, per-round instructions, #33 branch points, player-turn timing, stored session shape). Decision memo before any implementation.
+- **[#195](https://github.com/msdixon/secret-cabinet/issues/195) — loosen or lose the amnesia.** The "you will not remember this meeting" conceit is day-0 lore whose original narrative purpose is no longer reconstructable, and it has doubled as the excuse for members having no memory at all (2026-08-06). Spike scopes an options ladder: (a) keep amnesia + subconscious *residue* — the fiction-preserving rung the lodge context already licenses, and Rachel's own framing on #166; (b) dream-memory (themes, not transcripts); (c) full continuity (which would make #12 and #165 in-fiction). Costs per rung: prompt growth, contradiction management, character-drift risk, and the lodge-context rewrite itself. #166 is the implementation vehicle for whichever rung is chosen.
 
 ## How this doc relates to everything else
 
@@ -74,4 +76,4 @@ The full workflow/priority tracker — including Backlog-status items, bugs, and
 
 ---
 
-*Last updated: 2026-08-06 (#142's third and final `app.js` module extraction, sessions.js, opened as PR #182 — closes #142 on merge; see STATUS.md).*
+*Last updated: 2026-08-06 (state-of-the-app review: #184–#195 filed — defaults-inversion and voices arcs to Todo, infra hardening to Backlog, and two spikes reopening the day-0 rounds and amnesia constraints added to Other open decisions; see STATUS.md).*
