@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Lodge — The Secret-Cabin-et</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div class="lodge-root lodge-page-root">
+
+  <header class="lodge-page-header">
+    <a class="lodge-page-back" href="/">← The Salon</a>
+    <div class="lodge-page-title-block">
+      <div class="lodge-title lodge-page-title">The Lodge</div>
+      <div class="lodge-subtitle">Members, texts, and the threads between them</div>
+    </div>
+    <div class="lodge-page-stats" id="lodge-page-stats"></div>
+  </header>
+
+  <div class="lodge-page-graph-wrap">
+    <div class="graph-toolbar">
+      <input type="text" id="graph-search" class="lodge-select graph-search-input" placeholder="Search members, texts, themes…" autocomplete="off" />
+      <div class="graph-type-toggles">
+        <label class="graph-type-toggle" data-type="member"><input type="checkbox" checked data-node-type="member"> ● Members</label>
+        <label class="graph-type-toggle" data-type="text"><input type="checkbox" checked data-node-type="text"> ◆ Texts</label>
+        <label class="graph-type-toggle" data-type="theme"><input type="checkbox" checked data-node-type="theme"> ▲ Themes</label>
+      </div>
+      <button class="lodge-btn graph-reset-btn" id="graph-reset-btn" title="Re-center and reheat the layout">Reheat ⟲</button>
+    </div>
+    <div class="graph-svg-container" id="graph-svg-container">
+      <svg id="graph-svg" preserveAspectRatio="xMidYMid meet"></svg>
+      <div class="graph-empty-hint" id="graph-empty-hint" style="display:none;">The graph is quiet — no matching nodes.</div>
+      <div class="graph-tooltip" id="graph-tooltip" style="display:none;"></div>
+    </div>
+  </div>
+
+  <div class="lodge-page-body">
+    <aside class="lodge-page-roster" id="lodge-page-roster">
+      <div class="panel-label">The Assembled</div>
+      <div class="member-filter-input-wrap">
+        <input type="text" id="roster-filter" class="member-filter-input lodge-roster-filter" placeholder="Filter…" autocomplete="off" />
+      </div>
+      <div class="lodge-roster-grid" id="lodge-roster-grid"></div>
+    </aside>
+
+    <main class="lodge-page-detail" id="lodge-page-detail">
+      <div class="lodge-detail-empty" id="lodge-detail-empty">
+        Select a member, text, or theme — from the roster, or the graph above — to open its record.
+      </div>
+      <div class="lodge-detail-content" id="lodge-detail-content" style="display:none;"></div>
+    </main>
+  </div>
+
+</div>
+
+<script src="lodge.js"></script>
+</body>
+</html>
