@@ -169,7 +169,8 @@ window.Sessions = (function () {
             <button class="session-compare-btn" id="compare-btn-${s.id}" onclick="window.Sessions.toggleCompareSelect('${s.id}', this)">⊕ Compare</button>
             <button class="session-publish-btn${s.published ? ' is-published' : ''}" onclick="window.Sessions.togglePublish('${s.id}', ${!!s.published}, this)" title="${s.published ? 'Unpublish from the public reading room' : 'Publish to the public reading room'}">${s.published ? '★ Unpublish' : '☆ Publish'}</button>
             <button class="session-delete-btn" onclick="window.Sessions.deleteSession('${s.id}', this)">Delete</button>
-          </div>`;
+          </div>
+          <div class="session-publish-hint">${publishHintText(s.published)}</div>`;
         list.appendChild(el);
         (childrenOf[s.id] || []).forEach(child => renderSessionItem(child, depth + 1));
       };
@@ -411,6 +412,17 @@ window.Sessions = (function () {
     }
   }
 
+  // Persistent disclosure shown under every session's action row (not just on
+  // click) — publishing exposes the source document (often a real personal
+  // journal entry) and full transcript at an unauthenticated URL, and that
+  // fact should be visible before the user ever clicks Publish, not only
+  // inside the confirm() dialog that follows the click.
+  function publishHintText(published) {
+    return published
+      ? 'Public — the source document, transcript, and member portraits are visible to anyone with the link, no login required.'
+      : 'Publishing makes the source document, transcript, and member portraits public at a URL with no login required.';
+  }
+
   // #38: toggles a session's public reading-room page. Publishing exposes the
   // source document (often a personal journal entry pulled from Day One) and
   // the full transcript at an unauthenticated URL — confirm plainly rather
@@ -418,7 +430,7 @@ window.Sessions = (function () {
   async function togglePublish(id, currentlyPublished, btn) {
     const confirmMsg = currentlyPublished
       ? 'Unpublish this meeting? Its public reading-room page will stop working.'
-      : 'Publish this meeting?\n\nThe source document and full transcript will become viewable by anyone with the link — no login required. (Portraits and researcher notes are not included.)';
+      : 'Publish this meeting? The source document, transcript, and member portraits become viewable by anyone with the link — no login required.';
     if (!confirm(confirmMsg)) return;
     try {
       const res = await fetch(`/api/sessions/${id}/publish`, {
@@ -431,7 +443,8 @@ window.Sessions = (function () {
 
       btn.outerHTML = `<button class="session-publish-btn${data.published ? ' is-published' : ''}" onclick="window.Sessions.togglePublish('${id}', ${data.published}, this)" title="${data.published ? 'Unpublish from the public reading room' : 'Publish to the public reading room'}">${data.published ? '★ Unpublish' : '☆ Publish'}</button>`;
 
-      const dateRow = document.getElementById(`compare-btn-${id}`)?.closest('.session-item')?.querySelector('.session-item-date');
+      const item = document.getElementById(`compare-btn-${id}`)?.closest('.session-item');
+      const dateRow = item?.querySelector('.session-item-date');
       const existingBadge = dateRow?.querySelector('.session-published-badge');
       if (data.published) {
         if (!existingBadge && dateRow) {
@@ -448,6 +461,8 @@ window.Sessions = (function () {
       } else {
         existingBadge?.remove();
       }
+      const hintEl = item?.querySelector('.session-publish-hint');
+      if (hintEl) hintEl.textContent = publishHintText(data.published);
     } catch (e) {
       alert('Could not update publish status.');
     }

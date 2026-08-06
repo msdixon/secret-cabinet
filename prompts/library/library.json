@@ -124,5 +124,32 @@
     "members": ["randolph", "blavatsky"],
     "themes": ["clairvoyance", "astral-light", "ether", "inner-vision", "seership"],
     "file": "randolph-clairvoyance-birthright-1870.md"
+  },
+  {
+    "id": "llull-lover-beloved-1283",
+    "title": "The Book of the Lover and the Beloved",
+    "source": "Blanquerna",
+    "date": "1283",
+    "members": ["llull", "teresa", "arabi"],
+    "themes": ["mystical-love", "union", "ascent", "devotion", "allegory"],
+    "file": "llull-lover-beloved-1283.md"
+  },
+  {
+    "id": "bruno-heroic-enthusiasts-1585",
+    "title": "The Intellectual Power Never at Rest — The Heroic Enthusiasts",
+    "source": "The Heroic Enthusiasts (Gli Eroici Furori): An Ethical Poem",
+    "date": "1585",
+    "members": ["bruno", "dee"],
+    "themes": ["infinite", "intellect", "desire", "cosmology", "unity"],
+    "file": "bruno-heroic-enthusiasts-1585.md"
+  },
+  {
+    "id": "al-hallaj-ana-l-haqq",
+    "title": "Ana'l-Haqq — Verses Quoted in The Mystics of Islam",
+    "source": "The Mystics of Islam",
+    "date": "922",
+    "members": ["al-hallaj", "arabi"],
+    "themes": ["union", "ecstatic-utterance", "annihilation", "fana", "heresy"],
+    "file": "al-hallaj-ana-l-haqq.md"
   }
 ]

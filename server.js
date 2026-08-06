@@ -139,14 +139,26 @@ function requireAuth(req, res, next) {
   // #38: the reading room is the one intentionally public surface — gated by
   // session.published inside the route handler itself, not by passphrase.
   // Authoring/publishing stays behind the passphrase; only the rendered
-  // output is reachable here.
+  // output is reachable here. Portraits must also bypass: the reading room
+  // page embeds them directly, and on a deployed (PASSPHRASE-set) instance
+  // an unauthenticated visitor's <img> requests would otherwise 401. Static
+  // character art, not sensitive on its own — safe to open regardless of
+  // whether any session happens to be published.
   if (req.path.startsWith('/reading-room/')) return next();
+  if (req.path.startsWith('/portraits/')) return next();
   if (req.session.authed) return next();
   if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'Unauthorized' });
   res.redirect('/login');
 }
 
 app.use(requireAuth);
+
+// #84 — member page + knowledge-graph visualization, a clean URL for the
+// meta-level research view (not tucked in a drawer, per the issue).
+app.get('/lodge', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'lodge.html'));
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/vendor/babylonjs', express.static(path.join(__dirname, 'node_modules/babylonjs')));
 
@@ -347,13 +359,21 @@ function renderRoundHtml(text) {
 }
 
 function renderReadingRoomPage(session) {
-  const memberNames = (session.members || [])
-    .map(id => ROSTER.find(m => m.id === id)?.name)
+  const members = (session.members || [])
+    .map(id => ROSTER.find(m => m.id === id))
     .filter(Boolean);
   const title = (session.entry || 'A meeting').trim().slice(0, 80);
   const roundsHtml = (session.rounds || []).map(r =>
     `<section class="rr-round"><h2 class="rr-round-label">${escapeHtml(r.label)}</h2>${renderRoundHtml(r.text)}</section>`
   ).join('\n');
+  // Portraits are AI-generated placeholders, disclosed in MANIFEST.md; not
+  // every roster entry has one yet (see #80), so a broken image just hides
+  // itself rather than showing a placeholder icon — same convention as the
+  // dossier drawer's portrait (public/app.js).
+  const membersHtml = members.map(m => `<span class="rr-member">
+      <img class="rr-portrait" src="/portraits/${escapeHtml(m.id)}.png" alt="" loading="lazy" onerror="this.style.display='none'">
+      <span class="rr-member-name">${escapeHtml(m.name)}</span>
+    </span>`).join('');
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -382,7 +402,10 @@ function renderReadingRoomPage(session) {
   .rr-masthead-name { font-family: 'UnifrakturMaguntia', serif; font-size: 26px; color: var(--amber); letter-spacing: 2px; }
   .rr-masthead-tag { font-family: 'IM Fell English', serif; font-style: italic; font-size: 12px; color: var(--ash); letter-spacing: 3px; text-transform: uppercase; margin-top: 6px; }
   .rr-meta { text-align: center; font-family: 'IM Fell English', serif; font-size: 13px; color: var(--ash); margin: 28px 0 4px; }
-  .rr-members { text-align: center; font-family: 'IM Fell English', serif; font-style: italic; font-size: 14px; color: var(--muted); margin-bottom: 40px; }
+  .rr-members { display: flex; flex-wrap: wrap; justify-content: center; gap: 18px 22px; margin-bottom: 40px; }
+  .rr-member { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 68px; }
+  .rr-portrait { width: 56px; height: 56px; border-radius: 50%; object-fit: cover; border: 1px solid var(--amber-dim); }
+  .rr-member-name { font-family: 'IM Fell English', serif; font-style: italic; font-size: 12px; color: var(--muted); text-align: center; line-height: 1.3; }
   .rr-source { border-left: 3px solid var(--amber-dim); background: var(--panel); padding: 18px 22px; margin-bottom: 48px; font-style: italic; color: var(--muted); white-space: pre-wrap; }
   .rr-round { margin-bottom: 48px; }
   .rr-round-label { font-family: 'IM Fell English', serif; font-size: 13px; letter-spacing: 3px; text-transform: uppercase; color: var(--ash); text-align: center; margin-bottom: 28px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
@@ -401,7 +424,7 @@ function renderReadingRoomPage(session) {
       <div class="rr-masthead-tag">Reading Room</div>
     </header>
     <div class="rr-meta">${escapeHtml(session.date || '')}</div>
-    <div class="rr-members">${memberNames.map(escapeHtml).join(' · ')}</div>
+    <div class="rr-members">${membersHtml}</div>
     <div class="rr-source">${escapeHtml(session.entry || '')}</div>
     ${roundsHtml}
     <footer class="rr-footer">Published from a private session of The Secret-Cabin-et.<br>An imaginative exercise, not a historical record.</footer>
@@ -1590,11 +1613,22 @@ app.get('/api/library/:id', (req, res) => {
     // Strip YAML frontmatter, return plain text
     const text = raw.replace(/^---[\s\S]*?---\n/, '').trim();
     const image = loadArchiveImageIndex()[entry.id]?.image || null;
-    res.json({ ...entry, text, image });
+    const { citation, source_url } = parseLibraryFrontmatter(raw);
+    res.json({ ...entry, text, image, citation, source_url });
   } catch (err) {
     res.status(500).json({ error: 'Failed to load entry' });
   }
 });
+
+// `citation`/`source_url` live only in each entry's .md frontmatter, not in
+// library.json's index — this reads them out. Shared by the internal
+// citation-grounding lookup below and GET /api/library/:id (#84).
+function parseLibraryFrontmatter(raw) {
+  const frontmatter = raw.match(/^---\n([\s\S]*?)\n---/)?.[1] || '';
+  const citation = frontmatter.match(/^citation:\s*"?(.*?)"?$/m)?.[1] || null;
+  const source_url = frontmatter.match(/^source_url:\s*"?(.*?)"?$/m)?.[1] || null;
+  return { citation, source_url };
+}
 
 // Internal-only: read the `citation`/`source_url` frontmatter fields (plus
 // the full excerpt body, for #153 part 1's text-grounded re-check) that
@@ -1606,9 +1640,7 @@ function loadLibraryCitationLookup() {
     const filePath = path.join(LIBRARY_DIR, entry.file);
     if (!fs.existsSync(filePath)) continue;
     const raw = fs.readFileSync(filePath, 'utf8');
-    const frontmatter = raw.match(/^---\n([\s\S]*?)\n---/)?.[1] || '';
-    const citation = frontmatter.match(/^citation:\s*"?(.*?)"?$/m)?.[1];
-    const source_url = frontmatter.match(/^source_url:\s*"?(.*?)"?$/m)?.[1];
+    const { citation, source_url } = parseLibraryFrontmatter(raw);
     const text = raw.replace(/^---[\s\S]*?---\n/, '').trim();
     lookup[entry.id] = { title: entry.title, source: entry.source, citation, source_url, text };
   }
