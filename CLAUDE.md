@@ -2,9 +2,13 @@
 
 Standing instructions for any Claude Code session working in this repo. See [PROJECT.md](PROJECT.md) for direction/roadmap and [STATUS.md](STATUS.md) for what's already shipped — read those first for context on the work itself. This file is process only.
 
-## After merging any PR to main
+## Logging to STATUS.md
 
-Append a one-line, dated entry to `STATUS.md` before ending your turn — don't wait to be asked, and don't batch it up for later. This has already been missed twice in one sitting (PR #123, #124) and had to be backfilled; treat "merged a PR" and "logged it in STATUS.md" as the same action, not two.
+**The STATUS.md entry ships inside the PR it describes — never as a follow-up commit to `main` after merging.** Add the entry on the branch itself, as one of the last commits before the PR is ready to merge (open the PR first if you need its number to link; then push one more commit adding the line). The entry and the code it describes land in the same merge, atomically, with no separate step to remember or forget.
+
+**Why this replaced "append after merging, before ending your turn":** that instruction was racy in practice, not just occasionally forgotten. Once a PR merges, whoever notices — a different session wrapping up, or Rachel merging by hand — may reasonably try to log it, and nothing prevents two sessions from doing so independently. On 2026-08-07 that happened for real: two concurrent sessions both backfilled a STATUS.md entry for the same PR (#206) within minutes of each other, producing an actual merge conflict on `main` — not a close call, a collision. Shipping the entry inside the PR removes the race entirely: if the PR merged, the entry is already there; no session ever needs to guess whether someone beat them to it.
+
+**Before adding any entry — including a backfill for older history — grep `STATUS.md` for the PR or issue number first.** If it's already logged, don't add a second entry; if you have real detail the existing one lacks, that's a judgment call about whether it's worth a short addendum, not grounds for a duplicate paragraph. This guards the one gap the new rule doesn't close on its own: PRs merged before this convention existed, or where a session skipped the step, still need occasional backfilling — but backfilling should stay rare, deliberate, and checked-for-duplicates now, not a standing "after every merge" habit.
 
 ## Worktree hygiene
 
