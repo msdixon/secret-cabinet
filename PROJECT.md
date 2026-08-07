@@ -27,7 +27,7 @@ The architectural frontier (previously tracked under the now-retired `tier-3` la
 | Thread | Status | Items |
 |---|---|---|
 | **Interactivity / agency** | 2 of 3 shipped | #31 player-as-member (done), #33 branching sessions (done), #32 investigation mode (parked — see below) |
-| **Atmosphere / presence — the north-star thread** | #184 is the active next step | #26 3D salon ✅, #27 portraits ✅, #28 avatar presence ✅ — next: #184 stage-as-default-view (Witness presentation as the live view, 2.5D composition direction). #29 voice synth and #17 ambient audio deliberately iceboxed (2026-08-06): less important, buildable at any later point |
+| **Atmosphere / presence — the north-star thread** | defaults-inversion arc complete | #26 3D salon ✅, #27 portraits ✅, #28 avatar presence ✅, #184 stage-as-default-view ✅, #185 director-cast-with-regulars ✅ — next: #186 Continue/Preserve after-panel. #29 voice synth and #17 ambient audio deliberately iceboxed (2026-08-06): less important, buildable at any later point |
 | **Research-grounding** | v2 complete | #36 citation verification ✅ (v1), #153 retrieval-grounded v2 ✅ — shipped in three parts (library grounding PR #171, provenance field PR #173, web-escalation PR #183; #111 closed as subsumed), #37 scholarly export ✅ (carries the provenance data), #30 archival image integration ✅ — ongoing: #35a hand-curated library growth, which now also feeds #187 (voice exemplars) |
 | **Voices / interiority — opened by the 2026-08-06 review** | opening | #187 library excerpts as register exemplars, #188 intra-session disposition state (interruption-as-intent folded in), #166 cross-session residue (implementation vehicle for whichever rung the #195 amnesia spike chooses) |
 
@@ -50,9 +50,9 @@ Full sequencing rationale lives in [issue #118](https://github.com/msdixon/secre
 
 - [#142](https://github.com/msdixon/secret-cabinet/issues/142) — **done.** All three extractions shipped (`witness.js` PR #169, `export.js` PR #172, `sessions.js` PR #182, merged 2026-08-06), each following the `window.X` + `configure(deps)` script-tag/IIFE convention with core state staying in `app.js` as sole owner. [#137](https://github.com/msdixon/secret-cabinet/issues/137) (frontend tests) is now unblocked — its scope also covers pipeline.js's pure scheduling functions. The 2026-08-06 review filed the sequel: [#193](https://github.com/msdixon/secret-cabinet/issues/193), extending the same discipline to the 1,645-line `server.js`, plus the rest of the infra-hardening batch ([#189](https://github.com/msdixon/secret-cabinet/issues/189) model-id constant, [#190](https://github.com/msdixon/secret-cabinet/issues/190) prompt caching, [#191](https://github.com/msdixon/secret-cabinet/issues/191) metrics surface, [#192](https://github.com/msdixon/secret-cabinet/issues/192) demo-survives-redeploy).
 
-Current Todo-status backlog (no ranking implied — pick next tranche with Rachel). Refreshed 2026-08-06 after the state-of-the-app review; unlike the previous list, the first three below advance the north star directly:
+Current Todo-status backlog (no ranking implied — pick next tranche with Rachel). Refreshed 2026-08-07 after #184 and #185 shipped; the first item below advances the north star directly:
 
-- [#184](https://github.com/msdixon/secret-cabinet/issues/184) stage as the default live view (needs a short design doc first) / [#185](https://github.com/msdixon/secret-cabinet/issues/185) director-proposes-cast with pinned regulars / [#186](https://github.com/msdixon/secret-cabinet/issues/186) Continue/Preserve after-panel — the defaults-inversion arc
+- [#186](https://github.com/msdixon/secret-cabinet/issues/186) Continue/Preserve after-panel — completes the defaults-inversion arc
 - [#187](https://github.com/msdixon/secret-cabinet/issues/187) library excerpts as voice exemplars / [#188](https://github.com/msdixon/secret-cabinet/issues/188) intra-session disposition — the voices arc
 - [#137](https://github.com/msdixon/secret-cabinet/issues/137) frontend test framework (unblocked by #142's completion)
 - [#35](https://github.com/msdixon/secret-cabinet/issues/35) archival ingestion pipeline, 35a track (hand-curated growth continues; 35b bulk tooling deferred)
@@ -81,4 +81,4 @@ The full workflow/priority tracker — including Backlog-status items, bugs, and
 
 ---
 
-*Last updated: 2026-08-06 (full refresh after the state-of-the-app review: #184–#197 filed, thread table updated — research-grounding v2 complete, #184 now the atmosphere thread's active step, voices/interiority added as a fourth thread — Todo backlog list rewritten, and three new entries in Other open decisions; see STATUS.md).*
+*Last updated: 2026-08-07 (trimmed todo backlog: #184 and #185 shipped, #186 now the active north-star item; defaults-inversion arc thread table updated to reflect completion; see STATUS.md for implementation details).*
