@@ -88,12 +88,30 @@ window.Witness = (function () {
 
   // ── Replay mode ────────────────────────────────────────────────────────────
   let witnessBlocks = [];      // parsed sequence of blocks to play
-  let witnessIndex = 0;        // current block position
+  let witnessIndex = 0;        // current block position (next block to render)
   let witnessTimer = null;     // auto-advance timer
   let witnessActive = false;
   let witnessSourceSessionId = null; // session being witnessed (for restore on exit)
   let deps = null;              // core helpers/data handed in by start() -- see below
   let onExitRestore = null;     // app.js's restoreSession, captured from deps at start()
+
+  // Go-back support (#90): parallel arrays over witnessIndex so we can
+  // undo any rendered block without a full re-render.
+  //   witnessRenderedNodes[i]   — DOM nodes appended to the stage by block i
+  //   witnessSideSnapshots[i]   — { lastSpeakerId, currentSpeakerSide } captured
+  //                               *before* block i was rendered, so restoring it
+  //                               makes getSpeakerSide() behave identically on a
+  //                               re-render of the same block.
+  // Both are reset in start() and maintained in advance() / goBack().
+  let witnessRenderedNodes = [];
+  let witnessSideSnapshots = [];
+  // End-of-session state: tracked separately so clicking/arrowing at the end
+  // doesn't stack up multiple "The room falls silent." markers.
+  let witnessEnded = false;
+  let witnessEndEl = null;
+  // Touch-swipe tracking (mobile go-back, #90).
+  let _touchStartX = null;
+  let _touchStartY = null;
 
   const WITNESS_WPM = 180;     // reading speed for auto-advance pacing
   const WITNESS_PAUSE_AFTER_HEADER = 1800;   // ms pause after round headers
@@ -234,34 +252,123 @@ window.Witness = (function () {
     return WITNESS_MIN_PAUSE;
   }
 
+  // Shared helper: update hint and progress bar to reflect the current state.
+  function _updateControls() {
+    const hint = document.getElementById('witness-hint');
+    const prog = document.getElementById('witness-progress');
+    if (witnessEnded) {
+      if (hint) hint.textContent = '← back · Exit to leave';
+      if (prog) prog.style.width = '100%';
+    } else if (witnessIndex === 0) {
+      if (hint) hint.textContent = 'Space or click to advance';
+      if (prog) prog.style.width = '0%';
+    } else {
+      const pct = (witnessIndex / witnessBlocks.length) * 100;
+      if (hint) hint.textContent =
+        `${witnessIndex} / ${witnessBlocks.length} — ← back · space or click`;
+      if (prog) prog.style.width = `${pct}%`;
+    }
+  }
+
   function advance() {
     if (!witnessActive) return;
     clearTimeout(witnessTimer);
 
+    // At the end: add the closing marker exactly once, then stop.
     if (witnessIndex >= witnessBlocks.length) {
-      const stage = document.getElementById('witness-stage');
-      const endEl = document.createElement('div');
-      endEl.className = 'witness-end';
-      endEl.textContent = 'The room falls silent.';
-      stage.appendChild(endEl);
-      stage.scrollTop = stage.scrollHeight;
-      document.getElementById('witness-hint').textContent = 'Click Exit to return';
-      document.getElementById('witness-progress').style.width = '100%';
+      if (!witnessEnded) {
+        const stage = document.getElementById('witness-stage');
+        witnessEndEl = document.createElement('div');
+        witnessEndEl.className = 'witness-end';
+        witnessEndEl.textContent = 'The room falls silent.';
+        stage.appendChild(witnessEndEl);
+        stage.scrollTop = stage.scrollHeight;
+        witnessEnded = true;
+      }
+      _updateControls();
       return;
     }
 
-    const block = witnessBlocks[witnessIndex];
-    const delay = renderWitnessBlock(block);
-    witnessIndex++;
+    // Snapshot speaker-side state so goBack() can restore it for this block.
+    witnessSideSnapshots[witnessIndex] = { lastSpeakerId, currentSpeakerSide };
 
-    // Update progress bar
-    const pct = (witnessIndex / witnessBlocks.length) * 100;
-    document.getElementById('witness-progress').style.width = `${pct}%`;
-    document.getElementById('witness-hint').textContent =
-      `${witnessIndex} / ${witnessBlocks.length} — space or click to advance`;
+    // Render the block, collecting every newly appended child node.
+    const stage = document.getElementById('witness-stage');
+    const childCountBefore = stage.childElementCount;
+    const delay = renderWitnessBlock(witnessBlocks[witnessIndex]);
+    const newNodes = [];
+    for (let i = childCountBefore; i < stage.childElementCount; i++) {
+      newNodes.push(stage.children[i]);
+    }
+    witnessRenderedNodes[witnessIndex] = newNodes;
+
+    witnessIndex++;
+    _updateControls();
 
     // Schedule auto-advance
     witnessTimer = setTimeout(advance, delay);
+  }
+
+  // Step back one block (#90). Removes the last rendered block's DOM nodes
+  // and restores the speaker-side state that was in effect before it rendered,
+  // so re-advancing reproduces the exact same output.
+  function goBack() {
+    if (!witnessActive) return;
+    clearTimeout(witnessTimer);
+
+    // Remove the end-of-session marker and its flag first, so the state
+    // machine is in sync with the DOM regardless of whether we go further back.
+    if (witnessEnded) {
+      if (witnessEndEl) { witnessEndEl.remove(); witnessEndEl = null; }
+      witnessEnded = false;
+    }
+
+    // Nothing left to undo.
+    if (witnessIndex <= 0) {
+      _updateControls();
+      return;
+    }
+
+    witnessIndex--;
+
+    // Remove the nodes this block appended.
+    const nodes = witnessRenderedNodes[witnessIndex] || [];
+    nodes.forEach(n => { if (n.parentNode) n.parentNode.removeChild(n); });
+    witnessRenderedNodes[witnessIndex] = [];
+
+    // Restore speaker-side state to what it was before the block rendered.
+    const snap = witnessSideSnapshots[witnessIndex];
+    if (snap) { lastSpeakerId = snap.lastSpeakerId; currentSpeakerSide = snap.currentSpeakerSide; }
+
+    const stage = document.getElementById('witness-stage');
+    stage.scrollTop = stage.scrollHeight;
+    _updateControls();
+
+    // Resume auto-advance from the stepped-back position after a short pause
+    // so the user has time to read what they returned to.
+    witnessTimer = setTimeout(advance, WITNESS_MIN_PAUSE * 2);
+  }
+
+  // ── Touch / swipe support (#90) ────────────────────────────────────────────
+  // Swipe left = advance (next), swipe right = go back.
+  // Registered on the stage element in start() / removed in exit() so these
+  // handlers are only active during replay (not live mode).
+  function _onTouchStart(e) {
+    _touchStartX = e.touches[0].clientX;
+    _touchStartY = e.touches[0].clientY;
+  }
+
+  function _onTouchEnd(e) {
+    if (_touchStartX === null) return;
+    const dx = e.changedTouches[0].clientX - _touchStartX;
+    const dy = e.changedTouches[0].clientY - _touchStartY;
+    _touchStartX = null;
+    _touchStartY = null;
+    // Require a clear horizontal intent: |dx| > 40px and horizontal dominates.
+    if (Math.abs(dx) < 40 || Math.abs(dx) <= Math.abs(dy) * 1.5) return;
+    // Suppress the synthetic click that would otherwise fire advance() via onclick.
+    e.preventDefault();
+    if (dx < 0) advance(); else goBack();
   }
 
   // Begins replay of a fully-resolved session. `session` is { rounds,
@@ -290,9 +397,15 @@ window.Witness = (function () {
     witnessActive = true;
     witnessSourceSessionId = session.id || null;
 
-    // Reset side map for a clean Witness run
+    // Reset side map and go-back state for a clean Witness run.
     lastSpeakerId = null; currentSpeakerSide = 'right';
-    document.getElementById('witness-stage').innerHTML = '';
+    witnessRenderedNodes = [];
+    witnessSideSnapshots = [];
+    witnessEnded = false;
+    witnessEndEl = null;
+
+    const stage = document.getElementById('witness-stage');
+    stage.innerHTML = '';
     document.getElementById('witness-progress').style.display = '';
 
     // Show witness panel
@@ -301,18 +414,26 @@ window.Witness = (function () {
     document.getElementById('witness-progress').style.width = '0%';
     document.getElementById('witness-hint').textContent = 'Space or click to advance';
 
-    // Keyboard handler
+    // Keyboard handler (arrow keys + space for go-back / advance, Esc to exit)
     document.addEventListener('keydown', witnessKeyHandler);
+
+    // Touch-swipe handler for mobile go-back (#90). passive:false on touchend
+    // so e.preventDefault() can suppress the synthetic click.
+    stage.addEventListener('touchstart', _onTouchStart, { passive: true });
+    stage.addEventListener('touchend', _onTouchEnd, { passive: false });
 
     advance();
   }
 
   function witnessKeyHandler(e) {
-    if (e.code === 'Space' && witnessActive) {
+    if (!witnessActive) return;
+    if (e.code === 'Space' || e.code === 'ArrowRight' || e.code === 'ArrowDown') {
       e.preventDefault();
       advance();
-    }
-    if (e.code === 'Escape' && witnessActive) {
+    } else if (e.code === 'ArrowLeft' || e.code === 'ArrowUp') {
+      e.preventDefault();
+      goBack();
+    } else if (e.code === 'Escape') {
       exit();
     }
   }
@@ -321,10 +442,15 @@ window.Witness = (function () {
     const sessionToRestore = witnessSourceSessionId;
     witnessActive = false;
     witnessSourceSessionId = null;
+    witnessEnded = false;
+    witnessEndEl = null;
     clearTimeout(witnessTimer);
     document.removeEventListener('keydown', witnessKeyHandler);
+    const stage = document.getElementById('witness-stage');
+    stage.removeEventListener('touchstart', _onTouchStart);
+    stage.removeEventListener('touchend', _onTouchEnd);
     document.getElementById('witness-panel').style.display = 'none';
-    document.getElementById('witness-stage').innerHTML = '';
+    stage.innerHTML = '';
     // Hand back to app.js to restore the session transcript so the user
     // lands back in the full view -- this module never calls app.js
     // functions other than the one it was explicitly given for this.
