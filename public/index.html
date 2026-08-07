@@ -104,12 +104,28 @@
     </div>
 
     <div class="member-panel">
-      <div class="panel-label" style="display:flex;align-items:center;gap:8px;justify-content:space-between;">
-        <span style="display:flex;align-items:center;gap:8px;">II. The Assembled <span id="member-count-badge" class="member-count-badge"></span></span>
-        <input type="text" class="member-filter-input" id="member-filter" placeholder="Filter…" oninput="renderMembers()" />
+      <div class="panel-label member-panel-head">
+        <span class="member-panel-heading">II. The Assembled <span id="member-count-badge" class="member-count-badge"></span></span>
+        <span class="member-panel-controls">
+          <button type="button" class="lodge-btn cast-ask-btn" id="cast-ask-btn" onclick="window.Casting.requestProposal()" title="Ask who tonight's document would draw">✦ Who would this draw?</button>
+          <input type="text" class="member-filter-input" id="member-filter" placeholder="Filter…" oninput="renderMembers()" />
+        </span>
+      </div>
+      <div class="cast-proposal" id="cast-proposal" style="display:none;">
+        <div class="cast-proposal-head">
+          <span class="cast-proposal-title" id="cast-proposal-title"></span>
+          <button type="button" class="cast-proposal-dismiss" onclick="window.Casting.dismissProposal()" title="Dismiss" aria-label="Dismiss the proposed cast">✕</button>
+        </div>
+        <div class="cast-proposal-names" id="cast-proposal-names"></div>
+        <div class="cast-proposal-reason" id="cast-proposal-reason"></div>
+        <div class="cast-proposal-actions" id="cast-proposal-actions">
+          <button type="button" class="lodge-btn primary" onclick="window.Casting.acceptProposal()">Seat them</button>
+          <button type="button" class="lodge-btn" onclick="window.Casting.requestProposal()">Ask again</button>
+        </div>
       </div>
       <div class="members-grid" id="members-grid"></div>
       <div class="members-empty-hint" id="members-empty-hint" style="display:none;">No members match "<span id="members-empty-hint-term"></span>".</div>
+      <div class="members-cast-hint" id="members-cast-hint" style="display:none;">No one is seated yet. Bring a document and the room will say who it draws — or pin a regular with ✦ and they will always be here.</div>
       <div style="margin-top:12px;">
         <button class="lodge-btn add-member-btn" onclick="openAddMemberModal()">+ Invite to the Lodge</button>
       </div>
@@ -329,6 +345,7 @@
 <script src="witness.js"></script>
 <script src="export.js"></script>
 <script src="sessions.js"></script>
+<script src="casting.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

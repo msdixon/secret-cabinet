@@ -157,6 +157,7 @@ window.Export = (function () {
           document.getElementById('entry-date-tag').textContent = entry.date || '';
           document.getElementById('entry-journal-tag').textContent = entry.source || 'Library';
           deps.setStatus('The document has been read aloud. The room has heard it.', false);
+          deps.onDocumentReady?.();
         })
         .catch(() => {
           display.textContent = 'Could not load entry.';
@@ -173,6 +174,7 @@ window.Export = (function () {
       document.getElementById('entry-date-tag').textContent = cached.date || '';
       document.getElementById('entry-journal-tag').textContent = cached.journalName;
       deps.setStatus('The document has been read aloud. The room has heard it.', false);
+      deps.onDocumentReady?.();
     } else if (isPaste) {
       deps.setCurrentEntry('');
     }
@@ -233,6 +235,7 @@ window.Export = (function () {
     sel.value = 'paste';
     handleSourceChange();
     deps.setStatus(`"${filename}" loaded.${notice ? ' Long document trimmed.' : ' The room has heard it.'}`, false);
+    deps.onDocumentReady?.();
   }
 
   // ── Export ─────────────────────────────────────────────────────────────────
