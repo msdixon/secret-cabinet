@@ -543,7 +543,7 @@ app.post('/api/convene', async (req, res) => {
   openSSE(res);
   try {
     const { fullRoundText: text, disposition } = await runRound({
-      client, model: 'claude-sonnet-4-6', lodgeContext, ROSTER, loadMemberFile,
+      client, model: 'claude-sonnet-4-6', lodgeContext, ROSTER, loadMemberFile, loadVoiceExemplar,
       presentMemberIds: playerDirectorPool(members, effectivePlayerMode, effectivePlayerMemberId),
       artifact: artifact || null, notes: notes || {},
       roundPrompt, conversationHistory: [],
@@ -635,7 +635,7 @@ app.post('/api/round', async (req, res) => {
   openSSE(res);
   try {
     const { fullRoundText: text, disposition } = await runRound({
-      client, model: 'claude-sonnet-4-6', lodgeContext, ROSTER, loadMemberFile,
+      client, model: 'claude-sonnet-4-6', lodgeContext, ROSTER, loadMemberFile, loadVoiceExemplar,
       presentMemberIds: playerDirectorPool(session.members, session.playerMode, session.playerMemberId),
       artifact: null, notes: {},
       roundPrompt, conversationHistory: session.conversationHistory.slice(-6),
@@ -683,7 +683,7 @@ app.post('/api/interject', async (req, res) => {
   openSSE(res);
   try {
     const { fullRoundText: response, disposition } = await runRound({
-      client, model: 'claude-sonnet-4-6', lodgeContext, ROSTER, loadMemberFile,
+      client, model: 'claude-sonnet-4-6', lodgeContext, ROSTER, loadMemberFile, loadVoiceExemplar,
       presentMemberIds: playerDirectorPool(session.members, session.playerMode, session.playerMemberId),
       artifact: null, notes: {},
       roundPrompt: prompt, conversationHistory: session.conversationHistory.slice(-6),
@@ -730,7 +730,7 @@ app.post('/api/prototype/round', async (req, res) => {
   openSSE(res);
   try {
     const { fullRoundText, speakerOrder } = await runRound({
-      client, model: 'claude-sonnet-4-6', lodgeContext, ROSTER, loadMemberFile,
+      client, model: 'claude-sonnet-4-6', lodgeContext, ROSTER, loadMemberFile, loadVoiceExemplar,
       presentMemberIds: members, artifact: null, notes: {},
       roundPrompt, conversationHistory: [],
       speakerCount: speakerCount || Math.min(members.length, 5),
@@ -1879,6 +1879,40 @@ function parseLibraryFrontmatter(raw) {
   const citation = frontmatter.match(/^citation:\s*"?(.*?)"?$/m)?.[1] || null;
   const source_url = frontmatter.match(/^source_url:\s*"?(.*?)"?$/m)?.[1] || null;
   return { citation, source_url };
+}
+
+// #187 — the library entry a member actually *wrote*, for injection into
+// their speaker prompt as a voice-register exemplar. Internal-only; not
+// exposed as a route.
+//
+// Keyed on `author`, deliberately not on `members`. `members` is an
+// association list — it includes everyone an entry concerns, so Waite's 1911
+// preface lists Pamela Colman Smith and Jung's 1916 text lists Corbin.
+// Matching on it would hand a member someone else's prose under the heading
+// "how you actually write", which is a fabrication of voice; `author` is the
+// one member whose hand the text is in. A member with no authored entry
+// returns null and their prompt is built exactly as it was before #187.
+//
+// One entry per author today. If an author ever gains a second, the first in
+// library.json order wins — deterministic, and a curator wanting a specific
+// one as the exemplar should order the file accordingly.
+function loadVoiceExemplar(memberId) {
+  if (!memberId) return null;
+  const entry = loadLibraryIndex().find(e => e.author === memberId);
+  if (!entry) return null;
+  const filePath = path.join(LIBRARY_DIR, entry.file);
+  if (!fs.existsSync(filePath)) return null;
+  const raw = fs.readFileSync(filePath, 'utf8');
+  const text = raw.replace(/^---[\s\S]*?---\n/, '').trim();
+  if (!text) return null;
+  return {
+    id: entry.id,
+    title: entry.title,
+    source: entry.source,
+    date: entry.date,
+    translated: !!entry.translated,
+    text,
+  };
 }
 
 // Internal-only: read the `citation`/`source_url` frontmatter fields (plus

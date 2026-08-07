@@ -31,7 +31,7 @@ function buildMemberSection(member, artifact, notes, loadMemberFile) {
 // retries, skips, and fallbacks) produces one of these, persisted alongside
 // the session so it's reviewable after the fact, not just an ephemeral
 // console line.
-function makeMetric(phase, { round, memberId, attempts, usage, latencyMs, skipped, error, reasoning } = {}) {
+function makeMetric(phase, { round, memberId, attempts, usage, latencyMs, skipped, error, reasoning, voiceExemplar } = {}) {
   return {
     phase, // 'director' | 'speaker' | 'casting'
     round: round ?? null,
@@ -42,6 +42,13 @@ function makeMetric(phase, { round, memberId, attempts, usage, latencyMs, skippe
     skipped: !!skipped,
     error: error || null,
     reasoning: reasoning || null,
+    // #187: which library entry (if any) was injected as this speaker's
+    // register exemplar. Recorded so the feature's input-token cost is
+    // attributable after the fact — the same speaker with and without an
+    // exemplar is the comparison, and without this field the two are
+    // indistinguishable in the persisted metrics. Always null off the
+    // speaker phase.
+    voiceExemplar: voiceExemplar || null,
     timestamp: new Date().toISOString(),
   };
 }
@@ -421,13 +428,123 @@ function countWords(text) {
   return trimmed ? trimmed.split(/\s+/).length : 0;
 }
 
+// ── Voice-register exemplar (#187) ──────────────────────────────────────────
+//
+// The library (#35a) holds a verified primary-source excerpt for 21 of the 33
+// roster members, and until now that text was read only by citation
+// verification (#36/#153) — never by the member whose prose it is. Each
+// member's voice therefore rested entirely on their character file's
+// *description* of a register rather than on evidence of one. This injects
+// a trimmed slice of a member's own writing into their speaker prompt as an
+// exemplar of how they actually sound on the page.
+//
+// The 12 members with no library entry of their own get nothing extra and
+// behave exactly as before — the voice doc's description alone. That is the
+// intended degradation, not a gap to paper over: a member is only ever shown
+// text they actually wrote.
+//
+// Twelve, not the ten hard passes STATUS.md's 2026-08-07 entry names. Library
+// *coverage* counts a member as covered if they appear in an entry's
+// `members` list at all, which is the right measure for the graph and for
+// citation matching but the wrong one here: Pamela Colman Smith is listed on
+// Waite's 1911 preface and Corbin on Jung's 1916 text because those entries
+// concern them, not because they wrote a word of them. Handing Waite's prose
+// to Pixie as "how you actually write" would be a fabrication of exactly the
+// kind this project's citation work exists to prevent — hence the explicit
+// `author` field in library.json (added by this change) rather than a reuse
+// of `members`.
+
+// A few hundred words, per the issue — enough to carry a cadence, cheap
+// enough to pay per speaker call (input tokens, uncached until #190). Sized
+// against the real corpus: 16 of 21 entries are already under it and pass
+// through whole; it only bites on the five long ones (Moina Mathers 584
+// words, Porete 434, Dion Fortune 406, Lévi 302, Hildegard 301). The whole
+// section costs ~550 input tokens per beat when present.
+const VOICE_EXEMPLAR_WORD_BUDGET = 300;
+
+// Trims from the top of the excerpt on the largest natural boundary that
+// fits — whole paragraphs first, then whole sentences, and only as a last
+// resort mid-sentence. A register exemplar cut mid-clause is a worse
+// exemplar: the model reads the truncation itself as a stylistic habit.
+function trimToWordBudget(text, maxWords) {
+  const trimmed = (text || '').trim();
+  if (!trimmed || countWords(trimmed) <= maxWords) return trimmed;
+
+  const paragraphs = trimmed.split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
+  const kept = [];
+  let used = 0;
+  for (const paragraph of paragraphs) {
+    const words = countWords(paragraph);
+    if (used + words > maxWords) break;
+    kept.push(paragraph);
+    used += words;
+  }
+  if (kept.length) return `${kept.join('\n\n')}\n\n[…]`;
+
+  // The opening paragraph alone overruns the budget — fall back to whole
+  // sentences within it.
+  const sentences = paragraphs[0].match(/[^.!?]+(?:[.!?]+|$)/g) || [];
+  const keptSentences = [];
+  used = 0;
+  for (const sentence of sentences) {
+    const words = countWords(sentence);
+    if (used + words > maxWords) break;
+    keptSentences.push(sentence.trim());
+    used += words;
+  }
+  if (keptSentences.length) return `${keptSentences.join(' ')} […]`;
+
+  // One unbroken sentence longer than the whole budget (verse without
+  // terminal punctuation does this too) — hard cut.
+  return `${trimmed.split(/\s+/).slice(0, maxWords).join(' ')} […]`;
+}
+
+// `exemplar` is { title, source, date, text, translated } — see server.js's
+// loadVoiceExemplar. Returns '' for a member with no entry, which is what
+// makes the degradation invisible rather than a hole in the prompt.
+function buildVoiceExemplarSection(exemplar) {
+  const text = trimToWordBudget(exemplar?.text, VOICE_EXEMPLAR_WORD_BUDGET);
+  if (!text) return '';
+
+  // Half the corpus's titles already name the work they're drawn from
+  // ("The Voice of the Devil — The Marriage of Heaven and Hell", source "The
+  // Marriage of Heaven and Hell"), so a naive join prints it twice. Drop the
+  // redundant half rather than hand the model a line that reads like a
+  // stutter — this is the one place in the prompt claiming to be evidence.
+  const parts = [exemplar.title];
+  if (exemplar.source && !exemplar.title?.includes(exemplar.source)) parts.push(exemplar.source);
+  parts.push(exemplar.date);
+  const provenance = parts.filter(Boolean).join(' — ');
+  // Most of the corpus (12 of 21) is in translation, so for over half these
+  // members the specific English words are a translator's choice, not
+  // theirs. Naming that keeps the model from adopting Rosenthal's or Peers's
+  // vocabulary as Ibn Khaldun's or Teresa's own.
+  const translationNote = exemplar.translated
+    ? ' The English here is a translator\'s, not yours: take the cadence, the shape of the argument, and the habits of attention as your own — not the particular vocabulary.'
+    : '';
+
+  return `\n\n---\n\n## HOW YOU ACTUALLY WRITE — A PAGE IN YOUR OWN HAND
+
+Below is a passage of your own writing, from the lodge's archive. It is here as evidence of your register — your sentence rhythm, how you build and qualify a thought, what you reach for and what you leave alone. It is not a topic, an assignment, or a thing to bring up.
+
+${provenance}
+
+${text}
+
+Let this govern *how* you speak tonight, never *what* you speak about. Do not quote it, cite it, allude to it, or steer the room toward its subject — no one here is discussing this text, and producing it would read as a non sequitur. It is also written prose, and you are speaking aloud in a room: what carries over is the mind and the movement, not the punctuation of the page.${translationNote}`;
+}
+
 // ── Per-speaker call ────────────────────────────────────────────────────────
 
 // Only this member's own character file goes in — no other present members'
 // files. That's the whole point: each speaker gets the model's full
 // attention instead of a fraction of it split across the whole cast.
-function buildSpeakerSystemPrompt({ lodgeContext, member, artifact, notes, loadMemberFile, disposition }) {
+function buildSpeakerSystemPrompt({ lodgeContext, member, artifact, notes, loadMemberFile, disposition, voiceExemplar }) {
   const memberSection = buildMemberSection(member, artifact, notes, loadMemberFile);
+  // #187: sits directly after the character file, since it's evidence for
+  // the same thing that file describes — and before the disposition, which
+  // is about tonight specifically and wants to be the last thing read.
+  const exemplarSection = buildVoiceExemplarSection(voiceExemplar);
   const dispositionSection = disposition?.trim()
     ? `\n\n---\n\n## YOUR PRIVATE STATE TONIGHT (no one else in the room can see this)\n\n${disposition.trim()}`
     : '';
@@ -436,7 +553,7 @@ function buildSpeakerSystemPrompt({ lodgeContext, member, artifact, notes, loadM
 
 ---
 
-${memberSection}${dispositionSection}
+${memberSection}${exemplarSection}${dispositionSection}
 
 ---
 
@@ -635,7 +752,7 @@ const MAX_TOTAL_BEATS = 16; // hard safety net — budget/pool logic should alwa
 async function runRound({ client, model, lodgeContext, ROSTER, loadMemberFile,
   presentMemberIds, artifact, notes, roundPrompt, conversationHistory,
   speakerCount, round, onChunk, onMetric, onSpeakerStart, onSpeakerEnd, precedingTurn,
-  disposition }) {
+  disposition, loadVoiceExemplar }) {
 
   const presentMembers = ROSTER.filter(m => presentMemberIds.includes(m.id));
   const effectiveCount = Math.min(speakerCount, presentMembers.length);
@@ -643,6 +760,24 @@ async function runRound({ client, model, lodgeContext, ROSTER, loadMemberFile,
   // one round (MAX_TURNS_PER_POOL_MEMBER) sees their own just-updated state
   // on the second turn, not the state from before the round started.
   const currentDisposition = { ...(disposition || {}) };
+  // #187: the library doesn't change mid-round, and a member can take more
+  // than one beat in a round — read each member's exemplar off disk once.
+  const exemplarCache = new Map();
+  const exemplarFor = memberId => {
+    if (!exemplarCache.has(memberId)) {
+      let entry = null;
+      try {
+        entry = loadVoiceExemplar?.(memberId) || null;
+      } catch (err) {
+        // A missing or malformed library entry must never cost a member
+        // their turn — fall through to the no-exemplar path, same as a
+        // member who simply has no entry.
+        console.warn('[voice-exemplar]', memberId, '—', err.message);
+      }
+      exemplarCache.set(memberId, entry);
+    }
+    return exemplarCache.get(memberId);
+  };
 
   // A human-written turn (player-as-member) seeded before the director
   // decides — streamed immediately so it appears in the live view before
@@ -701,7 +836,8 @@ async function runRound({ client, model, lodgeContext, ROSTER, loadMemberFile,
     if (!member) break; // shouldn't happen — selectSpeakers validates against presentIds
 
     const unheardCount = pool.filter(id => id !== memberId && !(spokenCounts.get(id) > 0)).length;
-    const system = buildSpeakerSystemPrompt({ lodgeContext, member, artifact, notes, loadMemberFile, disposition: currentDisposition[memberId] });
+    const voiceExemplar = exemplarFor(memberId);
+    const system = buildSpeakerSystemPrompt({ lodgeContext, member, artifact, notes, loadMemberFile, disposition: currentDisposition[memberId], voiceExemplar });
     const userMessage = buildSpeakerUserMessage({ roundPrompt, roundSoFarText: roundSoFar, member, remainingBudgetWords: remainingBudget, unheardCount });
 
     onChunk?.(`${member.name}\n`);
@@ -709,7 +845,7 @@ async function runRound({ client, model, lodgeContext, ROSTER, loadMemberFile,
     try {
       const { result, attempts } = await withOneRetry(() =>
         callSpeakerTurn({ client, model, system, conversationHistory, userMessage, onChunk }));
-      onMetric?.(makeMetric('speaker', { round, memberId, attempts, usage: result.usage, latencyMs: result.latencyMs }));
+      onMetric?.(makeMetric('speaker', { round, memberId, attempts, usage: result.usage, latencyMs: result.latencyMs, voiceExemplar: voiceExemplar?.id }));
 
       const contextBeforeTurn = roundSoFar;
       const settledText = stripInternalBlankLines(result.text);
@@ -738,7 +874,7 @@ async function runRound({ client, model, lodgeContext, ROSTER, loadMemberFile,
         // Best-effort — the member simply carries their prior disposition forward.
       }
     } catch (err) {
-      onMetric?.(makeMetric('speaker', { round, memberId, attempts: err.attempts || 1, skipped: true, error: err.message }));
+      onMetric?.(makeMetric('speaker', { round, memberId, attempts: err.attempts || 1, skipped: true, error: err.message, voiceExemplar: voiceExemplar?.id }));
       // Skip this speaker, keep the round going with fewer voices.
     }
 
@@ -778,6 +914,9 @@ module.exports = {
   pickNextSpeaker,
   isPoolExhausted,
   countWords,
+  VOICE_EXEMPLAR_WORD_BUDGET,
+  trimToWordBudget,
+  buildVoiceExemplarSection,
   buildSpeakerSystemPrompt,
   buildSpeakerUserMessage,
   stripInternalBlankLines,
