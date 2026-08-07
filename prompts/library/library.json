@@ -151,5 +151,32 @@
     "members": ["al-hallaj", "arabi"],
     "themes": ["union", "ecstatic-utterance", "annihilation", "fana", "heresy"],
     "file": "al-hallaj-ana-l-haqq.md"
+  },
+  {
+    "id": "hildegard-living-light-1175",
+    "title": "The Cloud of the Living Light",
+    "source": "Studies in the History and Method of Science, vol. I",
+    "date": "c. 1175",
+    "members": ["hildegard", "julian", "teresa"],
+    "themes": ["vision", "living-light", "prophecy", "interiority", "testimony"],
+    "file": "hildegard-living-light-1175.md"
+  },
+  {
+    "id": "porete-mirror-approbations",
+    "title": "The Author's Prologue — The Three Approbations",
+    "source": "The Mirror of Simple Souls",
+    "date": "c. 1295",
+    "members": ["porete", "julian", "teresa"],
+    "themes": ["authority", "approbation", "heresy", "annihilation", "mystical-love"],
+    "file": "porete-mirror-approbations.md"
+  },
+  {
+    "id": "fortune-machinery-of-the-mind-1922",
+    "title": "Dissociation and Auto-suggestion — The Machinery of the Mind",
+    "source": "The Machinery of the Mind",
+    "date": "1922",
+    "members": ["dion-fortune", "jung"],
+    "themes": ["unconscious", "dissociation", "auto-suggestion", "mechanism", "psychology"],
+    "file": "fortune-machinery-of-the-mind-1922.md"
   }
 ]
