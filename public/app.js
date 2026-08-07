@@ -821,6 +821,7 @@ async function convene() {
     }
 
     showSessionControls();
+    window.Witness.collapseStage();
     setStatus('The meeting has found its natural pause. The embers hold.', false);
   } finally {
     document.getElementById('convene-btn').disabled = false;
@@ -858,6 +859,7 @@ async function resumeRounds(fromIndex) {
         return;
       }
     }
+    window.Witness.collapseStage();
     setStatus('The meeting has found its natural pause. The embers hold.', false);
   } finally {
     document.getElementById('convene-btn').disabled = false;

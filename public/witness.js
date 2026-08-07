@@ -13,7 +13,7 @@
 // updateSeats([...activeMembers]).
 //
 // #184 (defaults inversion, see DESIGN-184-STAGE-DEFAULT.md): the stage
-// (#witness-stage) and the record (app.js's #transcript-content) are now two
+// (#witness-stage) and the record (app.js's #transcript-content) are two
 // permanent panes rendering the same conversation, never one swapped for the
 // other -- the old toggleLive()/getLiveStageEl() DOM re-parenting is gone.
 // A live convene mirrors each completed beat into the stage via
@@ -24,6 +24,18 @@
 // dataset.speaker the way record entries do: annotation stays exclusively in
 // the record (#184's decision), and the stage's .transcript-entry elements
 // are presentation-only, built by renderWitnessBlock exactly like replay.
+//
+// Revision, post-#206 review: both panes still render live, but only one is
+// ever VISIBLE -- the same streaming text showing twice at once turned out
+// to be unreadable, not "linked." collapseStage()/reopenStage() toggle
+// mutually exclusive classes on #stage-record: .stage-only (stage showing,
+// record hidden -- the default the instant a convene starts) and .collapsed
+// (record showing, stage hidden -- entered automatically once a convene
+// reaches its natural pause, or any time via Exit, which still never stops
+// a still-running convene). The record keeps accumulating while hidden;
+// live annotation during an active convene is deferred rather than
+// designed for, since a hidden pane isn't a workable annotation surface.
+// See DESIGN-184-STAGE-DEFAULT.md's Revision section.
 window.Witness = (function () {
   let deps = null; // core helpers/data -- see configure() below
 
@@ -94,12 +106,29 @@ window.Witness = (function () {
   function liveReset() { clearStage(true); }
   function resetLiveStage() { clearStage(false); }
 
+  // Enters "the record" view: stage hidden, record showing full height.
+  // Called on Exit (live or replay) and automatically once a convene
+  // reaches its natural pause -- see app.js's convene()/resumeRounds().
   function collapseStage() {
-    document.getElementById('stage-record')?.classList.add('collapsed');
+    const el = document.getElementById('stage-record');
+    el?.classList.remove('stage-only');
+    el?.classList.add('collapsed');
+    // The record may have been hidden (display:none) this whole time, which
+    // zeroes scrollHeight -- app.js's recordFollow() calls during that
+    // window were inert. Catch up now that layout is real, so revealing it
+    // lands on the latest speech, not wherever scrollTop last landed (0).
+    const recordScroll = document.getElementById('record-scroll');
+    if (recordScroll) recordScroll.scrollTop = recordScroll.scrollHeight;
   }
 
+  // Enters "the stage" view: record hidden, stage showing full height --
+  // the default the instant a live convene starts (via liveReset()) and
+  // whenever replay begins (via start()). Mutually exclusive with
+  // collapseStage() above: the two panes never render live at once.
   function reopenStage() {
-    document.getElementById('stage-record')?.classList.remove('collapsed');
+    const el = document.getElementById('stage-record');
+    el?.classList.remove('collapsed');
+    el?.classList.add('stage-only');
     const stage = document.getElementById('witness-stage');
     if (stage) stage.scrollTop = stage.scrollHeight;
   }

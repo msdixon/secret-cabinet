@@ -405,11 +405,17 @@ a.archival-image-link:hover { border-color:var(--lodge-amber-dim); cursor:pointe
    record is the same conversation rendered continuously in its own scrolling
    window, so a long session never grows the page. Heights are viewport-
    relative with floors/caps rather than exactly equal — see
-   DESIGN-184-STAGE-DEFAULT.md for why "similar" beats "identical" here. */
+   DESIGN-184-STAGE-DEFAULT.md for why "similar" beats "identical" here.
+
+   Revision: only one pane is ever VISIBLE at a time (.stage-only vs
+   .collapsed, toggled by witness.js) — showing the same streaming text in
+   both was unreadable, not "linked." See DESIGN-184-STAGE-DEFAULT.md's
+   Revision section and witness.js's collapseStage()/reopenStage(). */
 .stage-record { display:flex; flex-direction:column; background:var(--lodge-surface); border:1px solid var(--lodge-border); border-radius:2px; overflow:hidden; }
 
 .stage-pane { display:flex; flex-direction:column; height:54vh; min-height:340px; max-height:580px; border-bottom:1px solid var(--lodge-border); background:var(--lodge-bg); }
 .stage-record.collapsed .stage-pane { display:none; }
+.stage-record.stage-only .stage-pane { height:75vh; max-height:820px; }
 
 /* Shown only when the stage is exited/collapsed — reopens it without
    restarting a live convene or stopping the record's growth (#184: "exiting
@@ -419,8 +425,13 @@ a.archival-image-link:hover { border-color:var(--lodge-amber-dim); cursor:pointe
 .stage-collapsed-bar:hover { color:var(--lodge-muted); background:rgba(154,138,116,0.06); }
 .stage-record.collapsed .stage-collapsed-bar { display:block; }
 
+/* .stage-only is .collapsed's mirror image: the record stays hidden (not
+   just shorter) while the stage is showing, so the same streaming text is
+   never visible in both places at once. See witness.js's revision comment
+   atop collapseStage()/reopenStage(). */
 .record-pane { display:flex; flex-direction:column; height:44vh; min-height:220px; max-height:480px; }
 .stage-record.collapsed .record-pane { height:75vh; max-height:820px; }
+.stage-record.stage-only .record-pane { display:none; }
 /* .record-pane carries .transcript-panel for the shared panel background/
    border/padding rule above — reset padding here since the toolbar and
    scroll region below supply their own. */
@@ -441,6 +452,7 @@ a.archival-image-link:hover { border-color:var(--lodge-amber-dim); cursor:pointe
   .stage-pane { height:40vh; min-height:260px; max-height:none; }
   .record-pane { height:40vh; min-height:180px; max-height:none; }
   .stage-record.collapsed .record-pane { height:65vh; }
+  .stage-record.stage-only .stage-pane { height:65vh; }
 }
 
 .witness-controls { display:flex; align-items:center; gap:12px; padding:10px 16px; border-bottom:1px solid var(--lodge-border); flex-shrink:0; }

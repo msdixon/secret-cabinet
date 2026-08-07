@@ -187,11 +187,30 @@ The record's only structural landmark today is the round header. If the rounds s
 
 ## Implementation phases
 
-**Phase 1 — structure. Shipped.** Replaced the transcript/witness panel pair with the stacked stage + record assembly (`public/index.html`, `public/style.css`). Deleted `toggleLive()`'s re-parenting — `witness.js` now exposes `liveRoundHeader`/`liveSpeech`/`liveTyping*` for the stage's own lightweight mirror, called from `app.js`'s existing render call sites (`addRoundHeader`, `startStreamEntry`) right after each writes the record. Height budget, internal scroll, stick-to-bottom + "↓ live" pill (`app.js`'s `recordFollow`/`initRecordScroll`), and exit-collapses/`◎ Watch`-reopens in place of a new expand control, all built and verified live (129/129 tests, manual browser pass covering live mirroring, collapse/reopen, scroll stickiness, and replay go-back).
+**Phase 1 — structure. Shipped.** Replaced the transcript/witness panel pair with the stacked stage + record assembly (`public/index.html`, `public/style.css`). Deleted `toggleLive()`'s re-parenting — `witness.js` now exposes `liveRoundHeader`/`liveSpeech`/`liveTyping*` for the stage's own lightweight mirror, called from `app.js`'s existing render call sites (`addRoundHeader`, `startStreamEntry`) right after each writes the record. Height budget, internal scroll, stick-to-bottom + "↓ live" pill (`app.js`'s `recordFollow`/`initRecordScroll`), and exit-collapses/`◎ Watch`-reopens in place of a new expand control, all built and verified live (129/129 tests, manual browser pass covering live mirroring, collapse/reopen, scroll stickiness, and replay go-back). Superseded by the Revision below before merge.
 
-**Phase 2 — linkage and polish. Not started.** Current-beat marker in the record. Touch-handler scoping (already correctly scoped as a side effect of Phase 1 — `witness.js`'s touch listeners were already bound to `#witness-stage` specifically, confirmed rather than rebuilt). Live-annotation flow end to end (the mechanism is in place — annotation stays exclusively in the record, unaffected by stage mirroring — but hasn't had a dedicated pass).
+**Phase 2 — linkage and polish. Superseded by the Revision below** (current-beat marker and live-annotation-in-the-record are dropped, not just deferred — see Revision). Touch-handler scoping remains correct as a side effect of Phase 1 (`witness.js`'s touch listeners are bound to `#witness-stage` specifically).
 
 Phases 1–2 are the whole of #184. The stage view switcher, previously Phase 3, is now [#202](https://github.com/msdixon/secret-cabinet/issues/202).
+
+---
+
+## Revision (mutually exclusive panes, not simultaneous)
+
+Phase 1 as first built rendered both panes live and simultaneously, per every section above. In review, that surfaced a real problem this doc didn't anticipate: **the same streaming text visible in two places at once reads as a bug, not as "linked."** A reader can't tell which copy to follow, and during a live convene the stage's mirroring intentionally ignores its own pacing — "live beats appear as fast as the room actually speaks" — so the two panes weren't offering different experiences, just the same one twice.
+
+That reopened a bigger question first: if the stage is meant to become the room (per this doc's own "Scene placement" section, and per `PROJECT.md`'s "2.5D composition direction" for #184), should the fix be to put the room in the stage's slot now, rather than patch pane visibility? Checked and deferred: `scene.js` already exists and is already live-reactive (`setSpeaking()` fires on every streamed beat today), so it's not a large lift — but PROJECT.md's own phrase, "2.5D composition," means dialogue rendered **into** the room, not a wordless room replacing text. Building that is a real design pass (#202), not a canvas relocation, and doing it here would risk building the wrong shape twice. A three-tier stack (stage-text / room / record-text) was also considered and rejected — it doesn't resolve "why two text renderers," it just adds a third box between them.
+
+**Revised decision: only one pane is ever visible at a time — and the record is never a live-competing view.** This is #184's own title taken literally: Witness is the live view, the record is the minutes.
+
+- A live convene defaults to **stage-only**. The record keeps accumulating underneath, unseen — this is not a new mechanism, `witness.js`'s mirroring already wrote to both; only visibility changes.
+- The record becomes visible — and the stage collapses — **automatically the moment the convene reaches its natural pause** (`app.js`'s `convene()`/`resumeRounds()`, right where `showSessionControls()` already fired), or **any time via Exit**, which still doesn't stop a still-running convene (unchanged from the original decision).
+- Reopening the stage (`▲ The Stage` / `◎ Watch`) hides the record again. Both states reuse `#stage-record`'s existing `.collapsed` class (record showing) plus a new symmetric `.stage-only` class (stage showing) — no new toggle vocabulary, no third button.
+- Revealing a record that was hidden through an entire convene needed one real fix: `display:none` zeroes `scrollHeight`, so the existing stick-to-bottom scroll (`recordFollow()`) was inert the whole time it was hidden. `collapseStage()` now force-scrolls the record to its latest content the moment it becomes visible again.
+
+**Consequence: live annotation, deferred, not built around.** The "During a live convene — annotate in the record while the stage performs" bullet under Annotation above no longer describes this ticket, and Phase 2's current-beat marker (which only mattered if both panes could be visible together) is dropped rather than built. Annotation now happens once a convene reaches its pause (record auto-revealed, full read/annotate experience unchanged), or on any past session via Past Meetings / export — unchanged from before #184 existed. `addRound()`/`interject()` (the after-panel's "One More Turn"/"Interject") stream into whichever pane is currently showing, same mirroring, no special-casing needed.
+
+**Why not "room becomes the stage" now, concretely:** `PROJECT.md`'s "2.5D composition direction" and this doc's own §Scene placement both describe dialogue composited **into** the room, not a wordless room standing in for text. That's a UI design question — how does dialogue actually render against a portrait card? — not a relocation of `#scene-canvas`. Building it prematurely here risks the wrong shape shipping first. Witness-mode's bubbles are the stand-in for that until #202, not a rival to it.
 
 ---
 
@@ -205,11 +224,13 @@ Phases 1–2 are the whole of #184. The stage view switcher, previously Phase 3,
 | Record height | Fixed window, internal scroll, viewport-shared | Keeps live text above the fold without truncating |
 | Long reading / annotation pass | Exit the stage → record takes full height | Reuses an existing control; adds no new vocabulary |
 | Auto-scroll | Stick-to-bottom while attached, "↓ live" pill when not | Prevents yanking a re-reading user |
-| Pane linkage | Record never drives the stage; beat marker only | Preserves read-back-while-playing |
+| Pane linkage | Superseded — only one pane is ever visible, so nothing to link | See Revision: simultaneous visibility was the actual problem, not the fix |
 | Mobile | Same stack, smaller budget — no tabs | Stacking is already the mobile idiom |
 | Scene placement | View switcher **on the stage**, not a sibling tab | The room becomes the stage; a tab encodes the wrong relationship |
 | Building that switcher | Split to [#202](https://github.com/msdixon/secret-cabinet/issues/202) | Keeps #184 shippable; not lower value — should follow soon |
 | `toggleLive()` re-parenting | Deleted | Two permanent containers make it unnecessary |
+| Simultaneous live visibility | Reverted — only one pane visible at a time | Same streaming text in two places read as a bug, not "linked" (Revision) |
+| Room in the stage's slot now | Deferred to #202, not built here | PROJECT.md's "2.5D" means dialogue *in* the room, not a wordless room instead of text — a real design pass, not a relocation |
 
 ---
 
@@ -233,13 +254,14 @@ Phases 1–2 are the whole of #184. The stage view switcher, previously Phase 3,
 
 ## Success criteria
 
-- [ ] A live convene renders in the stage by default; the record scrolls beneath it without growing the page
-- [ ] Assembly never exceeds the viewport at any window size
-- [ ] Scrolling the record up stops auto-scroll; the "↓ live" pill re-attaches
-- [ ] Annotation works during a live convene, from the record
+- [x] A live convene renders in the stage by default, stage-only — the record never renders visibly alongside it (revised from "the record scrolls beneath it")
+- [x] Assembly never exceeds the viewport at any window size
+- [x] Scrolling the record up stops auto-scroll; the "↓ live" pill re-attaches, whenever the record is the visible pane
+- [ ] ~~Annotation works during a live convene, from the record~~ — deferred, see Revision
 - [ ] Citation tooltips render fully — no clipping at the record's edges
-- [ ] Go-back works in the stage with no regression from #90; swipes in the record scroll it instead
-- [ ] Exiting the stage gives the record full height; `◎ Watch` restores it
-- [ ] Exiting mid-convene does not stop the convene — the record keeps streaming
-- [ ] `toggleLive()`'s DOM re-parenting is gone
-- [ ] Past sessions replay correctly; no console errors
+- [x] Go-back works in the stage with no regression from #90; swipes in the record scroll it instead
+- [x] Exiting the stage gives the record full height; `◎ Watch` restores it (and now hides the record again)
+- [x] Exiting mid-convene does not stop the convene — the record keeps streaming, unseen until revealed
+- [x] `toggleLive()`'s DOM re-parenting is gone
+- [x] A convene reaching its natural pause automatically reveals the record, scrolled to its latest content, and hides the stage
+- [x] Past sessions replay correctly; no console errors — re-verified after this revision: `◎ Watch` defaults to stage-only, Exit returns to a fully-scrolled record

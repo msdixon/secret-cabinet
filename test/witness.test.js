@@ -28,7 +28,7 @@ const { loadPublicModule, assertIdsExistInIndexHtml } = require('./helpers/dom.j
 const WITNESS_IDS = [
   'stage-record', 'stage-pane', 'witness-hint', 'witness-exit-btn',
   'witness-stage', 'witness-progress', 'stage-collapsed-bar',
-  'transcript-panel', 'transcript-content',
+  'transcript-panel', 'transcript-content', 'record-scroll',
 ];
 
 const FIXTURE = `
@@ -41,7 +41,9 @@ const FIXTURE = `
     </div>
     <button id="stage-collapsed-bar"></button>
     <div id="transcript-panel">
-      <div id="transcript-content"></div>
+      <div id="record-scroll">
+        <div id="transcript-content"></div>
+      </div>
     </div>
   </div>
 `;
@@ -279,7 +281,9 @@ test('replay: start syncs the record, exit stops playback and collapses the stag
     assert.deepEqual(restored, ['sess-42'], 'exit must not call restoreSession a second time');
     assert.equal(document.getElementById('witness-stage').innerHTML, '');
     assert.equal(document.getElementById('witness-exit-btn').style.display, 'none');
-    assert.ok(document.getElementById('stage-record').classList.contains('collapsed'), 'exit collapses the stage');
+    const classes = document.getElementById('stage-record').classList;
+    assert.ok(classes.contains('collapsed'), 'exit collapses the stage');
+    assert.equal(classes.contains('stage-only'), false, 'exiting must leave stage-only behind, not carry both');
   });
 
   await t.test('a fresh replay reopens a collapsed stage', async t2 => {
@@ -289,7 +293,9 @@ test('replay: start syncs the record, exit stops playback and collapses the stag
 
     await Witness.start({ rounds: [{ label: 'Round I', text: 'Crowley:\nA line.' }] }, makeDeps());
 
-    assert.equal(document.getElementById('stage-record').classList.contains('collapsed'), false);
+    const classes = document.getElementById('stage-record').classList;
+    assert.equal(classes.contains('collapsed'), false);
+    assert.ok(classes.contains('stage-only'), 'starting a replay hides the record, not just un-hides the stage');
   });
 });
 
@@ -360,16 +366,22 @@ test('live mirroring (#184): the stage renders its own copy, independent of the 
     Witness.configure(makeDeps());
     Witness.liveRoundHeader('Round I');
     Witness.collapseStage();
-    assert.ok(document.getElementById('stage-record').classList.contains('collapsed'));
+    let classes = document.getElementById('stage-record').classList;
+    assert.ok(classes.contains('collapsed'));
+    assert.equal(classes.contains('stage-only'), false);
 
     Witness.resetLiveStage();
     assert.equal(document.getElementById('witness-stage').innerHTML, '');
-    assert.ok(document.getElementById('stage-record').classList.contains('collapsed'), 'resetLiveStage must not reopen a collapsed stage');
+    classes = document.getElementById('stage-record').classList;
+    assert.ok(classes.contains('collapsed'), 'resetLiveStage must not reopen a collapsed stage');
+    assert.equal(classes.contains('stage-only'), false);
 
     Witness.liveRoundHeader('Round II');
     Witness.liveReset();
     assert.equal(document.getElementById('witness-stage').innerHTML, '');
-    assert.equal(document.getElementById('stage-record').classList.contains('collapsed'), false, 'liveReset reopens for a fresh convene');
+    classes = document.getElementById('stage-record').classList;
+    assert.equal(classes.contains('collapsed'), false, 'liveReset reopens for a fresh convene');
+    assert.ok(classes.contains('stage-only'), 'a fresh convene defaults to stage-only, hiding the record');
   });
 });
 
@@ -381,7 +393,9 @@ test('collapse/reopen: exitClicked dispatches to whichever mode is active, never
 
     Witness.exitClicked();
 
-    assert.ok(document.getElementById('stage-record').classList.contains('collapsed'));
+    const classes = document.getElementById('stage-record').classList;
+    assert.ok(classes.contains('collapsed'));
+    assert.equal(classes.contains('stage-only'), false);
     // Live mirroring is not a replay -- exitClicked() must not clear stage
     // content the way ending a replay does; the convene (and its mirrored
     // beats) keep going underneath a collapsed stage.
@@ -395,6 +409,41 @@ test('collapse/reopen: exitClicked dispatches to whichever mode is active, never
 
     Witness.reopenStage();
 
-    assert.equal(document.getElementById('stage-record').classList.contains('collapsed'), false);
+    const classes = document.getElementById('stage-record').classList;
+    assert.equal(classes.contains('collapsed'), false);
+    assert.ok(classes.contains('stage-only'));
+  });
+
+  await t.test('collapseStage and reopenStage are mutually exclusive across repeated calls', t2 => {
+    const { document, module: Witness } = boot(t2);
+    Witness.configure(makeDeps());
+    const classes = document.getElementById('stage-record').classList;
+
+    Witness.reopenStage();
+    assert.ok(classes.contains('stage-only'));
+    assert.equal(classes.contains('collapsed'), false);
+
+    Witness.collapseStage();
+    assert.ok(classes.contains('collapsed'));
+    assert.equal(classes.contains('stage-only'), false);
+
+    Witness.reopenStage();
+    assert.ok(classes.contains('stage-only'));
+    assert.equal(classes.contains('collapsed'), false);
+  });
+
+  await t.test('collapseStage catches up the record\'s scroll position, which was inert while hidden', t2 => {
+    const { document, module: Witness } = boot(t2);
+    Witness.configure(makeDeps());
+    const recordScroll = document.getElementById('record-scroll');
+    // Simulate what a hidden (display:none) element's real layout would be
+    // once revealed -- jsdom gives every element scrollHeight 0, which is
+    // exactly the "still hidden" case this test needs to distinguish from.
+    Object.defineProperty(recordScroll, 'scrollHeight', { value: 640, configurable: true });
+    recordScroll.scrollTop = 0;
+
+    Witness.collapseStage();
+
+    assert.equal(recordScroll.scrollTop, 640, 'revealing the record should land on its latest content, not the top');
   });
 });
