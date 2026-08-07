@@ -7,7 +7,9 @@
     "start": "node server.js",
     "dev": "node --watch server.js",
     "update": "git pull origin main && npm install && lsof -ti :3132 | xargs kill -9 2>/dev/null; npm run dev",
-    "citations": "node scripts/build-citation-manifest.js"
+    "citations": "node scripts/build-citation-manifest.js",
+    "test": "node --test test/*.test.js",
+    "test:watch": "node --test --watch test/*.test.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
@@ -18,5 +20,8 @@
     "express-session": "^1.19.0",
     "multer": "^2.1.1",
     "pdf2json": "^4.0.3"
+  },
+  "devDependencies": {
+    "jsdom": "^29.1.1"
   }
 }
