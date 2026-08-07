@@ -37,6 +37,8 @@ Full sequencing rationale lives in [issue #118](https://github.com/msdixon/secre
 
 **Idea provenance (2026-08-03):** the retrieval-grounded verification work (#153) was directly inspired by reading [MOiRA](https://github.com/tajhlande/moira), an open-source research agent that verifies claims against retrieved evidence with visible provenance rather than model self-recall. Noted here rather than left implicit, for a future bibliography of the project's own making — see #153 and the revised #35 for what actually transfers and what doesn't.
 
+**Research grounding tool evaluation (2026-08-07):** surveyed four external tool families — Unpaywall (DOI-to-OA-PDF), [Imbad0202/academic-research-skills](https://github.com/Imbad0202/academic-research-skills) (paper-writing pipeline with claim-faithfulness auditing), mcpmarket research-content-access (retrieval workflow skill), and [lnilya/effortless-academic-skills](https://github.com/lnilya/effortless-academic-skills) (scholar workflow, Obsidian export). Decision: don't install any; mine the claim-faithfulness audit pattern from the first for scoping #141 (see that issue for the detailed design note). Retrieval APIs (Unpaywall for secondary scholarship; archive.org/IAPSOP for primary texts) are the right 35b components once hand-curation becomes the bottleneck — not before. OpenAlex's citation-graph data is the most project-novel idea: co-citation between members' corpora could seed the "relationships as assembled data layer" option in #197.
+
 ## What needs to happen to get there
 
 **Against the north star specifically:** the atmosphere/presence thread was stalled behind two undecided, non-technical questions since 2026-07-13. Both were decided 2026-07-27:
