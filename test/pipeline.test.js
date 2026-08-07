@@ -1,0 +1,237 @@
+'use strict';
+
+// #137 — first test tranche for pipeline.js's pure functions, per the scope
+// addition on the issue (2026-08-06 state-of-app review). These are the
+// scheduling primitives #164's word-budget beat loop made load-bearing:
+// no API calls, no I/O, and CI exercised none of them until now. They also
+// derisk the #194 rounds spike -- any restructuring of the beat loop wants
+// these pinned first.
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+
+const {
+  pickNextSpeaker,
+  isPoolExhausted,
+  isValidSelection,
+  stripInternalBlankLines,
+  countWords,
+  lengthTendencyOf,
+} = require('../pipeline.js');
+
+// pickNextSpeaker is weighted-random. Rather than seed a PRNG, sweep rng
+// deterministically across [0,1) and count outcomes -- the resulting share
+// per member IS the weight distribution, so these assertions describe the
+// intended behaviour ("rare but real", "expansive gets more room") in the
+// units the constants are written in.
+function shareOf(memberId, args, samples = 2000) {
+  let hits = 0;
+  for (let i = 0; i < samples; i++) {
+    const rng = () => (i + 0.5) / samples;
+    if (pickNextSpeaker({ ...args, rng }) === memberId) hits++;
+  }
+  return hits / samples;
+}
+
+const counts = pairs => new Map(pairs);
+
+test('lengthTendencyOf', async t => {
+  await t.test('returns the seeded override for the two named personas', () => {
+    assert.equal(lengthTendencyOf('crowley'), 'expansive');
+    assert.equal(lengthTendencyOf('yeats'), 'expansive');
+  });
+
+  await t.test('defaults to medium for everyone else', () => {
+    assert.equal(lengthTendencyOf('scholem'), 'medium');
+    assert.equal(lengthTendencyOf('nobody-by-this-id'), 'medium');
+  });
+});
+
+test('isPoolExhausted', async t => {
+  await t.test('is true only once every pool member has hit the 2-turn cap', () => {
+    const pool = ['scholem', 'blavatsky'];
+    assert.equal(isPoolExhausted(pool, counts([['scholem', 2], ['blavatsky', 2]])), true);
+    assert.equal(isPoolExhausted(pool, counts([['scholem', 2], ['blavatsky', 1]])), false);
+    assert.equal(isPoolExhausted(pool, counts([])), false);
+  });
+
+  await t.test('treats a member absent from spokenCounts as having spoken zero times', () => {
+    assert.equal(isPoolExhausted(['scholem'], counts([])), false);
+  });
+
+  await t.test('counts above the cap still read as exhausted', () => {
+    assert.equal(isPoolExhausted(['scholem'], counts([['scholem', 5]])), true);
+  });
+
+  await t.test('an empty pool is vacuously exhausted', () => {
+    assert.equal(isPoolExhausted([], counts([])), true);
+  });
+});
+
+test('pickNextSpeaker', async t => {
+  await t.test('returns null when every pool member is at the cap, so the caller re-consults the director', () => {
+    const picked = pickNextSpeaker({
+      pool: ['scholem', 'blavatsky'],
+      spokenCounts: counts([['scholem', 2], ['blavatsky', 2]]),
+      lastSpeakerId: 'blavatsky',
+      remainingBudget: 500,
+      rng: () => 0.5,
+    });
+    assert.equal(picked, null);
+  });
+
+  await t.test('never picks a member already at the cap', () => {
+    const args = {
+      pool: ['scholem', 'blavatsky'],
+      spokenCounts: counts([['scholem', 2]]),
+      lastSpeakerId: null,
+      remainingBudget: 500,
+    };
+    assert.equal(shareOf('scholem', args), 0);
+    assert.equal(shareOf('blavatsky', args), 1);
+  });
+
+  await t.test('speaking back-to-back is rare but possible (~12% against one fresh voice)', () => {
+    const share = shareOf('scholem', {
+      pool: ['scholem', 'blavatsky'],
+      spokenCounts: counts([['scholem', 1]]),
+      lastSpeakerId: 'scholem',
+      remainingBudget: 500,
+    });
+    // 0.12 / (0.12 + 1)
+    assert.ok(Math.abs(share - 0.107) < 0.01, `back-to-back share was ${share}`);
+    assert.ok(share > 0, 'back-to-back must stay possible, not impossible');
+  });
+
+  await t.test('an earlier turn this round discounts a repeat more than a fresh voice', () => {
+    const share = shareOf('scholem', {
+      pool: ['scholem', 'blavatsky'],
+      spokenCounts: counts([['scholem', 1]]),
+      // Someone outside the pool held the floor last, so neither candidate
+      // carries the back-to-back penalty — this isolates the decay factor.
+      lastSpeakerId: 'crowley',
+      remainingBudget: 500,
+    });
+    // 0.45 / (0.45 + 1) — discounted, but far likelier than the back-to-back case
+    assert.ok(Math.abs(share - 0.310) < 0.01, `repeat-after-gap share was ${share}`);
+  });
+
+  await t.test('expansive voices are favoured while there is budget to spend', () => {
+    const share = shareOf('crowley', {
+      pool: ['crowley', 'scholem'],
+      spokenCounts: counts([]),
+      lastSpeakerId: null,
+      remainingBudget: 500,
+    });
+    // 1.35 / (1.35 + 1)
+    assert.ok(Math.abs(share - 0.574) < 0.01, `expansive share was ${share}`);
+  });
+
+  await t.test('below the low-budget threshold that preference inverts, so the round can close', () => {
+    const args = {
+      pool: ['crowley', 'scholem'],
+      spokenCounts: counts([]),
+      lastSpeakerId: null,
+      remainingBudget: 100, // < LOW_BUDGET_WORDS (120)
+    };
+    // 1.35 * 0.4 = 0.54, against a medium voice's 1
+    const share = shareOf('crowley', args);
+    assert.ok(Math.abs(share - 0.351) < 0.01, `low-budget expansive share was ${share}`);
+    assert.ok(share < shareOf('scholem', args), 'terse-ish voices should win on a thin budget');
+  });
+
+  await t.test('always returns a member of the pool', () => {
+    const pool = ['crowley', 'scholem', 'blavatsky'];
+    for (let i = 0; i < 200; i++) {
+      const picked = pickNextSpeaker({
+        pool,
+        spokenCounts: counts([['crowley', 1]]),
+        lastSpeakerId: 'scholem',
+        remainingBudget: 300,
+        rng: () => i / 200,
+      });
+      assert.ok(pool.includes(picked), `picked ${picked}, which is not in the pool`);
+    }
+  });
+
+  await t.test('an rng returning exactly 1 still lands on a real member (floating-point fallback)', () => {
+    const picked = pickNextSpeaker({
+      pool: ['crowley', 'scholem'],
+      spokenCounts: counts([]),
+      lastSpeakerId: null,
+      remainingBudget: 500,
+      rng: () => 1,
+    });
+    assert.equal(picked, 'scholem');
+  });
+});
+
+test('countWords', async t => {
+  await t.test('counts whitespace-separated words', () => {
+    assert.equal(countWords('the room falls silent'), 4);
+  });
+
+  await t.test('empty and whitespace-only text is zero, not one', () => {
+    assert.equal(countWords(''), 0);
+    assert.equal(countWords('   \n\t  '), 0);
+  });
+
+  await t.test('collapses runs of whitespace and newlines', () => {
+    assert.equal(countWords('  one   two\n\nthree\tfour  '), 4);
+  });
+});
+
+test('stripInternalBlankLines', async t => {
+  await t.test('collapses a blank line so a multi-paragraph turn does not fragment into unattributed bubbles', () => {
+    assert.equal(
+      stripInternalBlankLines('First beat.\n\nSecond beat.'),
+      'First beat.\nSecond beat.',
+    );
+  });
+
+  await t.test('collapses a run of blank lines, or a whitespace-only line, to one break', () => {
+    assert.equal(stripInternalBlankLines('a\n\n\n\nb'), 'a\nb');
+    assert.equal(stripInternalBlankLines('a\n   \nb'), 'a\nb');
+    assert.equal(stripInternalBlankLines('a\n\t\nb'), 'a\nb');
+  });
+
+  await t.test('leaves single line breaks alone — those are the sanctioned pause', () => {
+    assert.equal(stripInternalBlankLines('a\nb\nc'), 'a\nb\nc');
+  });
+
+  await t.test('leaves text with no blank lines untouched', () => {
+    const text = '*She sets down the glass.* The point is not the ritual.';
+    assert.equal(stripInternalBlankLines(text), text);
+  });
+});
+
+test('isValidSelection', async t => {
+  const present = ['crowley', 'scholem', 'blavatsky'];
+
+  await t.test('accepts a distinct, in-range, all-present selection', () => {
+    assert.equal(isValidSelection(['crowley', 'scholem'], present, 1, 3), true);
+  });
+
+  await t.test('rejects a non-array (the shape a malformed tool call arrives in)', () => {
+    assert.equal(isValidSelection(undefined, present, 1, 3), false);
+    assert.equal(isValidSelection(null, present, 1, 3), false);
+    assert.equal(isValidSelection('crowley', present, 1, 3), false);
+  });
+
+  await t.test('rejects counts outside [minCount, maxCount]', () => {
+    assert.equal(isValidSelection([], present, 1, 3), false);
+    assert.equal(isValidSelection(['crowley', 'scholem', 'blavatsky'], present, 1, 2), false);
+  });
+
+  await t.test('rejects duplicates', () => {
+    assert.equal(isValidSelection(['crowley', 'crowley'], present, 1, 3), false);
+  });
+
+  await t.test('rejects a member who is not present, even if otherwise well-formed', () => {
+    assert.equal(isValidSelection(['crowley', 'yeats'], present, 1, 3), false);
+  });
+
+  await t.test('accepts an empty selection only when minCount allows it', () => {
+    assert.equal(isValidSelection([], present, 0, 3), true);
+  });
+});

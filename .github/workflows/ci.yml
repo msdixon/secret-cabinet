@@ -13,13 +13,23 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # Bumped from 20 with #137's suite: jsdom 29 requires ^20.19 || ^22.13
+          # || >=24, so a bare `20` would have depended on setup-node happening
+          # to resolve a late-enough 20.x. 22 is current LTS and closer to the
+          # Node the app is actually developed against.
+          node-version: 22
           cache: npm
 
       - run: npm ci
 
       - name: npm audit
         run: npm audit --audit-level=high
+
+      # #137 — unit suite (node:test + jsdom). No server, no API key; runs
+      # before the smoke test so a logic regression fails fast and reports as
+      # itself rather than as a mysterious smoke-test failure. See test/README.md.
+      - name: Unit tests
+        run: npm test
 
       - name: Scene scaffold smoke test
         env:
