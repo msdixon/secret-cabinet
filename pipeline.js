@@ -255,14 +255,17 @@ function countWords(text) {
 // Only this member's own character file goes in — no other present members'
 // files. That's the whole point: each speaker gets the model's full
 // attention instead of a fraction of it split across the whole cast.
-function buildSpeakerSystemPrompt({ lodgeContext, member, artifact, notes, loadMemberFile }) {
+function buildSpeakerSystemPrompt({ lodgeContext, member, artifact, notes, loadMemberFile, disposition }) {
   const memberSection = buildMemberSection(member, artifact, notes, loadMemberFile);
+  const dispositionSection = disposition?.trim()
+    ? `\n\n---\n\n## YOUR PRIVATE STATE TONIGHT (no one else in the room can see this)\n\n${disposition.trim()}`
+    : '';
 
   return `${lodgeContext}
 
 ---
 
-${memberSection}
+${memberSection}${dispositionSection}
 
 ---
 
@@ -365,6 +368,55 @@ async function callSpeakerTurn({ client, model, system, conversationHistory, use
   return { text: text.trim(), usage: finalMessage.usage, latencyMs };
 }
 
+// ── Disposition scratchpad (#188) ──────────────────────────────────────────
+//
+// A per-member private note — current stance, unspent intentions, tonight's
+// alignments and irritations — carried forward within the session and
+// re-injected into that member's *next* speaker call via
+// buildSpeakerSystemPrompt's dispositionSection. Never shown in the
+// transcript. Cadence: piggybacked as a cheap follow-up call right after a
+// member's own turn, not a once-per-round sweep of every present member —
+// that would mean an extra call per present member per round regardless of
+// whether they spoke, which cuts against the same cost discipline #164's
+// word-budget work was built around. A member who sits out a round simply
+// carries their prior disposition forward unchanged.
+
+const DISPOSITION_MAX_CHARS = 400; // a few sentences — hard cap so this can't balloon a speaker prompt over a long session
+const DISPOSITION_MAX_TOKENS = 150;
+
+function buildDispositionSystemPrompt({ member, priorDisposition }) {
+  const priorBlock = priorDisposition?.trim()
+    ? `Your private state going into this turn was:\n"${priorDisposition.trim()}"\n\nUpdate it — don't just repeat it back.`
+    : 'This is your first private reflection tonight — there is no prior state yet.';
+
+  return `You are privately reflecting as ${member.name}, immediately after speaking your turn in tonight's salon. This reflection is never shown to anyone — not the other members, not the transcript, not the researcher who convened the evening. It is your own unspoken interior state, carried forward to color how you show up for the rest of the evening.
+
+${priorBlock}
+
+Write 1-3 sentences, as private thought rather than speech: your current stance on the evening's argument, anything you haven't yet said but intend to, who you're aligned with or irritated by tonight. Be concrete and specific to what just happened, not a generic character summary. Keep it under ${DISPOSITION_MAX_CHARS} characters — this is a scratchpad, not an essay.`;
+}
+
+function buildDispositionUserMessage({ roundSoFarText, turnText, member }) {
+  return `--- WHAT JUST HAPPENED IN THE ROOM ---\n${roundSoFarText.trim()}\n\n--- WHAT YOU (${member.name}) JUST SAID ---\n${turnText}\n\n--- YOUR PRIVATE REFLECTION ---\nWrite your updated private disposition now.`;
+}
+
+// Deliberately no retry — this is a best-effort private-state update, not a
+// user-visible turn. A failure just means the member's disposition doesn't
+// move this beat; the caller keeps the prior value.
+async function callDispositionUpdate({ client, model, system, userMessage }) {
+  const start = Date.now();
+  const response = await client.messages.create({
+    model,
+    max_tokens: DISPOSITION_MAX_TOKENS,
+    system,
+    messages: [{ role: 'user', content: userMessage }],
+  });
+  const latencyMs = Date.now() - start;
+  const block = response.content.find(b => b.type === 'text');
+  const text = (block?.text || '').trim().slice(0, DISPOSITION_MAX_CHARS);
+  return { text, usage: response.usage, latencyMs };
+}
+
 // ── Orchestrator ──────────────────────────────────────────────────────────
 
 // #164: total words a round budgets for itself — the actual stopping
@@ -411,10 +463,15 @@ const MAX_TOTAL_BEATS = 16; // hard safety net — budget/pool logic should alwa
 // actually visible in practice.
 async function runRound({ client, model, lodgeContext, ROSTER, loadMemberFile,
   presentMemberIds, artifact, notes, roundPrompt, conversationHistory,
-  speakerCount, round, onChunk, onMetric, onSpeakerStart, onSpeakerEnd, precedingTurn }) {
+  speakerCount, round, onChunk, onMetric, onSpeakerStart, onSpeakerEnd, precedingTurn,
+  disposition }) {
 
   const presentMembers = ROSTER.filter(m => presentMemberIds.includes(m.id));
   const effectiveCount = Math.min(speakerCount, presentMembers.length);
+  // #188: mutated in place through the round so a member picked twice in
+  // one round (MAX_TURNS_PER_POOL_MEMBER) sees their own just-updated state
+  // on the second turn, not the state from before the round started.
+  const currentDisposition = { ...(disposition || {}) };
 
   // A human-written turn (player-as-member) seeded before the director
   // decides — streamed immediately so it appears in the live view before
@@ -473,7 +530,7 @@ async function runRound({ client, model, lodgeContext, ROSTER, loadMemberFile,
     if (!member) break; // shouldn't happen — selectSpeakers validates against presentIds
 
     const unheardCount = pool.filter(id => id !== memberId && !(spokenCounts.get(id) > 0)).length;
-    const system = buildSpeakerSystemPrompt({ lodgeContext, member, artifact, notes, loadMemberFile });
+    const system = buildSpeakerSystemPrompt({ lodgeContext, member, artifact, notes, loadMemberFile, disposition: currentDisposition[memberId] });
     const userMessage = buildSpeakerUserMessage({ roundPrompt, roundSoFarText: roundSoFar, member, remainingBudgetWords: remainingBudget, unheardCount });
 
     onChunk?.(`${member.name}\n`);
@@ -483,12 +540,32 @@ async function runRound({ client, model, lodgeContext, ROSTER, loadMemberFile,
         callSpeakerTurn({ client, model, system, conversationHistory, userMessage, onChunk }));
       onMetric?.(makeMetric('speaker', { round, memberId, attempts, usage: result.usage, latencyMs: result.latencyMs }));
 
+      const contextBeforeTurn = roundSoFar;
       const settledText = stripInternalBlankLines(result.text);
       roundSoFar += (roundSoFar ? '\n\n' : '') + `${member.name}\n${settledText}`;
       speakerOrder.push(memberId);
       onSpeakerEnd?.(memberId, member.name, settledText);
       onChunk?.('\n\n');
       remainingBudget -= countWords(settledText);
+
+      // #188: best-effort, isolated from the speaker try/catch above — a
+      // disposition failure must not get reported as a failed speaker turn
+      // that already succeeded and was already streamed to the client.
+      try {
+        const dispositionSystem = buildDispositionSystemPrompt({ member, priorDisposition: currentDisposition[memberId] });
+        const dispositionUserMessage = buildDispositionUserMessage({
+          roundSoFarText: contextBeforeTurn || 'Nothing yet — you are the first to speak this round.',
+          turnText: settledText, member,
+        });
+        const { text: updatedDisposition, usage: dUsage, latencyMs: dLatencyMs } = await callDispositionUpdate({
+          client, model, system: dispositionSystem, userMessage: dispositionUserMessage,
+        });
+        if (updatedDisposition) currentDisposition[memberId] = updatedDisposition;
+        onMetric?.(makeMetric('disposition', { round, memberId, usage: dUsage, latencyMs: dLatencyMs }));
+      } catch (err) {
+        onMetric?.(makeMetric('disposition', { round, memberId, skipped: true, error: err.message }));
+        // Best-effort — the member simply carries their prior disposition forward.
+      }
     } catch (err) {
       onMetric?.(makeMetric('speaker', { round, memberId, attempts: err.attempts || 1, skipped: true, error: err.message }));
       // Skip this speaker, keep the round going with fewer voices.
@@ -507,7 +584,7 @@ async function runRound({ client, model, lodgeContext, ROSTER, loadMemberFile,
     throw new Error('Every speaker failed this round — nothing to save.');
   }
 
-  return { fullRoundText: roundSoFar, speakerOrder };
+  return { fullRoundText: roundSoFar, speakerOrder, disposition: currentDisposition };
 }
 
 module.exports = {
@@ -527,5 +604,9 @@ module.exports = {
   buildSpeakerUserMessage,
   stripInternalBlankLines,
   callSpeakerTurn,
+  DISPOSITION_MAX_CHARS,
+  buildDispositionSystemPrompt,
+  buildDispositionUserMessage,
+  callDispositionUpdate,
   runRound,
 };

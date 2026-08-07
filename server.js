@@ -519,12 +519,13 @@ app.post('/api/convene', async (req, res) => {
 
   openSSE(res);
   try {
-    const { fullRoundText: text } = await runRound({
+    const { fullRoundText: text, disposition } = await runRound({
       client, model: 'claude-sonnet-4-6', lodgeContext, ROSTER, loadMemberFile,
       presentMemberIds: playerDirectorPool(members, effectivePlayerMode, effectivePlayerMemberId),
       artifact: artifact || null, notes: notes || {},
       roundPrompt, conversationHistory: [],
       speakerCount: speakerCountForRound(0), round: 0, precedingTurn,
+      disposition: {},
       onChunk: chunk => res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`),
       onSpeakerStart: memberId => res.write(`data: ${JSON.stringify({ speaking: memberId })}\n\n`),
       onSpeakerEnd: (memberId, name, text) => res.write(`data: ${JSON.stringify({ speakerDone: { memberId, name, text } })}\n\n`),
@@ -552,6 +553,7 @@ app.post('/api/convene', async (req, res) => {
       playerMemberId: effectivePlayerMemberId,
       playerName: effectivePlayerMode === 'custom' ? effectivePlayerName : null,
       playerTurns: precedingTurn ? [{ round: 0, speakerName: precedingTurn.speakerName, text: precedingTurn.text }] : [],
+      disposition: disposition || {},
     };
     saveSession(session);
     res.write(`data: ${JSON.stringify({ done: true, sessionId: id, round: 1, label: 'First Movement', text })}\n\n`);
@@ -583,12 +585,13 @@ app.post('/api/round', async (req, res) => {
 
   openSSE(res);
   try {
-    const { fullRoundText: text } = await runRound({
+    const { fullRoundText: text, disposition } = await runRound({
       client, model: 'claude-sonnet-4-6', lodgeContext, ROSTER, loadMemberFile,
       presentMemberIds: playerDirectorPool(session.members, session.playerMode, session.playerMemberId),
       artifact: null, notes: {},
       roundPrompt, conversationHistory: session.conversationHistory.slice(-6),
       speakerCount: speakerCountForRound(roundIndex), round: roundIndex, precedingTurn,
+      disposition: session.disposition || {},
       onChunk: chunk => res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`),
       onSpeakerStart: memberId => res.write(`data: ${JSON.stringify({ speaking: memberId })}\n\n`),
       onSpeakerEnd: (memberId, name, text) => res.write(`data: ${JSON.stringify({ speakerDone: { memberId, name, text } })}\n\n`),
@@ -602,6 +605,7 @@ app.post('/api/round', async (req, res) => {
     session.conversationHistory.push({ role: 'assistant', content: text });
     session.rounds.push({ label, text, historyLength: session.conversationHistory.length });
     session.transcriptText += `\n— ${label} —\n\n${formatTranscriptText(text)}\n`;
+    session.disposition = disposition || {};
     if (precedingTurn) {
       session.playerTurns = session.playerTurns || [];
       session.playerTurns.push({ round: roundIndex, speakerName: precedingTurn.speakerName, text: precedingTurn.text });
@@ -629,12 +633,13 @@ app.post('/api/interject', async (req, res) => {
 
   openSSE(res);
   try {
-    const { fullRoundText: response } = await runRound({
+    const { fullRoundText: response, disposition } = await runRound({
       client, model: 'claude-sonnet-4-6', lodgeContext, ROSTER, loadMemberFile,
       presentMemberIds: playerDirectorPool(session.members, session.playerMode, session.playerMemberId),
       artifact: null, notes: {},
       roundPrompt: prompt, conversationHistory: session.conversationHistory.slice(-6),
       speakerCount: Math.min(INTERJECT_SPEAKER_COUNT, session.members.length), round: session.rounds.length,
+      disposition: session.disposition || {},
       onChunk: chunk => res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`),
       onSpeakerStart: memberId => res.write(`data: ${JSON.stringify({ speaking: memberId })}\n\n`),
       onSpeakerEnd: (memberId, name, text) => res.write(`data: ${JSON.stringify({ speakerDone: { memberId, name, text } })}\n\n`),
@@ -647,6 +652,7 @@ app.post('/api/interject', async (req, res) => {
     session.conversationHistory.push({ role: 'user', content: prompt });
     session.conversationHistory.push({ role: 'assistant', content: response });
     session.transcriptText += `\n— A Presence Passes Through —\n\n— a voice from elsewhere —\n${text}\n\n${formatTranscriptText(response)}\n`;
+    session.disposition = disposition || {};
 
     saveSession(session);
     res.write(`data: ${JSON.stringify({ done: true, label: 'A Presence Passes Through', text: response })}\n\n`);
@@ -1357,6 +1363,7 @@ app.post('/api/sessions/:id/branch', (req, res) => {
     roundCount: parent.roundCount || 3,
     artifact: parent.artifact || null,
     notes: parent.notes || {},
+    disposition: parent.disposition || {},
     sourceSessionId: parent.sourceSessionId || null,
     conversationHistory: branchedHistory,
     rounds: branchedRounds,
