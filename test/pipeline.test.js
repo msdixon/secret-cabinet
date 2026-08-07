@@ -17,6 +17,10 @@ const {
   stripInternalBlankLines,
   countWords,
   lengthTendencyOf,
+  DISPOSITION_MAX_CHARS,
+  buildDispositionSystemPrompt,
+  buildDispositionUserMessage,
+  callDispositionUpdate,
 } = require('../pipeline.js');
 
 // pickNextSpeaker is weighted-random. Rather than seed a PRNG, sweep rng
@@ -233,5 +237,71 @@ test('isValidSelection', async t => {
 
   await t.test('accepts an empty selection only when minCount allows it', () => {
     assert.equal(isValidSelection([], present, 0, 3), true);
+  });
+});
+
+// #188 — the disposition scratchpad's pure prompt builders and the hard
+// truncation cap on callDispositionUpdate. The cap is the load-bearing
+// requirement from the issue ("must not balloon prompts") so it's pinned
+// here rather than trusted to prompt compliance alone — same principle as
+// stripInternalBlankLines not trusting the model to skip blank lines.
+test('buildDispositionSystemPrompt', async t => {
+  const member = { id: 'scholem', name: 'Gershom Scholem' };
+
+  await t.test('tells a first-time reflection there is no prior state', () => {
+    const prompt = buildDispositionSystemPrompt({ member, priorDisposition: null });
+    assert.match(prompt, /no prior state yet/);
+    assert.match(prompt, /Gershom Scholem/);
+  });
+
+  await t.test('quotes the prior disposition back and asks for an update, not a repeat', () => {
+    const prompt = buildDispositionSystemPrompt({ member, priorDisposition: 'Unconvinced by Crowley\'s reading of Kabbalah.' });
+    assert.match(prompt, /Unconvinced by Crowley's reading of Kabbalah\./);
+    assert.match(prompt, /don't just repeat it back/);
+  });
+
+  await t.test('states the hard character cap', () => {
+    const prompt = buildDispositionSystemPrompt({ member, priorDisposition: null });
+    assert.match(prompt, new RegExp(`under ${DISPOSITION_MAX_CHARS} characters`));
+  });
+});
+
+test('buildDispositionUserMessage', async t => {
+  await t.test('includes the round context, the member\'s own turn, and their name', () => {
+    const member = { id: 'yeats', name: 'W.B. Yeats' };
+    const message = buildDispositionUserMessage({
+      roundSoFarText: 'Crowley\nThe ritual is the point.',
+      turnText: 'I take the opposite view entirely.',
+      member,
+    });
+    assert.match(message, /Crowley\nThe ritual is the point\./);
+    assert.match(message, /I take the opposite view entirely\./);
+    assert.match(message, /YOU \(W\.B\. Yeats\) JUST SAID/);
+  });
+});
+
+test('callDispositionUpdate', async t => {
+  await t.test('hard-truncates the response to DISPOSITION_MAX_CHARS regardless of what the model returns', async () => {
+    const overlong = 'x'.repeat(DISPOSITION_MAX_CHARS + 200);
+    const fakeClient = {
+      messages: {
+        create: async () => ({
+          content: [{ type: 'text', text: overlong }],
+          usage: { input_tokens: 10, output_tokens: 10 },
+        }),
+      },
+    };
+    const { text } = await callDispositionUpdate({ client: fakeClient, model: 'test-model', system: 'sys', userMessage: 'msg' });
+    assert.equal(text.length, DISPOSITION_MAX_CHARS);
+  });
+
+  await t.test('trims whitespace and returns an empty string if the model returns nothing usable', async () => {
+    const fakeClient = {
+      messages: {
+        create: async () => ({ content: [], usage: null }),
+      },
+    };
+    const { text } = await callDispositionUpdate({ client: fakeClient, model: 'test-model', system: 'sys', userMessage: 'msg' });
+    assert.equal(text, '');
   });
 });
