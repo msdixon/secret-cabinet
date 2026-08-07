@@ -216,7 +216,7 @@ test('replay: advancing and progress', async t => {
 
     Witness.advance(); // one past the end
     assert.equal(document.querySelector('#witness-stage .witness-end').textContent, 'The room falls silent.');
-    assert.match(document.getElementById('witness-hint').textContent, /Click Exit/);
+    assert.match(document.getElementById('witness-hint').textContent, /Exit to leave/);
   });
 
   await t.test('advance() is inert when no replay is running', t2 => {
