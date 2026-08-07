@@ -9,81 +9,169 @@
 // globals (MEMBERS, currentSessionId, etc.) directly. Where playback needs
 // core data or logic -- member records, speaker-name resolution, markup
 // escaping, restoring a session on exit -- app.js passes it in as an
-// argument to start(), the same way app.js hands scene.js activeMembers via
+// argument, the same way app.js hands scene.js activeMembers via
 // updateSeats([...activeMembers]).
+//
+// #184 (defaults inversion, see DESIGN-184-STAGE-DEFAULT.md): the stage
+// (#witness-stage) and the record (app.js's #transcript-content) are now two
+// permanent panes rendering the same conversation, never one swapped for the
+// other -- the old toggleLive()/getLiveStageEl() DOM re-parenting is gone.
+// A live convene mirrors each completed beat into the stage via
+// liveRoundHeader/liveSpeech/liveTyping* below, called from app.js's
+// existing render call sites (addRoundHeader, startStreamEntry) right after
+// they write the same beat into the record. This is a second, lighter
+// render -- not a DOM move -- so it deliberately does NOT carry entryId or
+// dataset.speaker the way record entries do: annotation stays exclusively in
+// the record (#184's decision), and the stage's .transcript-entry elements
+// are presentation-only, built by renderWitnessBlock exactly like replay.
 window.Witness = (function () {
-  // ── Live mode (#87) ────────────────────────────────────────────────────────
-  // Live rounds render into #witness-stage using the exact same markup/CSS as
-  // replay (renderWitnessBlock below) instead of a parallel implementation --
-  // getLiveStageEl() is called from app.js's core render path
-  // (addRoundHeader, startStreamEntry, interject) once per round/entry. This
-  // is independent of the replay state machine further down, which the two
-  // never run at once: forceLiveOff() and start() both force live mode off,
-  // since restoring or replaying a stored session is never "the room
-  // speaking right now."
-  let witnessLiveActive = false;
+  let deps = null; // core helpers/data -- see configure() below
 
-  function getLiveStageEl() {
-    return witnessLiveActive
-      ? document.getElementById('witness-stage')
-      : document.getElementById('transcript-content');
+  // configure() is called once at app.js's init (same pattern as
+  // window.Export/window.Sessions) so deps exists before the first live
+  // convene, not just once replay starts. start() also re-sets deps from its
+  // own argument, in case a caller passes a fresher snapshot.
+  function configure(injectedDeps) {
+    deps = injectedDeps;
   }
 
-  // Swaps which panel is visible, *moving* (not cloning) each rendered entry
-  // across -- annotation state and click handlers are read via
-  // querySelectorAll on .transcript-entry globally (app.js's saveAnnotation,
-  // buildAnnotatedTranscript), so a clone would leave two nodes sharing one
-  // entryId and double up on save. Moving keeps exactly one DOM copy of each
-  // entry, just reparented, so toggling back and forth any number of times
-  // never loses or duplicates anything either side rendered. Disabled (by
-  // app.js, on #witness-live-toggle) while a round is streaming, so a round
-  // never gets split mid-turn across containers.
-  function toggleLive() {
-    witnessLiveActive = !witnessLiveActive;
-    const stage = document.getElementById('witness-stage');
-    const reading = document.getElementById('transcript-content');
-    const panel = document.getElementById('witness-panel');
-    const readingPanel = document.getElementById('transcript-panel');
-    const btn = document.getElementById('witness-live-toggle');
-    const from = witnessLiveActive ? reading : stage;
-    const to = witnessLiveActive ? stage : reading;
-    while (from.firstChild) to.appendChild(from.firstChild);
+  // ── Shared speaker-side tracking ─────────────────────────────────────────────
+  // Used by both live mirroring and replay. Never runs concurrently with
+  // either (a session is either being watched live or replayed, never both),
+  // so one set of module vars is safe -- each entry point below resets it.
+  let lastSpeakerId = null;
+  let currentSpeakerSide = 'right';
 
-    if (witnessLiveActive) {
-      readingPanel.style.display = 'none';
-      panel.style.display = 'block';
-      document.getElementById('witness-hint').textContent = '◉ Live — watching the room';
-      document.getElementById('witness-progress').style.display = 'none';
-      stage.scrollTop = stage.scrollHeight;
-      if (btn) { btn.textContent = '✕ Reading view'; btn.title = 'Return to the annotated reading view'; }
-    } else {
-      panel.style.display = 'none';
-      readingPanel.style.display = '';
-      document.getElementById('witness-progress').style.display = '';
-      reading.scrollTop = reading.scrollHeight;
-      if (btn) { btn.textContent = '◎ Witness'; btn.title = "Watch the room live, in Witness's theatrical presentation"; }
+  function getSpeakerSide(speakerId) {
+    if (speakerId === '—') return currentSpeakerSide;
+    if (speakerId !== lastSpeakerId) {
+      currentSpeakerSide = currentSpeakerSide === 'left' ? 'right' : 'left';
+      lastSpeakerId = speakerId;
     }
+    return currentSpeakerSide;
   }
 
-  // Forces live mode off regardless of the toggle's prior state, without the
-  // move-nodes-between-panels choreography toggleLive() does -- used by
-  // app.js's restoreSession(), where a restored session is static, read-only
-  // history that must never render into the live stage even if the toggle
-  // happened to be left on.
-  function forceLiveOff() {
-    witnessLiveActive = false;
-    document.getElementById('witness-panel').style.display = 'none';
-    document.getElementById('witness-stage').innerHTML = '';
-    document.getElementById('transcript-panel').style.display = '';
-    const btn = document.getElementById('witness-live-toggle');
-    if (btn) { btn.textContent = '◎ Witness'; btn.title = "Watch the room live, in Witness's theatrical presentation"; }
+  function memberGlyph(memberId) {
+    const m = memberId && deps.members.find(mm => mm.id === memberId);
+    return m?.glyph || '';
   }
 
-  // The shared panel's Exit button serves both modes -- dispatch to whichever
-  // state machine is actually active.
+  // ── Stage chrome: hint text, exit button, collapse/reopen ──────────────────
+  let hasStageContent = false;
+
+  function setHint(text) {
+    const hint = document.getElementById('witness-hint');
+    if (hint) hint.textContent = text;
+  }
+
+  function markStageActive() {
+    if (hasStageContent) return;
+    hasStageContent = true;
+    const btn = document.getElementById('witness-exit-btn');
+    if (btn) btn.style.display = '';
+  }
+
+  // Clears the stage back to idle. `reopen` distinguishes the two real
+  // callers: a brand-new live convene should default to showing the
+  // performance (reopen=true), while restoring a past session into the
+  // record should leave the stage collapsed if the user had it that way
+  // (reopen=false) -- restoring is a read-only record operation, not an
+  // invitation back into the stage.
+  function clearStage(reopen) {
+    const stage = document.getElementById('witness-stage');
+    if (stage) stage.innerHTML = '';
+    const prog = document.getElementById('witness-progress');
+    if (prog) prog.style.display = 'none';
+    const btn = document.getElementById('witness-exit-btn');
+    if (btn) btn.style.display = 'none';
+    lastSpeakerId = null;
+    currentSpeakerSide = 'right';
+    hasStageContent = false;
+    setHint('');
+    if (reopen) reopenStage();
+  }
+
+  function liveReset() { clearStage(true); }
+  function resetLiveStage() { clearStage(false); }
+
+  function collapseStage() {
+    document.getElementById('stage-record')?.classList.add('collapsed');
+  }
+
+  function reopenStage() {
+    document.getElementById('stage-record')?.classList.remove('collapsed');
+    const stage = document.getElementById('witness-stage');
+    if (stage) stage.scrollTop = stage.scrollHeight;
+  }
+
+  // ── Live mirroring (#184) ────────────────────────────────────────────────────
+  // Each call renders one already-settled beat into the stage via the same
+  // renderWitnessBlock() replay uses below -- ignoring its returned pacing
+  // delay, since live beats appear as fast as the room actually speaks, not
+  // on a reading-time schedule.
+  //
+  // liveRoundHeader returns its element (unlike liveSpeech/liveTyping*)
+  // because app.js's addRoundHeader() does the same for the record, and its
+  // callers pair the two: on a failed round, they call both h.remove() (the
+  // record) and this return value's .remove() (the stage), so a round that
+  // never actually happened doesn't linger as a performed beat on replay.
+  function liveRoundHeader(label) {
+    markStageActive();
+    setHint('◉ Live — the room is speaking');
+    const stage = document.getElementById('witness-stage');
+    const el = document.createElement('div');
+    el.className = 'witness-round-header';
+    el.innerHTML = `<div class="witness-rule"></div><span class="witness-round-label">${deps.escapeHTML(label)}</span><div class="witness-rule"></div>`;
+    stage.appendChild(el);
+    stage.scrollTop = stage.scrollHeight;
+    return el;
+  }
+
+  function liveSpeech({ speaker, text, memberId, annotation }) {
+    markStageActive();
+    setHint('◉ Live — the room is speaking');
+    renderWitnessBlock({ type: 'speech', speaker, text, memberId: memberId || null, annotation: annotation || null });
+  }
+
+  // Mirrors the record's "typing" placeholder (#115) so the stage keeps its
+  // theatrical, someone-is-speaking-right-now feel rather than going dark
+  // between beats. Growing raw text, not a real block -- swapped for the
+  // settled bubble by the next liveSpeech() call, same lifecycle as the
+  // record's own typing element in app.js's startStreamEntry().
+  let liveTypingEl = null;
+
+  function liveTypingStart(name) {
+    markStageActive();
+    setHint('◉ Live — the room is speaking');
+    const stage = document.getElementById('witness-stage');
+    if (!stage) return;
+    liveTypingEl = document.createElement('div');
+    liveTypingEl.className = 'transcript-typing';
+    liveTypingEl.innerHTML = `<div class="speaker-name">${deps.escapeHTML(name)}</div><div class="typing-text transcript-stream-live"></div>`;
+    stage.appendChild(liveTypingEl);
+    stage.scrollTop = stage.scrollHeight;
+  }
+
+  function liveTypingAppend(chunk) {
+    if (!liveTypingEl) return;
+    liveTypingEl.querySelector('.typing-text').textContent += chunk;
+    const stage = document.getElementById('witness-stage');
+    if (stage) stage.scrollTop = stage.scrollHeight;
+  }
+
+  function liveClearTyping() {
+    if (liveTypingEl) { liveTypingEl.remove(); liveTypingEl = null; }
+  }
+
+  // The shared panel's Exit button serves both live and replay -- dispatch to
+  // whichever is actually active. Live: collapse only, the convene (and the
+  // record) keep going underneath. Replay: stop the paced playback, then
+  // collapse -- #184's "exit the stage" is how the record gets full height
+  // back for a real reading/annotation pass, reusing this one control rather
+  // than adding a new one.
   function exitClicked() {
-    if (witnessLiveActive) toggleLive();
-    else exit();
+    if (witnessActive) exit();
+    else collapseStage();
   }
 
   // ── Replay mode ────────────────────────────────────────────────────────────
@@ -92,7 +180,6 @@ window.Witness = (function () {
   let witnessTimer = null;     // auto-advance timer
   let witnessActive = false;
   let witnessSourceSessionId = null; // session being witnessed (for restore on exit)
-  let deps = null;              // core helpers/data handed in by start() -- see below
   let onExitRestore = null;     // app.js's restoreSession, captured from deps at start()
 
   // Go-back support (#90): parallel arrays over witnessIndex so we can
@@ -117,27 +204,6 @@ window.Witness = (function () {
   const WITNESS_PAUSE_AFTER_HEADER = 1800;   // ms pause after round headers
   const WITNESS_MIN_PAUSE = 1200;            // minimum ms between blocks
   const WITNESS_MAX_PAUSE = 12000;           // cap on auto-advance delay
-
-  // Own speaker-side tracking, independent of app.js's live-transcript side
-  // state (lastSpeakerId/currentSpeakerSide there) -- replay and live
-  // rendering never run concurrently, but keeping a separate copy here means
-  // this module never has to reach into app.js's globals to reset it.
-  let lastSpeakerId = null;
-  let currentSpeakerSide = 'right';
-
-  function getSpeakerSide(speakerId) {
-    if (speakerId === '—') return currentSpeakerSide;
-    if (speakerId !== lastSpeakerId) {
-      currentSpeakerSide = currentSpeakerSide === 'left' ? 'right' : 'left';
-      lastSpeakerId = speakerId;
-    }
-    return currentSpeakerSide;
-  }
-
-  function memberGlyph(memberId) {
-    const m = memberId && deps.members.find(mm => mm.id === memberId);
-    return m?.glyph || '';
-  }
 
   /**
    * Parse a session's rounds + annotations into a flat sequence of playback blocks.
@@ -198,6 +264,10 @@ window.Witness = (function () {
     return Math.min(Math.max(ms, WITNESS_MIN_PAUSE), WITNESS_MAX_PAUSE);
   }
 
+  // Renders one block into the stage. Used by both replay's advance() (which
+  // uses the returned pacing delay) and live mirroring above (which ignores
+  // it). Always appends fresh elements -- never reads from or moves nodes
+  // belonging to the record.
   function renderWitnessBlock(block) {
     const stage = document.getElementById('witness-stage');
 
@@ -350,9 +420,9 @@ window.Witness = (function () {
   }
 
   // ── Touch / swipe support (#90) ────────────────────────────────────────────
-  // Swipe left = advance (next), swipe right = go back.
-  // Registered on the stage element in start() / removed in exit() so these
-  // handlers are only active during replay (not live mode).
+  // Swipe left = advance (next), swipe right = go back. Registered on the
+  // stage element only (start() / exit()) -- scoped so a swipe inside the
+  // record (#184) scrolls the record instead of driving the stage.
   function _onTouchStart(e) {
     _touchStartX = e.touches[0].clientX;
     _touchStartY = e.touches[0].clientY;
@@ -379,23 +449,26 @@ window.Witness = (function () {
   //
   // `injectedDeps` is { members, resolveMember, isKnownSpeakerHeader,
   // escapeHTML, renderActions, restoreSession } -- the handful of core
-  // app.js helpers playback needs. restoreSession is called (if provided)
-  // when exit() determines the session on screen before Witness opened
-  // should be restored.
-  function start(session, injectedDeps) {
+  // app.js helpers playback needs. Before rendering, this awaits
+  // deps.restoreSession(session.id) so the record shows the same session the
+  // stage is about to play (a no-op if it already does) -- #184: both panes
+  // are the same conversation, not stage-then-record-on-exit like before.
+  async function start(session, injectedDeps) {
     if (!session || !session.rounds) return;
-    deps = injectedDeps;
-    onExitRestore = injectedDeps?.restoreSession || null;
+    if (injectedDeps) deps = injectedDeps;
+    onExitRestore = deps?.restoreSession || null;
+    witnessSourceSessionId = session.id || null;
 
-    // Replay always wins over live mode -- watching a stored session is never
-    // "the room speaking right now."
-    witnessLiveActive = false;
-    document.getElementById('transcript-panel').style.display = '';
+    // Sync the record BEFORE touching the stage -- restoreSession() (via
+    // resetLiveStage()) also clears the stage, so awaiting first avoids a
+    // race where that clear would wipe out this replay's own render. Only
+    // when the session has an id: an ephemeral/unsaved session (no id) has
+    // nothing in the record to sync to.
+    if (onExitRestore && witnessSourceSessionId) await onExitRestore(witnessSourceSessionId);
 
     witnessBlocks = parseWitnessBlocks(session);
     witnessIndex = 0;
     witnessActive = true;
-    witnessSourceSessionId = session.id || null;
 
     // Reset side map and go-back state for a clean Witness run.
     lastSpeakerId = null; currentSpeakerSide = 'right';
@@ -406,11 +479,12 @@ window.Witness = (function () {
 
     const stage = document.getElementById('witness-stage');
     stage.innerHTML = '';
+    hasStageContent = true;
     document.getElementById('witness-progress').style.display = '';
+    document.getElementById('witness-exit-btn').style.display = '';
 
-    // Show witness panel
-    document.getElementById('witness-panel').style.display = 'block';
-    document.getElementById('witness-panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    reopenStage();
+    document.getElementById('stage-pane').scrollIntoView({ behavior: 'smooth', block: 'start' });
     document.getElementById('witness-progress').style.width = '0%';
     document.getElementById('witness-hint').textContent = 'Space or click to advance';
 
@@ -438,8 +512,11 @@ window.Witness = (function () {
     }
   }
 
+  // Stops replay entirely (no "resume where you left off" -- a fresh ◎ Watch
+  // click always restarts from block 0, unchanged from before #184). Unlike
+  // the pre-#184 version, this no longer needs to restore the record: start()
+  // already synced it, and it was never replaced during playback.
   function exit() {
-    const sessionToRestore = witnessSourceSessionId;
     witnessActive = false;
     witnessSourceSessionId = null;
     witnessEnded = false;
@@ -449,18 +526,24 @@ window.Witness = (function () {
     const stage = document.getElementById('witness-stage');
     stage.removeEventListener('touchstart', _onTouchStart);
     stage.removeEventListener('touchend', _onTouchEnd);
-    document.getElementById('witness-panel').style.display = 'none';
     stage.innerHTML = '';
-    // Hand back to app.js to restore the session transcript so the user
-    // lands back in the full view -- this module never calls app.js
-    // functions other than the one it was explicitly given for this.
-    if (sessionToRestore && onExitRestore) onExitRestore(sessionToRestore);
+    document.getElementById('witness-progress').style.display = 'none';
+    document.getElementById('witness-exit-btn').style.display = 'none';
+    hasStageContent = false;
+    collapseStage();
   }
 
   return {
-    getLiveStageEl,
-    toggleLive,
-    forceLiveOff,
+    configure,
+    liveReset,
+    resetLiveStage,
+    liveRoundHeader,
+    liveSpeech,
+    liveTypingStart,
+    liveTypingAppend,
+    liveClearTyping,
+    collapseStage,
+    reopenStage,
     exitClicked,
     advance,
     start,

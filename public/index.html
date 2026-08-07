@@ -205,33 +205,41 @@
       </div>
     </div>
 
-    <div class="transcript-panel" id="transcript-panel">
-      <div class="transcript-toolbar">
-        <button class="witness-live-toggle-btn" id="witness-live-toggle" onclick="window.Witness.toggleLive()" title="Watch the room live, in Witness's theatrical presentation">◎ Witness</button>
+    <!-- #184: the stage (Witness presentation) and the record (annotated
+         transcript) are two permanent, bounded panes rendering the same
+         conversation — never one swapped for the other. The stage plays
+         a live convene as it streams or a past session paced beat-by-beat
+         (#90 go-back); the record accumulates continuously beneath it in
+         its own scrolling window, so a long session never grows the page. -->
+    <div class="stage-record" id="stage-record">
+      <div class="stage-pane" id="stage-pane">
+        <div class="witness-controls">
+          <span class="witness-label">◎ The Stage</span>
+          <span class="witness-hint" id="witness-hint"></span>
+          <button class="witness-exit-btn" id="witness-exit-btn" onclick="window.Witness.exitClicked()" style="display:none;">✕ Exit</button>
+        </div>
+        <div class="witness-stage" id="witness-stage" onclick="window.Witness.advance()"></div>
+        <div class="witness-progress" id="witness-progress" style="display:none;"></div>
       </div>
-      <div class="transcript-empty" id="transcript-empty">
-        The chairs are arranged.<br>
-        The fire throws its light against the panelling.<br>
-        Above the mantel, the portrait<br>
-        <em style="color:#3a2810">regards the room with practiced indifference.</em><br><br>
-        When the document is read aloud, the meeting begins.
-      </div>
-      <div id="transcript-content"></div>
-    </div>
 
-    <!-- Witness mode panel — inline alternate view. Serves two modes: replay
-         (a past session played back at reading-time pacing, entered from
-         "◎ Watch this meeting" or the Past Meetings drawer) and live (#87,
-         the active convene's rounds rendered here as they stream, toggled
-         via #witness-live-toggle above). -->
-    <div class="witness-panel" id="witness-panel" style="display:none;">
-      <div class="witness-controls">
-        <span class="witness-label">◎ Witness</span>
-        <span class="witness-hint" id="witness-hint">Space or click to advance</span>
-        <button class="witness-exit-btn" onclick="window.Witness.exitClicked()">✕ Exit</button>
+      <button class="stage-collapsed-bar" id="stage-collapsed-bar" onclick="window.Witness.reopenStage()">▲ The Stage</button>
+
+      <div class="transcript-panel record-pane" id="transcript-panel">
+        <div class="record-toolbar">
+          <span class="record-label">The Record</span>
+          <button class="record-live-pill" id="record-live-pill" onclick="jumpToLive()">↓ live</button>
+        </div>
+        <div class="record-scroll" id="record-scroll">
+          <div class="transcript-empty" id="transcript-empty">
+            The chairs are arranged.<br>
+            The fire throws its light against the panelling.<br>
+            Above the mantel, the portrait<br>
+            <em style="color:#3a2810">regards the room with practiced indifference.</em><br><br>
+            When the document is read aloud, the meeting begins.
+          </div>
+          <div id="transcript-content"></div>
+        </div>
       </div>
-      <div class="witness-stage" id="witness-stage" onclick="window.Witness.advance()"></div>
-      <div class="witness-progress" id="witness-progress"></div>
     </div>
 
     <div class="after-panel" id="after-panel">

@@ -241,7 +241,7 @@ function setRoundCount(n) {
 let currentRenderRound = null;
 function addRoundHeader(label, roundIndex = null) {
   currentRenderRound = roundIndex;
-  const c = window.Witness.getLiveStageEl();
+  const c = document.getElementById('transcript-content');
   const h = document.createElement('div');
   h.className = 'transcript-round-header';
   h.innerHTML = `<div class="round-rule"></div><span class="round-rule-label">${label}</span><div class="round-rule"></div>`;
@@ -346,8 +346,46 @@ function getSpeakerSide(speakerId) {
   return currentSpeakerSide;
 }
 
-function addSpeech(speaker, text, isObserver, memberId, existingAnnotation, targetEl) {
-  const c = targetEl || document.getElementById('transcript-content');
+// ── Record scroll (#184) ──────────────────────────────────────────────────────
+// The record is now a bounded, internally-scrolling pane rather than an
+// unbounded growing column. Stick to bottom while the user hasn't scrolled
+// away; the moment they do, stop auto-scrolling and surface a "↓ live" pill
+// rather than yanking them back mid-read. recordAttached is the single
+// source of truth both the scroll listener and every append call site read.
+let recordAttached = true;
+
+function recordScrollEl() { return document.getElementById('record-scroll'); }
+
+function initRecordScroll() {
+  const el = recordScrollEl();
+  const pill = document.getElementById('record-live-pill');
+  if (!el || !pill) return;
+  el.addEventListener('scroll', () => {
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+    if (atBottom && !recordAttached) { recordAttached = true; pill.classList.remove('visible'); }
+    else if (!atBottom && recordAttached) { recordAttached = false; pill.classList.add('visible'); }
+  });
+  pill.addEventListener('click', jumpToLive);
+}
+
+// Called after every record append in place of the old unconditional
+// `c.scrollTop = c.scrollHeight`. A fresh/empty record has recordAttached
+// still true by default, so restoring a past session naturally scrolls
+// through to its end as it renders, same as today's incidental behavior.
+function recordFollow() {
+  const el = recordScrollEl();
+  if (el && recordAttached) el.scrollTop = el.scrollHeight;
+}
+
+function jumpToLive() {
+  recordAttached = true;
+  const el = recordScrollEl();
+  if (el) el.scrollTop = el.scrollHeight;
+  document.getElementById('record-live-pill')?.classList.remove('visible');
+}
+
+function addSpeech(speaker, text, isObserver, memberId, existingAnnotation) {
+  const c = document.getElementById('transcript-content');
   // If every non-empty line is wrapped in *...*, render as centered action line(s) with
   // no bubble and no speaker-side update. Handles both single and multi-line action blocks.
   const nonEmptyLines = text.trim().split('\n').map(l => l.trim()).filter(Boolean);
@@ -359,7 +397,7 @@ function addSpeech(speaker, text, isObserver, memberId, existingAnnotation, targ
       d.textContent = l.slice(1, -1);
       c.appendChild(d);
     });
-    c.scrollTop = c.scrollHeight;
+    recordFollow();
     transcriptText += nonEmptyLines.join('\n') + '\n\n';
     return;
   }
@@ -384,7 +422,7 @@ function addSpeech(speaker, text, isObserver, memberId, existingAnnotation, targ
     e.querySelector('.annotation-input').value = existingAnnotation;
   }
   c.appendChild(e);
-  c.scrollTop = c.scrollHeight;
+  recordFollow();
   // Skip "—" fallback speaker — it's a parser artefact, not real speech
   if (speaker !== '—') transcriptText += `${speaker} —\n${text}\n\n`;
 }
@@ -490,8 +528,8 @@ function isKnownSpeakerHeader(t, members) {
   return index.has(norm) && index.get(norm) != null;
 }
 
-function parseAndRenderTranscript(response, targetEl) {
-  const c0 = targetEl || document.getElementById('transcript-content');
+function parseAndRenderTranscript(response) {
+  const c0 = document.getElementById('transcript-content');
   const lines = response.split('\n');
   let speaker = null, textLines = [];
 
@@ -499,7 +537,7 @@ function parseAndRenderTranscript(response, targetEl) {
     if (speaker && textLines.length) {
       const text = textLines.join('\n').trim();
       const m = resolveMember(speaker, MEMBERS);
-      addSpeech(speaker, text, false, m?.id, null, c0);
+      addSpeech(speaker, text, false, m?.id, null);
       // If the block was pure action, preserve speaker so the next speech
       // (without a repeated header) still gets attributed correctly.
       const nonEmpty = text.split('\n').map(l => l.trim()).filter(Boolean);
@@ -517,11 +555,11 @@ function parseAndRenderTranscript(response, targetEl) {
     // Unattributed action line between speakers — render directly, no speaker needed
     const isActionLine = /^\*[^*\n]+\*$/.test(t);
     if (isActionLine && !speaker) {
-      const c = c0;
       const d = document.createElement('div');
       d.className = 'action-line';
       d.textContent = t.slice(1, -1);
-      c.appendChild(d);
+      c0.appendChild(d);
+      recordFollow();
       transcriptText += `${t}\n\n`;
       return;
     }
@@ -596,29 +634,32 @@ async function streamPost(url, body, onChunk, onSpeaking, onSpeakerDone) {
 // we know whether the block is a normal turn or a pure-action line (addSpeech
 // decides that from the complete text, which isn't knowable mid-stream).
 //
+// #184: every stage change here has a matching window.Witness.live*() call
+// right after it, mirroring the same beat into the stage a moment after the
+// record gets it -- the stage renders its own lightweight copy (see
+// witness.js's top-of-file comment), it never reads these DOM nodes.
+//
 // finalize() only falls back to the old whole-text reparse if nothing
 // rendered live this round -- a safety net, not the normal path, so a
-// missed or malformed speakerDone event can't silently drop content.
-// The stage a round streams into is decided once, at the start of that round
-// (window.Witness.getLiveStageEl(), #87) -- not re-checked chunk-by-chunk.
-// Toggling Witness mid-round would otherwise split one speaker's turn across
-// two containers, so the toggle button is disabled while any round is in
-// flight (see convene/resumeRounds/addRound/sendInterject) and this only
-// ever changes stage between rounds.
+// missed or malformed speakerDone event can't silently drop content. In that
+// rare case the record still gets the round correctly; only the stage misses
+// mirroring it, self-healing on the next round's beats.
 function startStreamEntry() {
-  const c = window.Witness.getLiveStageEl();
+  const c = document.getElementById('transcript-content');
   let typingEl = null;
   let renderedLive = false;
 
   function clearTyping() {
     if (typingEl) { typingEl.remove(); typingEl = null; }
+    window.Witness.liveClearTyping();
   }
 
   return {
     append(chunk) {
       if (!typingEl) return; // nothing streaming yet worth showing raw (e.g. the name-header chunk before onSpeaking fires)
       typingEl.querySelector('.typing-text').textContent += chunk;
-      c.scrollTop = c.scrollHeight;
+      recordFollow();
+      window.Witness.liveTypingAppend(chunk);
     },
     onSpeaking(memberId) {
       clearTyping();
@@ -627,16 +668,18 @@ function startStreamEntry() {
       typingEl.className = 'transcript-typing';
       typingEl.innerHTML = `<div class="speaker-name">${escapeHTML(m?.name || '…')}</div><div class="typing-text transcript-stream-live"></div>`;
       c.appendChild(typingEl);
-      c.scrollTop = c.scrollHeight;
+      recordFollow();
+      window.Witness.liveTypingStart(m?.name || '…');
     },
     onSpeakerDone({ memberId, name, text }) {
       clearTyping();
-      addSpeech(name, text, false, memberId || undefined, null, c);
+      addSpeech(name, text, false, memberId || undefined, null);
       renderedLive = true;
+      window.Witness.liveSpeech({ speaker: name, text, memberId: memberId || null });
     },
     finalize(fullText) {
       clearTyping();
-      if (!renderedLive) parseAndRenderTranscript(fullText, c);
+      if (!renderedLive) parseAndRenderTranscript(fullText);
     },
     abort() {
       clearTyping();
@@ -675,13 +718,14 @@ async function convene() {
 
   document.getElementById('transcript-empty').style.display = 'none';
   document.getElementById('transcript-content').innerHTML = '';
-  document.getElementById('witness-stage').innerHTML = '';
+  window.Witness.liveReset();
   _entryCounter = 0;
+  recordAttached = true;
+  document.getElementById('record-live-pill')?.classList.remove('visible');
 
   lastSpeakerId = null; currentSpeakerSide = 'right';
   document.getElementById('convene-btn').disabled = true;
   document.querySelectorAll('.round-count-btn').forEach(b => b.disabled = true);
-  document.getElementById('witness-live-toggle').disabled = true;
   document.getElementById('additional-round-btn').className = 'lodge-btn';
   document.getElementById('after-panel').className = 'after-panel';
   document.getElementById('interject-form').style.display = 'none';
@@ -728,6 +772,7 @@ async function convene() {
     setStatus('First Movement... the room is speaking.', true);
     const txtBefore1 = transcriptText;
     const h1 = addRoundHeader('First Movement', 0);
+    const sh1 = window.Witness.liveRoundHeader('First Movement');
     const s1 = startStreamEntry();
     let d1;
     try {
@@ -740,7 +785,7 @@ async function convene() {
         applyPlayerTurnMarkers(sessionPlayerTurns);
       }
     } catch (err) {
-      s1.abort(); h1.remove(); transcriptText = txtBefore1;
+      s1.abort(); h1.remove(); sh1.remove(); transcriptText = txtBefore1;
       const msg = err.message && !err.message.startsWith('Server error')
         ? err.message
         : 'The first movement could not begin. The fire may be low.';
@@ -757,6 +802,7 @@ async function convene() {
       await new Promise(r => setTimeout(r, 300));
       const txtBefore = transcriptText;
       const h = addRoundHeader(ROUND_LABELS[i], i);
+      const sh = window.Witness.liveRoundHeader(ROUND_LABELS[i]);
       const s = startStreamEntry();
       const ri = i;
       try {
@@ -767,7 +813,7 @@ async function convene() {
           applyPlayerTurnMarkers(sessionPlayerTurns);
         }
       } catch (err) {
-        s.abort(); h.remove(); transcriptText = txtBefore;
+        s.abort(); h.remove(); sh.remove(); transcriptText = txtBefore;
         showSessionControls();
         setError(`${ROUND_LABELS[ri]} could not continue.`, () => resumeRounds(ri));
         return;
@@ -779,7 +825,6 @@ async function convene() {
   } finally {
     document.getElementById('convene-btn').disabled = false;
     document.querySelectorAll('.round-count-btn').forEach(b => b.disabled = false);
-    document.getElementById('witness-live-toggle').disabled = false;
   }
 }
 
@@ -788,7 +833,6 @@ async function resumeRounds(fromIndex) {
   if (!currentSessionId) return;
   document.getElementById('convene-btn').disabled = true;
   document.querySelectorAll('.round-count-btn').forEach(b => b.disabled = true);
-  document.getElementById('witness-live-toggle').disabled = true;
   try {
     for (let i = fromIndex; i < activeConveneRoundCount; i++) {
       currentRound = i + 1;
@@ -798,6 +842,7 @@ async function resumeRounds(fromIndex) {
       if (i > fromIndex) await new Promise(r => setTimeout(r, 300));
       const txtBefore = transcriptText;
       const h = addRoundHeader(ROUND_LABELS[i], i);
+      const sh = window.Witness.liveRoundHeader(ROUND_LABELS[i]);
       const s = startStreamEntry();
       const ri = i;
       try {
@@ -808,7 +853,7 @@ async function resumeRounds(fromIndex) {
           applyPlayerTurnMarkers(sessionPlayerTurns);
         }
       } catch (err) {
-        s.abort(); h.remove(); transcriptText = txtBefore;
+        s.abort(); h.remove(); sh.remove(); transcriptText = txtBefore;
         setError(`${ROUND_LABELS[ri]} could not continue.`, () => resumeRounds(ri));
         return;
       }
@@ -817,7 +862,6 @@ async function resumeRounds(fromIndex) {
   } finally {
     document.getElementById('convene-btn').disabled = false;
     document.querySelectorAll('.round-count-btn').forEach(b => b.disabled = false);
-    document.getElementById('witness-live-toggle').disabled = false;
   }
 }
 
@@ -944,7 +988,6 @@ async function addRound() {
   if (!currentSessionId) return;
   const btn = document.getElementById('additional-round-btn');
   btn.disabled = true;
-  document.getElementById('witness-live-toggle').disabled = true;
   currentRound++;
   updatePips();
   setStatus('One More Turn... the room continues.', true);
@@ -952,6 +995,7 @@ async function addRound() {
   // Player turns are AI-only for "One More Turn" (v1 scope limit) — round
   // index is still tagged so this round's entries are consistently addressable.
   const h = addRoundHeader('One More Turn', currentRound - 1);
+  const sh = window.Witness.liveRoundHeader('One More Turn');
   const s = startStreamEntry();
 
   try {
@@ -959,12 +1003,11 @@ async function addRound() {
     s.finalize(d.text);
     setStatus('The embers hold a while longer.', false);
   } catch (err) {
-    s.abort(); h.remove(); transcriptText = txtBefore; currentRound--;
+    s.abort(); h.remove(); sh.remove(); transcriptText = txtBefore; currentRound--;
     updatePips();
     setError('The turn could not complete.', addRound);
   } finally {
     btn.disabled = false;
-    document.getElementById('witness-live-toggle').disabled = false;
   }
 }
 
@@ -987,14 +1030,15 @@ async function interject() {
   lastInterjectText = text;
 
   addRoundHeader('A Presence Passes Through');
-  addSpeech('— a voice from elsewhere —', text, true, undefined, undefined, window.Witness.getLiveStageEl());
+  window.Witness.liveRoundHeader('A Presence Passes Through');
+  addSpeech('— a voice from elsewhere —', text, true, undefined, undefined);
+  window.Witness.liveSpeech({ speaker: '— a voice from elsewhere —', text, memberId: null });
   setStatus('The room notices...', true);
   await sendInterject(text);
 }
 
 async function sendInterject(text) {
   const s = startStreamEntry();
-  document.getElementById('witness-live-toggle').disabled = true;
   try {
     const d = await streamPost('/api/interject', { sessionId: currentSessionId, text }, chunk => s.append(chunk), s.onSpeaking, s.onSpeakerDone);
     s.finalize(d.text);
@@ -1003,8 +1047,6 @@ async function sendInterject(text) {
   } catch (err) {
     s.abort();
     setError('The interjection went unheard.', () => sendInterject(lastInterjectText));
-  } finally {
-    document.getElementById('witness-live-toggle').disabled = false;
   }
 }
 
@@ -1076,10 +1118,15 @@ function collectLiveAnnotations() {
 }
 
 // A no-op if the session being restored is already the one loaded -- avoids
-// a redundant fetch/rerender when Witness exits back into the same session
-// it was launched from (mirrors exitWitness's old in-module check).
+// a redundant fetch/rerender when Witness starts back into the same session
+// it was launched from. Returns the underlying promise (or a resolved one
+// for the no-op case) so witness.js's start() can await it -- #184: the
+// record must be synced *before* the stage begins rendering, since restoring
+// clears the stage too (window.Witness.resetLiveStage()) and a race would
+// wipe out the stage's own render.
 function restoreSessionIfDifferent(id) {
-  if (id !== currentSessionId) window.Sessions.restoreSession(id);
+  if (id !== currentSessionId) return window.Sessions.restoreSession(id);
+  return Promise.resolve();
 }
 
 function witnessDeps() {
@@ -1103,7 +1150,7 @@ async function startWitness(sessionData) {
     session = await fetch(`/api/sessions/${currentSessionId}`).then(r => r.json());
     session.annotations = { ...(session.annotations || {}), ...collectLiveAnnotations() };
   }
-  window.Witness.start(session, witnessDeps());
+  await window.Witness.start(session, witnessDeps());
 }
 
 // Entry point from Past Meetings drawer
@@ -1111,7 +1158,7 @@ async function startWitnessFromSession(id) {
   try {
     const session = await fetch(`/api/sessions/${id}`).then(r => r.json());
     window.Sessions.closeSessionsDrawer();
-    window.Witness.start(session, witnessDeps());
+    await window.Witness.start(session, witnessDeps());
   } catch (e) {
     alert('Could not load session for playback.');
   }
@@ -1225,7 +1272,7 @@ window.Export.configure(exportDeps());
 // Live core-state accessors handed to window.Sessions (#142) -- same
 // getCore()-plus-setters shape as exportDeps() above, just with more entries:
 // restoreSession() alone hydrates most of app.js's session/player state, so
-// this is the biggest deps bag of the three extractions. forceWitnessLiveOff
+// this is the biggest deps bag of the three extractions. resetLiveStage
 // and resetTranscriptCounters bundle small groups of related
 // state/cross-module calls that always change together in restoreSession(),
 // rather than exposing each one as its own setter.
@@ -1251,8 +1298,12 @@ function sessionsDeps() {
     setPlayerTurnsRevealed: (v) => { playerTurnsRevealed = v; },
     setTranscriptText: (t) => { transcriptText = t; },
     setActiveMembers: (set) => { activeMembers = set; },
-    resetTranscriptCounters: () => { _entryCounter = 0; lastSpeakerId = null; currentSpeakerSide = 'right'; },
-    forceWitnessLiveOff: () => window.Witness.forceLiveOff(),
+    resetTranscriptCounters: () => {
+      _entryCounter = 0; lastSpeakerId = null; currentSpeakerSide = 'right';
+      recordAttached = true;
+      document.getElementById('record-live-pill')?.classList.remove('visible');
+    },
+    resetLiveStage: () => window.Witness.resetLiveStage(),
     escapeHTML, resolveMember, isKnownSpeakerHeader, renderActions,
     setStatus, setRoundCount, restorePlayAsControlDisplay,
     addRoundHeader, addBranchControl, parseAndRenderTranscript,
@@ -1260,6 +1311,8 @@ function sessionsDeps() {
   };
 }
 window.Sessions.configure(sessionsDeps());
+window.Witness.configure(witnessDeps());
+initRecordScroll();
 
 window.Export.applyEnvConfig();
 initSceneLayer();

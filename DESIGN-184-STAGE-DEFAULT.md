@@ -140,10 +140,10 @@ They can desync: the stage advances beat-by-beat under user control ([#90](https
 Annotation stays in the record, which is now always present rather than a swapped-out sibling. Both panes render from the same live SSE stream; neither is a snapshot of the other.
 
 - **During a live convene** — annotate in the record while the stage performs. Newly annotated passages mark immediately.
-- **After the meeting** — unchanged tooling (highlight, cite, tag). The expand control gives the room a long annotation pass needs.
+- **After the meeting** — unchanged tooling (highlight, cite, tag). Exiting the stage gives the record the full height a long pass needs.
 - **State ownership** — annotation state stays in `app.js`, shared. `witness.js` renders and plays back; it does not own annotation.
 
-**Known cost: tooltip clipping.** Citation tooltips and annotation popups currently expand into a full-page column. Inside a bounded scroll container they will clip at the edges. Fix is to portal them to the page root rather than positioning them inside the scroller — real work, not free, and it belongs in Phase 1 rather than being discovered in Phase 2.
+**Tooltip clipping, checked and ruled out.** Citation tooltips render through the native `title` attribute (`speechEl.title = ...`, `applyCitationFlags` in `app.js`), and the annotation editor is normal-flow content inside the entry, not an absolutely-positioned overlay — neither is subject to a scroll container's `overflow` clipping. No portaling needed; flagged here so the concern doesn't get silently re-raised.
 
 ---
 
@@ -187,9 +187,9 @@ The record's only structural landmark today is the round header. If the rounds s
 
 ## Implementation phases
 
-**Phase 1 — structure.** Replace the transcript/witness panel pair with the stacked stage + record assembly. Delete `toggleLive()`'s re-parenting. Height budget, internal scroll, stick-to-bottom + "↓ live" pill, expand control, tooltip portaling. Behavior otherwise unchanged.
+**Phase 1 — structure. Shipped.** Replaced the transcript/witness panel pair with the stacked stage + record assembly (`public/index.html`, `public/style.css`). Deleted `toggleLive()`'s re-parenting — `witness.js` now exposes `liveRoundHeader`/`liveSpeech`/`liveTyping*` for the stage's own lightweight mirror, called from `app.js`'s existing render call sites (`addRoundHeader`, `startStreamEntry`) right after each writes the record. Height budget, internal scroll, stick-to-bottom + "↓ live" pill (`app.js`'s `recordFollow`/`initRecordScroll`), and exit-collapses/`◎ Watch`-reopens in place of a new expand control, all built and verified live (129/129 tests, manual browser pass covering live mirroring, collapse/reopen, scroll stickiness, and replay go-back).
 
-**Phase 2 — linkage and polish.** Current-beat marker in the record. Touch-handler scoping. Live-annotation flow end to end.
+**Phase 2 — linkage and polish. Not started.** Current-beat marker in the record. Touch-handler scoping (already correctly scoped as a side effect of Phase 1 — `witness.js`'s touch listeners were already bound to `#witness-stage` specifically, confirmed rather than rebuilt). Live-annotation flow end to end (the mechanism is in place — annotation stays exclusively in the record, unaffected by stage mirroring — but hasn't had a dedicated pass).
 
 Phases 1–2 are the whole of #184. The stage view switcher, previously Phase 3, is now [#202](https://github.com/msdixon/secret-cabinet/issues/202).
 
