@@ -91,9 +91,7 @@
 
 .lodge-body { display:flex; flex-direction:column; flex:1; padding:20px 24px; gap:20px; max-width:960px; width:100%; margin:0 auto; }
 .panel-label { font-family:'IM Fell English',serif; font-size:13px; letter-spacing:2px; text-transform:uppercase; color:var(--lodge-muted); margin-bottom:8px; }
-.journal-panel, .member-panel, .transcript-panel, .after-panel, .scene-panel { background:var(--lodge-surface); border:1px solid var(--lodge-border); border-radius:2px; padding:16px; }
-.scene-panel canvas { width:100%; aspect-ratio:16/9; display:block; outline:none; }
-.scene-panel.scene-failed { display:none; }
+.journal-panel, .member-panel, .transcript-panel, .after-panel { background:var(--lodge-surface); border:1px solid var(--lodge-border); border-radius:2px; padding:16px; }
 .journal-controls { display:flex; gap:10px; margin-bottom:12px; flex-wrap:wrap; }
 .lodge-select { background:var(--lodge-panel); border:1px solid var(--lodge-border); color:var(--lodge-cream); font-family:'Crimson Pro',serif; font-size:15px; padding:7px 12px; border-radius:2px; cursor:pointer; flex:1; min-width:140px; appearance:none; }
 .lodge-select option { background:var(--lodge-panel); }
@@ -457,11 +455,27 @@ a.archival-image-link:hover { border-color:var(--lodge-amber-dim); cursor:pointe
 
 .witness-controls { display:flex; align-items:center; gap:12px; padding:10px 16px; border-bottom:1px solid var(--lodge-border); flex-shrink:0; }
 .witness-label { font-family:'IM Fell English',serif; font-size:12px; letter-spacing:2px; text-transform:uppercase; color:var(--lodge-ash); }
+/* #202: stage view switcher — text presentation ⇄ room. Two renderings of
+   the same conversation, chosen independently of which convene is live;
+   mutual exclusivity between .witness-stage and .witness-room is driven by
+   .stage-pane's view-room class, toggled in witness.js's setStageView(). */
+.stage-view-switch { display:flex; border:1px solid var(--lodge-border); border-radius:2px; overflow:hidden; flex-shrink:0; }
+.stage-view-btn { background:transparent; border:none; color:var(--lodge-ash); font-family:'IM Fell English',serif; font-size:11px; padding:3px 10px; cursor:pointer; letter-spacing:1px; }
+.stage-view-btn + .stage-view-btn { border-left:1px solid var(--lodge-border); }
+.stage-view-btn:hover { color:var(--lodge-muted); }
+.stage-view-btn.active { background:rgba(200,146,42,0.14); color:var(--lodge-amber); }
 .witness-hint { font-family:'IM Fell English',serif; font-size:12px; color:var(--lodge-border); font-style:italic; flex:1; text-align:center; }
 .witness-exit-btn { background:transparent; border:1px solid var(--lodge-border); color:var(--lodge-ash); font-family:'IM Fell English',serif; font-size:11px; padding:3px 10px; border-radius:2px; cursor:pointer; letter-spacing:1px; }
 .witness-exit-btn:hover { border-color:var(--lodge-ash); color:var(--lodge-muted); }
 .witness-progress { height:2px; background:var(--lodge-amber); width:0%; transition:width 0.4s ease; flex-shrink:0; }
 .witness-stage { flex:1 1 auto; min-height:0; overflow-y:auto; padding:24px 32px 20px; cursor:pointer; display:flex; flex-direction:column; gap:0; scroll-behavior:smooth; }
+/* The room (#202): same slot as .witness-stage, mutually exclusive with it.
+   Wordless for now -- dialogue rendered into the room is #28's scope, not
+   this switcher's. */
+.witness-room { display:none; flex:1 1 auto; min-height:0; background:var(--lodge-bg); }
+.witness-room canvas { width:100%; height:100%; display:block; outline:none; }
+.stage-pane.view-room .witness-stage { display:none; }
+.stage-pane.view-room .witness-room { display:flex; }
 .witness-stage .transcript-entry { max-width:70%; }
 .witness-stage .speaker-name { font-size:22px; }
 .witness-stage .speech-text { font-size:17px; }

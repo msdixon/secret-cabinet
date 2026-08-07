@@ -1232,19 +1232,26 @@ async function submitNewMember() {
 // ── Scene (3D) ──────────────────────────────────────────────────────────────
 // Phase 0 (#26): pure atmosphere, no member sync yet — see public/scene/scene.js.
 
+// #202: the room lives in the stage's view switcher now, not a standalone
+// panel -- so "scene unavailable" means removing the switcher entirely (a
+// switcher with only one option is clutter) and falling back to text,
+// rather than hiding an empty canvas.
+function hideRoomOption() {
+  document.getElementById('stage-view-switch')?.remove();
+  window.Witness?.setStageView('text');
+}
+
 function initSceneLayer() {
   try {
-    if (new URLSearchParams(location.search).get('noscene')) return;
-    if (localStorage.getItem('sc-scene-disabled')) return;
-    if (typeof BABYLON === 'undefined' || !window.LodgeScene) return;
+    if (new URLSearchParams(location.search).get('noscene')) return hideRoomOption();
+    if (localStorage.getItem('sc-scene-disabled')) return hideRoomOption();
+    if (typeof BABYLON === 'undefined' || !window.LodgeScene) return hideRoomOption();
     const canvas = document.getElementById('scene-canvas');
-    if (!canvas) return;
-    if (!LodgeScene.init(canvas)) {
-      document.getElementById('scene-panel')?.classList.add('scene-failed');
-    }
+    if (!canvas) return hideRoomOption();
+    if (!LodgeScene.init(canvas)) hideRoomOption();
   } catch (e) {
     console.error('[scene] failed to initialize, continuing without it', e);
-    document.getElementById('scene-panel')?.classList.add('scene-failed');
+    hideRoomOption();
   }
 }
 

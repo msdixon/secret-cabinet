@@ -29,14 +29,20 @@ const WITNESS_IDS = [
   'stage-record', 'stage-pane', 'witness-hint', 'witness-exit-btn',
   'witness-stage', 'witness-progress', 'stage-collapsed-bar',
   'transcript-panel', 'transcript-content', 'record-scroll',
+  'stage-view-switch', 'stage-view-text-btn', 'stage-view-room-btn',
 ];
 
 const FIXTURE = `
   <div id="stage-record">
     <div id="stage-pane">
       <div id="witness-hint"></div>
+      <div id="stage-view-switch">
+        <button id="stage-view-text-btn" class="active"></button>
+        <button id="stage-view-room-btn"></button>
+      </div>
       <button id="witness-exit-btn" style="display:none"></button>
       <div id="witness-stage"></div>
+      <div id="witness-room"></div>
       <div id="witness-progress" style="display:none"></div>
     </div>
     <button id="stage-collapsed-bar"></button>
@@ -445,5 +451,59 @@ test('collapse/reopen: exitClicked dispatches to whichever mode is active, never
     Witness.collapseStage();
 
     assert.equal(recordScroll.scrollTop, 640, 'revealing the record should land on its latest content, not the top');
+  });
+});
+
+test('stage view switcher (#202): text presentation ⇄ room, on the stage container', async t => {
+  await t.test('defaults to text with no stored preference, once configure() applies it', t2 => {
+    const { document, module: Witness } = boot(t2);
+    Witness.configure(makeDeps());
+    assert.equal(document.getElementById('stage-pane').classList.contains('view-room'), false);
+    assert.ok(document.getElementById('stage-view-text-btn').classList.contains('active'));
+    assert.equal(document.getElementById('stage-view-room-btn').classList.contains('active'), false);
+  });
+
+  await t.test('setStageView("room") switches the stage pane and button state, not the record', t2 => {
+    const { document, module: Witness } = boot(t2);
+    Witness.setStageView('room');
+
+    assert.ok(document.getElementById('stage-pane').classList.contains('view-room'));
+    assert.ok(document.getElementById('stage-view-room-btn').classList.contains('active'));
+    assert.equal(document.getElementById('stage-view-text-btn').classList.contains('active'), false);
+    assert.equal(document.getElementById('stage-record').classList.contains('view-room'), false, 'view-room belongs to the stage pane, not the stage/record assembly');
+  });
+
+  await t.test('setStageView("text") switches back', t2 => {
+    const { document, module: Witness } = boot(t2);
+    Witness.setStageView('room');
+    Witness.setStageView('text');
+
+    assert.equal(document.getElementById('stage-pane').classList.contains('view-room'), false);
+    assert.ok(document.getElementById('stage-view-text-btn').classList.contains('active'));
+    assert.equal(document.getElementById('stage-view-room-btn').classList.contains('active'), false);
+  });
+
+  await t.test('ignores an unrecognized view rather than clearing the current one', t2 => {
+    const { document, module: Witness } = boot(t2);
+    Witness.setStageView('room');
+    Witness.setStageView('bogus');
+
+    assert.ok(document.getElementById('stage-pane').classList.contains('view-room'), 'an invalid call should be a no-op, not fall back to text');
+  });
+
+  await t.test('persists the choice to localStorage and a fresh module load honors it once configure() runs', t2 => {
+    const { window, module: Witness } = boot(t2);
+    Witness.setStageView('room');
+    assert.equal(window.localStorage.getItem('sc-stage-view'), 'room');
+
+    // A fresh module load (simulating a page reload) reads the persisted
+    // choice at load time, same as the real page -- so localStorage must be
+    // seeded before eval, not after, to actually exercise that read.
+    const reloaded = loadPublicModule('witness.js', FIXTURE, w => w.localStorage.setItem('sc-stage-view', 'room'));
+    t2.after(reloaded.cleanup);
+    reloaded.module.configure(makeDeps());
+
+    assert.ok(reloaded.document.getElementById('stage-pane').classList.contains('view-room'));
+    assert.ok(reloaded.document.getElementById('stage-view-room-btn').classList.contains('active'));
   });
 });

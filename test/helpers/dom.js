@@ -24,6 +24,11 @@ const PUBLIC_DIR = path.join(__dirname, '..', '..', 'public');
  * Boot a jsdom window containing `bodyHtml`, then load public/<fileName>
  * into it exactly as a <script> tag would.
  *
+ * `beforeEval(window)`, if given, runs after the window exists but before
+ * the module is evaluated — for the rare case a module reads state (e.g.
+ * localStorage) at load time, which needs seeding before eval to observe
+ * rather than after.
+ *
  * Returns { dom, window, document, module, globalsAdded, cleanup }:
  *   module        — the single window global the file defined (window.Witness, ...)
  *   globalsAdded  — every global name the file added, so a test can assert the
@@ -31,7 +36,7 @@ const PUBLIC_DIR = path.join(__dirname, '..', '..', 'public');
  *   cleanup       — closes the window; call it from t.after() so pending
  *                   auto-advance timers don't outlive the test
  */
-function loadPublicModule(fileName, bodyHtml = '') {
+function loadPublicModule(fileName, bodyHtml = '', beforeEval) {
   const dom = new JSDOM(`<!doctype html><html><body>${bodyHtml}</body></html>`, {
     runScripts: 'outside-only', // gives us window.eval; does NOT run inline <script> in bodyHtml
     url: 'http://localhost:3132/',
@@ -42,6 +47,8 @@ function loadPublicModule(fileName, bodyHtml = '') {
   // calling it throws. witness.js's start() calls it on the panel. Stub it
   // rather than let a layout gap masquerade as a module failure.
   window.Element.prototype.scrollIntoView = function scrollIntoView() {};
+
+  if (beforeEval) beforeEval(window);
 
   const before = new Set(Object.keys(window));
   const src = fs.readFileSync(path.join(PUBLIC_DIR, fileName), 'utf8');
