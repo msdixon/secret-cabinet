@@ -33,7 +33,7 @@ function buildMemberSection(member, artifact, notes, loadMemberFile) {
 // console line.
 function makeMetric(phase, { round, memberId, attempts, usage, latencyMs, skipped, error, reasoning } = {}) {
   return {
-    phase, // 'director' | 'speaker'
+    phase, // 'director' | 'speaker' | 'casting'
     round: round ?? null,
     memberId: memberId || null,
     attempts: attempts ?? 1,
@@ -129,7 +129,11 @@ Choose between ${minCount} and ${maxCount} of the present members as this round'
   return { system, userMessage };
 }
 
-async function callDirector({ client, model, system, conversationHistory, userMessage, presentIds, minCount, maxCount }) {
+// `tool` defaults to the per-round director's own schema; the pre-convene
+// casting call (#185) passes its own so the two questions stay legible in
+// the transcript of what was actually asked.
+async function callDirector({ client, model, system, conversationHistory, userMessage, presentIds, minCount, maxCount, tool }) {
+  const schema = tool || buildDirectorToolSchema(presentIds, minCount, maxCount);
   const start = Date.now();
   const messages = [...conversationHistory, { role: 'user', content: userMessage }];
   const response = await client.messages.create({
@@ -137,8 +141,8 @@ async function callDirector({ client, model, system, conversationHistory, userMe
     max_tokens: 500,
     system,
     messages,
-    tools: [buildDirectorToolSchema(presentIds, minCount, maxCount)],
-    tool_choice: { type: 'tool', name: 'select_speakers' },
+    tools: [schema],
+    tool_choice: { type: 'tool', name: schema.name },
   });
   const latencyMs = Date.now() - start;
   const block = response.content.find(b => b.type === 'tool_use');
@@ -154,38 +158,205 @@ function isValidSelection(speakers, presentIds, minCount, maxCount) {
     && speakers.every(id => presentIds.includes(id));
 }
 
-// Retry-once + deterministic-fallback wrapper around callDirector.
+// Retry-once + deterministic-fallback loop, shared by the per-round director
+// (selectSpeakers) and the pre-convene casting call (proposeCast, #185).
+// Both ask the same *shape* of question — pick between minCount and maxCount
+// ids out of a fixed enum, with a rationale — so both want the same failure
+// handling: one corrective retry, then a deterministic fallback, so no caller
+// is ever left without a usable answer because a model call went sideways.
+async function runDirectorSelection({
+  client, model, system, userMessage, conversationHistory = [],
+  candidateIds, minCount, maxCount, tool,
+  phase = 'director', round = null, onMetric,
+  invalidNote, fallbackIds, fallbackNote,
+}) {
+  const correction = invalidNote
+    || ` Your previous selection was invalid — it must be between ${minCount} and ${maxCount} present member ids, no duplicates, drawn only from: ${candidateIds.join(', ')}. Choose again.`;
+
+  let lastReasoning = null;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const { speakers, reasoning, usage, latencyMs } = await callDirector({
+        client, model, system, conversationHistory,
+        userMessage: userMessage + (attempt === 2 ? correction : ''),
+        presentIds: candidateIds, minCount, maxCount, tool,
+      });
+      lastReasoning = reasoning || lastReasoning;
+      onMetric?.(makeMetric(phase, { round, attempts: attempt, usage, latencyMs, reasoning }));
+      if (isValidSelection(speakers, candidateIds, minCount, maxCount)) {
+        return { speakers, reasoning, source: attempt === 1 ? 'director' : 'director-retry' };
+      }
+    } catch (err) {
+      onMetric?.(makeMetric(phase, { round, attempts: attempt, error: err.message }));
+    }
+  }
+
+  onMetric?.(makeMetric(phase, { round, attempts: 2, skipped: true, error: fallbackNote, reasoning: lastReasoning }));
+  return { speakers: fallbackIds, reasoning: lastReasoning, source: 'fallback' };
+}
+
 // presentMembers must already be in roster order — the fallback pick
 // (first `maxCount` present members) relies on that ordering.
 async function selectSpeakers({ client, model, lodgeContext, presentMembers, instruction, conversationHistory, minCount, maxCount, round, onMetric, roundSoFar }) {
   const presentIds = presentMembers.map(m => m.id);
   const { system, userMessage } = buildDirectorPrompt({ lodgeContext, presentMembers, instruction, minCount, maxCount, roundSoFar });
 
-  let lastReasoning = null;
-  for (let attempt = 1; attempt <= 2; attempt++) {
-    const correctiveNote = attempt === 2
-      ? ` Your previous selection was invalid — it must be between ${minCount} and ${maxCount} present member ids, no duplicates, drawn only from: ${presentIds.join(', ')}. Choose again.`
-      : '';
-    try {
-      const { speakers, reasoning, usage, latencyMs } = await callDirector({
-        client, model, system, conversationHistory,
-        userMessage: userMessage + correctiveNote,
-        presentIds, minCount, maxCount,
-      });
-      lastReasoning = reasoning || lastReasoning;
-      onMetric?.(makeMetric('director', { round, attempts: attempt, usage, latencyMs, reasoning }));
-      if (isValidSelection(speakers, presentIds, minCount, maxCount)) {
-        return { speakers, reasoning, source: attempt === 1 ? 'director' : 'director-retry' };
-      }
-    } catch (err) {
-      onMetric?.(makeMetric('director', { round, attempts: attempt, error: err.message }));
-    }
+  return runDirectorSelection({
+    client, model, system, userMessage, conversationHistory,
+    candidateIds: presentIds, minCount, maxCount,
+    tool: buildDirectorToolSchema(presentIds, minCount, maxCount),
+    phase: 'director', round, onMetric,
+    // Deterministic fallback: first `maxCount` present members, in roster order.
+    fallbackIds: presentMembers.slice(0, maxCount).map(m => m.id),
+    fallbackNote: 'director failed twice — used deterministic fallback',
+  });
+}
+
+// ── Casting the evening (#185) ──────────────────────────────────────────────
+//
+// A different question from selectSpeakers'. The director asks "of the people
+// already in the room, who speaks next"; casting asks "of the whole lodge,
+// who turns up at all tonight" — once, before the meeting, from the document
+// rather than from a round instruction.
+//
+// Deliberately *not* full auto-casting. The user's pinned regulars are fixed
+// input, not a suggestion the model may drop: they are handed over as already
+// coming, and the model only fills the rest of the room around them. Hand-
+// casting from the full grid stays available either way — this proposes, it
+// never applies.
+
+// Enough of the document to cast from without paying for a whole book. The
+// opening of a text is where its subject announces itself; casting doesn't
+// need the argument, only the territory.
+const CASTING_DOCUMENT_LIMIT = 3000;
+
+// Same 4–6 the roster badge has always recommended (larger casts thin out
+// individual voices — see updateMemberCount in app.js).
+const CASTING_TARGET_MIN = 4;
+const CASTING_TARGET_MAX = 6;
+
+function buildCastingToolSchema(candidateIds, minCount, maxCount) {
+  return {
+    name: 'cast_the_evening',
+    description: 'Choose which further members of the lodge this document would draw to the room tonight.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        speakers: {
+          type: 'array',
+          items: { type: 'string', enum: candidateIds },
+          minItems: minCount,
+          maxItems: maxCount,
+          uniqueItems: true,
+          description: `Member ids, in order of how strongly the document draws them, from those not already coming: ${candidateIds.join(', ')}.`,
+        },
+        reasoning: {
+          // Unlike the per-round director's rationale, this one is shown —
+          // it is the proposal's whole case for itself.
+          type: 'string',
+          description: 'One or two sentences, in the register of the lodge, on what in this document draws these people. Shown to the user beside the proposed cast.',
+        },
+      },
+      required: ['speakers', 'reasoning'],
+    },
+  };
+}
+
+function buildCastingPrompt({ lodgeContext, candidates, regulars, documentText, minCount, maxCount }) {
+  const candidateLines = candidates
+    .map(m => `- ${m.id} — ${m.name}${m.brief ? `: ${m.brief}` : ''}`)
+    .join('\n');
+
+  const regularsBlock = regulars.length
+    ? `ALREADY COMING TONIGHT — the user's regulars. They are always drawn to this room. They are not yours to choose, and not yours to drop:\n${regulars.map(m => `- ${m.name}`).join('\n')}`
+    : 'No one is fixed for tonight. The whole room is yours to propose.';
+
+  const document = documentText.trim().slice(0, CASTING_DOCUMENT_LIMIT);
+
+  const system = `${lodgeContext}
+
+---
+
+## YOUR ROLE RIGHT NOW
+
+You are not writing dialogue, and you are not choosing who speaks within a round. You are saying who the evening's document draws to the room at all — which members of the lodge would find their way in tonight, given what is about to be read aloud.
+
+${regularsBlock}
+
+THE REST OF THE LODGE — anyone here may be drawn tonight:
+${candidateLines}
+
+THE DOCUMENT TO BE READ ALOUD TONIGHT:
+${document}
+
+Choose between ${minCount} and ${maxCount} further members, ordered by how strongly the document draws them. Cast for friction as much as for affinity — a room where everyone agrees has nothing to say. Consider who the document's subject belongs to, who would dispute it, and who would hear something in it nobody else would. Do not choose for coverage, seniority, or roster order.${regulars.length ? ' The regulars above are already in the room; choose people who make something of what those regulars will say, not duplicates of them.' : ''}`;
+
+  const userMessage = 'Say who this document draws tonight.';
+
+  return { system, userMessage };
+}
+
+// Returns { cast, additions, regulars, reasoning, source }. `cast` is the
+// full proposed room — regulars first, then the model's additions in the
+// order it ranked them. `source` is 'director' | 'director-retry' |
+// 'fallback' | 'regulars' (the last meaning no call was made at all).
+//
+// roster entries are { id, name, brief? }; `brief` is a one-line sketch used
+// only for casting judgment. Must be in roster order — the deterministic
+// fallback relies on it, exactly as selectSpeakers' does.
+async function proposeCast({
+  client, model, lodgeContext, roster, regularIds = [], documentText,
+  targetMin = CASTING_TARGET_MIN, targetMax = CASTING_TARGET_MAX, onMetric,
+}) {
+  const rosterIds = roster.map(m => m.id);
+  const regulars = roster.filter(m => regularIds.includes(m.id));
+  const candidates = roster.filter(m => !regularIds.includes(m.id));
+
+  // The regulars already fill (or overfill) the evening, or there is simply
+  // nobody left to add. Either way the answer is known without a call —
+  // #185's "one extra cheap call per session" is a ceiling, not a quota.
+  if (regulars.length >= targetMax || candidates.length === 0) {
+    return {
+      cast: regulars.map(m => m.id),
+      additions: [],
+      regulars: regulars.map(m => m.id),
+      reasoning: null,
+      source: 'regulars',
+    };
   }
 
-  // Deterministic fallback: first `maxCount` present members, in roster order.
-  const speakers = presentMembers.slice(0, maxCount).map(m => m.id);
-  onMetric?.(makeMetric('director', { round, attempts: 2, skipped: true, error: 'director failed twice — used deterministic fallback', reasoning: lastReasoning }));
-  return { speakers, reasoning: lastReasoning, source: 'fallback' };
+  const maxCount = Math.min(targetMax - regulars.length, candidates.length);
+  const minCount = Math.min(Math.max(targetMin - regulars.length, 1), maxCount);
+
+  const candidateIds = candidates.map(m => m.id);
+  const { system, userMessage } = buildCastingPrompt({
+    lodgeContext, candidates, regulars, documentText, minCount, maxCount,
+  });
+
+  const { speakers, reasoning, source } = await runDirectorSelection({
+    client, model, system, userMessage,
+    candidateIds, minCount, maxCount,
+    tool: buildCastingToolSchema(candidateIds, minCount, maxCount),
+    phase: 'casting', onMetric,
+    invalidNote: ` Your previous selection was invalid — it must be between ${minCount} and ${maxCount} member ids, no duplicates, drawn only from: ${candidateIds.join(', ')}. Choose again.`,
+    // Deterministic fallback: the first `minCount` candidates in roster order.
+    // Roster order is roughly the order the lodge was founded in, which is a
+    // defensible room to open with when the model can't be reached at all.
+    fallbackIds: candidateIds.slice(0, minCount),
+    fallbackNote: 'casting call failed twice — used deterministic fallback',
+  });
+
+  // rosterIds guards against a fallback list going stale mid-flight; the
+  // model path is already enum-constrained and validated upstream.
+  const additions = speakers.filter(id => rosterIds.includes(id));
+
+  return {
+    cast: [...regulars.map(m => m.id), ...additions],
+    additions,
+    regulars: regulars.map(m => m.id),
+    reasoning: reasoning || null,
+    source,
+  };
 }
 
 // ── Local hybrid speaker pacing (#164) ─────────────────────────────────────
@@ -595,7 +766,14 @@ module.exports = {
   buildDirectorPrompt,
   callDirector,
   isValidSelection,
+  runDirectorSelection,
   selectSpeakers,
+  CASTING_DOCUMENT_LIMIT,
+  CASTING_TARGET_MIN,
+  CASTING_TARGET_MAX,
+  buildCastingToolSchema,
+  buildCastingPrompt,
+  proposeCast,
   lengthTendencyOf,
   pickNextSpeaker,
   isPoolExhausted,
