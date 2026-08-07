@@ -21,6 +21,11 @@ const {
   buildDispositionSystemPrompt,
   buildDispositionUserMessage,
   callDispositionUpdate,
+  VOICE_EXEMPLAR_WORD_BUDGET,
+  trimToWordBudget,
+  buildVoiceExemplarSection,
+  buildSpeakerSystemPrompt,
+  makeMetric,
 } = require('../pipeline.js');
 
 // pickNextSpeaker is weighted-random. Rather than seed a PRNG, sweep rng
@@ -303,5 +308,154 @@ test('callDispositionUpdate', async t => {
     };
     const { text } = await callDispositionUpdate({ client: fakeClient, model: 'test-model', system: 'sys', userMessage: 'msg' });
     assert.equal(text, '');
+  });
+});
+
+// #187 — the voice-register exemplar. Two things are load-bearing and both
+// are pinned here rather than trusted to prompt compliance: the word budget
+// (this text is paid for in input tokens on every speaker beat) and the
+// graceful-degradation path (12 of 33 members have no authored library
+// entry, and their prompt must come out byte-identical to the pre-#187 one).
+
+const words = n => Array.from({ length: n }, (_, i) => `w${i}`).join(' ');
+
+test('trimToWordBudget', async t => {
+  await t.test('returns text under budget untouched, with no elision marker', () => {
+    const text = 'Energy is Eternal Delight.';
+    assert.equal(trimToWordBudget(text, 300), text);
+  });
+
+  await t.test('handles empty, whitespace-only, and missing input', () => {
+    assert.equal(trimToWordBudget('', 300), '');
+    assert.equal(trimToWordBudget('   \n\n  ', 300), '');
+    assert.equal(trimToWordBudget(undefined, 300), '');
+    assert.equal(trimToWordBudget(null, 300), '');
+  });
+
+  await t.test('keeps whole paragraphs and marks the elision', () => {
+    const text = `${words(10)}\n\n${words(10)}\n\n${words(10)}`;
+    const trimmed = trimToWordBudget(text, 25);
+    assert.equal(trimmed, `${words(10)}\n\n${words(10)}\n\n[…]`);
+  });
+
+  await t.test('never exceeds the budget in words (excluding the marker)', () => {
+    const text = `${words(40)}\n\n${words(40)}\n\n${words(40)}`;
+    const trimmed = trimToWordBudget(text, 100).replace('[…]', '');
+    assert.ok(countWords(trimmed) <= 100, `${countWords(trimmed)} words > 100`);
+  });
+
+  await t.test('falls back to whole sentences when the first paragraph alone overruns', () => {
+    const text = 'One two three. Four five six. Seven eight nine.';
+    assert.equal(trimToWordBudget(text, 7), 'One two three. Four five six. […]');
+  });
+
+  await t.test('hard-cuts a single sentence longer than the whole budget', () => {
+    // Verse without terminal punctuation reaches this path too.
+    const trimmed = trimToWordBudget(words(50), 10);
+    assert.equal(trimmed, `${words(10)} […]`);
+  });
+});
+
+test('buildVoiceExemplarSection', async t => {
+  const exemplar = {
+    id: 'blake-voice-of-the-devil-1790',
+    title: 'The Voice of the Devil',
+    source: 'The Marriage of Heaven and Hell',
+    date: '1790',
+    translated: false,
+    text: 'Energy is the only life and is from the Body.',
+  };
+
+  await t.test('returns an empty string for a member with no entry', () => {
+    assert.equal(buildVoiceExemplarSection(null), '');
+    assert.equal(buildVoiceExemplarSection(undefined), '');
+    assert.equal(buildVoiceExemplarSection({ title: 'Untitled', text: '' }), '');
+    assert.equal(buildVoiceExemplarSection({ title: 'Untitled', text: '   ' }), '');
+  });
+
+  await t.test('carries the excerpt and its provenance', () => {
+    const section = buildVoiceExemplarSection({ ...exemplar, source: 'Complete Writings' });
+    assert.match(section, /Energy is the only life and is from the Body\./);
+    assert.match(section, /The Voice of the Devil — Complete Writings — 1790/);
+  });
+
+  await t.test('does not print the source twice when the title already names it', () => {
+    // True of 11 of the 21 real entries — e.g. title "The Voice of the Devil
+    // — The Marriage of Heaven and Hell" over source "The Marriage of Heaven
+    // and Hell".
+    const section = buildVoiceExemplarSection({
+      ...exemplar,
+      title: 'The Voice of the Devil — The Marriage of Heaven and Hell',
+    });
+    assert.match(section, /The Voice of the Devil — The Marriage of Heaven and Hell — 1790/);
+    assert.equal(section.match(/The Marriage of Heaven and Hell/g).length, 1);
+  });
+
+  await t.test('frames it as register, not subject matter', () => {
+    const section = buildVoiceExemplarSection(exemplar);
+    assert.match(section, /govern \*how\* you speak tonight, never \*what\*/);
+    assert.match(section, /Do not quote it, cite it, allude to it/);
+  });
+
+  await t.test('adds the translator caveat only when the entry is a translation', () => {
+    assert.doesNotMatch(buildVoiceExemplarSection(exemplar), /translator's/);
+    assert.match(buildVoiceExemplarSection({ ...exemplar, translated: true }), /The English here is a translator's, not yours/);
+  });
+
+  await t.test('trims an over-budget excerpt to the shared budget', () => {
+    const section = buildVoiceExemplarSection({ ...exemplar, text: words(VOICE_EXEMPLAR_WORD_BUDGET + 200) });
+    assert.match(section, /\[…\]/);
+    assert.ok(countWords(section) < VOICE_EXEMPLAR_WORD_BUDGET + 200);
+  });
+});
+
+test('buildSpeakerSystemPrompt — voice exemplar wiring', async t => {
+  const base = {
+    lodgeContext: 'LODGE CONTEXT',
+    member: { id: 'william-blake', name: 'Blake', file: 'william-blake.md' },
+    artifact: null,
+    notes: {},
+    loadMemberFile: () => '# BLAKE\n\n## HOW YOU SPEAK\n\nAphoristic.',
+  };
+  const exemplar = {
+    id: 'blake-voice-of-the-devil-1790',
+    title: 'The Voice of the Devil',
+    source: 'The Marriage of Heaven and Hell',
+    date: '1790',
+    translated: false,
+    text: 'Energy is Eternal Delight.',
+  };
+
+  await t.test('a member without an entry gets the exact pre-#187 prompt', () => {
+    const withoutArg = buildSpeakerSystemPrompt(base);
+    assert.equal(buildSpeakerSystemPrompt({ ...base, voiceExemplar: null }), withoutArg);
+    assert.doesNotMatch(withoutArg, /HOW YOU ACTUALLY WRITE/);
+  });
+
+  await t.test('a member with an entry gets the exemplar section', () => {
+    const prompt = buildSpeakerSystemPrompt({ ...base, voiceExemplar: exemplar });
+    assert.match(prompt, /HOW YOU ACTUALLY WRITE — A PAGE IN YOUR OWN HAND/);
+    assert.match(prompt, /Energy is Eternal Delight\./);
+  });
+
+  await t.test('the exemplar sits after the character file and before tonight\'s disposition', () => {
+    const prompt = buildSpeakerSystemPrompt({
+      ...base, voiceExemplar: exemplar, disposition: 'Irritated by Crowley.',
+    });
+    assert.ok(prompt.indexOf('HOW YOU SPEAK') < prompt.indexOf('HOW YOU ACTUALLY WRITE'));
+    assert.ok(prompt.indexOf('HOW YOU ACTUALLY WRITE') < prompt.indexOf('YOUR PRIVATE STATE TONIGHT'));
+    assert.ok(prompt.indexOf('YOUR PRIVATE STATE TONIGHT') < prompt.indexOf('YOUR TURN RIGHT NOW'));
+  });
+});
+
+test('makeMetric — voiceExemplar attribution', async t => {
+  await t.test('records the injected entry id on a speaker metric', () => {
+    const metric = makeMetric('speaker', { round: 0, memberId: 'william-blake', voiceExemplar: 'blake-voice-of-the-devil-1790' });
+    assert.equal(metric.voiceExemplar, 'blake-voice-of-the-devil-1790');
+  });
+
+  await t.test('is null when no exemplar was injected and on non-speaker phases', () => {
+    assert.equal(makeMetric('speaker', { memberId: 'scholem' }).voiceExemplar, null);
+    assert.equal(makeMetric('director', { round: 0 }).voiceExemplar, null);
   });
 });
