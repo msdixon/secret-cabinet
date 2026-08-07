@@ -27,7 +27,8 @@ const PUBLIC_DIR = path.join(__dirname, '..', '..', 'public');
  * `beforeEval(window)` runs after the window exists but before the module is
  * loaded into it — the only place to seed browser state a module reads at
  * load time rather than at call time (casting.js reads localStorage for the
- * user's regulars there, the way a real page would).
+ * user's regulars there, the way a real page would; witness.js's stage view
+ * switcher does the same for its persisted text/room preference).
  *
  * Returns { dom, window, document, module, globalsAdded, cleanup }:
  *   module        — the single window global the file defined (window.Witness, ...)

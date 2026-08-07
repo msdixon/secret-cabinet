@@ -231,10 +231,21 @@
       <div class="stage-pane" id="stage-pane">
         <div class="witness-controls">
           <span class="witness-label">◎ The Stage</span>
+          <!-- #202: text presentation ⇄ room, two renderings of the same
+               conversation. Lives on the stage, not a sibling tab next to
+               the record -- see DESIGN-184-STAGE-DEFAULT.md's "Scene
+               placement" section for why. -->
+          <div class="stage-view-switch" id="stage-view-switch">
+            <button class="stage-view-btn active" id="stage-view-text-btn" onclick="window.Witness.setStageView('text')">Text</button>
+            <button class="stage-view-btn" id="stage-view-room-btn" onclick="window.Witness.setStageView('room')">Room</button>
+          </div>
           <span class="witness-hint" id="witness-hint"></span>
           <button class="witness-exit-btn" id="witness-exit-btn" onclick="window.Witness.exitClicked()" style="display:none;">✕ Exit</button>
         </div>
         <div class="witness-stage" id="witness-stage" onclick="window.Witness.advance()"></div>
+        <div class="witness-room" id="witness-room">
+          <canvas id="scene-canvas"></canvas>
+        </div>
         <div class="witness-progress" id="witness-progress" style="display:none;"></div>
       </div>
 
@@ -303,11 +314,6 @@
       <div class="after-row">
         <span class="source-tag" id="export-status"></span>
       </div>
-    </div>
-
-    <div class="scene-panel" id="scene-panel">
-      <div class="panel-label">The Room</div>
-      <canvas id="scene-canvas"></canvas>
     </div>
 
     <div class="status-bar" id="status-bar">The room waits.</div>

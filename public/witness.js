@@ -45,6 +45,7 @@ window.Witness = (function () {
   // own argument, in case a caller passes a fresher snapshot.
   function configure(injectedDeps) {
     deps = injectedDeps;
+    applyStageView();
   }
 
   // ── Shared speaker-side tracking ─────────────────────────────────────────────
@@ -66,6 +67,32 @@ window.Witness = (function () {
   function memberGlyph(memberId) {
     const m = memberId && deps.members.find(mm => mm.id === memberId);
     return m?.glyph || '';
+  }
+
+  // ── View switcher (#202): text presentation ⇄ room ──────────────────────────
+  // The stage container renders either the witness-stage bubbles or the 3D
+  // room (window.LodgeScene) -- two renderings of the same conversation,
+  // chosen independently of which convene is live and never shown together
+  // (same "one pane visible at a time" reasoning as collapseStage/reopenStage
+  // above, just for the stage's own two sub-views). Persisted like the app's
+  // other small UI prefs (sc-ulysses-group, sc-scene-disabled).
+  let stageView = localStorage.getItem('sc-stage-view') === 'room' ? 'room' : 'text';
+
+  // Applies stageView to the DOM. Called from configure() (after the DOM
+  // this module touches definitely exists) rather than at module-load time --
+  // module-convention.test.js loads this file against an empty <body> and
+  // asserts nothing at load time reaches for it.
+  function applyStageView() {
+    document.getElementById('stage-pane')?.classList.toggle('view-room', stageView === 'room');
+    document.getElementById('stage-view-text-btn')?.classList.toggle('active', stageView === 'text');
+    document.getElementById('stage-view-room-btn')?.classList.toggle('active', stageView === 'room');
+  }
+
+  function setStageView(view) {
+    if (view !== 'text' && view !== 'room') return;
+    stageView = view;
+    localStorage.setItem('sc-stage-view', view);
+    applyStageView();
   }
 
   // ── Stage chrome: hint text, exit button, collapse/reopen ──────────────────
@@ -564,6 +591,7 @@ window.Witness = (function () {
 
   return {
     configure,
+    setStageView,
     liveReset,
     resetLiveStage,
     liveRoundHeader,
