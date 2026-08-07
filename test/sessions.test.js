@@ -51,7 +51,7 @@ function makeDeps(document, calls) {
   return {
     getCore: () => ({ MEMBERS }),
     setStatus: record('setStatus'),
-    forceWitnessLiveOff: record('forceWitnessLiveOff'),
+    resetLiveStage: record('resetLiveStage'),
     resetTranscriptCounters: record('resetTranscriptCounters'),
     setCurrentSessionId: record('setCurrentSessionId'),
     setSessionDate: record('setSessionDate'),
@@ -151,18 +151,19 @@ test('restoreSession', async t => {
     assert.deepEqual([...argFor(calls, 'setActiveMembers')], ['crowley', 'blavatsky']);
   });
 
-  await t.test('forces Witness live mode off before rendering stored history', async t2 => {
-    // A restored session is static, read-only history — it must never land in
-    // the live stage, and the stage must be cleared before the entry counter
-    // resets, or a stale node can collide on entryId with a restored one.
+  await t.test('resets the stage before rendering stored history', async t2 => {
+    // A restored session is static, read-only history — the stage (#184's
+    // performance pane) must not sit next to it showing something stale, and
+    // it must be cleared before the entry counter resets, or a stale node
+    // can collide on entryId with a restored one.
     const { calls, module: Sessions } = boot(t2, { fetchImpl: () => jsonOk(SESSION) });
     await Sessions.restoreSession('sess-1');
 
     const order = calls.map(c => c[0]);
-    assert.ok(order.includes('forceWitnessLiveOff'), 'live mode must be forced off');
+    assert.ok(order.includes('resetLiveStage'), 'the stage must be reset');
     assert.ok(
-      order.indexOf('forceWitnessLiveOff') < order.indexOf('resetTranscriptCounters'),
-      'live mode goes off before the counters reset',
+      order.indexOf('resetLiveStage') < order.indexOf('resetTranscriptCounters'),
+      'the stage resets before the counters reset',
     );
     assert.ok(
       order.indexOf('resetTranscriptCounters') < order.indexOf('parseAndRenderTranscript'),

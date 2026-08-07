@@ -327,14 +327,13 @@ window.Sessions = (function () {
       if (!res.ok) throw new Error('Not found');
       const session = await res.json();
 
-      // A restored session is static, read-only history -- never render it into
-      // the live Witness stage even if that toggle happened to be left on. Also
-      // clear the stage itself: resetTranscriptCounters() below resets
-      // _entryCounter, so a stale node left over from a *previous* session
-      // could collide on entryId with a freshly restored one, and the global
-      // .transcript-entry queries annotation/export logic runs (saveAnnotation,
-      // buildAnnotatedTranscript) would pick it up.
-      deps.forceWitnessLiveOff();
+      // #184: stage and record are permanent panes, but the stage's content
+      // still belongs to whichever session was live or being replayed before
+      // this one -- clear it so a restored (read-only) session doesn't sit
+      // next to a stale performance from something else. Left collapsed/open
+      // as the user had it; restoring is a record operation, not an
+      // invitation back into the stage.
+      deps.resetLiveStage();
 
       // Reset UI state
       document.getElementById('transcript-empty').style.display = 'none';

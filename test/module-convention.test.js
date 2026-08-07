@@ -22,7 +22,7 @@ const { loadPublicModule, PUBLIC_DIR } = require('./helpers/dom.js');
 // module needs another to be present just to define itself.
 const MODULES = [
   { file: 'scene/scene.js', global: 'LodgeScene', api: ['init', 'updateSeats', 'setSpeaking'] },
-  { file: 'witness.js', global: 'Witness', api: ['getLiveStageEl', 'toggleLive', 'forceLiveOff', 'exitClicked', 'advance', 'start'] },
+  { file: 'witness.js', global: 'Witness', api: ['configure', 'liveReset', 'resetLiveStage', 'liveRoundHeader', 'liveSpeech', 'collapseStage', 'reopenStage', 'exitClicked', 'advance', 'start'] },
   { file: 'export.js', global: 'Export', api: ['configure', 'buildAnnotatedTranscript', 'exportMd'] },
   { file: 'sessions.js', global: 'Sessions', api: ['configure', 'restoreSession', 'collectSessionNotes'] },
 ];
