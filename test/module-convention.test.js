@@ -18,13 +18,14 @@ const path = require('node:path');
 const { loadPublicModule, PUBLIC_DIR } = require('./helpers/dom.js');
 
 // Load order matters in index.html (scene → witness → export → sessions →
-// app); each is loaded in isolation here, which is the stronger claim: no
-// module needs another to be present just to define itself.
+// casting → app); each is loaded in isolation here, which is the stronger
+// claim: no module needs another to be present just to define itself.
 const MODULES = [
   { file: 'scene/scene.js', global: 'LodgeScene', api: ['init', 'updateSeats', 'setSpeaking'] },
   { file: 'witness.js', global: 'Witness', api: ['configure', 'liveReset', 'resetLiveStage', 'liveRoundHeader', 'liveSpeech', 'collapseStage', 'reopenStage', 'exitClicked', 'advance', 'start'] },
   { file: 'export.js', global: 'Export', api: ['configure', 'buildAnnotatedTranscript', 'exportMd'] },
   { file: 'sessions.js', global: 'Sessions', api: ['configure', 'restoreSession', 'collectSessionNotes'] },
+  { file: 'casting.js', global: 'Casting', api: ['configure', 'getRegulars', 'isRegular', 'toggleRegular', 'seatRegulars', 'noteHandCast', 'requestProposal', 'acceptProposal', 'dismissProposal', 'render'] },
 ];
 
 for (const { file, global: globalName, api } of MODULES) {

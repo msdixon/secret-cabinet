@@ -16,7 +16,9 @@ async function fetchMembers() {
 
 const ROUND_LABELS = ['First Movement', 'The Room Responds', 'Final Embers'];
 
-// No members selected by default — user assembles the room each session.
+// Seeded at startup from the user's pinned regulars (#185, window.Casting);
+// empty until someone pins their first, and hand-castable from the grid
+// either way.
 let activeMembers = new Set();
 let currentRound = 0;
 let selectedRoundCount = 3;       // live round-count selector value
@@ -46,22 +48,44 @@ function renderMembers() {
   // No core/guest distinction — one sorted, filterable roster. An already-active
   // member stays visible even when the filter no longer matches them, so casting
   // someone doesn't make them disappear.
+  //
+  // Regulars sort to the front (#185): the people who are always here should
+  // read as the room's standing shape, not as three names scattered through an
+  // alphabet.
   const filter = (document.getElementById('member-filter')?.value || '').trim().toLowerCase();
-  const roster = [...MEMBERS].sort((a, b) => a.name.localeCompare(b.name));
+  const roster = [...MEMBERS].sort((a, b) => {
+    const ra = window.Casting.isRegular(a.id), rb = window.Casting.isRegular(b.id);
+    if (ra !== rb) return ra ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  });
   const grid = document.getElementById('members-grid');
   let visibleCount = 0;
 
   roster.forEach(m => {
     const isActive = activeMembers.has(m.id);
+    const isRegular = window.Casting.isRegular(m.id);
     if (filter && !isActive && !m.name.toLowerCase().includes(filter)) return;
     visibleCount++;
     const el = document.createElement('div');
-    el.className = 'member-token' + (isActive ? ' active' : '');
-    el.innerHTML = `<img class="member-portrait" src="/portraits/${m.id}.png" alt="" loading="lazy" onerror="portraitFallback(this,'dot')"><span class="member-name">${m.name}</span>`;
+    el.className = 'member-token' + (isActive ? ' active' : '') + (isRegular ? ' regular' : '');
+    // Roster names are user-authored (+ Invite to the Lodge), and the pin puts
+    // one inside two attributes — escape rather than trust it there.
+    const safeName = escapeHTML(m.name);
+    el.innerHTML = `<img class="member-portrait" src="/portraits/${m.id}.png" alt="" loading="lazy" onerror="portraitFallback(this,'dot')"><span class="member-name">${m.name}</span>`
+      + `<button type="button" class="member-pin${isRegular ? ' pinned' : ''}" aria-pressed="${isRegular}"`
+      + ` title="${isRegular ? `${safeName} is a regular — always drawn to the room. Click to release.` : `Keep ${safeName} as a regular — always drawn to the room.`}"`
+      + ` aria-label="${isRegular ? 'Release' : 'Keep'} ${safeName} as a regular">✦</button>`;
     el.onclick = () => {
       if (isActive) activeMembers.delete(m.id);
       else activeMembers.add(m.id);
+      window.Casting.noteHandCast();
       renderMembers();
+    };
+    // The pin sits inside the token but answers a different question — who is
+    // always here, not who is here tonight — so it must not also toggle presence.
+    el.querySelector('.member-pin').onclick = (e) => {
+      e.stopPropagation();
+      window.Casting.toggleRegular(m.id);
     };
     grid.appendChild(el);
   });
@@ -71,6 +95,7 @@ function renderMembers() {
   if (filter) document.getElementById('members-empty-hint-term').textContent = filter;
 
   updateMemberCount();
+  window.Casting.render();
   populateArtifactSelect();
   populatePlayAsMemberSelect();
   if (activeMembers.size > 0) window.Sessions.buildDossier([...activeMembers]);
@@ -1255,6 +1280,30 @@ function initSceneLayer() {
   }
 }
 
+// ── Casting triggers (#185) ───────────────────────────────────────────────────
+
+// "On document paste" taken literally, rather than debouncing every keystroke:
+// the proposal fires on the paste event itself, on a committed edit (change =
+// blur, for the typed case), and on the hook export.js calls when a Day One /
+// library / file document finishes loading. window.Casting does the rest of
+// the gating — it won't repeat for the same document, and won't fire at all
+// once the user has hand-cast.
+function autoProposeCast() {
+  // Clicking Convene blurs the textarea, which fires `change`. Casting a room
+  // that is already assembling is pure waste — and the one call this feature
+  // is allowed per session shouldn't be spent on it.
+  if (document.getElementById('convene-btn')?.disabled) return;
+  window.Casting.requestProposal({ auto: true });
+}
+
+function initCastingTriggers() {
+  const area = document.getElementById('paste-area');
+  if (!area) return;
+  // Paste fires before the textarea's value updates; defer a tick.
+  area.addEventListener('paste', () => setTimeout(autoProposeCast, 0));
+  area.addEventListener('change', autoProposeCast);
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 // Live core-state accessors handed to window.Export (#142) -- getCore()
@@ -1274,6 +1323,10 @@ function exportDeps() {
     },
     setCurrentSourceSessionId: (id) => { currentSourceSessionId = id; },
     setStatus,
+    // #185 — the non-paste document paths (Day One, library, file import) land
+    // asynchronously inside export.js, so there is no DOM event app.js could
+    // listen for. This is the notification that a document is now readable.
+    onDocumentReady: autoProposeCast,
   };
 }
 window.Export.configure(exportDeps());
@@ -1321,11 +1374,30 @@ function sessionsDeps() {
 }
 window.Sessions.configure(sessionsDeps());
 window.Witness.configure(witnessDeps());
+
+// window.Casting (#185) owns regulars and the pre-convene proposal; app.js
+// keeps ownership of activeMembers, so the deps bag hands over the live Set
+// itself rather than a snapshot — casting seats and unseats people, and every
+// such change is followed by renderMembers() here.
+function castingDeps() {
+  return {
+    getCore: () => ({ activeMembers, MEMBERS }),
+    getEntry: () => window.Export.getEntry(),
+    renderMembers,
+    setStatus,
+  };
+}
+window.Casting.configure(castingDeps());
+initCastingTriggers();
+
 initRecordScroll();
 
 window.Export.applyEnvConfig();
 initSceneLayer();
-fetchMembers().then(() => renderMembers());
+fetchMembers().then(() => {
+  window.Casting.seatRegulars();
+  renderMembers();
+});
 window.Export.updateExportJournalLabel();
 handlePlayAsModeChange();
 window.Export.restoreSavedSettings();

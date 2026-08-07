@@ -21,6 +21,15 @@ const {
   buildDispositionSystemPrompt,
   buildDispositionUserMessage,
   callDispositionUpdate,
+  CASTING_DOCUMENT_LIMIT,
+  buildCastingToolSchema,
+  buildCastingPrompt,
+  proposeCast,
+  VOICE_EXEMPLAR_WORD_BUDGET,
+  trimToWordBudget,
+  buildVoiceExemplarSection,
+  buildSpeakerSystemPrompt,
+  makeMetric,
 } = require('../pipeline.js');
 
 // pickNextSpeaker is weighted-random. Rather than seed a PRNG, sweep rng
@@ -303,5 +312,345 @@ test('callDispositionUpdate', async t => {
     };
     const { text } = await callDispositionUpdate({ client: fakeClient, model: 'test-model', system: 'sys', userMessage: 'msg' });
     assert.equal(text, '');
+  });
+});
+
+// #187 — the voice-register exemplar. Two things are load-bearing and both
+// are pinned here rather than trusted to prompt compliance: the word budget
+// (this text is paid for in input tokens on every speaker beat) and the
+// graceful-degradation path (12 of 33 members have no authored library
+// entry, and their prompt must come out byte-identical to the pre-#187 one).
+
+const words = n => Array.from({ length: n }, (_, i) => `w${i}`).join(' ');
+
+test('trimToWordBudget', async t => {
+  await t.test('returns text under budget untouched, with no elision marker', () => {
+    const text = 'Energy is Eternal Delight.';
+    assert.equal(trimToWordBudget(text, 300), text);
+  });
+
+  await t.test('handles empty, whitespace-only, and missing input', () => {
+    assert.equal(trimToWordBudget('', 300), '');
+    assert.equal(trimToWordBudget('   \n\n  ', 300), '');
+    assert.equal(trimToWordBudget(undefined, 300), '');
+    assert.equal(trimToWordBudget(null, 300), '');
+  });
+
+  await t.test('keeps whole paragraphs and marks the elision', () => {
+    const text = `${words(10)}\n\n${words(10)}\n\n${words(10)}`;
+    const trimmed = trimToWordBudget(text, 25);
+    assert.equal(trimmed, `${words(10)}\n\n${words(10)}\n\n[…]`);
+  });
+
+  await t.test('never exceeds the budget in words (excluding the marker)', () => {
+    const text = `${words(40)}\n\n${words(40)}\n\n${words(40)}`;
+    const trimmed = trimToWordBudget(text, 100).replace('[…]', '');
+    assert.ok(countWords(trimmed) <= 100, `${countWords(trimmed)} words > 100`);
+  });
+
+  await t.test('falls back to whole sentences when the first paragraph alone overruns', () => {
+    const text = 'One two three. Four five six. Seven eight nine.';
+    assert.equal(trimToWordBudget(text, 7), 'One two three. Four five six. […]');
+  });
+
+  await t.test('hard-cuts a single sentence longer than the whole budget', () => {
+    // Verse without terminal punctuation reaches this path too.
+    const trimmed = trimToWordBudget(words(50), 10);
+    assert.equal(trimmed, `${words(10)} […]`);
+  });
+});
+
+test('buildVoiceExemplarSection', async t => {
+  const exemplar = {
+    id: 'blake-voice-of-the-devil-1790',
+    title: 'The Voice of the Devil',
+    source: 'The Marriage of Heaven and Hell',
+    date: '1790',
+    translated: false,
+    text: 'Energy is the only life and is from the Body.',
+  };
+
+  await t.test('returns an empty string for a member with no entry', () => {
+    assert.equal(buildVoiceExemplarSection(null), '');
+    assert.equal(buildVoiceExemplarSection(undefined), '');
+    assert.equal(buildVoiceExemplarSection({ title: 'Untitled', text: '' }), '');
+    assert.equal(buildVoiceExemplarSection({ title: 'Untitled', text: '   ' }), '');
+  });
+
+  await t.test('carries the excerpt and its provenance', () => {
+    const section = buildVoiceExemplarSection({ ...exemplar, source: 'Complete Writings' });
+    assert.match(section, /Energy is the only life and is from the Body\./);
+    assert.match(section, /The Voice of the Devil — Complete Writings — 1790/);
+  });
+
+  await t.test('does not print the source twice when the title already names it', () => {
+    // True of 11 of the 21 real entries — e.g. title "The Voice of the Devil
+    // — The Marriage of Heaven and Hell" over source "The Marriage of Heaven
+    // and Hell".
+    const section = buildVoiceExemplarSection({
+      ...exemplar,
+      title: 'The Voice of the Devil — The Marriage of Heaven and Hell',
+    });
+    assert.match(section, /The Voice of the Devil — The Marriage of Heaven and Hell — 1790/);
+    assert.equal(section.match(/The Marriage of Heaven and Hell/g).length, 1);
+  });
+
+  await t.test('frames it as register, not subject matter', () => {
+    const section = buildVoiceExemplarSection(exemplar);
+    assert.match(section, /govern \*how\* you speak tonight, never \*what\*/);
+    assert.match(section, /Do not quote it, cite it, allude to it/);
+  });
+
+  await t.test('adds the translator caveat only when the entry is a translation', () => {
+    assert.doesNotMatch(buildVoiceExemplarSection(exemplar), /translator's/);
+    assert.match(buildVoiceExemplarSection({ ...exemplar, translated: true }), /The English here is a translator's, not yours/);
+  });
+
+  await t.test('trims an over-budget excerpt to the shared budget', () => {
+    const section = buildVoiceExemplarSection({ ...exemplar, text: words(VOICE_EXEMPLAR_WORD_BUDGET + 200) });
+    assert.match(section, /\[…\]/);
+    assert.ok(countWords(section) < VOICE_EXEMPLAR_WORD_BUDGET + 200);
+  });
+});
+
+test('buildSpeakerSystemPrompt — voice exemplar wiring', async t => {
+  const base = {
+    lodgeContext: 'LODGE CONTEXT',
+    member: { id: 'william-blake', name: 'Blake', file: 'william-blake.md' },
+    artifact: null,
+    notes: {},
+    loadMemberFile: () => '# BLAKE\n\n## HOW YOU SPEAK\n\nAphoristic.',
+  };
+  const exemplar = {
+    id: 'blake-voice-of-the-devil-1790',
+    title: 'The Voice of the Devil',
+    source: 'The Marriage of Heaven and Hell',
+    date: '1790',
+    translated: false,
+    text: 'Energy is Eternal Delight.',
+  };
+
+  await t.test('a member without an entry gets the exact pre-#187 prompt', () => {
+    const withoutArg = buildSpeakerSystemPrompt(base);
+    assert.equal(buildSpeakerSystemPrompt({ ...base, voiceExemplar: null }), withoutArg);
+    assert.doesNotMatch(withoutArg, /HOW YOU ACTUALLY WRITE/);
+  });
+
+  await t.test('a member with an entry gets the exemplar section', () => {
+    const prompt = buildSpeakerSystemPrompt({ ...base, voiceExemplar: exemplar });
+    assert.match(prompt, /HOW YOU ACTUALLY WRITE — A PAGE IN YOUR OWN HAND/);
+    assert.match(prompt, /Energy is Eternal Delight\./);
+  });
+
+  await t.test('the exemplar sits after the character file and before tonight\'s disposition', () => {
+    const prompt = buildSpeakerSystemPrompt({
+      ...base, voiceExemplar: exemplar, disposition: 'Irritated by Crowley.',
+    });
+    assert.ok(prompt.indexOf('HOW YOU SPEAK') < prompt.indexOf('HOW YOU ACTUALLY WRITE'));
+    assert.ok(prompt.indexOf('HOW YOU ACTUALLY WRITE') < prompt.indexOf('YOUR PRIVATE STATE TONIGHT'));
+    assert.ok(prompt.indexOf('YOUR PRIVATE STATE TONIGHT') < prompt.indexOf('YOUR TURN RIGHT NOW'));
+  });
+});
+
+test('makeMetric — voiceExemplar attribution', async t => {
+  await t.test('records the injected entry id on a speaker metric', () => {
+    const metric = makeMetric('speaker', { round: 0, memberId: 'william-blake', voiceExemplar: 'blake-voice-of-the-devil-1790' });
+    assert.equal(metric.voiceExemplar, 'blake-voice-of-the-devil-1790');
+  });
+
+  await t.test('is null when no exemplar was injected and on non-speaker phases', () => {
+    assert.equal(makeMetric('speaker', { memberId: 'scholem' }).voiceExemplar, null);
+    assert.equal(makeMetric('director', { round: 0 }).voiceExemplar, null);
+  });
+});
+
+// #185 — the pre-convene casting call. The load-bearing promise here is that
+// the user's regulars are *input*, not a suggestion the model is free to
+// drop: proposeCast has to keep them in the cast no matter what comes back,
+// and has to skip the call entirely when they already fill the room. Both are
+// exactly the kind of thing that would degrade silently in production — a
+// dropped regular reads as "the AI decided", not as a bug.
+
+const LODGE = 'THE LODGE CONTEXT';
+const ROSTER = [
+  { id: 'crowley', name: 'Crowley', brief: 'Ceremonial magician; wrote The Book of the Law.' },
+  { id: 'yeats', name: 'Yeats', brief: 'Poet; Golden Dawn initiate.' },
+  { id: 'blavatsky', name: 'Blavatsky', brief: 'Founded the Theosophical Society.' },
+  { id: 'jung', name: 'Jung', brief: 'Analytical psychology; alchemy as psychic process.' },
+  { id: 'scholem', name: 'Scholem', brief: 'Historian of Jewish mysticism.' },
+];
+
+// A client that answers the casting tool call with whatever ids the test
+// wants, and records what it was asked.
+function fakeCastingClient(reply) {
+  const asked = [];
+  return {
+    asked,
+    messages: {
+      create: async (req) => {
+        asked.push(req);
+        const r = typeof reply === 'function' ? reply(asked.length) : reply;
+        if (r instanceof Error) throw r;
+        return {
+          content: [{ type: 'tool_use', input: r }],
+          usage: { input_tokens: 100, output_tokens: 20 },
+        };
+      },
+    },
+  };
+}
+
+test('buildCastingToolSchema', async t => {
+  await t.test('constrains the enum to the candidates, not the whole roster', () => {
+    const schema = buildCastingToolSchema(['jung', 'scholem'], 1, 2);
+    assert.equal(schema.name, 'cast_the_evening');
+    assert.deepEqual(schema.input_schema.properties.speakers.items.enum, ['jung', 'scholem']);
+    assert.equal(schema.input_schema.properties.speakers.minItems, 1);
+    assert.equal(schema.input_schema.properties.speakers.maxItems, 2);
+    assert.equal(schema.input_schema.properties.speakers.uniqueItems, true);
+  });
+});
+
+test('buildCastingPrompt', async t => {
+  const candidates = ROSTER.slice(2);
+  const regulars = ROSTER.slice(0, 2);
+
+  await t.test('hands the regulars over as fixed, not as options', () => {
+    const { system } = buildCastingPrompt({
+      lodgeContext: LODGE, candidates, regulars,
+      documentText: 'a document about alchemy', minCount: 1, maxCount: 4,
+    });
+    assert.match(system, /ALREADY COMING TONIGHT/);
+    assert.match(system, /not yours to choose, and not yours to drop/);
+    // The regulars must not also appear in the choosable list.
+    const choosable = system.slice(system.indexOf('THE REST OF THE LODGE'));
+    assert.equal(/- crowley —/.test(choosable), false);
+    assert.match(choosable, /- jung — Jung: Analytical psychology/);
+  });
+
+  await t.test('says so plainly when nothing is pinned', () => {
+    const { system } = buildCastingPrompt({
+      lodgeContext: LODGE, candidates: ROSTER, regulars: [],
+      documentText: 'a document', minCount: 4, maxCount: 6,
+    });
+    assert.match(system, /No one is fixed for tonight/);
+    assert.equal(/ALREADY COMING TONIGHT/.test(system), false);
+  });
+
+  await t.test('carries the member briefs — names alone are not enough to cast on', () => {
+    const { system } = buildCastingPrompt({
+      lodgeContext: LODGE, candidates: ROSTER, regulars: [],
+      documentText: 'a document', minCount: 4, maxCount: 6,
+    });
+    assert.match(system, /Historian of Jewish mysticism/);
+  });
+
+  await t.test('truncates the document rather than paying for a whole book', () => {
+    const { system } = buildCastingPrompt({
+      lodgeContext: LODGE, candidates: ROSTER, regulars: [],
+      documentText: 'z'.repeat(CASTING_DOCUMENT_LIMIT + 500), minCount: 4, maxCount: 6,
+    });
+    assert.equal(new RegExp(`z{${CASTING_DOCUMENT_LIMIT}}[^z]`).test(system + '|'), true);
+  });
+
+  await t.test('asks for friction, not coverage', () => {
+    const { system } = buildCastingPrompt({
+      lodgeContext: LODGE, candidates: ROSTER, regulars: [],
+      documentText: 'a document', minCount: 4, maxCount: 6,
+    });
+    assert.match(system, /Cast for friction as much as for affinity/);
+    assert.match(system, /Do not choose for coverage, seniority, or roster order/);
+  });
+});
+
+test('proposeCast', async t => {
+  await t.test('returns regulars first, then the model\'s additions in its own order', async () => {
+    const client = fakeCastingClient({ speakers: ['scholem', 'jung'], reasoning: 'Both would dispute it.' });
+    const result = await proposeCast({
+      client, model: 'test-model', lodgeContext: LODGE, roster: ROSTER,
+      regularIds: ['yeats', 'crowley'], documentText: 'a document about the Kabbalah',
+    });
+    assert.deepEqual(result.cast, ['crowley', 'yeats', 'scholem', 'jung']);
+    assert.deepEqual(result.additions, ['scholem', 'jung']);
+    assert.deepEqual(result.regulars, ['crowley', 'yeats']);
+    assert.equal(result.reasoning, 'Both would dispute it.');
+    assert.equal(result.source, 'director');
+  });
+
+  await t.test('asks only for the seats the regulars leave open', async () => {
+    const client = fakeCastingClient({ speakers: ['jung'], reasoning: 'r' });
+    await proposeCast({
+      client, model: 'test-model', lodgeContext: LODGE, roster: ROSTER,
+      regularIds: ['crowley', 'yeats', 'blavatsky'], documentText: 'a document',
+      targetMin: 4, targetMax: 5,
+    });
+    const speakers = client.asked[0].tools[0].input_schema.properties.speakers;
+    assert.equal(speakers.maxItems, 2, '5 wanted, 3 already coming');
+    assert.equal(speakers.minItems, 1, '4 wanted, 3 already coming');
+    assert.deepEqual(speakers.items.enum, ['jung', 'scholem']);
+  });
+
+  await t.test('spends no call at all when the regulars already fill the room', async () => {
+    const client = fakeCastingClient({ speakers: ['jung'], reasoning: 'r' });
+    const result = await proposeCast({
+      client, model: 'test-model', lodgeContext: LODGE, roster: ROSTER,
+      regularIds: ['crowley', 'yeats', 'blavatsky', 'jung'], documentText: 'a document',
+      targetMin: 3, targetMax: 4,
+    });
+    assert.equal(client.asked.length, 0);
+    assert.equal(result.source, 'regulars');
+    assert.deepEqual(result.cast, ['crowley', 'yeats', 'blavatsky', 'jung']);
+    assert.deepEqual(result.additions, []);
+    assert.equal(result.reasoning, null);
+  });
+
+  await t.test('never returns more than the target, however many regulars there are', async () => {
+    const client = fakeCastingClient({ speakers: ['scholem'], reasoning: 'r' });
+    const result = await proposeCast({
+      client, model: 'test-model', lodgeContext: LODGE, roster: ROSTER,
+      regularIds: ['crowley', 'yeats', 'blavatsky'], documentText: 'a document',
+      targetMin: 4, targetMax: 4,
+    });
+    assert.equal(result.cast.length, 4);
+  });
+
+  await t.test('retries once on an out-of-range answer, then keeps the valid one', async () => {
+    const client = fakeCastingClient(n => n === 1
+      ? { speakers: ['jung', 'scholem', 'crowley'], reasoning: 'too many, and one is a regular' }
+      : { speakers: ['jung'], reasoning: 'better' });
+    const result = await proposeCast({
+      client, model: 'test-model', lodgeContext: LODGE, roster: ROSTER,
+      regularIds: ['crowley', 'yeats', 'blavatsky'], documentText: 'a document',
+      targetMin: 4, targetMax: 4,
+    });
+    assert.equal(client.asked.length, 2);
+    assert.equal(result.source, 'director-retry');
+    assert.deepEqual(result.cast, ['crowley', 'yeats', 'blavatsky', 'jung']);
+  });
+
+  await t.test('falls back to a real room rather than nothing when the call fails twice', async () => {
+    const client = fakeCastingClient(new Error('the fire is low'));
+    const metrics = [];
+    const result = await proposeCast({
+      client, model: 'test-model', lodgeContext: LODGE, roster: ROSTER,
+      regularIds: ['crowley'], documentText: 'a document',
+      targetMin: 3, targetMax: 5, onMetric: m => metrics.push(m),
+    });
+    assert.equal(result.source, 'fallback');
+    assert.ok(result.cast.includes('crowley'), 'the regular survives a failed call');
+    assert.equal(result.cast.length, 3, 'the fallback fills to targetMin, not targetMax');
+    assert.equal(metrics.at(-1).phase, 'casting');
+    assert.equal(metrics.at(-1).skipped, true);
+  });
+
+  await t.test('ignores an unknown regular id instead of casting a ghost', async () => {
+    const client = fakeCastingClient({ speakers: ['jung', 'scholem'], reasoning: 'r' });
+    const result = await proposeCast({
+      client, model: 'test-model', lodgeContext: LODGE, roster: ROSTER,
+      regularIds: ['crowley', 'someone-deleted'], documentText: 'a document',
+      targetMin: 3, targetMax: 3,
+    });
+    assert.deepEqual(result.regulars, ['crowley']);
+    assert.equal(result.cast.includes('someone-deleted'), false);
   });
 });

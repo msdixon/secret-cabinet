@@ -139,6 +139,42 @@ a.lodge-btn { display:inline-block; text-decoration:none; }
 .member-filter-input:focus { outline:none; border-color:var(--lodge-amber-dim); }
 .member-filter-input::placeholder { color:var(--lodge-ash); font-style:italic; }
 .members-empty-hint { font-family:'Crimson Pro',serif; font-size:13px; font-style:italic; color:var(--lodge-muted); padding:4px 2px; }
+.members-cast-hint { font-family:'Crimson Pro',serif; font-size:13px; font-style:italic; color:var(--lodge-ash); padding:6px 2px 2px; max-width:52ch; line-height:1.5; }
+
+/* ── Casting: regulars + the proposed cast (#185) ───────────────────────────
+   The pin lives inside the member token but answers a different question —
+   who is always here, not who is here tonight — so it stays dim until hovered
+   or pinned rather than competing with the token's own active state. */
+.member-pin { background:none; border:none; padding:0 0 0 2px; margin:0; line-height:1; cursor:pointer; font-size:11px; color:transparent; transition:color 0.2s; flex-shrink:0; }
+.member-token:hover .member-pin { color:var(--lodge-ash); }
+.member-pin:hover { color:var(--lodge-amber); }
+.member-pin:focus-visible { outline:1px solid var(--lodge-amber-dim); outline-offset:2px; color:var(--lodge-ash); }
+.member-pin.pinned, .member-token:hover .member-pin.pinned { color:var(--lodge-amber); text-shadow:0 0 6px rgba(200,146,42,0.5); }
+.member-token.regular { border-left:2px solid var(--lodge-amber-dim); }
+
+/* The heading row carries three things now (title+badge, ask, filter), which
+   is more than a narrow viewport fits on one line — so it wraps rather than
+   pushing the page sideways. */
+.member-panel-head { display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; }
+.member-panel-heading { display:flex; align-items:center; gap:8px; }
+.member-panel-controls { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.cast-ask-btn { font-size:11px; padding:3px 9px; }
+
+.cast-proposal { border:1px solid var(--lodge-amber-dim); border-left-width:3px; border-radius:2px; background:rgba(200,146,42,0.05); padding:10px 12px; margin-bottom:10px; }
+.cast-proposal.pending { border-color:var(--lodge-border); border-left-color:var(--lodge-amber-dim); background:transparent; }
+.cast-proposal-head { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.cast-proposal-title { font-family:'IM Fell English',serif; font-size:12px; letter-spacing:1.5px; text-transform:uppercase; color:var(--lodge-amber); }
+.cast-proposal.pending .cast-proposal-title { color:var(--lodge-ash); }
+.cast-proposal-dismiss { background:none; border:none; color:var(--lodge-ash); cursor:pointer; font-size:13px; line-height:1; padding:2px 4px; }
+.cast-proposal-dismiss:hover { color:var(--lodge-cream); }
+.cast-proposal-names { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+.cast-proposal-name { font-family:'IM Fell English',serif; font-size:14px; color:var(--lodge-cream); border:1px solid var(--lodge-border); border-radius:2px; padding:2px 8px; }
+/* A regular in the proposal is a fact, not a suggestion — marked so it reads
+   as "already coming" rather than as something the director chose. */
+.cast-proposal-name.regular { border-color:var(--lodge-amber-dim); color:var(--lodge-amber); }
+.cast-proposal-name.regular::before { content:'✦ '; font-size:10px; }
+.cast-proposal-reason { font-family:'Crimson Pro',serif; font-size:13px; font-style:italic; color:var(--lodge-muted); margin-top:8px; line-height:1.5; max-width:64ch; }
+.cast-proposal-actions { display:flex; gap:8px; margin-top:12px; }
 .round-controls { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
 .round-pips { display:flex; gap:6px; align-items:center; }
 .round-pip { width:10px; height:10px; border-radius:50%; border:1px solid var(--lodge-border); background:transparent; transition:all 0.3s; }

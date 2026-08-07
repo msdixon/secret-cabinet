@@ -4,6 +4,8 @@
     "title": "The Revolt of 1900 — Crowley's Account",
     "source": "The Confessions of Aleister Crowley",
     "date": "1929",
+    "author": "crowley",
+    "translated": false,
     "members": ["crowley", "waite", "yeats"],
     "themes": ["golden-dawn", "schism", "authority", "initiation"],
     "file": "crowley-golden-dawn-1900.md"
@@ -13,6 +15,8 @@
     "title": "The First Automatic Script — A Vision, Introduction",
     "source": "A Vision",
     "date": "1937",
+    "author": "yeats",
+    "translated": false,
     "members": ["yeats", "maud"],
     "themes": ["automatism", "vision", "marriage", "spirits", "symbolism"],
     "file": "yeats-automatic-writing-1917.md"
@@ -22,6 +26,8 @@
     "title": "On the Astral Light — Isis Unveiled",
     "source": "Isis Unveiled, Vol. I",
     "date": "1877",
+    "author": "blavatsky",
+    "translated": false,
     "members": ["blavatsky", "levi"],
     "themes": ["astral", "occult-science", "will", "ether", "plagiarism"],
     "file": "blavatsky-astral-light-1877.md"
@@ -31,6 +37,8 @@
     "title": "Preface to The Pictorial Key to the Tarot",
     "source": "The Pictorial Key to the Tarot",
     "date": "1911",
+    "author": "waite",
+    "translated": false,
     "members": ["waite", "pixie"],
     "themes": ["tarot", "symbolism", "authorship", "hermeticism", "pictorial-tradition"],
     "file": "waite-pictorial-key-preface-1911.md"
@@ -40,6 +48,8 @@
     "title": "The Fourth Mansion — The Interior Castle",
     "source": "The Interior Castle",
     "date": "1577",
+    "author": "teresa",
+    "translated": true,
     "members": ["teresa", "arabi"],
     "themes": ["mysticism", "union", "interiority", "prayer", "consolations"],
     "file": "teresa-fourth-mansion-1577.md"
@@ -49,6 +59,8 @@
     "title": "On the Imagination and the Forms of God — Fusus al-Hikam",
     "source": "Fusus al-Hikam (The Bezels of Wisdom)",
     "date": "1229",
+    "author": "arabi",
+    "translated": true,
     "members": ["arabi", "teresa", "levi"],
     "themes": ["imagination", "theophany", "form", "vision", "unity-of-being"],
     "file": "arabi-imagination-fusus.md"
@@ -58,6 +70,8 @@
     "title": "The Great Arcanum — Dogme et Rituel de la Haute Magie",
     "source": "Dogme et Rituel de la Haute Magie",
     "date": "1856",
+    "author": "levi",
+    "translated": true,
     "members": ["levi", "crowley", "waite"],
     "themes": ["magic", "will", "initiation", "arcanum", "astral-light"],
     "file": "levi-great-arcanum-1856.md"
@@ -67,6 +81,8 @@
     "title": "On Vision and the Irish Cause — A Servant of the Queen",
     "source": "A Servant of the Queen",
     "date": "1938",
+    "author": "maud",
+    "translated": false,
     "members": ["maud", "yeats"],
     "themes": ["ireland", "nationalism", "vision", "mysticism", "sacrifice"],
     "file": "maud-gonne-servant-of-queen-1938.md"
@@ -76,6 +92,8 @@
     "title": "Preface to the Monas Hieroglyphica",
     "source": "Monas Hieroglyphica",
     "date": "1564",
+    "author": "dee",
+    "translated": true,
     "members": ["dee", "crowley", "levi"],
     "themes": ["symbol", "unity", "mathematics", "alchemy", "hieroglyph"],
     "file": "dee-monas-hieroglyphica-1564.md"
@@ -85,6 +103,8 @@
     "title": "On Asabiyyah and the Rise and Fall of Dynasties — Muqaddimah",
     "source": "Muqaddimah",
     "date": "1377",
+    "author": "khaldun",
+    "translated": true,
     "members": ["khaldun", "arabi"],
     "themes": ["history", "civilisation", "decline", "solidarity", "cycles"],
     "file": "khaldun-asabiyyah-muqaddimah-1377.md"
@@ -94,6 +114,8 @@
     "title": "'All Shall Be Well' — Revelations of Divine Love, Chapter XXVII",
     "source": "Revelations of Divine Love (Long Text)",
     "date": "1413",
+    "author": "julian",
+    "translated": true,
     "members": ["julian", "teresa"],
     "themes": ["sin", "providence", "suffering", "divine-love", "universalism", "showings"],
     "file": "julian-revelations-allshallbewell-1413.md"
@@ -103,6 +125,8 @@
     "title": "On the Ancient Belief in Dream-Symbolism — Psychology of the Unconscious",
     "source": "Psychology of the Unconscious: A Study of the Transformations and Symbolisms of the Libido",
     "date": "1916",
+    "author": "jung",
+    "translated": true,
     "members": ["jung", "corbin"],
     "themes": ["dream-symbolism", "unconscious", "interpretation", "mythology", "hidden-meaning"],
     "file": "jung-dream-symbolism-1916.md"
@@ -112,6 +136,8 @@
     "title": "The Voice of the Devil — The Marriage of Heaven and Hell",
     "source": "The Marriage of Heaven and Hell",
     "date": "1790",
+    "author": "william-blake",
+    "translated": false,
     "members": ["william-blake", "yeats"],
     "themes": ["contraries", "energy", "reason", "imagination", "prophecy"],
     "file": "blake-voice-of-the-devil-1790.md"
@@ -121,6 +147,8 @@
     "title": "The Birthright of Every Human Being — Seership! The Magnetic Mirror",
     "source": "Seership! The Magnetic Mirror",
     "date": "1870",
+    "author": "randolph",
+    "translated": false,
     "members": ["randolph", "blavatsky"],
     "themes": ["clairvoyance", "astral-light", "ether", "inner-vision", "seership"],
     "file": "randolph-clairvoyance-birthright-1870.md"
@@ -130,6 +158,8 @@
     "title": "The Book of the Lover and the Beloved",
     "source": "Blanquerna",
     "date": "1283",
+    "author": "llull",
+    "translated": true,
     "members": ["llull", "teresa", "arabi"],
     "themes": ["mystical-love", "union", "ascent", "devotion", "allegory"],
     "file": "llull-lover-beloved-1283.md"
@@ -139,6 +169,8 @@
     "title": "The Intellectual Power Never at Rest — The Heroic Enthusiasts",
     "source": "The Heroic Enthusiasts (Gli Eroici Furori): An Ethical Poem",
     "date": "1585",
+    "author": "bruno",
+    "translated": true,
     "members": ["bruno", "dee"],
     "themes": ["infinite", "intellect", "desire", "cosmology", "unity"],
     "file": "bruno-heroic-enthusiasts-1585.md"
@@ -148,6 +180,8 @@
     "title": "Ana'l-Haqq — Verses Quoted in The Mystics of Islam",
     "source": "The Mystics of Islam",
     "date": "922",
+    "author": "al-hallaj",
+    "translated": true,
     "members": ["al-hallaj", "arabi"],
     "themes": ["union", "ecstatic-utterance", "annihilation", "fana", "heresy"],
     "file": "al-hallaj-ana-l-haqq.md"
@@ -157,6 +191,8 @@
     "title": "The Cloud of the Living Light",
     "source": "Studies in the History and Method of Science, vol. I",
     "date": "c. 1175",
+    "author": "hildegard",
+    "translated": true,
     "members": ["hildegard", "julian", "teresa"],
     "themes": ["vision", "living-light", "prophecy", "interiority", "testimony"],
     "file": "hildegard-living-light-1175.md"
@@ -166,6 +202,8 @@
     "title": "The Author's Prologue — The Three Approbations",
     "source": "The Mirror of Simple Souls",
     "date": "c. 1295",
+    "author": "porete",
+    "translated": true,
     "members": ["porete", "julian", "teresa"],
     "themes": ["authority", "approbation", "heresy", "annihilation", "mystical-love"],
     "file": "porete-mirror-approbations.md"
@@ -175,6 +213,8 @@
     "title": "Preface to the New Edition — The Kabbalah Unveiled",
     "source": "The Kabbalah Unveiled, Second Edition",
     "date": "1926",
+    "author": "moina-mathers",
+    "translated": false,
     "members": ["moina-mathers"],
     "themes": ["golden-dawn", "mysteries", "science-occultism", "initiation", "fraternity", "practical-magic"],
     "file": "moina-mathers-preface-1926.md"
@@ -184,6 +224,8 @@
     "title": "Dissociation and Auto-suggestion — The Machinery of the Mind",
     "source": "The Machinery of the Mind",
     "date": "1922",
+    "author": "dion-fortune",
+    "translated": false,
     "members": ["dion-fortune", "jung"],
     "themes": ["unconscious", "dissociation", "auto-suggestion", "mechanism", "psychology"],
     "file": "fortune-machinery-of-the-mind-1922.md"

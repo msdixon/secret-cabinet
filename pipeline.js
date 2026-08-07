@@ -31,9 +31,9 @@ function buildMemberSection(member, artifact, notes, loadMemberFile) {
 // retries, skips, and fallbacks) produces one of these, persisted alongside
 // the session so it's reviewable after the fact, not just an ephemeral
 // console line.
-function makeMetric(phase, { round, memberId, attempts, usage, latencyMs, skipped, error, reasoning } = {}) {
+function makeMetric(phase, { round, memberId, attempts, usage, latencyMs, skipped, error, reasoning, voiceExemplar } = {}) {
   return {
-    phase, // 'director' | 'speaker'
+    phase, // 'director' | 'speaker' | 'casting'
     round: round ?? null,
     memberId: memberId || null,
     attempts: attempts ?? 1,
@@ -42,6 +42,13 @@ function makeMetric(phase, { round, memberId, attempts, usage, latencyMs, skippe
     skipped: !!skipped,
     error: error || null,
     reasoning: reasoning || null,
+    // #187: which library entry (if any) was injected as this speaker's
+    // register exemplar. Recorded so the feature's input-token cost is
+    // attributable after the fact — the same speaker with and without an
+    // exemplar is the comparison, and without this field the two are
+    // indistinguishable in the persisted metrics. Always null off the
+    // speaker phase.
+    voiceExemplar: voiceExemplar || null,
     timestamp: new Date().toISOString(),
   };
 }
@@ -129,7 +136,11 @@ Choose between ${minCount} and ${maxCount} of the present members as this round'
   return { system, userMessage };
 }
 
-async function callDirector({ client, model, system, conversationHistory, userMessage, presentIds, minCount, maxCount }) {
+// `tool` defaults to the per-round director's own schema; the pre-convene
+// casting call (#185) passes its own so the two questions stay legible in
+// the transcript of what was actually asked.
+async function callDirector({ client, model, system, conversationHistory, userMessage, presentIds, minCount, maxCount, tool }) {
+  const schema = tool || buildDirectorToolSchema(presentIds, minCount, maxCount);
   const start = Date.now();
   const messages = [...conversationHistory, { role: 'user', content: userMessage }];
   const response = await client.messages.create({
@@ -137,8 +148,8 @@ async function callDirector({ client, model, system, conversationHistory, userMe
     max_tokens: 500,
     system,
     messages,
-    tools: [buildDirectorToolSchema(presentIds, minCount, maxCount)],
-    tool_choice: { type: 'tool', name: 'select_speakers' },
+    tools: [schema],
+    tool_choice: { type: 'tool', name: schema.name },
   });
   const latencyMs = Date.now() - start;
   const block = response.content.find(b => b.type === 'tool_use');
@@ -154,38 +165,205 @@ function isValidSelection(speakers, presentIds, minCount, maxCount) {
     && speakers.every(id => presentIds.includes(id));
 }
 
-// Retry-once + deterministic-fallback wrapper around callDirector.
+// Retry-once + deterministic-fallback loop, shared by the per-round director
+// (selectSpeakers) and the pre-convene casting call (proposeCast, #185).
+// Both ask the same *shape* of question — pick between minCount and maxCount
+// ids out of a fixed enum, with a rationale — so both want the same failure
+// handling: one corrective retry, then a deterministic fallback, so no caller
+// is ever left without a usable answer because a model call went sideways.
+async function runDirectorSelection({
+  client, model, system, userMessage, conversationHistory = [],
+  candidateIds, minCount, maxCount, tool,
+  phase = 'director', round = null, onMetric,
+  invalidNote, fallbackIds, fallbackNote,
+}) {
+  const correction = invalidNote
+    || ` Your previous selection was invalid — it must be between ${minCount} and ${maxCount} present member ids, no duplicates, drawn only from: ${candidateIds.join(', ')}. Choose again.`;
+
+  let lastReasoning = null;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const { speakers, reasoning, usage, latencyMs } = await callDirector({
+        client, model, system, conversationHistory,
+        userMessage: userMessage + (attempt === 2 ? correction : ''),
+        presentIds: candidateIds, minCount, maxCount, tool,
+      });
+      lastReasoning = reasoning || lastReasoning;
+      onMetric?.(makeMetric(phase, { round, attempts: attempt, usage, latencyMs, reasoning }));
+      if (isValidSelection(speakers, candidateIds, minCount, maxCount)) {
+        return { speakers, reasoning, source: attempt === 1 ? 'director' : 'director-retry' };
+      }
+    } catch (err) {
+      onMetric?.(makeMetric(phase, { round, attempts: attempt, error: err.message }));
+    }
+  }
+
+  onMetric?.(makeMetric(phase, { round, attempts: 2, skipped: true, error: fallbackNote, reasoning: lastReasoning }));
+  return { speakers: fallbackIds, reasoning: lastReasoning, source: 'fallback' };
+}
+
 // presentMembers must already be in roster order — the fallback pick
 // (first `maxCount` present members) relies on that ordering.
 async function selectSpeakers({ client, model, lodgeContext, presentMembers, instruction, conversationHistory, minCount, maxCount, round, onMetric, roundSoFar }) {
   const presentIds = presentMembers.map(m => m.id);
   const { system, userMessage } = buildDirectorPrompt({ lodgeContext, presentMembers, instruction, minCount, maxCount, roundSoFar });
 
-  let lastReasoning = null;
-  for (let attempt = 1; attempt <= 2; attempt++) {
-    const correctiveNote = attempt === 2
-      ? ` Your previous selection was invalid — it must be between ${minCount} and ${maxCount} present member ids, no duplicates, drawn only from: ${presentIds.join(', ')}. Choose again.`
-      : '';
-    try {
-      const { speakers, reasoning, usage, latencyMs } = await callDirector({
-        client, model, system, conversationHistory,
-        userMessage: userMessage + correctiveNote,
-        presentIds, minCount, maxCount,
-      });
-      lastReasoning = reasoning || lastReasoning;
-      onMetric?.(makeMetric('director', { round, attempts: attempt, usage, latencyMs, reasoning }));
-      if (isValidSelection(speakers, presentIds, minCount, maxCount)) {
-        return { speakers, reasoning, source: attempt === 1 ? 'director' : 'director-retry' };
-      }
-    } catch (err) {
-      onMetric?.(makeMetric('director', { round, attempts: attempt, error: err.message }));
-    }
+  return runDirectorSelection({
+    client, model, system, userMessage, conversationHistory,
+    candidateIds: presentIds, minCount, maxCount,
+    tool: buildDirectorToolSchema(presentIds, minCount, maxCount),
+    phase: 'director', round, onMetric,
+    // Deterministic fallback: first `maxCount` present members, in roster order.
+    fallbackIds: presentMembers.slice(0, maxCount).map(m => m.id),
+    fallbackNote: 'director failed twice — used deterministic fallback',
+  });
+}
+
+// ── Casting the evening (#185) ──────────────────────────────────────────────
+//
+// A different question from selectSpeakers'. The director asks "of the people
+// already in the room, who speaks next"; casting asks "of the whole lodge,
+// who turns up at all tonight" — once, before the meeting, from the document
+// rather than from a round instruction.
+//
+// Deliberately *not* full auto-casting. The user's pinned regulars are fixed
+// input, not a suggestion the model may drop: they are handed over as already
+// coming, and the model only fills the rest of the room around them. Hand-
+// casting from the full grid stays available either way — this proposes, it
+// never applies.
+
+// Enough of the document to cast from without paying for a whole book. The
+// opening of a text is where its subject announces itself; casting doesn't
+// need the argument, only the territory.
+const CASTING_DOCUMENT_LIMIT = 3000;
+
+// Same 4–6 the roster badge has always recommended (larger casts thin out
+// individual voices — see updateMemberCount in app.js).
+const CASTING_TARGET_MIN = 4;
+const CASTING_TARGET_MAX = 6;
+
+function buildCastingToolSchema(candidateIds, minCount, maxCount) {
+  return {
+    name: 'cast_the_evening',
+    description: 'Choose which further members of the lodge this document would draw to the room tonight.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        speakers: {
+          type: 'array',
+          items: { type: 'string', enum: candidateIds },
+          minItems: minCount,
+          maxItems: maxCount,
+          uniqueItems: true,
+          description: `Member ids, in order of how strongly the document draws them, from those not already coming: ${candidateIds.join(', ')}.`,
+        },
+        reasoning: {
+          // Unlike the per-round director's rationale, this one is shown —
+          // it is the proposal's whole case for itself.
+          type: 'string',
+          description: 'One or two sentences, in the register of the lodge, on what in this document draws these people. Shown to the user beside the proposed cast.',
+        },
+      },
+      required: ['speakers', 'reasoning'],
+    },
+  };
+}
+
+function buildCastingPrompt({ lodgeContext, candidates, regulars, documentText, minCount, maxCount }) {
+  const candidateLines = candidates
+    .map(m => `- ${m.id} — ${m.name}${m.brief ? `: ${m.brief}` : ''}`)
+    .join('\n');
+
+  const regularsBlock = regulars.length
+    ? `ALREADY COMING TONIGHT — the user's regulars. They are always drawn to this room. They are not yours to choose, and not yours to drop:\n${regulars.map(m => `- ${m.name}`).join('\n')}`
+    : 'No one is fixed for tonight. The whole room is yours to propose.';
+
+  const document = documentText.trim().slice(0, CASTING_DOCUMENT_LIMIT);
+
+  const system = `${lodgeContext}
+
+---
+
+## YOUR ROLE RIGHT NOW
+
+You are not writing dialogue, and you are not choosing who speaks within a round. You are saying who the evening's document draws to the room at all — which members of the lodge would find their way in tonight, given what is about to be read aloud.
+
+${regularsBlock}
+
+THE REST OF THE LODGE — anyone here may be drawn tonight:
+${candidateLines}
+
+THE DOCUMENT TO BE READ ALOUD TONIGHT:
+${document}
+
+Choose between ${minCount} and ${maxCount} further members, ordered by how strongly the document draws them. Cast for friction as much as for affinity — a room where everyone agrees has nothing to say. Consider who the document's subject belongs to, who would dispute it, and who would hear something in it nobody else would. Do not choose for coverage, seniority, or roster order.${regulars.length ? ' The regulars above are already in the room; choose people who make something of what those regulars will say, not duplicates of them.' : ''}`;
+
+  const userMessage = 'Say who this document draws tonight.';
+
+  return { system, userMessage };
+}
+
+// Returns { cast, additions, regulars, reasoning, source }. `cast` is the
+// full proposed room — regulars first, then the model's additions in the
+// order it ranked them. `source` is 'director' | 'director-retry' |
+// 'fallback' | 'regulars' (the last meaning no call was made at all).
+//
+// roster entries are { id, name, brief? }; `brief` is a one-line sketch used
+// only for casting judgment. Must be in roster order — the deterministic
+// fallback relies on it, exactly as selectSpeakers' does.
+async function proposeCast({
+  client, model, lodgeContext, roster, regularIds = [], documentText,
+  targetMin = CASTING_TARGET_MIN, targetMax = CASTING_TARGET_MAX, onMetric,
+}) {
+  const rosterIds = roster.map(m => m.id);
+  const regulars = roster.filter(m => regularIds.includes(m.id));
+  const candidates = roster.filter(m => !regularIds.includes(m.id));
+
+  // The regulars already fill (or overfill) the evening, or there is simply
+  // nobody left to add. Either way the answer is known without a call —
+  // #185's "one extra cheap call per session" is a ceiling, not a quota.
+  if (regulars.length >= targetMax || candidates.length === 0) {
+    return {
+      cast: regulars.map(m => m.id),
+      additions: [],
+      regulars: regulars.map(m => m.id),
+      reasoning: null,
+      source: 'regulars',
+    };
   }
 
-  // Deterministic fallback: first `maxCount` present members, in roster order.
-  const speakers = presentMembers.slice(0, maxCount).map(m => m.id);
-  onMetric?.(makeMetric('director', { round, attempts: 2, skipped: true, error: 'director failed twice — used deterministic fallback', reasoning: lastReasoning }));
-  return { speakers, reasoning: lastReasoning, source: 'fallback' };
+  const maxCount = Math.min(targetMax - regulars.length, candidates.length);
+  const minCount = Math.min(Math.max(targetMin - regulars.length, 1), maxCount);
+
+  const candidateIds = candidates.map(m => m.id);
+  const { system, userMessage } = buildCastingPrompt({
+    lodgeContext, candidates, regulars, documentText, minCount, maxCount,
+  });
+
+  const { speakers, reasoning, source } = await runDirectorSelection({
+    client, model, system, userMessage,
+    candidateIds, minCount, maxCount,
+    tool: buildCastingToolSchema(candidateIds, minCount, maxCount),
+    phase: 'casting', onMetric,
+    invalidNote: ` Your previous selection was invalid — it must be between ${minCount} and ${maxCount} member ids, no duplicates, drawn only from: ${candidateIds.join(', ')}. Choose again.`,
+    // Deterministic fallback: the first `minCount` candidates in roster order.
+    // Roster order is roughly the order the lodge was founded in, which is a
+    // defensible room to open with when the model can't be reached at all.
+    fallbackIds: candidateIds.slice(0, minCount),
+    fallbackNote: 'casting call failed twice — used deterministic fallback',
+  });
+
+  // rosterIds guards against a fallback list going stale mid-flight; the
+  // model path is already enum-constrained and validated upstream.
+  const additions = speakers.filter(id => rosterIds.includes(id));
+
+  return {
+    cast: [...regulars.map(m => m.id), ...additions],
+    additions,
+    regulars: regulars.map(m => m.id),
+    reasoning: reasoning || null,
+    source,
+  };
 }
 
 // ── Local hybrid speaker pacing (#164) ─────────────────────────────────────
@@ -250,13 +428,123 @@ function countWords(text) {
   return trimmed ? trimmed.split(/\s+/).length : 0;
 }
 
+// ── Voice-register exemplar (#187) ──────────────────────────────────────────
+//
+// The library (#35a) holds a verified primary-source excerpt for 21 of the 33
+// roster members, and until now that text was read only by citation
+// verification (#36/#153) — never by the member whose prose it is. Each
+// member's voice therefore rested entirely on their character file's
+// *description* of a register rather than on evidence of one. This injects
+// a trimmed slice of a member's own writing into their speaker prompt as an
+// exemplar of how they actually sound on the page.
+//
+// The 12 members with no library entry of their own get nothing extra and
+// behave exactly as before — the voice doc's description alone. That is the
+// intended degradation, not a gap to paper over: a member is only ever shown
+// text they actually wrote.
+//
+// Twelve, not the ten hard passes STATUS.md's 2026-08-07 entry names. Library
+// *coverage* counts a member as covered if they appear in an entry's
+// `members` list at all, which is the right measure for the graph and for
+// citation matching but the wrong one here: Pamela Colman Smith is listed on
+// Waite's 1911 preface and Corbin on Jung's 1916 text because those entries
+// concern them, not because they wrote a word of them. Handing Waite's prose
+// to Pixie as "how you actually write" would be a fabrication of exactly the
+// kind this project's citation work exists to prevent — hence the explicit
+// `author` field in library.json (added by this change) rather than a reuse
+// of `members`.
+
+// A few hundred words, per the issue — enough to carry a cadence, cheap
+// enough to pay per speaker call (input tokens, uncached until #190). Sized
+// against the real corpus: 16 of 21 entries are already under it and pass
+// through whole; it only bites on the five long ones (Moina Mathers 584
+// words, Porete 434, Dion Fortune 406, Lévi 302, Hildegard 301). The whole
+// section costs ~550 input tokens per beat when present.
+const VOICE_EXEMPLAR_WORD_BUDGET = 300;
+
+// Trims from the top of the excerpt on the largest natural boundary that
+// fits — whole paragraphs first, then whole sentences, and only as a last
+// resort mid-sentence. A register exemplar cut mid-clause is a worse
+// exemplar: the model reads the truncation itself as a stylistic habit.
+function trimToWordBudget(text, maxWords) {
+  const trimmed = (text || '').trim();
+  if (!trimmed || countWords(trimmed) <= maxWords) return trimmed;
+
+  const paragraphs = trimmed.split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
+  const kept = [];
+  let used = 0;
+  for (const paragraph of paragraphs) {
+    const words = countWords(paragraph);
+    if (used + words > maxWords) break;
+    kept.push(paragraph);
+    used += words;
+  }
+  if (kept.length) return `${kept.join('\n\n')}\n\n[…]`;
+
+  // The opening paragraph alone overruns the budget — fall back to whole
+  // sentences within it.
+  const sentences = paragraphs[0].match(/[^.!?]+(?:[.!?]+|$)/g) || [];
+  const keptSentences = [];
+  used = 0;
+  for (const sentence of sentences) {
+    const words = countWords(sentence);
+    if (used + words > maxWords) break;
+    keptSentences.push(sentence.trim());
+    used += words;
+  }
+  if (keptSentences.length) return `${keptSentences.join(' ')} […]`;
+
+  // One unbroken sentence longer than the whole budget (verse without
+  // terminal punctuation does this too) — hard cut.
+  return `${trimmed.split(/\s+/).slice(0, maxWords).join(' ')} […]`;
+}
+
+// `exemplar` is { title, source, date, text, translated } — see server.js's
+// loadVoiceExemplar. Returns '' for a member with no entry, which is what
+// makes the degradation invisible rather than a hole in the prompt.
+function buildVoiceExemplarSection(exemplar) {
+  const text = trimToWordBudget(exemplar?.text, VOICE_EXEMPLAR_WORD_BUDGET);
+  if (!text) return '';
+
+  // Half the corpus's titles already name the work they're drawn from
+  // ("The Voice of the Devil — The Marriage of Heaven and Hell", source "The
+  // Marriage of Heaven and Hell"), so a naive join prints it twice. Drop the
+  // redundant half rather than hand the model a line that reads like a
+  // stutter — this is the one place in the prompt claiming to be evidence.
+  const parts = [exemplar.title];
+  if (exemplar.source && !exemplar.title?.includes(exemplar.source)) parts.push(exemplar.source);
+  parts.push(exemplar.date);
+  const provenance = parts.filter(Boolean).join(' — ');
+  // Most of the corpus (12 of 21) is in translation, so for over half these
+  // members the specific English words are a translator's choice, not
+  // theirs. Naming that keeps the model from adopting Rosenthal's or Peers's
+  // vocabulary as Ibn Khaldun's or Teresa's own.
+  const translationNote = exemplar.translated
+    ? ' The English here is a translator\'s, not yours: take the cadence, the shape of the argument, and the habits of attention as your own — not the particular vocabulary.'
+    : '';
+
+  return `\n\n---\n\n## HOW YOU ACTUALLY WRITE — A PAGE IN YOUR OWN HAND
+
+Below is a passage of your own writing, from the lodge's archive. It is here as evidence of your register — your sentence rhythm, how you build and qualify a thought, what you reach for and what you leave alone. It is not a topic, an assignment, or a thing to bring up.
+
+${provenance}
+
+${text}
+
+Let this govern *how* you speak tonight, never *what* you speak about. Do not quote it, cite it, allude to it, or steer the room toward its subject — no one here is discussing this text, and producing it would read as a non sequitur. It is also written prose, and you are speaking aloud in a room: what carries over is the mind and the movement, not the punctuation of the page.${translationNote}`;
+}
+
 // ── Per-speaker call ────────────────────────────────────────────────────────
 
 // Only this member's own character file goes in — no other present members'
 // files. That's the whole point: each speaker gets the model's full
 // attention instead of a fraction of it split across the whole cast.
-function buildSpeakerSystemPrompt({ lodgeContext, member, artifact, notes, loadMemberFile, disposition }) {
+function buildSpeakerSystemPrompt({ lodgeContext, member, artifact, notes, loadMemberFile, disposition, voiceExemplar }) {
   const memberSection = buildMemberSection(member, artifact, notes, loadMemberFile);
+  // #187: sits directly after the character file, since it's evidence for
+  // the same thing that file describes — and before the disposition, which
+  // is about tonight specifically and wants to be the last thing read.
+  const exemplarSection = buildVoiceExemplarSection(voiceExemplar);
   const dispositionSection = disposition?.trim()
     ? `\n\n---\n\n## YOUR PRIVATE STATE TONIGHT (no one else in the room can see this)\n\n${disposition.trim()}`
     : '';
@@ -265,7 +553,7 @@ function buildSpeakerSystemPrompt({ lodgeContext, member, artifact, notes, loadM
 
 ---
 
-${memberSection}${dispositionSection}
+${memberSection}${exemplarSection}${dispositionSection}
 
 ---
 
@@ -464,7 +752,7 @@ const MAX_TOTAL_BEATS = 16; // hard safety net — budget/pool logic should alwa
 async function runRound({ client, model, lodgeContext, ROSTER, loadMemberFile,
   presentMemberIds, artifact, notes, roundPrompt, conversationHistory,
   speakerCount, round, onChunk, onMetric, onSpeakerStart, onSpeakerEnd, precedingTurn,
-  disposition }) {
+  disposition, loadVoiceExemplar }) {
 
   const presentMembers = ROSTER.filter(m => presentMemberIds.includes(m.id));
   const effectiveCount = Math.min(speakerCount, presentMembers.length);
@@ -472,6 +760,24 @@ async function runRound({ client, model, lodgeContext, ROSTER, loadMemberFile,
   // one round (MAX_TURNS_PER_POOL_MEMBER) sees their own just-updated state
   // on the second turn, not the state from before the round started.
   const currentDisposition = { ...(disposition || {}) };
+  // #187: the library doesn't change mid-round, and a member can take more
+  // than one beat in a round — read each member's exemplar off disk once.
+  const exemplarCache = new Map();
+  const exemplarFor = memberId => {
+    if (!exemplarCache.has(memberId)) {
+      let entry = null;
+      try {
+        entry = loadVoiceExemplar?.(memberId) || null;
+      } catch (err) {
+        // A missing or malformed library entry must never cost a member
+        // their turn — fall through to the no-exemplar path, same as a
+        // member who simply has no entry.
+        console.warn('[voice-exemplar]', memberId, '—', err.message);
+      }
+      exemplarCache.set(memberId, entry);
+    }
+    return exemplarCache.get(memberId);
+  };
 
   // A human-written turn (player-as-member) seeded before the director
   // decides — streamed immediately so it appears in the live view before
@@ -530,7 +836,8 @@ async function runRound({ client, model, lodgeContext, ROSTER, loadMemberFile,
     if (!member) break; // shouldn't happen — selectSpeakers validates against presentIds
 
     const unheardCount = pool.filter(id => id !== memberId && !(spokenCounts.get(id) > 0)).length;
-    const system = buildSpeakerSystemPrompt({ lodgeContext, member, artifact, notes, loadMemberFile, disposition: currentDisposition[memberId] });
+    const voiceExemplar = exemplarFor(memberId);
+    const system = buildSpeakerSystemPrompt({ lodgeContext, member, artifact, notes, loadMemberFile, disposition: currentDisposition[memberId], voiceExemplar });
     const userMessage = buildSpeakerUserMessage({ roundPrompt, roundSoFarText: roundSoFar, member, remainingBudgetWords: remainingBudget, unheardCount });
 
     onChunk?.(`${member.name}\n`);
@@ -538,7 +845,7 @@ async function runRound({ client, model, lodgeContext, ROSTER, loadMemberFile,
     try {
       const { result, attempts } = await withOneRetry(() =>
         callSpeakerTurn({ client, model, system, conversationHistory, userMessage, onChunk }));
-      onMetric?.(makeMetric('speaker', { round, memberId, attempts, usage: result.usage, latencyMs: result.latencyMs }));
+      onMetric?.(makeMetric('speaker', { round, memberId, attempts, usage: result.usage, latencyMs: result.latencyMs, voiceExemplar: voiceExemplar?.id }));
 
       const contextBeforeTurn = roundSoFar;
       const settledText = stripInternalBlankLines(result.text);
@@ -567,7 +874,7 @@ async function runRound({ client, model, lodgeContext, ROSTER, loadMemberFile,
         // Best-effort — the member simply carries their prior disposition forward.
       }
     } catch (err) {
-      onMetric?.(makeMetric('speaker', { round, memberId, attempts: err.attempts || 1, skipped: true, error: err.message }));
+      onMetric?.(makeMetric('speaker', { round, memberId, attempts: err.attempts || 1, skipped: true, error: err.message, voiceExemplar: voiceExemplar?.id }));
       // Skip this speaker, keep the round going with fewer voices.
     }
 
@@ -595,11 +902,21 @@ module.exports = {
   buildDirectorPrompt,
   callDirector,
   isValidSelection,
+  runDirectorSelection,
   selectSpeakers,
+  CASTING_DOCUMENT_LIMIT,
+  CASTING_TARGET_MIN,
+  CASTING_TARGET_MAX,
+  buildCastingToolSchema,
+  buildCastingPrompt,
+  proposeCast,
   lengthTendencyOf,
   pickNextSpeaker,
   isPoolExhausted,
   countWords,
+  VOICE_EXEMPLAR_WORD_BUDGET,
+  trimToWordBudget,
+  buildVoiceExemplarSection,
   buildSpeakerSystemPrompt,
   buildSpeakerUserMessage,
   stripInternalBlankLines,
