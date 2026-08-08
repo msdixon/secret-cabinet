@@ -90,18 +90,41 @@ function buildRosterGrid(filter) {
   const term = (filter || '').trim().toLowerCase();
   const members = ROSTER.filter(m => !term || m.name.toLowerCase().includes(term));
   grid.innerHTML = members.map(m => `
-    <div class="lodge-roster-card ${selectedId === m.id ? 'selected' : ''}" data-select="${m.id}" role="button" tabindex="0" aria-label="${escapeHTML(m.name)}">
+    <div class="lodge-roster-card ${selectedId === m.id ? 'selected' : ''}${hoveredId === m.id ? ' hovered' : ''}" data-select="${m.id}" role="button" tabindex="0" aria-label="${escapeHTML(m.name)}">
       <img class="lodge-roster-portrait" src="/portraits/${m.id}.png" alt="" loading="lazy" onerror="this.style.display='none'">
       <div class="lodge-roster-glyph">${escapeHTML(m.glyph || '')}</div>
       <div class="lodge-roster-name">${escapeHTML(m.name)}</div>
     </div>
   `).join('') || '<div class="members-empty-hint">No members match.</div>';
 
+  // #240 — hovering a roster card highlights the corresponding graph node
+  // (and its connections) via the same hoveredId/renderGraph path a graph
+  // hover already uses; the guard on mouseleave matches attachDrag/graph
+  // node hover — only clear if this card is still the one that set it, so
+  // a fast cursor move from roster to graph can't clobber a hover the graph
+  // just claimed.
   grid.querySelectorAll('[data-select]').forEach(el => {
-    el.addEventListener('click', () => selectNode(el.dataset.select));
+    const id = el.dataset.select;
+    el.addEventListener('click', () => selectNode(id));
     el.addEventListener('keydown', (ev) => {
-      if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); selectNode(el.dataset.select); }
+      if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); selectNode(id); }
     });
+    el.addEventListener('mouseenter', () => { hoveredId = id; scheduleHoverRender(); });
+    el.addEventListener('mouseleave', () => { if (hoveredId === id) hoveredId = null; scheduleHoverRender(); });
+  });
+}
+
+// #240 — toggles .selected/.hovered on existing roster cards without
+// rebuilding the grid's innerHTML (buildRosterGrid re-attaches listeners
+// and would fight the grid's own scroll position); called from renderGraph
+// so a graph-driven hover/select stays in sync with the roster on every
+// frame, the same way the graph's own highlight already does.
+function syncRosterHighlight() {
+  const grid = document.getElementById('lodge-roster-grid');
+  grid.querySelectorAll('[data-select]').forEach(el => {
+    const id = el.dataset.select;
+    el.classList.toggle('selected', id === selectedId);
+    el.classList.toggle('hovered', id === hoveredId && id !== selectedId);
   });
 }
 
@@ -485,13 +508,21 @@ function renderGraph() {
       if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); selectNode(n.id); }
     });
     g.addEventListener('mouseenter', () => { hoveredId = n.id; scheduleHoverRender(); });
-    g.addEventListener('mouseleave', () => { hoveredId = null; scheduleHoverRender(); });
+    // #240 — guard matches the new roster-card hover handlers: only clear
+    // if this node is still the one that set hoveredId, so a fast cursor
+    // move from graph to roster (or vice versa) can't clobber a hover the
+    // other panel just claimed.
+    g.addEventListener('mouseleave', () => { if (hoveredId === n.id) hoveredId = null; scheduleHoverRender(); });
     attachDrag(g, n);
 
     nodesLayer.appendChild(g);
   });
 
   document.getElementById('graph-empty-hint').style.display = anyVisible ? 'none' : 'block';
+  // #240 — keep the roster's highlight in lockstep with the graph on every
+  // render (hover, select, search, drag, physics tick) without rebuilding
+  // its DOM.
+  syncRosterHighlight();
 }
 
 function dominantOrigin(parts) {
@@ -687,9 +718,18 @@ function onTypeToggle() {
 
 function selectNode(id) {
   selectedId = id;
+  // renderGraph() calls syncRosterHighlight(), which reflects selectedId
+  // onto the roster without rebuilding it — a full buildRosterGrid() here
+  // would re-attach every card's listeners and could yank the user's
+  // current scroll position right as we're about to intentionally move it.
   renderGraph();
-  buildRosterGrid(document.getElementById('roster-filter').value);
   renderDetail();
+  // #240 — the roster grid is a small scrollable list; a member selected
+  // from the graph could easily be scrolled out of view, which is exactly
+  // the "closer relationship" gap Rachel flagged. Selecting from the graph
+  // (or the roster itself, harmlessly) now reveals the corresponding card.
+  const card = document.querySelector(`#lodge-roster-grid [data-select="${CSS.escape(id)}"]`);
+  if (card) card.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 }
 
 async function renderDetail() {

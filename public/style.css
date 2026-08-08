@@ -616,9 +616,13 @@ a.archival-image-link:hover { border-color:var(--lodge-amber-dim); cursor:pointe
 .lodge-page-roster { width:280px; flex-shrink:0; background:var(--lodge-surface); border:1px solid var(--lodge-border); border-radius:2px; padding:14px; display:flex; flex-direction:column; gap:10px; max-height:calc(100vh - 260px); }
 .lodge-roster-filter { width:100%; }
 .lodge-roster-grid { overflow-y:auto; display:flex; flex-direction:column; gap:4px; }
-.lodge-roster-card { display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:2px; cursor:pointer; transition:background 0.15s; }
+.lodge-roster-card { display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:2px; cursor:pointer; border:1px solid transparent; transition:background 0.15s, border-color 0.15s, box-shadow 0.15s; }
 .lodge-roster-card:hover { background:rgba(200,146,42,0.08); }
-.lodge-roster-card.selected { background:rgba(200,146,42,0.16); }
+/* #240 — reflects the graph's hoveredId onto the matching roster card (see
+   syncRosterHighlight in lodge.js); a lighter echo of .selected so the two
+   panels visibly track each other on hover, not just on click. */
+.lodge-roster-card.hovered { background:rgba(200,146,42,0.1); border-color:var(--lodge-amber-dim); }
+.lodge-roster-card.selected { background:rgba(200,146,42,0.2); border-color:var(--lodge-amber); box-shadow:0 0 8px rgba(200,146,42,0.35); }
 .lodge-roster-portrait { width:28px; height:28px; border-radius:50%; object-fit:cover; border:1px solid var(--lodge-border); flex-shrink:0; }
 .lodge-roster-glyph { color:var(--lodge-amber); font-size:13px; width:16px; text-align:center; flex-shrink:0; }
 .lodge-roster-name { font-family:'Crimson Pro',serif; font-size:14px; color:var(--lodge-cream); }
