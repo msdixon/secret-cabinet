@@ -21,6 +21,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 const crypto = require('crypto');
 
 const session = require('express-session');
+const FileStore = require('session-file-store')(session);
 
 const dayOne = require('./dayone');
 const multer = require('multer');
@@ -55,7 +56,15 @@ app.set('trust proxy', 1);
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const PORT = process.env.PORT || 3132;
-const SESSIONS_DIR = path.join(__dirname, 'sessions');
+// Railway auto-injects RAILWAY_VOLUME_MOUNT_PATH when a volume is attached to
+// the service. Reading it here (rather than hardcoding a path) means convene
+// data and auth sessions start landing on the mounted volume — and surviving
+// redeploys — the moment a volume is attached in the Railway dashboard, with
+// no further code change. Falls back to __dirname for local dev and for any
+// deployed instance that hasn't attached a volume yet (still ephemeral there).
+const DATA_DIR = process.env.RAILWAY_VOLUME_MOUNT_PATH || __dirname;
+const SESSIONS_DIR = path.join(DATA_DIR, 'sessions');
+const AUTH_SESSIONS_DIR = path.join(DATA_DIR, '.auth-sessions');
 const PROMPTS_DIR = path.join(__dirname, 'prompts');
 const MEMBERS_DIR = path.join(PROMPTS_DIR, 'members');
 
@@ -68,7 +77,19 @@ app.use(express.urlencoded({ extended: false }));
 
 const PASSPHRASE = process.env.PASSPHRASE || null;
 
+// A gated deploy with no real secret means every restart mints a fresh
+// server-side signing key in effect (since the fallback is a shared, public
+// string) — cookies from a previous secret verify against whichever process
+// happens to be running. Fail loudly at startup rather than silently serving
+// a passphrase gate that isn't actually gating anything.
+if (!IS_LOCAL && PASSPHRASE && !process.env.SESSION_SECRET) {
+  console.error('SESSION_SECRET must be set when PASSPHRASE is set on a deployed instance. ' +
+    'Generate one with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
+  process.exit(1);
+}
+
 app.use(session({
+  store: new FileStore({ path: AUTH_SESSIONS_DIR }),
   secret: process.env.SESSION_SECRET || 'local-dev-secret-change-me',
   resave: false,
   saveUninitialized: false,
