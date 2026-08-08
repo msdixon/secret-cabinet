@@ -104,6 +104,8 @@ PORT=3132
 
 The `.env` file is never committed. On a fresh clone, create it manually or copy from a secure location.
 
+**Running multiple worktrees at once:** every worktree shares the same root `.env`, so they all default to `PORT=3132`. Either run `PORT=3200 npm run dev` in a given worktree to pick your own port, or just start it with no override — if 3132 is taken, the server scans upward (3133, 3134, ...) and logs whichever port it actually bound.
+
 ---
 
 *The fire is lit. The room remembers nothing. The document waits.*

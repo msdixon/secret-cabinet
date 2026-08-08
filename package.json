@@ -7,7 +7,7 @@
     "start": "node server.js",
     "predev": "npm install --no-audit --no-fund",
     "dev": "node --watch server.js",
-    "update": "git pull origin main && npm install && lsof -ti :3132 | xargs kill -9 2>/dev/null; npm run dev",
+    "update": "git pull origin main && npm install && lsof -ti :${PORT:-3132} | xargs kill -9 2>/dev/null; npm run dev",
     "citations": "node scripts/build-citation-manifest.js",
     "test": "node --test test/*.test.js",
     "test:watch": "node --test --watch test/*.test.js"
