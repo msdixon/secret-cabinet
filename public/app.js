@@ -751,9 +751,9 @@ async function convene() {
   lastSpeakerId = null; currentSpeakerSide = 'right';
   document.getElementById('convene-btn').disabled = true;
   document.querySelectorAll('.round-count-btn').forEach(b => b.disabled = true);
+  document.getElementById('additional-round-btn').className = 'lodge-btn';
   document.getElementById('after-panel').className = 'after-panel';
   document.getElementById('interject-form').style.display = 'none';
-  closeAllAfterMenus();
 
   currentSessionId = null;
   currentRound = 0;
@@ -894,6 +894,7 @@ async function resumeRounds(fromIndex) {
 
 function showSessionControls() {
   document.getElementById('after-panel').className = 'after-panel visible';
+  document.getElementById('additional-round-btn').className = 'lodge-btn visible';
   document.getElementById('verify-citations-btn').className = 'lodge-btn visible';
   document.getElementById('reveal-player-turns-btn').className = 'lodge-btn' + (sessionPlayerTurns.length ? ' visible' : '');
   window.Export.updateScholarlyExportButton();
@@ -1113,8 +1114,8 @@ function reconveneOnCurrentSession() {
   // Clear transcript view so user starts fresh
   document.getElementById('transcript-content').innerHTML = '';
   document.getElementById('after-panel').className = 'after-panel';
+  document.getElementById('additional-round-btn').className = 'lodge-btn';
   document.getElementById('interject-form').style.display = 'none';
-  closeAllAfterMenus();
   currentRound = 0;
   currentSessionId = null;
   transcriptText = '';
@@ -1122,57 +1123,6 @@ function reconveneOnCurrentSession() {
 
   window.scrollTo({ top: 0, behavior: 'smooth' });
   setStatus('The transcript has been placed on the table. Assemble a new room and reconvene.', false);
-}
-
-// ── Continue / Preserve menus ───────────────────────────────────────────────
-// #74 folded a sprawling after-meeting panel into fewer controls once already;
-// #186 does it again by naming the two verbs directly. Continue's four items
-// (one more turn, interject, reconvene, branch) and Preserve's exports were
-// all top-level buttons before this -- now they live behind one menu each,
-// opened/closed the same way as the sessions/dossier drawers elsewhere in
-// this file, just anchored to their button instead of sliding from the edge.
-
-function closeAllAfterMenus() {
-  document.querySelectorAll('.lodge-menu.open').forEach(m => m.classList.remove('open'));
-}
-
-function toggleAfterMenu(menuId) {
-  const menu = document.getElementById(menuId);
-  const wasOpen = menu.classList.contains('open');
-  closeAllAfterMenus();
-  if (!wasOpen) menu.classList.add('open');
-}
-
-// A click anywhere outside a menu-wrap closes whatever's open; a click on an
-// item inside a menu (an export, "One More Turn", etc.) closes it too, since
-// every item here is a one-shot action rather than a toggle worth leaving open.
-document.addEventListener('click', (e) => {
-  if (e.target.closest('.lodge-menu')) { closeAllAfterMenus(); return; }
-  if (!e.target.closest('.menu-wrap')) closeAllAfterMenus();
-});
-
-// Continue's "Branch" item branches from the meeting's current end, reusing
-// the per-round #33 branch machinery (normally only offered inline on a
-// restored session's individual round headers) with the latest round index.
-function branchFromLatestRound() {
-  if (!currentSessionId || currentRound < 1) return;
-  branchFromRound(currentRound - 1);
-}
-
-// ── Export settings drawer ──────────────────────────────────────────────────
-// #186: Ulysses group/identifier, Obsidian vault, and the Day One journal
-// label used to sit as standing fields in the after-panel; they're config,
-// consulted rarely, not something the ritual space needs to show by default.
-
-function openExportSettings() {
-  closeAllAfterMenus();
-  document.getElementById('export-settings-overlay').classList.add('open');
-  document.getElementById('export-settings-drawer').classList.add('open');
-}
-
-function closeExportSettings() {
-  document.getElementById('export-settings-overlay').classList.remove('open');
-  document.getElementById('export-settings-drawer').classList.remove('open');
 }
 
 // ── Witness mode ──────────────────────────────────────────────────────────────
