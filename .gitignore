@@ -2,5 +2,6 @@ node_modules/
 .env
 sessions/*
 !sessions/.gitkeep
+.auth-sessions/
 CITATION-MANIFEST.md
 .DS_Store
