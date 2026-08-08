@@ -43,6 +43,13 @@ let svgW = 900, svgH = 520;
 
 let simRunning = false;
 let simAlpha = 0;
+// #218 — at ~140 nodes / ~400 links, summed kinetic energy (see simTick)
+// plateaus around 6-9 from residual spring/boundary jitter and rarely dips
+// under the 0.02 stop threshold on its own; this alpha decay is what
+// actually ends the loop. It was 0.996 (~16s to expire), which kept
+// requestAnimationFrame rebuilding the whole SVG at 60fps long after motion
+// was visually imperceptible. 0.97 expires in ~2s, well after real settling.
+const ALPHA_DECAY = 0.97;
 
 // ── Boot ───────────────────────────────────────────────────────────────────
 
@@ -163,14 +170,28 @@ function layoutInitialPositions() {
 }
 
 // ── Force simulation (hand-rolled — no D3 dependency for ~150 nodes) ───────
+//
+// #218 — REPEL/DAMPING/MAX_SPEED were retuned together: nodes seeded close
+// together by layoutInitialPositions() (or freed after a drag) could land
+// within the distSq<1 floor below, which used to hand out a ~900px/tick
+// impulse with nothing capping it — a visible snap, then a slow 0.82-retention
+// decay that read as jitter for several seconds. Lower REPEL, harder DAMPING,
+// and a per-tick speed clamp keep any single tick's displacement small enough
+// to read as settling instead of bouncing.
+
+function prefersReducedMotion() {
+  return typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
 
 function simTick() {
   const cx = svgW / 2, cy = svgH / 2;
   const nodes = graphNodes;
-  const REPEL = 900;
+  const REPEL = 650;
   const SPRING = 0.02;
   const CENTER = 0.008;
-  const DAMPING = 0.82;
+  const DAMPING = 0.72;
+  const MAX_SPEED = 12;
 
   // Repulsion (O(n^2) — fine at this node count).
   for (let i = 0; i < nodes.length; i++) {
@@ -201,7 +222,7 @@ function simTick() {
     if (!b.fixed) { b.vx -= fx; b.vy -= fy; }
   });
 
-  // Centering + damping + integrate.
+  // Centering + damping + speed cap + integrate.
   let kinetic = 0;
   nodes.forEach(n => {
     if (n.fixed) return;
@@ -209,6 +230,11 @@ function simTick() {
     n.vy += (cy - n.y) * CENTER;
     n.vx *= DAMPING;
     n.vy *= DAMPING;
+    const speed = Math.hypot(n.vx, n.vy);
+    if (speed > MAX_SPEED) {
+      const scale = MAX_SPEED / speed;
+      n.vx *= scale; n.vy *= scale;
+    }
     n.x += n.vx;
     n.y += n.vy;
     n.x = Math.max(n.r, Math.min(svgW - n.r, n.x));
@@ -218,8 +244,27 @@ function simTick() {
   return kinetic;
 }
 
+// Reduced motion: run the same tick function to convergence synchronously,
+// no requestAnimationFrame, so the graph appears already-settled rather than
+// animating into place. Same physics, just no visible motion.
+function settleImmediately() {
+  const MAX_ITER = 200;
+  let alpha = 1;
+  for (let i = 0; i < MAX_ITER; i++) {
+    const kinetic = simTick();
+    alpha *= ALPHA_DECAY;
+    if (kinetic <= 0.02 || alpha <= 0.02) break;
+  }
+  simRunning = false;
+  renderGraph();
+}
+
 function startSim() {
   simAlpha = 1;
+  if (prefersReducedMotion()) {
+    settleImmediately();
+    return;
+  }
   if (!simRunning) {
     simRunning = true;
     requestAnimationFrame(simLoop);
@@ -234,7 +279,7 @@ function reheat() {
 function simLoop() {
   const kinetic = simTick();
   renderGraph();
-  simAlpha *= 0.996;
+  simAlpha *= ALPHA_DECAY;
   if (kinetic > 0.02 && simAlpha > 0.02) {
     requestAnimationFrame(simLoop);
   } else {

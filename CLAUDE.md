@@ -10,6 +10,12 @@ Standing instructions for any Claude Code session working in this repo. See [PRO
 
 **Before adding any entry — including a backfill for older history — grep `STATUS.md` for the PR or issue number first.** If it's already logged, don't add a second entry; if you have real detail the existing one lacks, that's a judgment call about whether it's worth a short addendum, not grounds for a duplicate paragraph. This guards the one gap the new rule doesn't close on its own: PRs merged before this convention existed, or where a session skipped the step, still need occasional backfilling — but backfilling should stay rare, deliberate, and checked-for-duplicates now, not a standing "after every merge" habit.
 
+## Updating PROJECT.md's Todo backlog
+
+**Update PROJECT.md's Todo backlog and thread-status table before merge if the PR closes an item named there** — document what's shipped and what's next in the same commit. Same rule and same reasoning as STATUS.md above: land it atomically with the PR, not as a follow-up cleanup pass.
+
+**Why:** this drift kept recurring in practice, not as a one-off slip. #184 and #185 both shipped (PRs #206 and #209) but PROJECT.md still listed them as open until a manual pass caught it on 2026-08-08 — and days later it happened again, this time across #187, #188, #137, #90, and separately #203, all shipped but still shown as active until another manual pass reconciled the doc. Nothing forces anyone to go back and update the roadmap doc once a PR merges, so it silently goes stale until someone happens to notice — the exact gap STATUS.md's rule already closes for the changelog. A reactive backstop exists too (`/cabinet-next`'s board-drift check, added 2026-08-08), but that's a periodic catch-up pass, not a fix at the source; this rule is the source fix.
+
 ## Filing new issues
 
 **Every new issue gets added to the GitHub Project board (#2, "Secret-Cabin-et Roadmap") at creation time** — not left to be picked up in a later triage pass:
