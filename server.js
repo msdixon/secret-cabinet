@@ -5,11 +5,21 @@ const path = require('path');
 
 // Walk up from __dirname to find the nearest .env file (supports git worktrees
 // where the .env lives in the main project root, not the worktree directory).
+// override:true refreshes stale shell-exported vars (e.g. an old API key) from
+// .env — but since every worktree shares that same root .env, it would also
+// clobber a PORT set on the command line to avoid a collision with another
+// worktree's dev server (#211). Re-assert a shell-set PORT after loading so
+// `PORT=3200 npm run dev` actually wins.
 (function loadEnv() {
+  const shellPort = process.env.PORT;
   let dir = __dirname;
   while (true) {
     const candidate = path.join(dir, '.env');
-    if (fs.existsSync(candidate)) { require('dotenv').config({ path: candidate, override: true, quiet: true }); return; }
+    if (fs.existsSync(candidate)) {
+      require('dotenv').config({ path: candidate, override: true, quiet: true });
+      if (shellPort) process.env.PORT = shellPort;
+      return;
+    }
     const parent = path.dirname(dir);
     if (parent === dir) break;
     dir = parent;
@@ -55,7 +65,7 @@ const app = express();
 app.set('trust proxy', 1);
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-const PORT = process.env.PORT || 3132;
+const PORT = Number(process.env.PORT) || 3132;
 // Railway auto-injects RAILWAY_VOLUME_MOUNT_PATH when a volume is attached to
 // the service. Reading it here (rather than hardcoding a path) means convene
 // data and auth sessions start landing on the mounted volume — and surviving
@@ -1963,6 +1973,24 @@ function buildTranscriptHeader(entry, memberIds, date) {
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`The Secret-Cabin-et is open at http://localhost:${PORT}`);
-});
+// Local dev only: concurrent worktree sessions default to the same PORT, so
+// on collision we scan upward for a free one instead of crashing (#211). In
+// production, Railway assigns PORT and expects the app to bind exactly that
+// port for routing to work — fail fast there instead of silently drifting.
+const MAX_PORT_ATTEMPTS = 10;
+
+function startServer(port, attemptsLeft) {
+  const server = app.listen(port, '0.0.0.0', () => {
+    console.log(`The Secret-Cabin-et is open at http://localhost:${port}`);
+  });
+  server.on('error', (err) => {
+    if (IS_LOCAL && err.code === 'EADDRINUSE' && attemptsLeft > 0) {
+      console.log(`Port ${port} is already in use, trying ${port + 1}...`);
+      startServer(port + 1, attemptsLeft - 1);
+    } else {
+      throw err;
+    }
+  });
+}
+
+startServer(PORT, MAX_PORT_ATTEMPTS);
