@@ -31,7 +31,7 @@ function buildMemberSection(member, artifact, notes, loadMemberFile) {
 // retries, skips, and fallbacks) produces one of these, persisted alongside
 // the session so it's reviewable after the fact, not just an ephemeral
 // console line.
-function makeMetric(phase, { round, memberId, attempts, usage, latencyMs, skipped, error, reasoning, voiceExemplar, waitingOnMemberId } = {}) {
+function makeMetric(phase, { round, memberId, attempts, usage, latencyMs, skipped, error, reasoning, voiceExemplar, waitingOnMemberId, residueNote } = {}) {
   return {
     phase, // 'director' | 'speaker' | 'casting' | 'disposition'
     round: round ?? null,
@@ -54,6 +54,11 @@ function makeMetric(phase, { round, memberId, attempts, usage, latencyMs, skippe
     // signal actually fires without re-parsing prose. Always null off
     // every phase but 'disposition'.
     waitingOnMemberId: waitingOnMemberId || null,
+    // #166: whether this disposition beat wrote a new residue fragment —
+    // lets real sessions be checked for how often cross-session residue
+    // actually accrues without re-reading the residue store by hand.
+    // Always null off the 'disposition' phase.
+    residueNote: residueNote || null,
     timestamp: new Date().toISOString(),
   };
 }
@@ -552,17 +557,89 @@ ${text}
 Let this govern *how* you speak tonight, never *what* you speak about. Do not quote it, cite it, allude to it, or steer the room toward its subject — no one here is discussing this text, and producing it would read as a non sequitur. It is also written prose, and you are speaking aloud in a room: what carries over is the mind and the movement, not the punctuation of the page.${translationNote}`;
 }
 
+// ── Cross-session residue (#166) ───────────────────────────────────────────
+//
+// Rung (a) of #195's amnesia ladder: members stay amnesiac — no recall of
+// prior meetings — but drift the way the lodge context already licenses:
+// "the meeting deposits itself in you below the threshold of conscious
+// recall... a quality of readiness." Where #188's disposition is a member's
+// stance *tonight*, residue is the same mechanism's slow accumulation
+// *across* tonights — a small, capped, per-member store of stances,
+// tendencies, warmths and grudges that outlives the session that produced
+// it, read back into every future session's speaker prompt regardless of
+// which room convenes it.
+//
+// Piggybacks on the exact disposition tool call (see callDispositionUpdate
+// above) rather than adding a second one: `residueNote` is populated only
+// on the rare beat that earns it. Zero added latency, zero added API calls.
+//
+// Voice fidelity is the paramount constraint (per #166's scoping) — see
+// AXES.md's Axis 4 for the drift-toward-sameness risk this format resists:
+// fragments must stay short, concrete, and instance-grounded, and the
+// oldest erode off the cap long before accumulated residue could ever
+// outweigh the character file's fixed voice.
+
+const RESIDUE_MAX_CHARS = 480; // same order of magnitude as disposition's 400, deliberately not larger — smaller and more conservative was the explicit mandate
+const RESIDUE_NOTE_MAX_CHARS = 200; // one fragment's ceiling before it ever reaches the merge
+const RESIDUE_SEPARATOR = ' · ';
+
+// Deterministic, no model call: appends the new fragment and drops whole
+// fragments from the *oldest* end until back under the cap — never a
+// mid-fragment cut, same principle as #187's trimToWordBudget (a note
+// sheared mid-clause reads to the model as a stylistic habit, not an
+// elision). Oldest residue simply erodes off the cap as new residue
+// accrues — sediment, not a narrative a second call would have to compose.
+function mergeResidue(priorText, note) {
+  const trimmedNote = (note || '').trim().slice(0, RESIDUE_NOTE_MAX_CHARS);
+  if (!trimmedNote) return (priorText || '').trim();
+
+  const priorFragments = (priorText || '').split(RESIDUE_SEPARATOR).map(f => f.trim()).filter(Boolean);
+  const fragments = [...priorFragments, trimmedNote];
+
+  const kept = [];
+  let used = 0;
+  for (let i = fragments.length - 1; i >= 0; i--) {
+    const fragment = fragments[i];
+    const cost = fragment.length + (kept.length ? RESIDUE_SEPARATOR.length : 0);
+    if (used + cost > RESIDUE_MAX_CHARS) break;
+    kept.unshift(fragment);
+    used += cost;
+  }
+  return kept.join(RESIDUE_SEPARATOR);
+}
+
+// `residueText` is the merged, on-disk cross-session store for this member
+// — see server.js's loadResidue. Empty for a member with no accumulated
+// residue yet, which is what makes the degradation invisible (same contract
+// as buildVoiceExemplarSection). The framing is deliberately never a claim
+// of memory — rung (a) keeps the amnesia; this is instinct, not recall.
+function buildResidueSection(residueText) {
+  const text = (residueText || '').trim();
+  if (!text) return '';
+
+  return `\n\n---\n\n## WHAT LINGERS, THOUGH YOU COULDN'T SAY WHY
+
+${text}
+
+This is not memory. You have no meetings to recall, and if pressed, you would honestly deny remembering any of them — because you don't. It surfaces only as instinct: a tone you reach for without knowing its source, a wariness or a warmth that arrives ahead of any reason you could give for it. Let it color how you carry yourself tonight — never mention it, explain it, or gesture at where it comes from. As far as you know, there is nothing to gesture at.`;
+}
+
 // ── Per-speaker call ────────────────────────────────────────────────────────
 
 // Only this member's own character file goes in — no other present members'
 // files. That's the whole point: each speaker gets the model's full
 // attention instead of a fraction of it split across the whole cast.
-function buildSpeakerSystemPrompt({ lodgeContext, member, artifact, notes, loadMemberFile, disposition, voiceExemplar }) {
+function buildSpeakerSystemPrompt({ lodgeContext, member, artifact, notes, loadMemberFile, disposition, voiceExemplar, residue }) {
   const memberSection = buildMemberSection(member, artifact, notes, loadMemberFile);
   // #187: sits directly after the character file, since it's evidence for
   // the same thing that file describes — and before the disposition, which
   // is about tonight specifically and wants to be the last thing read.
   const exemplarSection = buildVoiceExemplarSection(voiceExemplar);
+  // #166: slower-moving than disposition (spans sessions, not just tonight)
+  // so it sits between the exemplar and the disposition — evidence of
+  // register, then accumulated drift, then tonight specifically, in that
+  // order of how far back each one reaches.
+  const residueSection = buildResidueSection(residue);
   // #203: disposition is now { text, waitingOnMemberId } (see the
   // disposition scratchpad section below) — only the prose goes in the
   // speaker prompt, the structured target is read by pickNextSpeaker.
@@ -575,7 +652,7 @@ function buildSpeakerSystemPrompt({ lodgeContext, member, artifact, notes, loadM
 
 ---
 
-${memberSection}${exemplarSection}${dispositionSection}
+${memberSection}${exemplarSection}${residueSection}${dispositionSection}
 
 ---
 
@@ -712,7 +789,7 @@ async function callSpeakerTurn({ client, model, system, conversationHistory, use
 // pickNextSpeaker's INTERRUPT_INTENT_WEIGHT for the consumer.
 
 const DISPOSITION_MAX_CHARS = 400; // a few sentences — hard cap so this can't balloon a speaker prompt over a long session
-const DISPOSITION_MAX_TOKENS = 220; // reflection prose plus the tool-call JSON wrapper and target field
+const DISPOSITION_MAX_TOKENS = 280; // reflection prose plus the tool-call JSON wrapper, target field, and #166's optional residue field
 
 function buildDispositionToolSchema(presentIds) {
   return {
@@ -730,13 +807,22 @@ function buildDispositionToolSchema(presentIds) {
           enum: [...presentIds, 'none'],
           description: 'The one present member (by id) this member has unspent business with and would want to answer or press if that person speaks again — or "none" if that is not true right now. Most turns are "none"; only name someone when it is real.',
         },
+        // #166: cross-session residue, piggybacked on this same call rather
+        // than a second one — see the "Cross-session residue" section below
+        // for the full mechanism. Left out of `required` on purpose: an
+        // omitted field is how the model expresses "nothing belongs here",
+        // which is the common case by design.
+        residueNote: {
+          type: 'string',
+          description: `Optional, and rare. Only when this beat genuinely shifted or confirmed something that should outlast tonight — a durable turn in stance, a new alliance or grudge, a tendency proven true. One short sentence, written in your own private register, under ${RESIDUE_NOTE_MAX_CHARS} characters. Leave this out entirely on ordinary turns — most turns, nothing belongs here.`,
+        },
       },
       required: ['reflection', 'waitingOnMemberId'],
     },
   };
 }
 
-function buildDispositionSystemPrompt({ member, priorDisposition, presentMembers = [] }) {
+function buildDispositionSystemPrompt({ member, priorDisposition, presentMembers = [], priorResidue }) {
   const priorText = priorDisposition?.text?.trim();
   const priorTarget = priorDisposition?.waitingOnMemberId
     ? presentMembers.find(m => m.id === priorDisposition.waitingOnMemberId)?.name
@@ -746,13 +832,23 @@ function buildDispositionSystemPrompt({ member, priorDisposition, presentMembers
     ? `Your private state going into this turn was:\n"${priorText}"\n\nUpdate it — don't just repeat it back.${priorTargetNote}`
     : 'This is your first private reflection tonight — there is no prior state yet.';
 
+  // #166: shown so the model doesn't re-mint a fragment that's already
+  // there — the point of residue is what's new or confirmed, not a running
+  // restatement of what's already settled.
+  const priorResidueText = priorResidue?.trim();
+  const residueContextBlock = priorResidueText
+    ? `\n\nResidue already carried from other evenings, beneath this member's own conscious recall: "${priorResidueText}" Only add to it below if tonight genuinely shifted or confirmed something beyond what's already there — most turns, it didn't.`
+    : '';
+
   return `You are privately reflecting as ${member.name}, immediately after speaking your turn in tonight's salon. This reflection is never shown to anyone — not the other members, not the transcript, not the researcher who convened the evening. It is your own unspoken interior state, carried forward to color how you show up for the rest of the evening.
 
-${priorBlock}
+${priorBlock}${residueContextBlock}
 
 Write 1-3 sentences, as private thought rather than speech: your current stance on the evening's argument, anything you haven't yet said but intend to, who you're aligned with or irritated by tonight. Be concrete and specific to what just happened, not a generic character summary. Keep it under ${DISPOSITION_MAX_CHARS} characters — this is a scratchpad, not an essay.
 
-Separately, name whether there is one present person you have real unspent business with — something you'd want to answer or press if they spoke again. This is the exception, not the default: most turns, there is no one.`;
+Separately, name whether there is one present person you have real unspent business with — something you'd want to answer or press if they spoke again. This is the exception, not the default: most turns, there is no one.
+
+Separately again, and rarer still: name whether tonight left something that should genuinely outlast this evening — not tonight's mood, a durable turn. Most turns, there is nothing here either.`;
 }
 
 function buildDispositionUserMessage({ roundSoFarText, turnText, member }) {
@@ -777,12 +873,15 @@ async function callDispositionUpdate({ client, model, system, userMessage, prese
   });
   const latencyMs = Date.now() - start;
   const block = response.content.find(b => b.type === 'tool_use');
-  const { reflection, waitingOnMemberId } = block?.input || {};
+  const { reflection, waitingOnMemberId, residueNote } = block?.input || {};
   const text = (reflection || '').trim().slice(0, DISPOSITION_MAX_CHARS);
   const target = waitingOnMemberId && waitingOnMemberId !== 'none' && presentIds.includes(waitingOnMemberId)
     ? waitingOnMemberId
     : null;
-  return { text, waitingOnMemberId: target, usage: response.usage, latencyMs };
+  // #166: '' rather than undefined when absent, so callers can treat "no
+  // residue this beat" uniformly without an extra undefined check.
+  const residue = (residueNote || '').trim().slice(0, RESIDUE_NOTE_MAX_CHARS);
+  return { text, waitingOnMemberId: target, residueNote: residue, usage: response.usage, latencyMs };
 }
 
 // ── Orchestrator ──────────────────────────────────────────────────────────
@@ -801,7 +900,9 @@ const MAX_TOTAL_BEATS = 16; // hard safety net — budget/pool logic should alwa
 // Ties the director and per-speaker calls together into one round. Returns
 // { fullRoundText, speakerOrder } in the exact shape the caller already
 // persists today (one rolled-up round of text) — this function is the only
-// thing that changes about *how* that text gets generated.
+// thing that changes about *how* that text gets generated. Also returns
+// `residueUpdates` (#166) — a sparse map of only the members who wrote a
+// new cross-session residue fragment this round, for the caller to persist.
 //
 // `roundSoFar` is local to this call only — it is never persisted on its
 // own, only as the finished `fullRoundText`. Each per-speaker call still
@@ -832,7 +933,7 @@ const MAX_TOTAL_BEATS = 16; // hard safety net — budget/pool logic should alwa
 async function runRound({ client, model, lodgeContext, ROSTER, loadMemberFile,
   presentMemberIds, artifact, notes, roundPrompt, conversationHistory,
   speakerCount, round, onChunk, onMetric, onSpeakerStart, onSpeakerEnd, precedingTurn,
-  disposition, loadVoiceExemplar }) {
+  disposition, loadVoiceExemplar, loadResidue }) {
 
   const presentMembers = ROSTER.filter(m => presentMemberIds.includes(m.id));
   const effectiveCount = Math.min(speakerCount, presentMembers.length);
@@ -858,6 +959,31 @@ async function runRound({ client, model, lodgeContext, ROSTER, loadMemberFile,
     }
     return exemplarCache.get(memberId);
   };
+
+  // #166: like exemplarCache, but mutated in place through the round (same
+  // reason as currentDisposition) — a member picked twice in one round
+  // should see their own just-written residue fragment on the second turn,
+  // not the stale on-disk value from before the round started.
+  const residueCache = new Map();
+  const residueFor = memberId => {
+    if (!residueCache.has(memberId)) {
+      let text = '';
+      try {
+        text = loadResidue?.(memberId) || '';
+      } catch (err) {
+        // A missing or malformed residue file must never cost a member
+        // their turn — fall through to the no-residue path, same as a
+        // member who simply hasn't accrued any yet.
+        console.warn('[residue]', memberId, '—', err.message);
+      }
+      residueCache.set(memberId, text);
+    }
+    return residueCache.get(memberId);
+  };
+  // Only entries a member actually wrote to this round — most rounds this
+  // stays empty (see buildDispositionToolSchema's residueNote: "most turns,
+  // nothing belongs here"). The caller persists exactly what's here.
+  const residueUpdates = {};
 
   // A human-written turn (player-as-member) seeded before the director
   // decides — streamed immediately so it appears in the live view before
@@ -926,7 +1052,8 @@ async function runRound({ client, model, lodgeContext, ROSTER, loadMemberFile,
 
     const unheardCount = pool.filter(id => id !== memberId && !(spokenCounts.get(id) > 0)).length;
     const voiceExemplar = exemplarFor(memberId);
-    const system = buildSpeakerSystemPrompt({ lodgeContext, member, artifact, notes, loadMemberFile, disposition: currentDisposition[memberId], voiceExemplar });
+    const residue = residueFor(memberId);
+    const system = buildSpeakerSystemPrompt({ lodgeContext, member, artifact, notes, loadMemberFile, disposition: currentDisposition[memberId], voiceExemplar, residue });
     const userMessage = buildSpeakerUserMessage({ roundPrompt, roundSoFarText: roundSoFar, member, remainingBudgetWords: remainingBudget, unheardCount, interruptingName: interruptedMember?.name || null });
 
     onChunk?.(`${member.name}\n`);
@@ -948,17 +1075,25 @@ async function runRound({ client, model, lodgeContext, ROSTER, loadMemberFile,
       // disposition failure must not get reported as a failed speaker turn
       // that already succeeded and was already streamed to the client.
       try {
-        const dispositionSystem = buildDispositionSystemPrompt({ member, priorDisposition: currentDisposition[memberId], presentMembers });
+        const priorResidueText = residueFor(memberId);
+        const dispositionSystem = buildDispositionSystemPrompt({ member, priorDisposition: currentDisposition[memberId], presentMembers, priorResidue: priorResidueText });
         const dispositionUserMessage = buildDispositionUserMessage({
           roundSoFarText: contextBeforeTurn || 'Nothing yet — you are the first to speak this round.',
           turnText: settledText, member,
         });
         const dispositionPresentIds = presentMembers.filter(m => m.id !== memberId).map(m => m.id);
-        const { text: updatedDisposition, waitingOnMemberId, usage: dUsage, latencyMs: dLatencyMs } = await callDispositionUpdate({
+        const { text: updatedDisposition, waitingOnMemberId, residueNote, usage: dUsage, latencyMs: dLatencyMs } = await callDispositionUpdate({
           client, model, system: dispositionSystem, userMessage: dispositionUserMessage, presentIds: dispositionPresentIds,
         });
         if (updatedDisposition) currentDisposition[memberId] = { text: updatedDisposition, waitingOnMemberId };
-        onMetric?.(makeMetric('disposition', { round, memberId, usage: dUsage, latencyMs: dLatencyMs, waitingOnMemberId }));
+        // #166: only when the beat actually earned a fragment — most beats
+        // don't (see the tool schema's "most turns, nothing belongs here").
+        if (residueNote) {
+          const mergedResidue = mergeResidue(priorResidueText, residueNote);
+          residueCache.set(memberId, mergedResidue);
+          residueUpdates[memberId] = mergedResidue;
+        }
+        onMetric?.(makeMetric('disposition', { round, memberId, usage: dUsage, latencyMs: dLatencyMs, waitingOnMemberId, residueNote: residueNote || null }));
       } catch (err) {
         onMetric?.(makeMetric('disposition', { round, memberId, skipped: true, error: err.message }));
         // Best-effort — the member simply carries their prior disposition forward.
@@ -981,7 +1116,7 @@ async function runRound({ client, model, lodgeContext, ROSTER, loadMemberFile,
     throw new Error('Every speaker failed this round — nothing to save.');
   }
 
-  return { fullRoundText: roundSoFar, speakerOrder, disposition: currentDisposition };
+  return { fullRoundText: roundSoFar, speakerOrder, disposition: currentDisposition, residueUpdates };
 }
 
 module.exports = {
@@ -1007,6 +1142,11 @@ module.exports = {
   VOICE_EXEMPLAR_WORD_BUDGET,
   trimToWordBudget,
   buildVoiceExemplarSection,
+  RESIDUE_MAX_CHARS,
+  RESIDUE_NOTE_MAX_CHARS,
+  RESIDUE_SEPARATOR,
+  mergeResidue,
+  buildResidueSection,
   buildSpeakerSystemPrompt,
   buildSpeakerUserMessage,
   stripInternalBlankLines,
