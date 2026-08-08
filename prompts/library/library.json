@@ -6,6 +6,7 @@
     "date": "1929",
     "author": "crowley",
     "translated": false,
+    "license": "public-domain",
     "members": ["crowley", "waite", "yeats"],
     "themes": ["golden-dawn", "schism", "authority", "initiation"],
     "file": "crowley-golden-dawn-1900.md"
@@ -17,6 +18,7 @@
     "date": "1937",
     "author": "yeats",
     "translated": false,
+    "license": "public-domain",
     "members": ["yeats", "maud"],
     "themes": ["automatism", "vision", "marriage", "spirits", "symbolism"],
     "file": "yeats-automatic-writing-1917.md"
@@ -28,6 +30,7 @@
     "date": "1877",
     "author": "blavatsky",
     "translated": false,
+    "license": "public-domain",
     "members": ["blavatsky", "levi"],
     "themes": ["astral", "occult-science", "will", "ether", "plagiarism"],
     "file": "blavatsky-astral-light-1877.md"
@@ -39,6 +42,7 @@
     "date": "1911",
     "author": "waite",
     "translated": false,
+    "license": "public-domain",
     "members": ["waite", "pixie"],
     "themes": ["tarot", "symbolism", "authorship", "hermeticism", "pictorial-tradition"],
     "file": "waite-pictorial-key-preface-1911.md"
@@ -50,6 +54,7 @@
     "date": "1577",
     "author": "teresa",
     "translated": true,
+    "license": "public-domain",
     "members": ["teresa", "arabi"],
     "themes": ["mysticism", "union", "interiority", "prayer", "consolations"],
     "file": "teresa-fourth-mansion-1577.md"
@@ -61,6 +66,7 @@
     "date": "1229",
     "author": "arabi",
     "translated": true,
+    "license": "public-domain",
     "members": ["arabi", "teresa", "levi"],
     "themes": ["imagination", "theophany", "form", "vision", "unity-of-being"],
     "file": "arabi-imagination-fusus.md"
@@ -72,6 +78,7 @@
     "date": "1856",
     "author": "levi",
     "translated": true,
+    "license": "public-domain",
     "members": ["levi", "crowley", "waite"],
     "themes": ["magic", "will", "initiation", "arcanum", "astral-light"],
     "file": "levi-great-arcanum-1856.md"
@@ -83,6 +90,7 @@
     "date": "1938",
     "author": "maud",
     "translated": false,
+    "license": "public-domain",
     "members": ["maud", "yeats"],
     "themes": ["ireland", "nationalism", "vision", "mysticism", "sacrifice"],
     "file": "maud-gonne-servant-of-queen-1938.md"
@@ -94,6 +102,7 @@
     "date": "1564",
     "author": "dee",
     "translated": true,
+    "license": "public-domain",
     "members": ["dee", "crowley", "levi"],
     "themes": ["symbol", "unity", "mathematics", "alchemy", "hieroglyph"],
     "file": "dee-monas-hieroglyphica-1564.md"
@@ -105,6 +114,7 @@
     "date": "1377",
     "author": "khaldun",
     "translated": true,
+    "license": "public-domain",
     "members": ["khaldun", "arabi"],
     "themes": ["history", "civilisation", "decline", "solidarity", "cycles"],
     "file": "khaldun-asabiyyah-muqaddimah-1377.md"
@@ -116,6 +126,7 @@
     "date": "1413",
     "author": "julian",
     "translated": true,
+    "license": "public-domain",
     "members": ["julian", "teresa"],
     "themes": ["sin", "providence", "suffering", "divine-love", "universalism", "showings"],
     "file": "julian-revelations-allshallbewell-1413.md"
@@ -127,6 +138,7 @@
     "date": "1916",
     "author": "jung",
     "translated": true,
+    "license": "public-domain",
     "members": ["jung", "corbin"],
     "themes": ["dream-symbolism", "unconscious", "interpretation", "mythology", "hidden-meaning"],
     "file": "jung-dream-symbolism-1916.md"
@@ -138,6 +150,7 @@
     "date": "1790",
     "author": "william-blake",
     "translated": false,
+    "license": "public-domain",
     "members": ["william-blake", "yeats"],
     "themes": ["contraries", "energy", "reason", "imagination", "prophecy"],
     "file": "blake-voice-of-the-devil-1790.md"
@@ -149,6 +162,7 @@
     "date": "1870",
     "author": "randolph",
     "translated": false,
+    "license": "public-domain",
     "members": ["randolph", "blavatsky"],
     "themes": ["clairvoyance", "astral-light", "ether", "inner-vision", "seership"],
     "file": "randolph-clairvoyance-birthright-1870.md"
@@ -160,6 +174,7 @@
     "date": "1283",
     "author": "llull",
     "translated": true,
+    "license": "public-domain",
     "members": ["llull", "teresa", "arabi"],
     "themes": ["mystical-love", "union", "ascent", "devotion", "allegory"],
     "file": "llull-lover-beloved-1283.md"
@@ -171,6 +186,7 @@
     "date": "1585",
     "author": "bruno",
     "translated": true,
+    "license": "public-domain",
     "members": ["bruno", "dee"],
     "themes": ["infinite", "intellect", "desire", "cosmology", "unity"],
     "file": "bruno-heroic-enthusiasts-1585.md"
@@ -182,6 +198,7 @@
     "date": "922",
     "author": "al-hallaj",
     "translated": true,
+    "license": "public-domain",
     "members": ["al-hallaj", "arabi"],
     "themes": ["union", "ecstatic-utterance", "annihilation", "fana", "heresy"],
     "file": "al-hallaj-ana-l-haqq.md"
@@ -193,6 +210,7 @@
     "date": "c. 1175",
     "author": "hildegard",
     "translated": true,
+    "license": "public-domain",
     "members": ["hildegard", "julian", "teresa"],
     "themes": ["vision", "living-light", "prophecy", "interiority", "testimony"],
     "file": "hildegard-living-light-1175.md"
@@ -204,6 +222,7 @@
     "date": "c. 1295",
     "author": "porete",
     "translated": true,
+    "license": "public-domain",
     "members": ["porete", "julian", "teresa"],
     "themes": ["authority", "approbation", "heresy", "annihilation", "mystical-love"],
     "file": "porete-mirror-approbations.md"
@@ -215,6 +234,7 @@
     "date": "1926",
     "author": "moina-mathers",
     "translated": false,
+    "license": "public-domain",
     "members": ["moina-mathers"],
     "themes": ["golden-dawn", "mysteries", "science-occultism", "initiation", "fraternity", "practical-magic"],
     "file": "moina-mathers-preface-1926.md"
@@ -226,6 +246,7 @@
     "date": "1922",
     "author": "dion-fortune",
     "translated": false,
+    "license": "public-domain",
     "members": ["dion-fortune", "jung"],
     "themes": ["unconscious", "dissociation", "auto-suggestion", "mechanism", "psychology"],
     "file": "fortune-machinery-of-the-mind-1922.md"

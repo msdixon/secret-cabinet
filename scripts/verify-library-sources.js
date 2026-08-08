@@ -35,6 +35,20 @@ async function checkArchiveOrg(identifier) {
   return { ok: true };
 }
 
+// Same failure mode as archive.org, different door: a doi.org link 404s
+// cleanly for a made-up DOI, but a *plausible but wrong* one can resolve to
+// some unrelated real work and still pass a plain HTTP check. Crossref's
+// API is the equivalent of archive.org's /metadata — it's what #35's
+// license section relies on to make a DOI actually checkable, not just
+// reachable.
+async function checkDoi(doi) {
+  const res = await fetch(`https://api.crossref.org/works/${doi}`);
+  if (!res.ok) return { ok: false, reason: `no such DOI (Crossref HTTP ${res.status})` };
+  const data = await res.json();
+  if (!data?.message?.title) return { ok: false, reason: 'DOI resolved but Crossref has no title for it' };
+  return { ok: true };
+}
+
 async function checkGeneric(url) {
   try {
     const res = await fetch(url);
@@ -46,7 +60,10 @@ async function checkGeneric(url) {
 
 async function verifyOne(source_url) {
   const archiveMatch = source_url.match(/^https:\/\/archive\.org\/details\/(.+)$/);
-  return archiveMatch ? checkArchiveOrg(archiveMatch[1]) : checkGeneric(source_url);
+  if (archiveMatch) return checkArchiveOrg(archiveMatch[1]);
+  const doiMatch = source_url.match(/^https:\/\/doi\.org\/(.+)$/);
+  if (doiMatch) return checkDoi(doiMatch[1]);
+  return checkGeneric(source_url);
 }
 
 async function main() {
