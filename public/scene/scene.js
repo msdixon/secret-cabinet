@@ -73,7 +73,11 @@ window.LodgeScene = (function () {
       avatar.isVisible = false;
       const avatarMat = new BABYLON.StandardMaterial(`avatarMat-${i}`, scene);
       avatarMat.disableLighting = true; // read the portrait at its own brightness, not scene-lit
-      avatarMat.emissiveColor = new BABYLON.Color3(1, 1, 1);
+      // Black, not white: StandardMaterial adds emissiveColor + emissiveTexture
+      // rather than multiplying them, so a white emissiveColor clamps every
+      // portrait to solid white regardless of its actual pixels (#217). Black
+      // leaves the texture as the only emissive contribution.
+      avatarMat.emissiveColor = new BABYLON.Color3(0, 0, 0);
       avatarMat.backFaceCulling = false;
       avatar.material = avatarMat;
 
