@@ -113,7 +113,7 @@ window.LodgeScene = (function () {
   // fires, so we look the seat up by memberId rather than by closure.
   function getPortraitTexture(scene, memberId) {
     if (!portraitTextures[memberId]) {
-      portraitTextures[memberId] = new BABYLON.Texture(
+      const tex = new BABYLON.Texture(
         `/portraits/${memberId}.png`, scene, false, false,
         BABYLON.Texture.TRILINEAR_SAMPLINGMODE, null,
         () => {
@@ -122,6 +122,16 @@ window.LodgeScene = (function () {
           if (seat) seat.avatar.isVisible = false;
         }
       );
+      // The Texture constructor's invertY flag is supposed to flip this, but
+      // it has no visible effect here -- Babylon's engine-level GPU texture
+      // cache appears to key on URL alone and reuse an already-uploaded
+      // texture regardless of invertY on a new Texture() instance. Flipping
+      // the V axis in the UV transform instead (vScale/vOffset) works
+      // reliably because it's applied at sample time, not upload time.
+      // Verified live via canvas pixel readback (#231).
+      tex.vScale = -1;
+      tex.vOffset = 1;
+      portraitTextures[memberId] = tex;
     }
     return portraitTextures[memberId];
   }
