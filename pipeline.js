@@ -33,7 +33,7 @@ function buildMemberSection(member, artifact, notes, loadMemberFile) {
 // console line.
 function makeMetric(phase, { round, memberId, attempts, usage, latencyMs, skipped, error, reasoning, voiceExemplar, waitingOnMemberId, residueNote } = {}) {
   return {
-    phase, // 'director' | 'speaker' | 'casting' | 'disposition'
+    phase, // 'director' | 'speaker' | 'casting' | 'disposition' | 'citation-extraction' | 'citation-grounding'
     round: round ?? null,
     memberId: memberId || null,
     attempts: attempts ?? 1,

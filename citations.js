@@ -1,5 +1,7 @@
 'use strict';
 
+const { makeMetric } = require('./pipeline');
+
 // #193 seam-map, module 5 of 8 — citation verification (#153).
 //
 // ~250 lines with a single caller (POST /api/sessions/:id/verify-citations),
@@ -15,7 +17,7 @@
 // slipped past exactly this kind of surface-level check). One batched call
 // covering every matched citation in the round, not one call each; skipped
 // entirely (no extra call) if nothing matched.
-async function groundAgainstLibraryText(client, model, citations, libraryLookup) {
+async function groundAgainstLibraryText(client, model, citations, libraryLookup, onMetric) {
   const matched = citations
     .map((c, index) => ({ c, index }))
     .filter(({ c }) => c.libraryMatch && libraryLookup[c.libraryMatch]?.text);
@@ -33,6 +35,7 @@ For each numbered item, judge whether its "Transcript quote" is genuinely consis
     return `### Item ${index}\nWork cited: ${c.work}\nTranscript quote: "${c.quote}"\n\nExcerpt from "${entry.title}" (${entry.source}):\n${entry.text}`;
   }).join('\n\n---\n\n');
 
+  const start = Date.now();
   const response = await client.messages.create({
     model,
     max_tokens: 2000,
@@ -62,6 +65,8 @@ For each numbered item, judge whether its "Transcript quote" is genuinely consis
     }],
     tool_choice: { type: 'tool', name: 'report_grounded_verdicts' },
   });
+  const latencyMs = Date.now() - start;
+  onMetric?.(makeMetric('citation-grounding', { usage: response.usage, latencyMs }));
 
   const block = response.content.find(b => b.type === 'tool_use');
   const verdicts = block?.input?.verdicts || [];

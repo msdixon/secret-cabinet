@@ -801,7 +801,7 @@ async function convene() {
     const s1 = startStreamEntry();
     let d1;
     try {
-      d1 = await streamPost('/api/convene', { entry, members, roundCount: activeConveneRoundCount, artifact, notes, sourceSessionId: currentSourceSessionId || undefined, playerMode, playerMemberId, playerName, playerTurn: playerTurn1 || undefined }, chunk => s1.append(chunk), s1.onSpeaking, s1.onSpeakerDone);
+      d1 = await streamPost('/api/convene', { entry, members, roundCount: activeConveneRoundCount, artifact, notes, sourceSessionId: currentSourceSessionId || undefined, playerMode, playerMemberId, playerName, playerTurn: playerTurn1 || undefined, castMetrics: window.Casting.consumeMetrics() }, chunk => s1.append(chunk), s1.onSpeaking, s1.onSpeakerDone);
       s1.finalize(d1.text);
       currentSessionId = d1.sessionId;
       window.Sessions.buildDossier(members);

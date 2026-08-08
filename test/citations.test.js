@@ -64,6 +64,33 @@ test('groundAgainstLibraryText', async t => {
     const result = await c.groundAgainstLibraryText(fakeClient, 'test-model', citationsList, lookup);
     assert.equal(result.size, 0);
   });
+
+  // #225 — generationMetrics didn't cover this call at all; onMetric is how
+  // the caller (server.js) gets usage back to persist onto the session.
+  await t.test('reports a citation-grounding metric when a call is made', async () => {
+    const fakeClient = {
+      messages: {
+        create: async () => ({
+          usage: { input_tokens: 111, output_tokens: 22 },
+          content: [{ type: 'tool_use', input: { verdicts: [{ index: 0, verdict: 'verified', note: 'n' }] } }],
+        }),
+      },
+    };
+    const citationsList = [{ libraryMatch: 'e1', work: 'Some Work', quote: 'a quote' }];
+    const lookup = { e1: { title: 'T', source: 'S', text: 'The excerpt text.' } };
+    const metrics = [];
+    await c.groundAgainstLibraryText(fakeClient, 'test-model', citationsList, lookup, m => metrics.push(m));
+    assert.equal(metrics.length, 1);
+    assert.equal(metrics[0].phase, 'citation-grounding');
+    assert.deepEqual(metrics[0].usage, { input_tokens: 111, output_tokens: 22 });
+  });
+
+  await t.test('does not call onMetric when nothing matched (no call was made)', async () => {
+    const fakeClient = { messages: { create: async () => ({ content: [] }) } };
+    const metrics = [];
+    await c.groundAgainstLibraryText(fakeClient, 'test-model', [{ libraryMatch: null }], {}, m => metrics.push(m));
+    assert.equal(metrics.length, 0);
+  });
 });
 
 test('worksOverlap', async t => {

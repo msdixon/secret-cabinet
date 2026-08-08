@@ -40,6 +40,8 @@ window.Casting = (function () {
   let pending = false;
   let handCast = false;       // the user has touched the grid for this document
   let proposedFor = null;     // fingerprint of the document last proposed on
+  let lastMetrics = [];       // #225 — usage from the most recent /api/cast call,
+                               // held here until app.js's convene call claims it
 
   function configure(injectedDeps) {
     deps = injectedDeps;
@@ -146,8 +148,10 @@ window.Casting = (function () {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Could not read the room');
       proposal = data;
+      lastMetrics = Array.isArray(data.metrics) ? data.metrics : [];
     } catch (e) {
       proposal = null;
+      lastMetrics = [];
       // A failed proposal is a non-event: the grid still works, and an auto
       // attempt the user never asked for shouldn't take over the status bar.
       if (!auto) deps.setStatus(`The room could not be read — ${e.message}`, false);
@@ -172,6 +176,16 @@ window.Casting = (function () {
   function dismissProposal() {
     proposal = null;
     render();
+  }
+
+  // #225 — app.js calls this once, right before /api/convene, to fold the
+  // casting call's usage into the new session's generationMetrics. Clears on
+  // read so a later convene (a different document, a hand-cast room) doesn't
+  // pick up a stale call it never made.
+  function consumeMetrics() {
+    const metrics = lastMetrics;
+    lastMetrics = [];
+    return metrics;
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -229,6 +243,7 @@ window.Casting = (function () {
     requestProposal,
     acceptProposal,
     dismissProposal,
+    consumeMetrics,
     render,
   };
 })();
