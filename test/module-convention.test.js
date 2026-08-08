@@ -25,7 +25,7 @@ const MODULES = [
   { file: 'witness.js', global: 'Witness', api: ['configure', 'liveReset', 'resetLiveStage', 'liveRoundHeader', 'liveSpeech', 'collapseStage', 'reopenStage', 'exitClicked', 'advance', 'start'] },
   { file: 'export.js', global: 'Export', api: ['configure', 'buildAnnotatedTranscript', 'exportMd'] },
   { file: 'sessions.js', global: 'Sessions', api: ['configure', 'restoreSession', 'collectSessionNotes'] },
-  { file: 'casting.js', global: 'Casting', api: ['configure', 'getRegulars', 'isRegular', 'toggleRegular', 'seatRegulars', 'noteHandCast', 'requestProposal', 'acceptProposal', 'dismissProposal', 'render'] },
+  { file: 'casting.js', global: 'Casting', api: ['configure', 'getRegulars', 'isRegular', 'toggleRegular', 'seatRegulars', 'noteHandCast', 'requestProposal', 'acceptProposal', 'dismissProposal', 'consumeMetrics', 'render'] },
 ];
 
 for (const { file, global: globalName, api } of MODULES) {

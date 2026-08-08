@@ -212,6 +212,30 @@ test('casting.js — the proposal', async t => {
     assert.equal(b.calls.length, 2);
     assert.equal(b.document.getElementById('cast-proposal').style.display, 'block');
   });
+
+  // #225 — the casting call's usage has nowhere to live server-side (no
+  // session exists yet), so it rides along in the /api/cast response and
+  // app.js claims it via consumeMetrics() right before /api/convene.
+  await t.test('consumeMetrics hands back the last response\'s metrics, then clears them', async t2 => {
+    const b = boot(t2, {
+      respond: () => ({ ok: true, json: { ...DEFAULT_RESPONSE.json, metrics: [{ phase: 'casting', usage: { input_tokens: 1, output_tokens: 2 } }] } }),
+    });
+    await b.module.requestProposal();
+    assert.deepEqual([...b.module.consumeMetrics()], [{ phase: 'casting', usage: { input_tokens: 1, output_tokens: 2 } }]);
+    assert.deepEqual([...b.module.consumeMetrics()], [], 'a second read must not resend the same call');
+  });
+
+  await t.test('consumeMetrics is empty when the response carried no metrics', async t2 => {
+    const b = boot(t2);
+    await b.module.requestProposal();
+    assert.deepEqual([...b.module.consumeMetrics()], []);
+  });
+
+  await t.test('a failed proposal leaves no metrics to consume', async t2 => {
+    const b = boot(t2, { respond: () => ({ ok: false, json: { error: 'the fire is low' } }) });
+    await b.module.requestProposal();
+    assert.deepEqual([...b.module.consumeMetrics()], []);
+  });
 });
 
 test('casting.js — render', async t => {

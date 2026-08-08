@@ -35,7 +35,7 @@ const FileStore = require('session-file-store')(session);
 const dayOne = require('./dayone');
 const multer = require('multer');
 const PDFParser = require('pdf2json');
-const { buildMemberSection, runRound, stripInternalBlankLines, proposeCast } = require('./pipeline');
+const { buildMemberSection, runRound, stripInternalBlankLines, proposeCast, makeMetric } = require('./pipeline');
 const roster = require('./roster');
 const transcriptFormat = require('./transcript-format');
 const readingRoom = require('./reading-room');
@@ -258,12 +258,17 @@ app.post('/api/convene', async (req, res) => {
   if (!members?.length) return res.status(400).json({ error: 'at least one member is required' });
 
   const { roundInstructions, roundCount, artifact, notes, sourceSessionId,
-    playerMode, playerMemberId, playerName, playerTurn } = req.body;
+    playerMode, playerMemberId, playerName, playerTurn, castMetrics } = req.body;
   const isTranscriptSource = !!sourceSessionId;
   const id = makeSessionId(entry);
   const date = new Date().toISOString().slice(0, 10);
   const roundPrompt = buildRoundPrompt(0, entry, roundInstructions, artifact || null, isTranscriptSource);
-  const generationMetrics = [];
+  // #225 — the pre-convene casting call's usage rides in on the request body
+  // (see /api/cast) rather than being held server-side; validate the shape
+  // rather than trusting it wholesale since it's client-supplied.
+  const generationMetrics = Array.isArray(castMetrics)
+    ? castMetrics.filter(m => m && typeof m === 'object' && typeof m.phase === 'string')
+    : [];
 
   const effectivePlayerMode = playerMode || 'none';
   const effectivePlayerMemberId = effectivePlayerMode === 'member' ? (playerMemberId || null) : null;
@@ -327,6 +332,16 @@ app.post('/api/cast', async (req, res) => {
   const { entry, regulars } = req.body;
   if (!entry?.trim()) return res.status(400).json({ error: 'entry is required' });
 
+  // No session exists yet to attach usage to (#225) — the casting call happens
+  // before /api/convene creates one, if it ever does. Rather than holding
+  // state server-side with nothing to key it on, the metrics ride along in
+  // this response; the client hands them back on /api/convene (see
+  // public/casting.js's consumeMetrics + app.js's castMetrics) so they land
+  // in session.generationMetrics same as every other phase. A proposal the
+  // user never accepts just never sends its metrics anywhere — no session
+  // means no persisted metrics either way, which is the same "cost of a
+  // proposal nobody used" the rest of the app already accepts.
+  const metrics = [];
   try {
     const result = await proposeCast({
       client, model: MODEL, lodgeContext,
@@ -334,10 +349,11 @@ app.post('/api/cast', async (req, res) => {
       regularIds: Array.isArray(regulars) ? regulars : [],
       documentText: entry,
       onMetric: m => {
+        metrics.push(m);
         if (m.skipped) console.warn('[degraded]', m.phase, '—', m.error);
       },
     });
-    res.json(result);
+    res.json({ ...result, metrics });
   } catch (err) {
     console.error('Casting error:', err);
     res.status(500).json({ error: err.message || 'Could not read the room' });
@@ -720,8 +736,8 @@ app.patch('/api/sessions/:id/annotations', (req, res) => {
 
 // Citation verification (#153) lives in citations.js (#193); thin wrappers
 // here supply the current client/model.
-function groundAgainstLibraryText(citationsList, libraryLookup) {
-  return citations.groundAgainstLibraryText(client, MODEL, citationsList, libraryLookup);
+function groundAgainstLibraryText(citationsList, libraryLookup, onMetric) {
+  return citations.groundAgainstLibraryText(client, MODEL, citationsList, libraryLookup, onMetric);
 }
 
 function escalateCitationsToWeb(citationsList) {
@@ -732,6 +748,7 @@ function escalateCitationsToWeb(citationsList) {
 app.post('/api/sessions/:id/verify-citations', async (req, res) => {
   const session = loadSession(req.params.id);
   if (!session) return res.status(404).json({ error: 'Session not found' });
+  session.generationMetrics = session.generationMetrics || [];
 
   try {
     const fullText = session.transcriptText || '';
@@ -754,6 +771,7 @@ ${libraryList}
 
 The "quote" field must be a verbatim excerpt (~10-25 words) copied exactly from the transcript text below, so it can be located in the original.`;
 
+    const extractStart = Date.now();
     const response = await client.messages.create({
       model: MODEL,
       max_tokens: 4000,
@@ -786,6 +804,7 @@ The "quote" field must be a verbatim excerpt (~10-25 words) copied exactly from 
       }],
       tool_choice: { type: 'tool', name: 'report_citations' },
     });
+    session.generationMetrics.push(makeMetric('citation-extraction', { usage: response.usage, latencyMs: Date.now() - extractStart }));
 
     const archiveImages = loadArchiveImageIndex();
     const block = response.content.find(b => b.type === 'tool_use');
@@ -793,7 +812,7 @@ The "quote" field must be a verbatim excerpt (~10-25 words) copied exactly from 
     // #153 part 1 — re-check library-matched citations against the entry's
     // actual text, rather than trusting the extraction pass's title/source
     // match. Skipped (no extra call) when nothing matched this round.
-    const grounded = await groundAgainstLibraryText(rawCitations, libraryLookup);
+    const grounded = await groundAgainstLibraryText(rawCitations, libraryLookup, m => session.generationMetrics.push(m));
     // #153 part 2 — for citations that didn't match a library entry, attempt
     // a real web lookup (capped, see MAX_WEB_ESCALATIONS) before trusting the
     // model's own memory-based verdict.
