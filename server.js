@@ -27,6 +27,7 @@ const multer = require('multer');
 const PDFParser = require('pdf2json');
 const { buildMemberSection, runRound, stripInternalBlankLines, proposeCast } = require('./pipeline');
 const roster = require('./roster');
+const transcriptFormat = require('./transcript-format');
 
 // ─── Environment flags ────────────────────────────────────────────────────────
 const IS_LOCAL = process.env.LOCAL === 'true' || process.env.NODE_ENV !== 'production';
@@ -236,49 +237,15 @@ function openSSE(res) {
   });
 }
 
-// ── Speaker header recognition (mirrors public/app.js's alias index) ──────
-// Members sign with a short form (surname, first name, or nickname), not
-// their full roster name — see roster.json's `aliases` field and the
-// comment above buildAliasIndex in public/app.js for the full rationale.
-// Kept in sync with that client-side logic; if one changes, change both.
-const ALIAS_STOPWORDS = new Set(['of', 'the', 'van', 'der', 'de', 'la', 'lady', 'sir', 'dr', 'st']);
-
-function normalizeSpeaker(s) {
-  return s.normalize('NFD').replace(/[̀-ͯ]/g, '')
-    .replace(/['’]/g, '').toLowerCase().replace(/[\s-]+/g, ' ').trim();
-}
-
-function buildSpeakerHeaderSet(roster) {
-  const owner = new Map(); // normalized key -> member id, or null if ambiguous
-  const register = (key, id) => {
-    const k = normalizeSpeaker(key);
-    if (!k) return;
-    if (owner.has(k) && owner.get(k) !== id) owner.set(k, null);
-    else if (!owner.has(k)) owner.set(k, id);
-  };
-  roster.forEach(m => {
-    register(m.name, m.id);
-    m.name.split(/[\s-]+/)
-      .filter(tok => tok.length > 2 && !ALIAS_STOPWORDS.has(tok.toLowerCase()))
-      .forEach(tok => register(tok, m.id));
-    (m.aliases || []).forEach(a => register(a, m.id));
-  });
-  const set = new Set();
-  owner.forEach((id, k) => { if (id != null) set.add(k); });
-  return set;
-}
-
 // ─── Reading room (public, read-only) — #38 ───────────────────────────────────
 // A session explicitly marked published renders at /reading-room/:id with no
 // login and no client JS: just the source document and the transcript, typeset.
 // Whole-session only for this MVP — no per-round curation, no portraits, no
 // annotations (matches the issue's "no generation controls, no member grid").
-
-function escapeHtml(s) {
-  return String(s)
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-}
+//
+// Speaker-header recognition and escaping live in transcript-format.js (#193);
+// aliased here so the rest of this section reads the same as before.
+const { escapeHtml, buildSpeakerHeaderSet, normalizeSpeaker } = transcriptFormat;
 
 // Mirrors public/app.js's renderTranscriptInto parsing (same speaker-header
 // heuristics, via the same buildSpeakerHeaderSet/normalizeSpeaker used above)
@@ -400,15 +367,8 @@ function renderReadingRoomPage(session) {
 </html>`;
 }
 
-// Post-process raw Claude transcript text: append ' —' after speaker name lines
-// so plain-text exports clearly distinguish speakers from speech.
 function formatTranscriptText(text) {
-  const headers = buildSpeakerHeaderSet(ROSTER);
-  return text.split('\n').map(line => {
-    const t = line.trim();
-    const bare = t.endsWith(':') ? t.slice(0, -1) : t;
-    return headers.has(normalizeSpeaker(bare)) ? `${bare} —` : line;
-  }).join('\n');
+  return transcriptFormat.formatTranscriptText(text, ROSTER);
 }
 
 // ─── Round prompts ────────────────────────────────────────────────────────────
@@ -1881,8 +1841,7 @@ function loadLibraryCitationLookup() {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function buildTranscriptHeader(entry, memberIds, date) {
-  const names = memberIds.map(id => ROSTER.find(m => m.id === id)?.name).filter(Boolean).join(', ');
-  return `THE SECRET-CABIN-ET\nMeeting Notes — ${date}\nAssembled: ${names}\n\nSource material:\n${entry}\n`;
+  return transcriptFormat.buildTranscriptHeader(entry, memberIds, date, ROSTER);
 }
 
 // ─── Start ────────────────────────────────────────────────────────────────────
