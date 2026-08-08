@@ -64,6 +64,33 @@ test('library.json — translated field (#187)', async t => {
   });
 });
 
+// #35 tier-2 sourcing — an entry no longer has to be public domain, but it
+// does have to say what it is instead of defaulting to reading as public
+// domain by omission. See prompts/library/README.md's `license` section.
+const VALID_LICENSES = new Set(['public-domain', 'cc0', 'cc-by-4.0', 'cc-by-nc-4.0', 'fair-use']);
+const PD_EQUIVALENT = new Set(['public-domain', 'cc0']);
+
+test('library.json — license field (#35)', async t => {
+  await t.test('every entry has a recognized license value', () => {
+    const bad = library.filter(e => !VALID_LICENSES.has(e.license)).map(e => `${e.id} → ${e.license}`);
+    assert.deepEqual(bad, [], `entries with missing/unrecognized license: ${bad.join(', ')}`);
+  });
+
+  await t.test('non-public-domain entries carry a rights_note explaining the basis', () => {
+    // rights_note lives in the .md frontmatter alongside citation/source_url,
+    // not in library.json's compact index — same split as those two fields.
+    const missing = [];
+    for (const entry of library) {
+      if (PD_EQUIVALENT.has(entry.license)) continue;
+      const filePath = path.join(LIBRARY_DIR, entry.file);
+      const raw = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8') : '';
+      const note = raw.match(/^rights_note:\s*"?(.*?)"?$/m)?.[1]?.trim();
+      if (!note) missing.push(entry.id);
+    }
+    assert.deepEqual(missing, [], `licensed/fair-use entries with no rights_note: ${missing.join(', ')}`);
+  });
+});
+
 test('library.json — entry files (#187)', async t => {
   await t.test('every entry\'s file exists and has a non-empty excerpt body', () => {
     // The exemplar path reads the body after stripping frontmatter; an entry
