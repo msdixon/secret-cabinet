@@ -18,6 +18,7 @@ const {
   countWords,
   lengthTendencyOf,
   DISPOSITION_MAX_CHARS,
+  buildDispositionToolSchema,
   buildDispositionSystemPrompt,
   buildDispositionUserMessage,
   callDispositionUpdate,
@@ -29,6 +30,7 @@ const {
   trimToWordBudget,
   buildVoiceExemplarSection,
   buildSpeakerSystemPrompt,
+  buildSpeakerUserMessage,
   makeMetric,
 } = require('../pipeline.js');
 
@@ -177,6 +179,76 @@ test('pickNextSpeaker', async t => {
     });
     assert.equal(picked, 'scholem');
   });
+
+  // #203: a member privately waiting on the person who just spoke should be
+  // meaningfully likelier to get the next beat — an interruption reading as
+  // a character choice, not a scheduling accident.
+  await t.test('a member waiting on the last speaker is weighted up by INTERRUPT_INTENT_WEIGHT (3x)', () => {
+    const args = {
+      pool: ['scholem', 'blavatsky'],
+      spokenCounts: counts([]),
+      lastSpeakerId: 'crowley',
+      remainingBudget: 500,
+      disposition: { scholem: { waitingOnMemberId: 'crowley' } },
+    };
+    // 3 / (3 + 1)
+    const share = shareOf('scholem', args);
+    assert.ok(Math.abs(share - 0.75) < 0.02, `waiting-on share was ${share}`);
+  });
+
+  await t.test('the boost only applies when the target actually just spoke', () => {
+    const withoutMatch = shareOf('scholem', {
+      pool: ['scholem', 'blavatsky'],
+      spokenCounts: counts([]),
+      lastSpeakerId: 'yeats', // not who scholem is waiting on
+      remainingBudget: 500,
+      disposition: { scholem: { waitingOnMemberId: 'crowley' } },
+    });
+    assert.ok(Math.abs(withoutMatch - 0.5) < 0.02, `unmatched-target share was ${withoutMatch}`);
+  });
+
+  await t.test('is a no-op with no disposition map, and tolerant of a member missing from it', () => {
+    const args = {
+      pool: ['scholem', 'blavatsky'],
+      spokenCounts: counts([]),
+      lastSpeakerId: 'crowley',
+      remainingBudget: 500,
+    };
+    assert.ok(Math.abs(shareOf('scholem', args) - 0.5) < 0.02);
+    assert.ok(Math.abs(shareOf('scholem', { ...args, disposition: {} }) - 0.5) < 0.02);
+  });
+
+  await t.test('a null lastSpeakerId (round-opening pick) never triggers the boost', () => {
+    // A waitingOnMemberId can never equal null, but this guards the
+    // `lastSpeakerId &&` short-circuit explicitly rather than by accident.
+    const share = shareOf('scholem', {
+      pool: ['scholem', 'blavatsky'],
+      spokenCounts: counts([]),
+      lastSpeakerId: null,
+      remainingBudget: 500,
+      disposition: { scholem: { waitingOnMemberId: null } },
+    });
+    assert.ok(Math.abs(share - 0.5) < 0.02);
+  });
+});
+
+test('buildSpeakerUserMessage', async t => {
+  const member = { id: 'yeats', name: 'W.B. Yeats' };
+
+  await t.test('adds no interruption note when interruptingName is absent', () => {
+    const message = buildSpeakerUserMessage({ roundPrompt: 'Discuss.', roundSoFarText: '', member });
+    assert.doesNotMatch(message, /unfinished business/);
+  });
+
+  await t.test('tells the speaker they are cutting in, and leaves the choice open', () => {
+    const message = buildSpeakerUserMessage({
+      roundPrompt: 'Discuss.', roundSoFarText: 'Crowley\nSome point.', member,
+      interruptingName: 'Aleister Crowley',
+    });
+    assert.match(message, /unfinished business with Aleister Crowley, who just spoke/);
+    assert.match(message, /mid-stride/);
+    assert.match(message, /fine to let it pass/);
+  });
 });
 
 test('countWords', async t => {
@@ -264,7 +336,9 @@ test('buildDispositionSystemPrompt', async t => {
   });
 
   await t.test('quotes the prior disposition back and asks for an update, not a repeat', () => {
-    const prompt = buildDispositionSystemPrompt({ member, priorDisposition: 'Unconvinced by Crowley\'s reading of Kabbalah.' });
+    const prompt = buildDispositionSystemPrompt({
+      member, priorDisposition: { text: 'Unconvinced by Crowley\'s reading of Kabbalah.', waitingOnMemberId: null },
+    });
     assert.match(prompt, /Unconvinced by Crowley's reading of Kabbalah\./);
     assert.match(prompt, /don't just repeat it back/);
   });
@@ -272,6 +346,34 @@ test('buildDispositionSystemPrompt', async t => {
   await t.test('states the hard character cap', () => {
     const prompt = buildDispositionSystemPrompt({ member, priorDisposition: null });
     assert.match(prompt, new RegExp(`under ${DISPOSITION_MAX_CHARS} characters`));
+  });
+
+  // #203: the structured "unspent business" target — real #188 sessions
+  // showed free text is the wrong thing to key scheduling off (pronoun
+  // references, truncation cutting the naming clause), so the prior
+  // target is surfaced by resolved name, not re-parsed from prose.
+  await t.test('names the prior waiting-on target by resolved name when one was set', () => {
+    const presentMembers = [{ id: 'waite', name: 'A.E. Waite' }, { id: 'yeats', name: 'W.B. Yeats' }];
+    const prompt = buildDispositionSystemPrompt({
+      member, presentMembers,
+      priorDisposition: { text: 'Still turning over the Kabbalah point.', waitingOnMemberId: 'waite' },
+    });
+    assert.match(prompt, /You were privately waiting to answer or press A\.E\. Waite\./);
+  });
+
+  await t.test('says nothing extra when there was no prior target', () => {
+    const presentMembers = [{ id: 'waite', name: 'A.E. Waite' }];
+    const prompt = buildDispositionSystemPrompt({
+      member, presentMembers,
+      priorDisposition: { text: 'Still turning over the Kabbalah point.', waitingOnMemberId: null },
+    });
+    assert.doesNotMatch(prompt, /privately waiting to answer or press/);
+  });
+
+  await t.test('asks for the unspent-business target as the exception, not the default', () => {
+    const prompt = buildDispositionSystemPrompt({ member, priorDisposition: null });
+    assert.match(prompt, /unspent business with/);
+    assert.match(prompt, /most turns, there is no one/i);
   });
 });
 
@@ -289,29 +391,66 @@ test('buildDispositionUserMessage', async t => {
   });
 });
 
+// #203: the disposition update is now a forced tool call (reflection prose
+// + a structured waitingOnMemberId), not a plain text response — see the
+// disposition scratchpad section's comment for why free text turned out to
+// be the wrong thing to key scheduling off of.
+function fakeDispositionClient(input) {
+  return {
+    messages: {
+      create: async () => ({
+        content: [{ type: 'tool_use', input }],
+        usage: { input_tokens: 10, output_tokens: 10 },
+      }),
+    },
+  };
+}
+
 test('callDispositionUpdate', async t => {
-  await t.test('hard-truncates the response to DISPOSITION_MAX_CHARS regardless of what the model returns', async () => {
+  await t.test('hard-truncates the reflection to DISPOSITION_MAX_CHARS regardless of what the model returns', async () => {
     const overlong = 'x'.repeat(DISPOSITION_MAX_CHARS + 200);
-    const fakeClient = {
-      messages: {
-        create: async () => ({
-          content: [{ type: 'text', text: overlong }],
-          usage: { input_tokens: 10, output_tokens: 10 },
-        }),
-      },
-    };
-    const { text } = await callDispositionUpdate({ client: fakeClient, model: 'test-model', system: 'sys', userMessage: 'msg' });
+    const fakeClient = fakeDispositionClient({ reflection: overlong, waitingOnMemberId: 'none' });
+    const { text } = await callDispositionUpdate({ client: fakeClient, model: 'test-model', system: 'sys', userMessage: 'msg', presentIds: ['waite'] });
     assert.equal(text.length, DISPOSITION_MAX_CHARS);
   });
 
   await t.test('trims whitespace and returns an empty string if the model returns nothing usable', async () => {
-    const fakeClient = {
-      messages: {
-        create: async () => ({ content: [], usage: null }),
-      },
-    };
+    const fakeClient = { messages: { create: async () => ({ content: [], usage: null }) } };
     const { text } = await callDispositionUpdate({ client: fakeClient, model: 'test-model', system: 'sys', userMessage: 'msg' });
     assert.equal(text, '');
+  });
+
+  await t.test('resolves a valid, present waitingOnMemberId', async () => {
+    const fakeClient = fakeDispositionClient({ reflection: 'Still turning this over.', waitingOnMemberId: 'waite' });
+    const { waitingOnMemberId } = await callDispositionUpdate({ client: fakeClient, model: 'test-model', system: 'sys', userMessage: 'msg', presentIds: ['waite', 'yeats'] });
+    assert.equal(waitingOnMemberId, 'waite');
+  });
+
+  await t.test('treats the "none" sentinel as null', async () => {
+    const fakeClient = fakeDispositionClient({ reflection: 'Nothing pending.', waitingOnMemberId: 'none' });
+    const { waitingOnMemberId } = await callDispositionUpdate({ client: fakeClient, model: 'test-model', system: 'sys', userMessage: 'msg', presentIds: ['waite'] });
+    assert.equal(waitingOnMemberId, null);
+  });
+
+  await t.test('ignores a target that is not in presentIds — a hallucinated or stale id must not silently pass through', async () => {
+    const fakeClient = fakeDispositionClient({ reflection: 'Still turning this over.', waitingOnMemberId: 'not-present-tonight' });
+    const { waitingOnMemberId } = await callDispositionUpdate({ client: fakeClient, model: 'test-model', system: 'sys', userMessage: 'msg', presentIds: ['waite'] });
+    assert.equal(waitingOnMemberId, null);
+  });
+
+  await t.test('defaults to no target when the tool call is missing or malformed', async () => {
+    const fakeClient = { messages: { create: async () => ({ content: [], usage: null }) } };
+    const { waitingOnMemberId } = await callDispositionUpdate({ client: fakeClient, model: 'test-model', system: 'sys', userMessage: 'msg', presentIds: ['waite'] });
+    assert.equal(waitingOnMemberId, null);
+  });
+});
+
+test('buildDispositionToolSchema', async t => {
+  await t.test('constrains the target enum to present ids plus the "none" sentinel', () => {
+    const schema = buildDispositionToolSchema(['waite', 'yeats']);
+    assert.equal(schema.name, 'update_disposition');
+    assert.deepEqual(schema.input_schema.properties.waitingOnMemberId.enum, ['waite', 'yeats', 'none']);
+    assert.deepEqual(schema.input_schema.required, ['reflection', 'waitingOnMemberId']);
   });
 });
 
@@ -444,7 +583,7 @@ test('buildSpeakerSystemPrompt — voice exemplar wiring', async t => {
 
   await t.test('the exemplar sits after the character file and before tonight\'s disposition', () => {
     const prompt = buildSpeakerSystemPrompt({
-      ...base, voiceExemplar: exemplar, disposition: 'Irritated by Crowley.',
+      ...base, voiceExemplar: exemplar, disposition: { text: 'Irritated by Crowley.', waitingOnMemberId: null },
     });
     assert.ok(prompt.indexOf('HOW YOU SPEAK') < prompt.indexOf('HOW YOU ACTUALLY WRITE'));
     assert.ok(prompt.indexOf('HOW YOU ACTUALLY WRITE') < prompt.indexOf('YOUR PRIVATE STATE TONIGHT'));
@@ -461,6 +600,20 @@ test('makeMetric — voiceExemplar attribution', async t => {
   await t.test('is null when no exemplar was injected and on non-speaker phases', () => {
     assert.equal(makeMetric('speaker', { memberId: 'scholem' }).voiceExemplar, null);
     assert.equal(makeMetric('director', { round: 0 }).voiceExemplar, null);
+  });
+});
+
+// #203: without this, whether the interruption signal is firing in real
+// sessions is unobservable except by re-reading disposition prose by hand.
+test('makeMetric — waitingOnMemberId attribution', async t => {
+  await t.test('records the resolved target on a disposition metric', () => {
+    const metric = makeMetric('disposition', { round: 0, memberId: 'yeats', waitingOnMemberId: 'waite' });
+    assert.equal(metric.waitingOnMemberId, 'waite');
+  });
+
+  await t.test('is null when there is no target', () => {
+    assert.equal(makeMetric('disposition', { memberId: 'yeats' }).waitingOnMemberId, null);
+    assert.equal(makeMetric('speaker', { memberId: 'yeats' }).waitingOnMemberId, null);
   });
 });
 

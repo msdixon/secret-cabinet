@@ -31,9 +31,9 @@ function buildMemberSection(member, artifact, notes, loadMemberFile) {
 // retries, skips, and fallbacks) produces one of these, persisted alongside
 // the session so it's reviewable after the fact, not just an ephemeral
 // console line.
-function makeMetric(phase, { round, memberId, attempts, usage, latencyMs, skipped, error, reasoning, voiceExemplar } = {}) {
+function makeMetric(phase, { round, memberId, attempts, usage, latencyMs, skipped, error, reasoning, voiceExemplar, waitingOnMemberId } = {}) {
   return {
-    phase, // 'director' | 'speaker' | 'casting'
+    phase, // 'director' | 'speaker' | 'casting' | 'disposition'
     round: round ?? null,
     memberId: memberId || null,
     attempts: attempts ?? 1,
@@ -49,6 +49,11 @@ function makeMetric(phase, { round, memberId, attempts, usage, latencyMs, skippe
     // indistinguishable in the persisted metrics. Always null off the
     // speaker phase.
     voiceExemplar: voiceExemplar || null,
+    // #203: the structured "unspent business" target a disposition update
+    // resolved, if any — lets real sessions be checked for how often the
+    // signal actually fires without re-parsing prose. Always null off
+    // every phase but 'disposition'.
+    waitingOnMemberId: waitingOnMemberId || null,
     timestamp: new Date().toISOString(),
   };
 }
@@ -394,9 +399,21 @@ const REPEAT_BACK_TO_BACK_WEIGHT = 0.12; // rare but real — reads as an interr
 const REPEAT_DECAY = 0.45; // each earlier appearance this round further discounts a repeat pick
 const LOW_BUDGET_WORDS = 120; // below this, favor members who tend to land a short beat and let the round close
 
+// #203: a member whose disposition names someone they privately have
+// unspent business with should be meaningfully likelier to get the next
+// beat once that person actually speaks — an interruption reading as a
+// character choice, not a scheduling accident. Well above LENGTH_WEIGHT's
+// ~1.35x ceiling so ordinary length-tendency variance can't swamp it, but
+// still a weight, not a forced pick: other pool weighting (repeat discount,
+// budget throttle) still applies on top, and the room doesn't stop for
+// every unspent intention the instant it becomes eligible.
+const INTERRUPT_INTENT_WEIGHT = 3;
+
 // Returns a memberId from `pool`, or null if every pool member has already
 // hit MAX_TURNS_PER_POOL_MEMBER (the caller should re-consult the director).
-function pickNextSpeaker({ pool, spokenCounts, lastSpeakerId, remainingBudget, rng = Math.random }) {
+// `disposition`, if given, is the { [memberId]: { waitingOnMemberId } } map
+// built by callDispositionUpdate (#188/#203) — read-only here.
+function pickNextSpeaker({ pool, spokenCounts, lastSpeakerId, remainingBudget, disposition, rng = Math.random }) {
   const weights = pool.map(id => {
     const timesSpoken = spokenCounts.get(id) || 0;
     if (timesSpoken >= MAX_TURNS_PER_POOL_MEMBER) return 0;
@@ -405,6 +422,7 @@ function pickNextSpeaker({ pool, spokenCounts, lastSpeakerId, remainingBudget, r
     if (id === lastSpeakerId) w *= REPEAT_BACK_TO_BACK_WEIGHT;
     else if (timesSpoken > 0) w *= Math.pow(REPEAT_DECAY, timesSpoken);
     if (remainingBudget < LOW_BUDGET_WORDS && tendency === 'expansive') w *= 0.4;
+    if (lastSpeakerId && disposition?.[id]?.waitingOnMemberId === lastSpeakerId) w *= INTERRUPT_INTENT_WEIGHT;
     return w;
   });
 
@@ -545,8 +563,12 @@ function buildSpeakerSystemPrompt({ lodgeContext, member, artifact, notes, loadM
   // the same thing that file describes — and before the disposition, which
   // is about tonight specifically and wants to be the last thing read.
   const exemplarSection = buildVoiceExemplarSection(voiceExemplar);
-  const dispositionSection = disposition?.trim()
-    ? `\n\n---\n\n## YOUR PRIVATE STATE TONIGHT (no one else in the room can see this)\n\n${disposition.trim()}`
+  // #203: disposition is now { text, waitingOnMemberId } (see the
+  // disposition scratchpad section below) — only the prose goes in the
+  // speaker prompt, the structured target is read by pickNextSpeaker.
+  const dispositionText = disposition?.text?.trim();
+  const dispositionSection = dispositionText
+    ? `\n\n---\n\n## YOUR PRIVATE STATE TONIGHT (no one else in the room can see this)\n\n${dispositionText}`
     : '';
 
   return `${lodgeContext}
@@ -601,7 +623,12 @@ function stripInternalBlankLines(text) {
 // whoever's left once it's already gone.
 const CROWDED_WORDS_PER_VOICE = 220;
 
-function buildSpeakerUserMessage({ roundPrompt, roundSoFarText, member, remainingBudgetWords, unheardCount }) {
+// `interruptingName`, when set, is the just-spoken member this pick's own
+// disposition named as unfinished business (see pickNextSpeaker's
+// INTERRUPT_INTENT_WEIGHT, #203) — told to the speaker as an option, not an
+// instruction, since a real interruption is sometimes let go rather than
+// taken.
+function buildSpeakerUserMessage({ roundPrompt, roundSoFarText, member, remainingBudgetWords, unheardCount, interruptingName }) {
   const soFar = roundSoFarText?.trim()
     ? `\n\n--- THE ROUND SO FAR ---\n${roundSoFarText.trim()}\n`
     : '';
@@ -613,7 +640,10 @@ function buildSpeakerUserMessage({ roundPrompt, roundSoFarText, member, remainin
       ? `\n\n(Roughly ${remainingBudgetWords} words of room left in the round, and ${unheardCount} other${unheardCount === 1 ? '' : 's'} who haven't spoken yet still waiting on it. If everyone's going to fit, this is a moment where a line lands harder than a paragraph — but read the room; don't cut yourself off if something genuinely needs the space.)`
       : `\n\n(The round has roughly ${remainingBudgetWords} words of room left before it should start wrapping up — a felt sense of how much space remains, not a hard limit. A short reaction is as valid a turn as a long one.)`;
   }
-  return `${roundPrompt}${soFar}${budgetHint}
+  const interruptNote = interruptingName
+    ? `\n\n(You have unfinished business with ${interruptingName}, who just spoke — this is your moment for it. Take the thought mid-stride if it's still hot, or let the room settle a beat first and strike after. Your call; it's fine to let it pass.)`
+    : '';
+  return `${roundPrompt}${soFar}${budgetHint}${interruptNote}
 
 --- YOUR TURN ---
 Generate ${member.name}'s contribution now.`;
@@ -656,7 +686,7 @@ async function callSpeakerTurn({ client, model, system, conversationHistory, use
   return { text: text.trim(), usage: finalMessage.usage, latencyMs };
 }
 
-// ── Disposition scratchpad (#188) ──────────────────────────────────────────
+// ── Disposition scratchpad (#188, structured target #203) ─────────────────
 //
 // A per-member private note — current stance, unspent intentions, tonight's
 // alignments and irritations — carried forward within the session and
@@ -668,20 +698,61 @@ async function callSpeakerTurn({ client, model, system, conversationHistory, use
 // whether they spoke, which cuts against the same cost discipline #164's
 // word-budget work was built around. A member who sits out a round simply
 // carries their prior disposition forward unchanged.
+//
+// #203: alongside the free prose, the model also names — as a separate
+// structured field, not parsed out of the prose — which present member (if
+// any) it privately has unspent business with. Real #188 sessions (see the
+// issue's dependency note) showed prose is the wrong thing to key
+// scheduling off of: a member's stated target is as often a bare pronoun
+// ("I want to press *him* on...") as a name, and the hard truncation cap
+// sometimes cuts the sentence naming the target before it arrives. A
+// same-call tool field costs no extra latency and can't be misread the way
+// a name-scan through freeform prose can. `disposition[memberId]` is
+// therefore `{ text, waitingOnMemberId }`, not a bare string — see
+// pickNextSpeaker's INTERRUPT_INTENT_WEIGHT for the consumer.
 
 const DISPOSITION_MAX_CHARS = 400; // a few sentences — hard cap so this can't balloon a speaker prompt over a long session
-const DISPOSITION_MAX_TOKENS = 150;
+const DISPOSITION_MAX_TOKENS = 220; // reflection prose plus the tool-call JSON wrapper and target field
 
-function buildDispositionSystemPrompt({ member, priorDisposition }) {
-  const priorBlock = priorDisposition?.trim()
-    ? `Your private state going into this turn was:\n"${priorDisposition.trim()}"\n\nUpdate it — don't just repeat it back.`
+function buildDispositionToolSchema(presentIds) {
+  return {
+    name: 'update_disposition',
+    description: 'Record this member\'s private interior state after speaking, including whether they have unspent business with anyone present.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        reflection: {
+          type: 'string',
+          description: `1-3 sentences of private thought — current stance, anything unsaid but intended, who they're aligned with or irritated by. Under ${DISPOSITION_MAX_CHARS} characters.`,
+        },
+        waitingOnMemberId: {
+          type: 'string',
+          enum: [...presentIds, 'none'],
+          description: 'The one present member (by id) this member has unspent business with and would want to answer or press if that person speaks again — or "none" if that is not true right now. Most turns are "none"; only name someone when it is real.',
+        },
+      },
+      required: ['reflection', 'waitingOnMemberId'],
+    },
+  };
+}
+
+function buildDispositionSystemPrompt({ member, priorDisposition, presentMembers = [] }) {
+  const priorText = priorDisposition?.text?.trim();
+  const priorTarget = priorDisposition?.waitingOnMemberId
+    ? presentMembers.find(m => m.id === priorDisposition.waitingOnMemberId)?.name
+    : null;
+  const priorTargetNote = priorTarget ? ` You were privately waiting to answer or press ${priorTarget}.` : '';
+  const priorBlock = priorText
+    ? `Your private state going into this turn was:\n"${priorText}"\n\nUpdate it — don't just repeat it back.${priorTargetNote}`
     : 'This is your first private reflection tonight — there is no prior state yet.';
 
   return `You are privately reflecting as ${member.name}, immediately after speaking your turn in tonight's salon. This reflection is never shown to anyone — not the other members, not the transcript, not the researcher who convened the evening. It is your own unspoken interior state, carried forward to color how you show up for the rest of the evening.
 
 ${priorBlock}
 
-Write 1-3 sentences, as private thought rather than speech: your current stance on the evening's argument, anything you haven't yet said but intend to, who you're aligned with or irritated by tonight. Be concrete and specific to what just happened, not a generic character summary. Keep it under ${DISPOSITION_MAX_CHARS} characters — this is a scratchpad, not an essay.`;
+Write 1-3 sentences, as private thought rather than speech: your current stance on the evening's argument, anything you haven't yet said but intend to, who you're aligned with or irritated by tonight. Be concrete and specific to what just happened, not a generic character summary. Keep it under ${DISPOSITION_MAX_CHARS} characters — this is a scratchpad, not an essay.
+
+Separately, name whether there is one present person you have real unspent business with — something you'd want to answer or press if they spoke again. This is the exception, not the default: most turns, there is no one.`;
 }
 
 function buildDispositionUserMessage({ roundSoFarText, turnText, member }) {
@@ -690,19 +761,28 @@ function buildDispositionUserMessage({ roundSoFarText, turnText, member }) {
 
 // Deliberately no retry — this is a best-effort private-state update, not a
 // user-visible turn. A failure just means the member's disposition doesn't
-// move this beat; the caller keeps the prior value.
-async function callDispositionUpdate({ client, model, system, userMessage }) {
+// move this beat; the caller keeps the prior value. `presentIds` excludes
+// the reflecting member themself — waiting on yourself isn't a real state,
+// and pickNextSpeaker's back-to-back weighting already covers that case.
+async function callDispositionUpdate({ client, model, system, userMessage, presentIds = [] }) {
   const start = Date.now();
+  const tool = buildDispositionToolSchema(presentIds);
   const response = await client.messages.create({
     model,
     max_tokens: DISPOSITION_MAX_TOKENS,
     system,
     messages: [{ role: 'user', content: userMessage }],
+    tools: [tool],
+    tool_choice: { type: 'tool', name: tool.name },
   });
   const latencyMs = Date.now() - start;
-  const block = response.content.find(b => b.type === 'text');
-  const text = (block?.text || '').trim().slice(0, DISPOSITION_MAX_CHARS);
-  return { text, usage: response.usage, latencyMs };
+  const block = response.content.find(b => b.type === 'tool_use');
+  const { reflection, waitingOnMemberId } = block?.input || {};
+  const text = (reflection || '').trim().slice(0, DISPOSITION_MAX_CHARS);
+  const target = waitingOnMemberId && waitingOnMemberId !== 'none' && presentIds.includes(waitingOnMemberId)
+    ? waitingOnMemberId
+    : null;
+  return { text, waitingOnMemberId: target, usage: response.usage, latencyMs };
 }
 
 // ── Orchestrator ──────────────────────────────────────────────────────────
@@ -829,16 +909,25 @@ async function runRound({ client, model, lodgeContext, ROSTER, loadMemberFile,
       if (!pool.length) break;
     }
 
-    const memberId = pickNextSpeaker({ pool, spokenCounts, lastSpeakerId, remainingBudget });
+    const memberId = pickNextSpeaker({ pool, spokenCounts, lastSpeakerId, remainingBudget, disposition: currentDisposition });
     if (!memberId) break; // no viable candidate even after a fresh consult — end the round here
 
     const member = presentMembers.find(m => m.id === memberId);
     if (!member) break; // shouldn't happen — selectSpeakers validates against presentIds
 
+    // #203: read before lastSpeakerId is reassigned below — true when this
+    // pick's own disposition named the just-spoken member as unfinished
+    // business, regardless of whether INTERRUPT_INTENT_WEIGHT is what
+    // actually swung the roll. The framing is true either way: they did
+    // want to answer that person, and that person did just speak.
+    const interruptedMember = (lastSpeakerId && currentDisposition[memberId]?.waitingOnMemberId === lastSpeakerId)
+      ? presentMembers.find(m => m.id === lastSpeakerId)
+      : null;
+
     const unheardCount = pool.filter(id => id !== memberId && !(spokenCounts.get(id) > 0)).length;
     const voiceExemplar = exemplarFor(memberId);
     const system = buildSpeakerSystemPrompt({ lodgeContext, member, artifact, notes, loadMemberFile, disposition: currentDisposition[memberId], voiceExemplar });
-    const userMessage = buildSpeakerUserMessage({ roundPrompt, roundSoFarText: roundSoFar, member, remainingBudgetWords: remainingBudget, unheardCount });
+    const userMessage = buildSpeakerUserMessage({ roundPrompt, roundSoFarText: roundSoFar, member, remainingBudgetWords: remainingBudget, unheardCount, interruptingName: interruptedMember?.name || null });
 
     onChunk?.(`${member.name}\n`);
     onSpeakerStart?.(memberId);
@@ -859,16 +948,17 @@ async function runRound({ client, model, lodgeContext, ROSTER, loadMemberFile,
       // disposition failure must not get reported as a failed speaker turn
       // that already succeeded and was already streamed to the client.
       try {
-        const dispositionSystem = buildDispositionSystemPrompt({ member, priorDisposition: currentDisposition[memberId] });
+        const dispositionSystem = buildDispositionSystemPrompt({ member, priorDisposition: currentDisposition[memberId], presentMembers });
         const dispositionUserMessage = buildDispositionUserMessage({
           roundSoFarText: contextBeforeTurn || 'Nothing yet — you are the first to speak this round.',
           turnText: settledText, member,
         });
-        const { text: updatedDisposition, usage: dUsage, latencyMs: dLatencyMs } = await callDispositionUpdate({
-          client, model, system: dispositionSystem, userMessage: dispositionUserMessage,
+        const dispositionPresentIds = presentMembers.filter(m => m.id !== memberId).map(m => m.id);
+        const { text: updatedDisposition, waitingOnMemberId, usage: dUsage, latencyMs: dLatencyMs } = await callDispositionUpdate({
+          client, model, system: dispositionSystem, userMessage: dispositionUserMessage, presentIds: dispositionPresentIds,
         });
-        if (updatedDisposition) currentDisposition[memberId] = updatedDisposition;
-        onMetric?.(makeMetric('disposition', { round, memberId, usage: dUsage, latencyMs: dLatencyMs }));
+        if (updatedDisposition) currentDisposition[memberId] = { text: updatedDisposition, waitingOnMemberId };
+        onMetric?.(makeMetric('disposition', { round, memberId, usage: dUsage, latencyMs: dLatencyMs, waitingOnMemberId }));
       } catch (err) {
         onMetric?.(makeMetric('disposition', { round, memberId, skipped: true, error: err.message }));
         // Best-effort — the member simply carries their prior disposition forward.
@@ -922,6 +1012,7 @@ module.exports = {
   stripInternalBlankLines,
   callSpeakerTurn,
   DISPOSITION_MAX_CHARS,
+  buildDispositionToolSchema,
   buildDispositionSystemPrompt,
   buildDispositionUserMessage,
   callDispositionUpdate,
