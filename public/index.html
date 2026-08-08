@@ -64,6 +64,7 @@
     <div class="journal-panel">
       <div class="panel-label">I. The Document</div>
       <div class="journal-controls">
+        <input type="text" class="lodge-select library-search-input" id="library-search-input" placeholder="Search the Archival Library…" autocomplete="off" hidden oninput="window.Export.filterLibraryOptions(this.value)" />
         <select class="lodge-select" id="source-select" onmousedown="window.Export.loadSourceOptions()" onchange="window.Export.handleSourceChange()">
           <option value="paste">— paste an entry —</option>
           <optgroup label="Loading Day One journals…" id="source-loading-group" disabled>

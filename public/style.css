@@ -95,6 +95,9 @@
 .journal-controls { display:flex; gap:10px; margin-bottom:12px; flex-wrap:wrap; }
 .lodge-select { background:var(--lodge-panel); border:1px solid var(--lodge-border); color:var(--lodge-cream); font-family:'Crimson Pro',serif; font-size:15px; padding:7px 12px; border-radius:2px; cursor:pointer; flex:1; min-width:140px; appearance:none; }
 .lodge-select option { background:var(--lodge-panel); }
+.library-search-input { flex:1 1 100%; cursor:text; font-style:italic; font-size:14px; }
+.library-search-input::placeholder { color:var(--lodge-muted); }
+.library-search-input[hidden] { display:none; }
 .lodge-btn { background:transparent; border:1px solid var(--lodge-amber-dim); color:var(--lodge-amber); font-family:'IM Fell English',serif; font-size:13px; padding:7px 16px; border-radius:2px; cursor:pointer; letter-spacing:1px; transition:all 0.2s; white-space:nowrap; }
 .lodge-btn:hover { background:rgba(200,146,42,0.1); border-color:var(--lodge-amber); }
 a.lodge-btn { display:inline-block; text-decoration:none; }

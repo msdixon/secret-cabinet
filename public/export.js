@@ -27,6 +27,59 @@ window.Export = (function () {
   const entryCache = new Map(); // key: "dayone:journalId:idx" → { text, date, journalId, journalName }
   let sourceOptionsLoaded = false;
 
+  // ── Archival Library (#82) ─────────────────────────────────────────────────
+  let libraryEntries = []; // full unfiltered index, fetched once in loadSourceOptions
+  let libraryOptgroup = null; // the <optgroup> DOM node, rebuilt on each filter keystroke
+
+  // Same AND-of-terms matching as the server's GET /api/library?q= (server.js),
+  // reimplemented client-side so filtering doesn't round-trip while typing.
+  function libraryEntryMatches(entry, terms) {
+    return terms.every(t =>
+      entry.title.toLowerCase().includes(t) ||
+      entry.source.toLowerCase().includes(t) ||
+      entry.date?.toLowerCase().includes(t) ||
+      entry.themes?.some(th => th.includes(t)) ||
+      entry.members?.some(m => m.includes(t))
+    );
+  }
+
+  // Rebuilds the Archival Library optgroup from libraryEntries, filtered by
+  // filterText. Keeps the currently-selected option in the list even if it no
+  // longer matches, so typing a filter never yanks away the loaded entry.
+  function renderLibraryOptions(filterText) {
+    if (!libraryOptgroup) return;
+    const sel = document.getElementById('source-select');
+    const currentValue = sel.value;
+    const term = (filterText || '').trim().toLowerCase();
+    const terms = term ? term.split(/\s+/) : [];
+
+    const visible = libraryEntries.filter(entry =>
+      !terms.length ||
+      libraryEntryMatches(entry, terms) ||
+      `library:${entry.id}` === currentValue
+    );
+
+    libraryOptgroup.innerHTML = '';
+    if (!visible.length) {
+      const opt = document.createElement('option');
+      opt.disabled = true;
+      opt.textContent = 'No matching entries';
+      libraryOptgroup.appendChild(opt);
+      return;
+    }
+    visible.forEach(entry => {
+      const opt = document.createElement('option');
+      opt.value = `library:${entry.id}`;
+      opt.textContent = `${entry.date}  ${entry.title}`;
+      libraryOptgroup.appendChild(opt);
+    });
+    sel.value = currentValue; // reselect — rebuilding options can reset it
+  }
+
+  function filterLibraryOptions(term) {
+    renderLibraryOptions(term);
+  }
+
   function updateExportJournalLabel() {
     const el = document.getElementById('export-journal-name');
     if (el) el.textContent = deps.getCore().currentJournal.name || 'No journal selected';
@@ -120,15 +173,13 @@ window.Export = (function () {
       const libRes = await fetch('/api/library');
       const libEntries = await libRes.json();
       if (Array.isArray(libEntries) && libEntries.length) {
-        const libGroup = document.createElement('optgroup');
-        libGroup.label = 'Archival Library';
-        libEntries.forEach(entry => {
-          const opt = document.createElement('option');
-          opt.value = `library:${entry.id}`;
-          opt.textContent = `${entry.date}  ${entry.title}`;
-          libGroup.appendChild(opt);
-        });
-        sel.appendChild(libGroup);
+        libraryEntries = libEntries;
+        libraryOptgroup = document.createElement('optgroup');
+        libraryOptgroup.label = 'Archival Library';
+        sel.appendChild(libraryOptgroup);
+        renderLibraryOptions('');
+        const searchInput = document.getElementById('library-search-input');
+        if (searchInput) searchInput.hidden = false;
       }
     } catch (_) {}
   }
@@ -514,6 +565,7 @@ window.Export = (function () {
     updateExportJournalLabel,
     loadSourceOptions,
     handleSourceChange,
+    filterLibraryOptions,
     getEntry,
     handleFileSelect,
     buildAnnotatedTranscript,
