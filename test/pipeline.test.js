@@ -29,6 +29,11 @@ const {
   VOICE_EXEMPLAR_WORD_BUDGET,
   trimToWordBudget,
   buildVoiceExemplarSection,
+  RESIDUE_MAX_CHARS,
+  RESIDUE_NOTE_MAX_CHARS,
+  RESIDUE_SEPARATOR,
+  mergeResidue,
+  buildResidueSection,
   buildSpeakerSystemPrompt,
   buildSpeakerUserMessage,
   makeMetric,
@@ -375,6 +380,26 @@ test('buildDispositionSystemPrompt', async t => {
     assert.match(prompt, /unspent business with/);
     assert.match(prompt, /most turns, there is no one/i);
   });
+
+  // #166 — cross-session residue piggybacked on this same call.
+  await t.test('says nothing about prior residue when there is none yet', () => {
+    const prompt = buildDispositionSystemPrompt({ member, priorDisposition: null });
+    assert.doesNotMatch(prompt, /Residue already carried/);
+  });
+
+  await t.test('quotes prior residue back and asks only for something genuinely new', () => {
+    const prompt = buildDispositionSystemPrompt({
+      member, priorDisposition: null, priorResidue: 'Grew wary of Crowley\'s charm.',
+    });
+    assert.match(prompt, /Residue already carried from other evenings.*Grew wary of Crowley's charm\./s);
+    assert.match(prompt, /most turns, it didn't/);
+  });
+
+  await t.test('asks for the residue fragment as rare, on top of the unspent-business ask', () => {
+    const prompt = buildDispositionSystemPrompt({ member, priorDisposition: null });
+    assert.match(prompt, /outlast this evening/);
+    assert.match(prompt, /most turns, there is nothing here either/i);
+  });
 });
 
 test('buildDispositionUserMessage', async t => {
@@ -443,6 +468,26 @@ test('callDispositionUpdate', async t => {
     const { waitingOnMemberId } = await callDispositionUpdate({ client: fakeClient, model: 'test-model', system: 'sys', userMessage: 'msg', presentIds: ['waite'] });
     assert.equal(waitingOnMemberId, null);
   });
+
+  // #166 — the optional residueNote field, piggybacked on this same call.
+  await t.test('returns an empty residueNote when the model leaves the field out — the common case', async () => {
+    const fakeClient = fakeDispositionClient({ reflection: 'Still turning this over.', waitingOnMemberId: 'none' });
+    const { residueNote } = await callDispositionUpdate({ client: fakeClient, model: 'test-model', system: 'sys', userMessage: 'msg', presentIds: ['waite'] });
+    assert.equal(residueNote, '');
+  });
+
+  await t.test('trims and returns a residueNote when the model writes one', async () => {
+    const fakeClient = fakeDispositionClient({ reflection: 'Still turning this over.', waitingOnMemberId: 'none', residueNote: '  Grew certain of it.  ' });
+    const { residueNote } = await callDispositionUpdate({ client: fakeClient, model: 'test-model', system: 'sys', userMessage: 'msg', presentIds: ['waite'] });
+    assert.equal(residueNote, 'Grew certain of it.');
+  });
+
+  await t.test('hard-truncates residueNote to RESIDUE_NOTE_MAX_CHARS regardless of what the model returns', async () => {
+    const overlong = 'x'.repeat(RESIDUE_NOTE_MAX_CHARS + 200);
+    const fakeClient = fakeDispositionClient({ reflection: 'ok', waitingOnMemberId: 'none', residueNote: overlong });
+    const { residueNote } = await callDispositionUpdate({ client: fakeClient, model: 'test-model', system: 'sys', userMessage: 'msg', presentIds: ['waite'] });
+    assert.equal(residueNote.length, RESIDUE_NOTE_MAX_CHARS);
+  });
 });
 
 test('buildDispositionToolSchema', async t => {
@@ -451,6 +496,14 @@ test('buildDispositionToolSchema', async t => {
     assert.equal(schema.name, 'update_disposition');
     assert.deepEqual(schema.input_schema.properties.waitingOnMemberId.enum, ['waite', 'yeats', 'none']);
     assert.deepEqual(schema.input_schema.required, ['reflection', 'waitingOnMemberId']);
+  });
+
+  // #166 — residueNote must stay optional so an omitted field is how the
+  // model expresses "nothing belongs here," the common case by design.
+  await t.test('offers residueNote but does not require it', () => {
+    const schema = buildDispositionToolSchema(['waite']);
+    assert.equal(schema.input_schema.properties.residueNote.type, 'string');
+    assert.ok(!schema.input_schema.required.includes('residueNote'));
   });
 });
 
@@ -552,6 +605,87 @@ test('buildVoiceExemplarSection', async t => {
   });
 });
 
+// #166 — cross-session residue. mergeResidue is the load-bearing piece: it's
+// the only thing standing between "small, capped drift" and an unbounded
+// per-member file that grows for the life of the app, so its cap behaviour
+// and its never-cut-mid-fragment guarantee are pinned here rather than
+// trusted to review. See AXES.md's Axis 4 for why the cap is deliberately
+// not larger than #188's disposition cap.
+test('mergeResidue', async t => {
+  await t.test('starts fresh residue from a first note when there is no prior text', () => {
+    assert.equal(mergeResidue('', 'Grew wary of Crowley.'), 'Grew wary of Crowley.');
+    assert.equal(mergeResidue(null, 'Grew wary of Crowley.'), 'Grew wary of Crowley.');
+    assert.equal(mergeResidue(undefined, 'Grew wary of Crowley.'), 'Grew wary of Crowley.');
+  });
+
+  await t.test('is a no-op that returns the prior text untouched when there is no new note', () => {
+    assert.equal(mergeResidue('Grew wary of Crowley.', ''), 'Grew wary of Crowley.');
+    assert.equal(mergeResidue('Grew wary of Crowley.', null), 'Grew wary of Crowley.');
+    assert.equal(mergeResidue('Grew wary of Crowley.', '   '), 'Grew wary of Crowley.');
+  });
+
+  await t.test('appends a new fragment onto prior residue, separated', () => {
+    const merged = mergeResidue('Grew wary of Crowley.', 'Warmed to Yeats.');
+    assert.equal(merged, `Grew wary of Crowley.${RESIDUE_SEPARATOR}Warmed to Yeats.`);
+  });
+
+  await t.test('hard-truncates an over-long single note before it ever reaches the merge', () => {
+    const overlong = 'x'.repeat(RESIDUE_NOTE_MAX_CHARS + 100);
+    const merged = mergeResidue('', overlong);
+    assert.equal(merged.length, RESIDUE_NOTE_MAX_CHARS);
+  });
+
+  await t.test('never exceeds RESIDUE_MAX_CHARS, dropping whole fragments from the oldest end', () => {
+    let residue = '';
+    for (let i = 0; i < 20; i++) {
+      residue = mergeResidue(residue, `Fragment number ${i}, concrete and specific to that evening.`);
+      assert.ok(residue.length <= RESIDUE_MAX_CHARS, `over cap at i=${i}: ${residue.length} chars`);
+    }
+  });
+
+  await t.test('keeps only whole fragments — never cuts one mid-sentence to fit the cap', () => {
+    let residue = '';
+    for (let i = 0; i < 20; i++) {
+      residue = mergeResidue(residue, `Fragment number ${i}, concrete and specific to that evening.`);
+    }
+    for (const fragment of residue.split(RESIDUE_SEPARATOR)) {
+      assert.match(fragment, /^Fragment number \d+, concrete and specific to that evening\.$/);
+    }
+  });
+
+  await t.test('keeps the most recent fragments, not the oldest, once the cap is hit', () => {
+    let residue = '';
+    for (let i = 0; i < 20; i++) {
+      residue = mergeResidue(residue, `Fragment number ${i}, concrete and specific to that evening.`);
+    }
+    assert.match(residue, /Fragment number 19,/);
+    assert.doesNotMatch(residue, /Fragment number 0,/);
+  });
+});
+
+test('buildResidueSection', async t => {
+  await t.test('returns an empty string for a member with no residue yet', () => {
+    assert.equal(buildResidueSection(''), '');
+    assert.equal(buildResidueSection(null), '');
+    assert.equal(buildResidueSection(undefined), '');
+    assert.equal(buildResidueSection('   '), '');
+  });
+
+  await t.test('carries the residue text', () => {
+    const section = buildResidueSection('Grew wary of Crowley\'s charm.');
+    assert.match(section, /Grew wary of Crowley's charm\./);
+  });
+
+  // Rung (a) of #195's ladder: no claim of recall may ever reach the
+  // prompt, or this stops being residue and becomes rung (b) dream-memory.
+  await t.test('frames it explicitly as not-memory, never a claim of recall', () => {
+    const section = buildResidueSection('Grew wary of Crowley.');
+    assert.match(section, /This is not memory\./);
+    assert.match(section, /you would honestly deny remembering any of them/);
+    assert.match(section, /never mention it, explain it, or gesture at where it comes from/);
+  });
+});
+
 test('buildSpeakerSystemPrompt — voice exemplar wiring', async t => {
   const base = {
     lodgeContext: 'LODGE CONTEXT',
@@ -589,6 +723,29 @@ test('buildSpeakerSystemPrompt — voice exemplar wiring', async t => {
     assert.ok(prompt.indexOf('HOW YOU ACTUALLY WRITE') < prompt.indexOf('YOUR PRIVATE STATE TONIGHT'));
     assert.ok(prompt.indexOf('YOUR PRIVATE STATE TONIGHT') < prompt.indexOf('YOUR TURN RIGHT NOW'));
   });
+
+  // #166 — residue wiring, extending the same ordering test.
+  await t.test('a member without residue gets the exact pre-#166 prompt', () => {
+    const withoutArg = buildSpeakerSystemPrompt(base);
+    assert.equal(buildSpeakerSystemPrompt({ ...base, residue: '' }), withoutArg);
+    assert.equal(buildSpeakerSystemPrompt({ ...base, residue: null }), withoutArg);
+    assert.doesNotMatch(withoutArg, /WHAT LINGERS/);
+  });
+
+  await t.test('a member with residue gets the residue section', () => {
+    const prompt = buildSpeakerSystemPrompt({ ...base, residue: 'Grew wary of Crowley\'s charm.' });
+    assert.match(prompt, /WHAT LINGERS, THOUGH YOU COULDN'T SAY WHY/);
+    assert.match(prompt, /Grew wary of Crowley's charm\./);
+  });
+
+  await t.test('residue sits after the exemplar and before tonight\'s disposition — slower-moving evidence in between', () => {
+    const prompt = buildSpeakerSystemPrompt({
+      ...base, voiceExemplar: exemplar, residue: 'Grew wary of Crowley.',
+      disposition: { text: 'Irritated by Crowley.', waitingOnMemberId: null },
+    });
+    assert.ok(prompt.indexOf('HOW YOU ACTUALLY WRITE') < prompt.indexOf('WHAT LINGERS'));
+    assert.ok(prompt.indexOf('WHAT LINGERS') < prompt.indexOf('YOUR PRIVATE STATE TONIGHT'));
+  });
 });
 
 test('makeMetric — voiceExemplar attribution', async t => {
@@ -614,6 +771,20 @@ test('makeMetric — waitingOnMemberId attribution', async t => {
   await t.test('is null when there is no target', () => {
     assert.equal(makeMetric('disposition', { memberId: 'yeats' }).waitingOnMemberId, null);
     assert.equal(makeMetric('speaker', { memberId: 'yeats' }).waitingOnMemberId, null);
+  });
+});
+
+// #166 — same observability rationale as #203's waitingOnMemberId above,
+// for how often cross-session residue actually accrues in real sessions.
+test('makeMetric — residueNote attribution', async t => {
+  await t.test('records the residue fragment written on a disposition metric', () => {
+    const metric = makeMetric('disposition', { round: 0, memberId: 'yeats', residueNote: 'Grew wary of Crowley.' });
+    assert.equal(metric.residueNote, 'Grew wary of Crowley.');
+  });
+
+  await t.test('is null when no fragment was written', () => {
+    assert.equal(makeMetric('disposition', { memberId: 'yeats' }).residueNote, null);
+    assert.equal(makeMetric('speaker', { memberId: 'yeats' }).residueNote, null);
   });
 });
 

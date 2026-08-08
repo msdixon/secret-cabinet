@@ -65,10 +65,16 @@ const PORT = process.env.PORT || 3132;
 const DATA_DIR = process.env.RAILWAY_VOLUME_MOUNT_PATH || __dirname;
 const SESSIONS_DIR = path.join(DATA_DIR, 'sessions');
 const AUTH_SESSIONS_DIR = path.join(DATA_DIR, '.auth-sessions');
+// #166 — cross-session residue (rung (a) of #195's amnesia ladder). A
+// sibling of SESSIONS_DIR, deliberately not inside it: residue belongs to
+// the member across every session that ever convenes them, not to any one
+// session's record.
+const RESIDUE_DIR = path.join(DATA_DIR, 'residue');
 const PROMPTS_DIR = path.join(__dirname, 'prompts');
 const MEMBERS_DIR = path.join(PROMPTS_DIR, 'members');
 
 if (!fs.existsSync(SESSIONS_DIR)) fs.mkdirSync(SESSIONS_DIR, { recursive: true });
+if (!fs.existsSync(RESIDUE_DIR)) fs.mkdirSync(RESIDUE_DIR, { recursive: true });
 
 app.use(express.json({ limit: '4mb' }));
 app.use(express.urlencoded({ extended: false }));
@@ -564,8 +570,8 @@ app.post('/api/convene', async (req, res) => {
 
   openSSE(res);
   try {
-    const { fullRoundText: text, disposition } = await runRound({
-      client, model: MODEL, lodgeContext, ROSTER, loadMemberFile, loadVoiceExemplar,
+    const { fullRoundText: text, disposition, residueUpdates } = await runRound({
+      client, model: MODEL, lodgeContext, ROSTER, loadMemberFile, loadVoiceExemplar, loadResidue,
       presentMemberIds: playerDirectorPool(members, effectivePlayerMode, effectivePlayerMemberId),
       artifact: artifact || null, notes: notes || {},
       roundPrompt, conversationHistory: [],
@@ -601,6 +607,7 @@ app.post('/api/convene', async (req, res) => {
       disposition: disposition || {},
     };
     saveSession(session);
+    saveResidueUpdates(residueUpdates);
     res.write(`data: ${JSON.stringify({ done: true, sessionId: id, round: 1, label: 'First Movement', text })}\n\n`);
   } catch (err) {
     console.error('Convene error:', err);
@@ -656,8 +663,8 @@ app.post('/api/round', async (req, res) => {
 
   openSSE(res);
   try {
-    const { fullRoundText: text, disposition } = await runRound({
-      client, model: MODEL, lodgeContext, ROSTER, loadMemberFile, loadVoiceExemplar,
+    const { fullRoundText: text, disposition, residueUpdates } = await runRound({
+      client, model: MODEL, lodgeContext, ROSTER, loadMemberFile, loadVoiceExemplar, loadResidue,
       presentMemberIds: playerDirectorPool(session.members, session.playerMode, session.playerMemberId),
       artifact: null, notes: {},
       roundPrompt, conversationHistory: session.conversationHistory.slice(-6),
@@ -683,6 +690,7 @@ app.post('/api/round', async (req, res) => {
     }
 
     saveSession(session);
+    saveResidueUpdates(residueUpdates);
     res.write(`data: ${JSON.stringify({ done: true, round: roundIndex + 1, label, text })}\n\n`);
   } catch (err) {
     console.error('Round error:', err);
@@ -704,8 +712,8 @@ app.post('/api/interject', async (req, res) => {
 
   openSSE(res);
   try {
-    const { fullRoundText: response, disposition } = await runRound({
-      client, model: MODEL, lodgeContext, ROSTER, loadMemberFile, loadVoiceExemplar,
+    const { fullRoundText: response, disposition, residueUpdates } = await runRound({
+      client, model: MODEL, lodgeContext, ROSTER, loadMemberFile, loadVoiceExemplar, loadResidue,
       presentMemberIds: playerDirectorPool(session.members, session.playerMode, session.playerMemberId),
       artifact: null, notes: {},
       roundPrompt: prompt, conversationHistory: session.conversationHistory.slice(-6),
@@ -726,6 +734,7 @@ app.post('/api/interject', async (req, res) => {
     session.disposition = disposition || {};
 
     saveSession(session);
+    saveResidueUpdates(residueUpdates);
     res.write(`data: ${JSON.stringify({ done: true, label: 'A Presence Passes Through', text: response })}\n\n`);
   } catch (err) {
     console.error('Interject error:', err);
@@ -1935,6 +1944,40 @@ function loadVoiceExemplar(memberId) {
     translated: !!entry.translated,
     text,
   };
+}
+
+// #166 — cross-session residue store, one small JSON file per member in
+// RESIDUE_DIR. Read by runRound (pipeline.js) via the injected `loadResidue`
+// function, same dependency-injection pattern as loadMemberFile and
+// loadVoiceExemplar above — pipeline.js never touches the filesystem
+// directly, so it stays testable as pure functions (see test/pipeline.test.js).
+function residuePath(memberId) {
+  return path.join(RESIDUE_DIR, `${memberId}.json`);
+}
+
+function loadResidue(memberId) {
+  const p = residuePath(memberId);
+  if (!fs.existsSync(p)) return '';
+  try {
+    return JSON.parse(fs.readFileSync(p, 'utf8')).text || '';
+  } catch (err) {
+    console.warn('[residue] failed to read', memberId, '—', err.message);
+    return '';
+  }
+}
+
+// Best-effort, one file per member who actually wrote a fresh fragment this
+// round — most rounds this object is empty (see buildDispositionToolSchema's
+// residueNote: "most turns, nothing belongs here"). A write failure must
+// never fail a round that has already streamed successfully to the client.
+function saveResidueUpdates(residueUpdates) {
+  for (const [memberId, text] of Object.entries(residueUpdates || {})) {
+    try {
+      fs.writeFileSync(residuePath(memberId), JSON.stringify({ text, updatedAt: new Date().toISOString() }, null, 2));
+    } catch (err) {
+      console.warn('[residue] failed to save', memberId, '—', err.message);
+    }
+  }
 }
 
 // Internal-only: read the `citation`/`source_url` frontmatter fields (plus
