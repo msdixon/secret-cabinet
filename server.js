@@ -30,6 +30,7 @@ const roster = require('./roster');
 const transcriptFormat = require('./transcript-format');
 const readingRoom = require('./reading-room');
 const lodgePrompts = require('./lodge-prompts');
+const library = require('./library');
 
 // ─── Environment flags ────────────────────────────────────────────────────────
 const IS_LOCAL = process.env.LOCAL === 'true' || process.env.NODE_ENV !== 'production';
@@ -1565,15 +1566,11 @@ const LIBRARY_FILE = path.join(LIBRARY_DIR, 'library.json');
 const ARCHIVE_IMAGE_FILE = path.join(__dirname, 'public', 'archive', 'metadata.json');
 
 function loadLibraryIndex() {
-  if (!fs.existsSync(LIBRARY_FILE)) return [];
-  return JSON.parse(fs.readFileSync(LIBRARY_FILE, 'utf8'));
+  return library.loadLibraryIndex(LIBRARY_FILE);
 }
 
-// Archival images (#30) keyed by library entry id — see public/archive/metadata.json.
-// Kept separate from library.json/frontmatter since not every entry has an image yet.
 function loadArchiveImageIndex() {
-  if (!fs.existsSync(ARCHIVE_IMAGE_FILE)) return {};
-  return JSON.parse(fs.readFileSync(ARCHIVE_IMAGE_FILE, 'utf8')).entries || {};
+  return library.loadArchiveImageIndex(ARCHIVE_IMAGE_FILE);
 }
 
 // GET /api/library — list all entries (index only, no full text)
@@ -1622,65 +1619,16 @@ app.get('/api/library/:id', (req, res) => {
   }
 });
 
-// `citation`/`source_url` live only in each entry's .md frontmatter, not in
-// library.json's index — this reads them out. Shared by the internal
-// citation-grounding lookup below and GET /api/library/:id (#84).
 function parseLibraryFrontmatter(raw) {
-  const frontmatter = raw.match(/^---\n([\s\S]*?)\n---/)?.[1] || '';
-  const citation = frontmatter.match(/^citation:\s*"?(.*?)"?$/m)?.[1] || null;
-  const source_url = frontmatter.match(/^source_url:\s*"?(.*?)"?$/m)?.[1] || null;
-  return { citation, source_url };
+  return library.parseLibraryFrontmatter(raw);
 }
 
-// #187 — the library entry a member actually *wrote*, for injection into
-// their speaker prompt as a voice-register exemplar. Internal-only; not
-// exposed as a route.
-//
-// Keyed on `author`, deliberately not on `members`. `members` is an
-// association list — it includes everyone an entry concerns, so Waite's 1911
-// preface lists Pamela Colman Smith and Jung's 1916 text lists Corbin.
-// Matching on it would hand a member someone else's prose under the heading
-// "how you actually write", which is a fabrication of voice; `author` is the
-// one member whose hand the text is in. A member with no authored entry
-// returns null and their prompt is built exactly as it was before #187.
-//
-// One entry per author today. If an author ever gains a second, the first in
-// library.json order wins — deterministic, and a curator wanting a specific
-// one as the exemplar should order the file accordingly.
 function loadVoiceExemplar(memberId) {
-  if (!memberId) return null;
-  const entry = loadLibraryIndex().find(e => e.author === memberId);
-  if (!entry) return null;
-  const filePath = path.join(LIBRARY_DIR, entry.file);
-  if (!fs.existsSync(filePath)) return null;
-  const raw = fs.readFileSync(filePath, 'utf8');
-  const text = raw.replace(/^---[\s\S]*?---\n/, '').trim();
-  if (!text) return null;
-  return {
-    id: entry.id,
-    title: entry.title,
-    source: entry.source,
-    date: entry.date,
-    translated: !!entry.translated,
-    text,
-  };
+  return library.loadVoiceExemplar(LIBRARY_DIR, LIBRARY_FILE, memberId);
 }
 
-// Internal-only: read the `citation`/`source_url` frontmatter fields (plus
-// the full excerpt body, for #153 part 1's text-grounded re-check) that
-// loadLibraryIndex()/library.json don't carry, for cross-referencing a
-// verified citation to its grounding source. Not exposed via a public route.
 function loadLibraryCitationLookup() {
-  const lookup = {};
-  for (const entry of loadLibraryIndex()) {
-    const filePath = path.join(LIBRARY_DIR, entry.file);
-    if (!fs.existsSync(filePath)) continue;
-    const raw = fs.readFileSync(filePath, 'utf8');
-    const { citation, source_url } = parseLibraryFrontmatter(raw);
-    const text = raw.replace(/^---[\s\S]*?---\n/, '').trim();
-    lookup[entry.id] = { title: entry.title, source: entry.source, citation, source_url, text };
-  }
-  return lookup;
+  return library.loadLibraryCitationLookup(LIBRARY_DIR, LIBRARY_FILE);
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
