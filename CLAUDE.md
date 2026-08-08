@@ -10,6 +10,19 @@ Standing instructions for any Claude Code session working in this repo. See [PRO
 
 **Before adding any entry — including a backfill for older history — grep `STATUS.md` for the PR or issue number first.** If it's already logged, don't add a second entry; if you have real detail the existing one lacks, that's a judgment call about whether it's worth a short addendum, not grounds for a duplicate paragraph. This guards the one gap the new rule doesn't close on its own: PRs merged before this convention existed, or where a session skipped the step, still need occasional backfilling — but backfilling should stay rare, deliberate, and checked-for-duplicates now, not a standing "after every merge" habit.
 
+## Filing new issues
+
+**Every new issue gets added to the GitHub Project board (#2, "Secret-Cabin-et Roadmap") at creation time** — not left to be picked up in a later triage pass:
+
+```bash
+gh issue create --repo msdixon/secret-cabinet --title "..." --body "..." --label "..."
+gh project item-add 2 --owner msdixon --url <the issue URL just created>
+```
+
+**Why:** PROJECT.md and this file both say the board is where status actually lives, but that's only true if issues land on it. An issue that exists only in the repo's Issues tab is invisible to `/cabinet-next`'s board query and to the weekly doc-checkin's reconciliation — it doesn't get triaged, doesn't get a Status column, and just sits there until someone happens to notice it exists outside the normal flow. Filed 2026-08-08 after #218 was created without this step and had to be added to the board as an explicit follow-up.
+
+New items land in whatever Status the project's default assigns (observed as **Backlog** as of 2026-08-08) — that's fine as a landing spot; deciding whether it's actually Backlog-worthy vs. Icebox vs. something more urgent is what triage is for, not something to guess at the moment of filing.
+
 ## Worktree hygiene
 
 This project accumulates a git worktree per task under `.claude/worktrees/`. Left alone, they silently pile up — some have sat for months with real uncommitted work nobody circled back to.

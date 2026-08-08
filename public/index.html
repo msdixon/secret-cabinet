@@ -64,6 +64,7 @@
     <div class="journal-panel">
       <div class="panel-label">I. The Document</div>
       <div class="journal-controls">
+        <input type="text" class="lodge-select library-search-input" id="library-search-input" placeholder="Search the Archival Library…" autocomplete="off" hidden oninput="window.Export.filterLibraryOptions(this.value)" />
         <select class="lodge-select" id="source-select" onmousedown="window.Export.loadSourceOptions()" onchange="window.Export.handleSourceChange()">
           <option value="paste">— paste an entry —</option>
           <optgroup label="Loading Day One journals…" id="source-loading-group" disabled>
@@ -272,43 +273,44 @@
     <div class="after-panel" id="after-panel">
       <div class="panel-label" style="margin-bottom:10px;">III. After the Meeting</div>
 
+      <!-- #186: the panel reads as two verbs, not a control board. Continue
+           folds "one more turn / interject / reconvene / branch" -- four ways
+           of extending the meeting -- behind one menu; Preserve folds every
+           export and its per-app config behind another. Verify Citations and
+           Watch stay top-level: they're how you read the meeting that already
+           happened, not machinery for continuing or preserving it. -->
       <div class="after-row">
-        <button class="lodge-btn" id="additional-round-btn" onclick="addRound()">One More Turn ↻</button>
-        <button class="lodge-btn" id="interject-toggle-btn" style="border-color:#a0c8a0;color:#a0c8a0;" onclick="toggleInterjectForm()">Interject</button>
+        <div class="menu-wrap">
+          <button class="lodge-btn" id="continue-btn" onclick="toggleAfterMenu('continue-menu')">Continue ▾</button>
+          <div class="lodge-menu" id="continue-menu">
+            <button class="lodge-btn" id="additional-round-btn" onclick="addRound()">One More Turn ↻</button>
+            <button class="lodge-btn" id="interject-toggle-btn" style="border-color:#a0c8a0;color:#a0c8a0;" onclick="toggleInterjectForm()">Interject</button>
+            <button class="lodge-btn" onclick="reconveneOnCurrentSession()" title="Use this transcript as the document for a new session">↩ Reconvene</button>
+            <button class="lodge-btn" onclick="branchFromLatestRound()" title="Branch from here — explore an alternate path from this point, original stays untouched">⑂ Branch</button>
+          </div>
+        </div>
+
         <button class="lodge-btn" id="verify-citations-btn" onclick="verifyCitations()">Verify Citations ⚑</button>
         <button class="lodge-btn" style="border-color:var(--lodge-ash);color:var(--lodge-ash);" onclick="startWitness()" title="Watch the transcript play back with reading-time pacing">◎ Watch</button>
-        <button class="lodge-btn" style="border-color:var(--lodge-ash);color:var(--lodge-ash);" onclick="reconveneOnCurrentSession()" title="Use this transcript as the document for a new session">↩ Reconvene</button>
+
+        <div class="menu-wrap">
+          <button class="lodge-btn" id="preserve-btn" onclick="toggleAfterMenu('preserve-menu')">Preserve ▾</button>
+          <div class="lodge-menu" id="preserve-menu">
+            <button class="lodge-btn export-txt" onclick="window.Export.exportTxt()">↓ .txt</button>
+            <button class="lodge-btn export-scholarly" id="export-scholarly-btn" onclick="window.Export.exportScholarly()" disabled title="Annotate at least one passage to enable">↓ Scholarly Note (.md)</button>
+            <button class="lodge-btn export-dayone" onclick="window.Export.exportDayOne()">→ Day One</button>
+            <span id="export-ulysses-row"><button class="lodge-btn export-ulysses" onclick="window.Export.exportUlysses()">→ Ulysses</button></span>
+            <span id="export-obsidian-row"><button class="lodge-btn export-obsidian" onclick="window.Export.exportObsidian()">→ Obsidian</button></span>
+            <span id="export-md-row" style="display:none;"><button class="lodge-btn" onclick="window.Export.exportMd()">↓ .md</button></span>
+            <div class="lodge-menu-divider"></div>
+            <button class="lodge-btn" onclick="openExportSettings()">⚙ Export Settings…</button>
+          </div>
+        </div>
       </div>
 
       <div class="after-row interject-form" id="interject-form" style="display:none;">
         <input type="text" class="interject-input" id="interject-input" placeholder="A presence moves through the room. It has something to say..." onkeydown="if(event.key==='Enter') interject();" />
         <button class="lodge-btn" style="border-color:#a0c8a0;color:#a0c8a0;" onclick="interject()">Send</button>
-      </div>
-
-      <div class="after-row after-export-row">
-        <span class="export-note">Preserve the transcript:</span>
-        <button class="lodge-btn export-txt" onclick="window.Export.exportTxt()">↓ .txt</button>
-        <button class="lodge-btn export-scholarly" id="export-scholarly-btn" onclick="window.Export.exportScholarly()" disabled title="Annotate at least one passage to enable">↓ Scholarly Note (.md)</button>
-        <button class="lodge-btn export-dayone" onclick="window.Export.exportDayOne()">→ Day One</button>
-        <span id="export-ulysses-row"><button class="lodge-btn export-ulysses" onclick="window.Export.exportUlysses()">→ Ulysses</button></span>
-        <span id="export-obsidian-row"><button class="lodge-btn export-obsidian" onclick="window.Export.exportObsidian()">→ Obsidian</button></span>
-        <span id="export-md-row" style="display:none;"><button class="lodge-btn" onclick="window.Export.exportMd()">↓ .md</button></span>
-      </div>
-
-      <div class="after-row after-export-config">
-        <span class="export-note" id="export-journal-name">No journal selected</span>
-        <label class="export-config-field" id="export-ulysses-config">
-          <span>Ulysses group</span>
-          <input class="ulysses-group-input" id="ulysses-group" placeholder="e.g. The Affected" value="" oninput="localStorage.setItem('sc-ulysses-group',this.value)" />
-        </label>
-        <label class="export-config-field" id="export-ulysses-id-config">
-          <span>Group identifier (optional, subfolders)</span>
-          <input class="ulysses-group-input" id="ulysses-group-id" placeholder="Option+right-click group → Copy Callback Identifier" value="" oninput="localStorage.setItem('sc-ulysses-group-id',this.value)" />
-        </label>
-        <label class="export-config-field" id="export-obsidian-config">
-          <span>Obsidian vault</span>
-          <input class="ulysses-group-input" id="obsidian-vault" placeholder="~/Documents/My Vault" value="" oninput="localStorage.setItem('sc-obsidian-vault',this.value)" />
-        </label>
       </div>
 
       <div class="after-row">
@@ -343,6 +345,34 @@
   </div>
   <div class="dossier-body" id="dossier-body">
     <div class="sessions-empty">Convene a meeting to see the assembled.</div>
+  </div>
+</div>
+
+<!-- Export settings drawer (#186): per-app config for Preserve, out of the
+     ritual space and opened on demand rather than sitting as standing fields. -->
+<div class="export-settings-overlay" id="export-settings-overlay" onclick="closeExportSettings()"></div>
+<div class="export-settings-drawer" id="export-settings-drawer">
+  <div class="sessions-drawer-header">
+    <span class="sessions-drawer-title">Export Settings</span>
+    <button class="sessions-close-btn" onclick="closeExportSettings()">✕</button>
+  </div>
+  <div class="export-settings-body">
+    <div class="settings-field">
+      <span>Day One journal</span>
+      <span class="source-tag" id="export-journal-name" style="margin-left:0;">No journal selected</span>
+    </div>
+    <div class="settings-field" id="export-ulysses-config">
+      <span>Ulysses group</span>
+      <input class="ulysses-group-input" id="ulysses-group" placeholder="e.g. The Affected" value="" oninput="localStorage.setItem('sc-ulysses-group',this.value)" />
+    </div>
+    <div class="settings-field" id="export-ulysses-id-config">
+      <span>Group identifier (optional, subfolders)</span>
+      <input class="ulysses-group-input" id="ulysses-group-id" placeholder="Option+right-click group → Copy Callback Identifier" value="" oninput="localStorage.setItem('sc-ulysses-group-id',this.value)" />
+    </div>
+    <div class="settings-field" id="export-obsidian-config">
+      <span>Obsidian vault</span>
+      <input class="ulysses-group-input" id="obsidian-vault" placeholder="~/Documents/My Vault" value="" oninput="localStorage.setItem('sc-obsidian-vault',this.value)" />
+    </div>
   </div>
 </div>
 
