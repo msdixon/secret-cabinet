@@ -437,7 +437,7 @@ function pickNextSpeaker({ pool, spokenCounts, lastSpeakerId, remainingBudget, d
   let roll = rng() * total;
   for (let i = 0; i < pool.length; i++) {
     roll -= weights[i];
-    if (roll <= 0) return pool[i];
+    if (roll <= 0 && weights[i] > 0) return pool[i];
   }
   return pool[pool.length - 1]; // floating-point fallback
 }

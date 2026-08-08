@@ -185,6 +185,17 @@ test('pickNextSpeaker', async t => {
     assert.equal(picked, 'scholem');
   });
 
+  await t.test('an rng returning exactly 0 skips a first candidate already at the cap (#201)', () => {
+    const picked = pickNextSpeaker({
+      pool: ['scholem', 'blavatsky'],
+      spokenCounts: counts([['scholem', 2]]), // scholem is at MAX_TURNS_PER_POOL_MEMBER, weight 0
+      lastSpeakerId: null,
+      remainingBudget: 500,
+      rng: () => 0,
+    });
+    assert.equal(picked, 'blavatsky');
+  });
+
   // #203: a member privately waiting on the person who just spoke should be
   // meaningfully likelier to get the next beat — an interruption reading as
   // a character choice, not a scheduling accident.
