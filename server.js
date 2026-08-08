@@ -26,6 +26,7 @@ const dayOne = require('./dayone');
 const multer = require('multer');
 const PDFParser = require('pdf2json');
 const { buildMemberSection, runRound, stripInternalBlankLines, proposeCast } = require('./pipeline');
+const roster = require('./roster');
 
 // ─── Environment flags ────────────────────────────────────────────────────────
 const IS_LOCAL = process.env.LOCAL === 'true' || process.env.NODE_ENV !== 'production';
@@ -164,79 +165,37 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use('/vendor/babylonjs', express.static(path.join(__dirname, 'node_modules/babylonjs')));
 
 // ─── Lodge roster ────────────────────────────────────────────────────────────
-// Loaded from roster.json; reloadRoster() refreshes in-memory copy after writes.
+// Loaded from roster.json; reloadLodgeRoster() refreshes in-memory copy after
+// writes. See roster.js for the extracted, Express-agnostic implementation
+// (#193) — this section just owns the in-memory ROSTER singleton and the
+// brief cache that the module's functions take as explicit parameters.
 
 const ROSTER_FILE = path.join(MEMBERS_DIR, 'roster.json');
 let ROSTER = [];
 
-// One-line sketch per member, for #185's casting call — the model needs to
-// know who these people *are* to say which of them a document would draw, and
-// roster.json carries only names and glyphs. Shorter than the dossier's
-// version on purpose: this one is paid for 30-odd times in a single prompt.
-// Cached because it re-reads and re-parses every character file; cleared by
-// reloadRoster(), which is the only point at which those files can change.
-// Declared here rather than beside memberBrief() below so reloadRoster()'s
-// call at module load doesn't hit the temporal dead zone.
+// Cache for roster.memberBrief(), cleared whenever the roster is reloaded —
+// the only point at which member character files can change.
 const briefCache = new Map();
 
-// Small pool of neutral symbols for members without a hand-picked glyph (the
-// original 12 carry meaningful ones set by hand in roster.json). Cycles once
-// exhausted — see #80.
-const FALLBACK_GLYPHS = [
-  '☉', '♀', '♂', '♄', '♅', '♆', '♇', '☄',
-  '★', '☆', '✪', '✴', '✷', '✹', '✵', '❋',
-  '◆', '◇', '▲', '▽', '⬟', '⬢', '⌖', '✻',
-];
-
-// Deterministic-ish: picks the first pool symbol not already in use by the
-// roster, so glyphs stay distinct as long as the pool has room; cycles by
-// roster size once it doesn't.
-function assignGlyph(roster) {
-  const used = new Set(roster.map(m => m.glyph).filter(Boolean));
-  const free = FALLBACK_GLYPHS.find(g => !used.has(g));
-  return free || FALLBACK_GLYPHS[roster.length % FALLBACK_GLYPHS.length];
-}
-
-function reloadRoster() {
-  const all = JSON.parse(fs.readFileSync(ROSTER_FILE, 'utf8'));
-  // Filter out any entry whose character file no longer exists on disk
-  ROSTER = all.filter(m => !m.file || fs.existsSync(path.join(MEMBERS_DIR, m.file)));
-  // Backfill glyphs for any member who doesn't have one yet (e.g. members
-  // added to roster.json before glyphs existed, or by hand without one)
-  let backfilled = false;
-  for (const m of ROSTER) {
-    if (!m.glyph) {
-      m.glyph = assignGlyph(ROSTER);
-      backfilled = true;
-    }
-  }
+function reloadLodgeRoster() {
+  ROSTER = roster.reloadRoster(ROSTER_FILE, MEMBERS_DIR);
   briefCache.clear();
-  // Rewrite roster.json if entries were removed or glyphs were backfilled
-  if (ROSTER.length < all.length || backfilled) {
-    fs.writeFileSync(ROSTER_FILE, JSON.stringify(ROSTER, null, 2) + '\n', 'utf8');
-  }
 }
-reloadRoster();
+reloadLodgeRoster();
 
 const lodgeContext = fs.readFileSync(path.join(PROMPTS_DIR, 'lodge-context.md'), 'utf8');
 const axesDoc = fs.readFileSync(path.join(__dirname, 'AXES.md'), 'utf8');
 
 function loadMemberFile(filename) {
-  if (!filename) return '';
-  const p = path.join(MEMBERS_DIR, filename);
-  return fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : '';
+  return roster.loadMemberFile(MEMBERS_DIR, filename);
 }
 
 function memberBrief(member) {
-  if (briefCache.has(member.id)) return briefCache.get(member.id);
-  const text = loadMemberFile(member.file);
-  const brief = text ? extractSection(text, 'WHO YOU ARE', 200) : null;
-  briefCache.set(member.id, brief);
-  return brief;
+  return roster.memberBrief(MEMBERS_DIR, briefCache, member);
 }
 
 function castingRoster() {
-  return ROSTER.map(m => ({ id: m.id, name: m.name, brief: memberBrief(m) }));
+  return roster.castingRoster(MEMBERS_DIR, briefCache, ROSTER);
 }
 
 // ─── Session persistence ──────────────────────────────────────────────────────
@@ -1523,20 +1482,6 @@ app.get('/api/members', (req, res) => {
   res.json(ROSTER);
 });
 
-// Extract the first substantive paragraph after a character file's section
-// header. Shared by the dossier route (long form, for reading) and casting's
-// member briefs (short form, for the model's judgment).
-function extractSection(text, sectionName, limit = 320) {
-  const re = new RegExp(`## ${sectionName}[\\s\\S]*?\\n\\n([^#\\n][\\s\\S]*?)(?:\\n\\n---|\n\n##|$)`);
-  const m = text.match(re);
-  if (!m) return null;
-  const para = m[1].split(/\n\n/)[0].trim()
-    .replace(/\*([^*]+)\*/g, '$1') // strip asterisk emphasis
-    .replace(/\n/g, ' ')
-    .slice(0, limit);
-  return para || null;
-}
-
 // GET /api/members/:id/dossier — parse and return brief + voice from character file
 app.get('/api/members/:id/dossier', (req, res) => {
   const member = ROSTER.find(m => m.id === req.params.id);
@@ -1547,8 +1492,8 @@ app.get('/api/members/:id/dossier', (req, res) => {
   res.json({
     id: member.id,
     name: member.name,
-    bio: extractSection(text, 'WHO YOU ARE'),
-    voice: extractSection(text, 'HOW YOU SPEAK'),
+    bio: roster.extractSection(text, 'WHO YOU ARE'),
+    voice: roster.extractSection(text, 'HOW YOU SPEAK'),
   });
 });
 
@@ -1632,7 +1577,7 @@ ${relationships || '(not specified — infer from historical record)'}`;
 
     fs.writeFileSync(filePath, characterFile, 'utf8');
 
-    const newMember = { id, name: name.trim(), file, glyph: assignGlyph(ROSTER) };
+    const newMember = { id, name: name.trim(), file, glyph: roster.assignGlyph(ROSTER) };
     ROSTER.push(newMember);
     fs.writeFileSync(ROSTER_FILE, JSON.stringify(ROSTER, null, 2), 'utf8');
 
