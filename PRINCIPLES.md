@@ -9,7 +9,7 @@ Established 2026-08-08, at Rachel's request, stress-tested against [PROJECT.md](
 
 ## How to use this file
 
-Five principles, below. They aren't ranked, but **two explicit precedence rules exist** (under Principle 3 and Principle 4) for the cases where principles pull against each other — check those first when a decision feels like a genuine conflict rather than reaching for a default.
+Five principles, below — plus one explicit interaction to understand before treating any of the first three as standalone: **Voice, Verifiability, and Entertainment (Principles 1–3) form a deliberate, productive triangle, not a hierarchy** — see the section right after Principle 3. Principle 4 (Accessibility) is unconditional, not gated on anything. One further principle, Security, is tracked but deliberately not yet promoted to full weight — see the closing section.
 
 This is written-principles-only, for now. It does not yet include the code-level "design system" layer (tokens, component conventions) or a redesign — those are deliberately separate future work ([#236](https://github.com/msdixon/secret-cabinet/issues/236)), because Rachel isn't sold on the current UI and wants the principles settled before scaffolding is built on top of them.
 
@@ -41,28 +41,38 @@ This is written-principles-only, for now. It does not yet include the code-level
 
 ---
 
-## Principle 3 — Entertainment (in service of engagement, not instead of rigor)
+## Principle 3 — Entertainment
 
 **What it means:** The room should be fun, dramatically alive, and replayable — surprise, argument, camaraderie, the things Rachel named in PROJECT.md as what's actually kept her returning to the novel research. This is a real principle, not a guilty pleasure tolerated alongside the serious ones.
 
 **Why it's a principle:** Per PROJECT.md purpose #1: talking *to* the esotericists rather than only reading them "made the research fun and replayable, which is what's kept her interest in the novel alive" — and a novel spanning years needs exactly that durability. Entertainment isn't decoration on top of the research purpose; it's load-bearing for the research purpose surviving at all.
 
-**Precedence rule (the one real conflict with Principle 1):** When entertainment and verifiability/academic register pull in different directions — softening a controversial figure to make them more likable, inventing dramatic beats the historical record doesn't support, resolving a genuinely contested figure into a clean villain or a clean hero because a clean story is more satisfying — **verifiability wins.** This is not a new rule invented for this doc; it's [AXES.md](AXES.md) Axis 3's "accuracy is the design priority; comfort is not," carried up from character-writing into a general design rule. Drama has to be found *in* the accurate version of events, not manufactured by distorting them.
+**Its relationship to Verifiability is not a precedence rule.** An earlier draft of this principle resolved Entertainment-vs-Verifiability conflicts with a fixed hierarchy — verifiability always wins. Rachel corrected that (2026-08-08): the tension between them is deliberate and generative, likely the actual source of the project's appeal, not a conflict to adjudicate away. See the section immediately below, "Voice, Verifiability, Entertainment — the casting triangle."
 
-**Where this principle actually points, in practice:** toward investment in pacing, staging, presence, and interactivity (the Atmosphere/presence thread, #26–#28, #184–#186; #33 branching; #32 investigation mode, parked) — not toward loosening Principle 1 to make any individual member more crowd-pleasing.
+**Where this principle actually points, in practice:** toward investment in pacing, staging, presence, and interactivity (the Atmosphere/presence thread, #26–#28, #184–#186; #33 branching; #32 investigation mode, parked), and toward casting decisions that seek out — not avoid — figures where the tension with Verifiability and Voice is real and productive.
+
+---
+
+## Voice, Verifiability, Entertainment — the casting triangle
+
+**Why this gets its own section instead of living inside Principle 3:** Per Rachel (2026-08-08), the tension between Entertainment and Verifiability isn't a problem for either principle to win — it's deliberate, and it's plausibly where the project's actual frisson comes from. Finding the right lodge members, in her words, "can feel like casting reality show members" — a figure like Crowley, Sun Ra, or Blake gives endless entertainment value, while having enough documented material to make their voice sound authentic and enough that's verifiable to cite. Voice, Verifiability, and Entertainment together may be the actual mechanic that makes the room work: "the vibes of a perfect Real Housewives season, but with more useful content."
+
+**What this changes in practice:**
+- Casting and scoping decisions (which historical figure to add, how much material to gather before writing them) should actively look for members where all three land at once — inherently dramatic, well-documented enough for real voice fidelity, well-sourced enough to verify — rather than defaulting to whichever is easiest to satisfy alone. A figure who's fascinating but too thin in the record to voice or verify well is a weaker candidate than the drama alone suggests; so is a figure who's easy to verify but has no dramatic charge.
+- Within a single member's portrayal, once cast, [AXES.md](AXES.md) Axis 3's rule still holds and hasn't changed: the drama has to be found *in* the accurate record, not manufactured by softening a figure to be more likable or inventing beats the record doesn't support. That's not in tension with the triangle framing above — it's what keeps the tension productive instead of collapsing into either flattering fiction or dry accuracy with no charge.
+- Worth reading as a filter on the roster overall, not just a rule for any one member: if casting is trending toward figures who are easy but flat, that's a sign this triangle isn't being used as a design tool — worth surfacing at a `/cabinet-review` pass rather than waiting for it to become obvious.
 
 ---
 
 ## Principle 4 — Accessibility
 
-**What it means:** Two genuinely different facets, kept distinct on purpose so one doesn't quietly stand in for the other:
+**What it means:** Technical accessibility — contrast, keyboard navigation, screen-reader behavior, touch target size, standard WCAG practice. This principle is specifically about the app being built accessibly; it is not a claim about how approachable the esoteric subject matter is to a non-expert (a different question this doc isn't taking a position on — see the revision note below).
 
-- **(a) Approachability.** Esoteric and academic material shouldn't require the researcher to already have expertise to engage with it — this is close to the actual thesis of the playable-archive purpose (#2): the room should give a newcomer the delight and legibility that academic *life* has but academic *tools* usually don't.
-- **(b) Technical/WCAG accessibility.** Contrast, keyboard navigation, screen-reader behavior, touch target size — standard a11y practice.
+**Why it's a principle from day one, not gated on audience size:** Baked in now, deliberately, even though the app currently has exactly one user. Two reasons, both Rachel's own, not inferred: it's part of her professional values and her academic practice, full stop, independent of whether this specific tool "needs" it yet — and building accessibly from the start produces better design generally, not just a future-proofing hedge for a hypothetical multi-user audience.
 
-**Precedence / sequencing rule:** (a) is a live constraint now — every design decision can be checked against it today. (b) is currently low-stakes, because this is a solo local tool with one user (Rachel) who isn't relying on assistive technology for this app. **(b) becomes a gate, not a nice-to-have, the moment either the small-audience closed demo idea or the portfolio/grant path (purpose #2) actually moves forward** — it should be cleared *before* the app is shown to anyone outside this one-person context, not retrofitted after. Don't let (a) being satisfied stand in for (b) being done; they're independent checks.
+**Revision note (2026-08-08):** An earlier draft split this principle into two facets — this one, plus a second "approachability" facet (esoteric material shouldn't require existing expertise), with technical accessibility gated behind a future multi-user or demo step. Rachel corrected both: approachability wasn't a principle she'd actually proposed, and gating technical accessibility on audience size was an unconfirmed assumption about her needs, not something she'd said. The facet and the gate are both removed; recorded here so neither gets silently reintroduced.
 
-**Existing precedent:** none yet in code — this is the one principle with the least implementation behind it so far, which is worth naming plainly rather than implying otherwise.
+**Existing precedent:** none yet in code — the one principle with the least implementation behind it so far, worth naming plainly rather than implying otherwise. Starts now, with intent, rather than waiting for an audit to reveal gaps.
 
 ---
 
@@ -82,7 +92,15 @@ This is written-principles-only, for now. It does not yet include the code-level
 
 **"Portfolio-readiness" as its own, sixth principle.** Considered during the 2026-08-08 stress-test pass. Rejected: it isn't a standalone design constraint with its own trade-offs — it's a lens that raises the bar on Principles 1 and 5 specifically, whenever purpose #2 (the platform pitch / grant / PhD path) is actively being pursued rather than sitting in the background. Handled as an explicit modifier under those two principles instead of a separate entry. Revisit only if a case surfaces where portfolio-readiness genuinely pulls against one of the other four principles in a way the modifier framing can't express.
 
-**"Privacy / local-first" as its own principle.** Considered, same pass. Rejected for now: not yet a live constraint while [#24](https://github.com/msdixon/secret-cabinet/issues/24) (multi-user) stays explicitly orthogonal and unpursued per PROJECT.md. Revisit if #24 or the small-audience closed-demo idea actually moves from consideration into scoped work — at that point this may deserve to become a real principle rather than an assumption.
+---
+
+## Considered, deliberately not yet promoted — Security
+
+**Not the same as "Privacy / local-first"** (an earlier draft's framing, rejected by Rachel 2026-08-08 in favor of this). Security is the right frame here, not privacy-by-default: the concern isn't keeping the app private, it's the app being built securely as its surface area grows.
+
+**Why it's real but correctly weighted low right now:** today's surface area is a solo local tool with one user — most classic web-app security concerns (auth boundaries between users, data isolation across accounts, abuse surfaces) don't yet exist to defend against, so treating this as a full, actively-checked principle today would be solving a problem that isn't there yet.
+
+**What activates it:** the moment the small-audience closed demo idea, or [#24](https://github.com/msdixon/secret-cabinet/issues/24) multi-user, actually moves from consideration into scoped work. At that point this should become a full principle with its own entry here, reviewed before the app is shown to anyone outside this one-person context — not retrofitted after. The passphrase-gated `auth.js` module (extracted under #193) is the one piece of real surface that already exists and is the natural first thing to review when that trigger fires.
 
 ---
 
