@@ -15,6 +15,16 @@
   --lodge-ember-1: #ff6b1a;
   --lodge-ember-2: #e8922a;
   --lodge-ember-3: #c8621a;
+  /* #235 — graph node/edge colors distinct from the UI chrome palette above:
+     the UI colors (amber-dim, lodge-border, #3a3220, #2a2436) read fine as
+     borders/backgrounds but drop below 3:1 against --lodge-panel when used
+     as small node fills or thin edge strokes, verified with a WCAG relative-
+     luminance calc, not by eye. These are lightened until each combination
+     (fill or stroke-at-rendered-opacity, over --lodge-panel) clears 3:1. */
+  --lodge-graph-member-fill: #b8842a;
+  --lodge-graph-text-fill: #8a7c4c;
+  --lodge-graph-theme-fill: #8880b8;
+  --lodge-graph-edge-library: #a89468;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 .lodge-root { background: var(--lodge-bg); color: var(--lodge-cream); font-family: 'Crimson Pro', Georgia, serif; }
@@ -570,20 +580,21 @@ a.archival-image-link:hover { border-color:var(--lodge-amber-dim); cursor:pointe
 .graph-toolbar { display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin-bottom:10px; }
 .graph-search-input { max-width:280px; flex:none; }
 .graph-type-toggles { display:flex; gap:14px; flex-wrap:wrap; }
-.graph-type-toggle { font-family:'Crimson Pro',serif; font-size:13px; color:var(--lodge-muted); display:flex; align-items:center; gap:5px; cursor:pointer; user-select:none; }
-.graph-type-toggle input { accent-color:var(--lodge-amber); }
+.graph-type-toggle { font-family:'Crimson Pro',serif; font-size:14px; color:var(--lodge-muted); display:flex; align-items:center; gap:6px; cursor:pointer; user-select:none; padding:4px 2px; }
+.graph-type-toggle input { accent-color:var(--lodge-amber); width:16px; height:16px; }
 .graph-reset-btn { margin-left:auto; }
 
-.graph-svg-container { position:relative; width:100%; height:520px; background:var(--lodge-panel); border:1px solid var(--lodge-border); border-radius:2px; overflow:hidden; }
+.graph-svg-container { position:relative; width:100%; height:640px; background:var(--lodge-panel); border:1px solid var(--lodge-border); border-radius:2px; overflow:hidden; touch-action:none; }
 #graph-svg { width:100%; height:100%; cursor:grab; }
 #graph-svg:active { cursor:grabbing; }
+.graph-zoom-hint { position:absolute; left:8px; bottom:8px; z-index:4; font-family:'IM Fell English',serif; font-style:italic; font-size:11px; color:var(--lodge-muted); background:rgba(23,18,13,0.8); padding:3px 8px; border-radius:2px; pointer-events:none; }
 .graph-empty-hint { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-family:'IM Fell English',serif; font-style:italic; color:var(--lodge-muted); pointer-events:none; }
 .graph-tooltip { position:absolute; z-index:5; background:var(--lodge-panel); border:1px solid var(--lodge-amber-dim); color:var(--lodge-cream); font-family:'Crimson Pro',serif; font-size:12px; line-height:1.5; padding:6px 10px; border-radius:2px; max-width:280px; pointer-events:none; box-shadow:0 4px 12px rgba(0,0,0,0.4); }
 
-.graph-edge { stroke:var(--lodge-border); opacity:0.55; transition:opacity 0.15s; }
-.graph-edge-historical { stroke:var(--lodge-fire); opacity:0.65; }
-.graph-edge-session { stroke:var(--lodge-muted); opacity:0.5; }
-.graph-edge-library { stroke:var(--lodge-amber-dim); opacity:0.45; }
+.graph-edge { stroke:var(--lodge-graph-edge-library); opacity:0.7; transition:opacity 0.15s; }
+.graph-edge-historical { stroke:var(--lodge-fire); opacity:0.85; }
+.graph-edge-session { stroke:var(--lodge-muted); opacity:0.8; }
+.graph-edge-library { stroke:var(--lodge-graph-edge-library); opacity:0.85; }
 .graph-edge.dim { opacity:0.06; }
 
 .graph-node { cursor:pointer; }
@@ -592,13 +603,13 @@ a.archival-image-link:hover { border-color:var(--lodge-amber-dim); cursor:pointe
 .lodge-chip:focus-visible,
 .lodge-text-item:focus-visible { outline:2px solid var(--lodge-amber); outline-offset:2px; }
 .graph-node-shape { fill:var(--lodge-surface); stroke-width:1.5; transition:fill 0.15s, stroke 0.15s; }
-.graph-node-member .graph-node-shape { fill:var(--lodge-amber-dim); stroke:var(--lodge-amber); }
-.graph-node-text .graph-node-shape { fill:#3a3220; stroke:var(--lodge-parchment); }
-.graph-node-theme .graph-node-shape { fill:#2a2436; stroke:#9a86c0; }
+.graph-node-member .graph-node-shape { fill:var(--lodge-graph-member-fill); stroke:var(--lodge-amber); }
+.graph-node-text .graph-node-shape { fill:var(--lodge-graph-text-fill); stroke:var(--lodge-parchment); }
+.graph-node-theme .graph-node-shape { fill:var(--lodge-graph-theme-fill); stroke:#9a86c0; }
 .graph-node.selected .graph-node-shape { fill:var(--lodge-amber); stroke:var(--lodge-gold); filter:drop-shadow(0 0 6px rgba(200,146,42,0.7)); }
 .graph-node.dim { opacity:0.18; }
-.graph-node-label { font-family:'Crimson Pro',serif; font-size:10px; fill:var(--lodge-muted); pointer-events:none; user-select:none; }
-.graph-node-member .graph-node-label { font-size:11px; fill:var(--lodge-cream); }
+.graph-node-label { font-family:'Crimson Pro',serif; font-size:13px; fill:var(--lodge-muted); pointer-events:none; user-select:none; }
+.graph-node-member .graph-node-label { font-size:14px; fill:var(--lodge-cream); font-weight:600; }
 .graph-node.selected .graph-node-label { fill:var(--lodge-gold); }
 
 .lodge-page-body { flex:1; display:flex; gap:0; min-height:0; padding:16px 24px 24px; gap:20px; }
@@ -646,4 +657,26 @@ a.archival-image-link:hover { border-color:var(--lodge-amber-dim); cursor:pointe
   .lodge-page-body { flex-direction:column; }
   .lodge-page-roster { width:100%; max-height:220px; }
   .lodge-page-detail { max-height:none; }
+}
+
+/* #235 — mobile: the graph previously kept a fixed 900x520 layout scaled
+   down 1:1 into whatever width the phone had, so node radii, spacing, and
+   label text that read fine at desktop width became cramped and tiny at
+   ~340-390px wide. Give the graph much more vertical room (it's the one
+   dimension a phone has to spare) instead of shrinking everything into a
+   letterbox, and stack/enlarge the toolbar for touch. */
+@media (max-width: 640px) {
+  .lodge-page-header { flex-wrap:wrap; gap:8px 16px; padding:14px 16px; }
+  .lodge-page-title { font-size:19px; }
+  .lodge-page-stats { width:100%; order:3; white-space:normal; }
+
+  .lodge-page-graph-wrap { padding:12px 12px 0; }
+  .graph-toolbar { gap:10px; }
+  .graph-search-input { max-width:none; flex:1 1 100%; order:1; }
+  .graph-type-toggles { order:2; gap:16px; }
+  .graph-reset-btn { order:3; margin-left:0; }
+
+  .graph-svg-container { height:min(78vh, 620px); min-height:420px; }
+
+  .lodge-page-body { padding:12px 12px 16px; }
 }
