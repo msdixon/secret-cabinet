@@ -152,8 +152,29 @@ function buildGraphData() {
   layoutInitialPositions();
 }
 
+// #235 — the force sim is isotropic (repulsion/spring/center all treat x and
+// y identically), so on this page's wide-rectangle container it settles
+// into a circular cluster sized by the SHORTER dimension and just floats in
+// the middle — measured at 42% of container width used vs. 79% of height on
+// a typical 1200x640 desktop container, which is exactly the "wide margins,
+// even after zooming" symptom (zooming just magnifies the same undersized
+// cluster and its surrounding empty space in fixed proportion). Rather than
+// retune REPEL/SPRING/DAMPING/MAX_SPEED — #218 tuned those together and
+// carefully, and a numeric harness run against production data showed the
+// existing settle already converges (more tick budget doesn't change the
+// topology) — the simulation runs entirely in a square "sim space" sized by
+// S = min(svgW, svgH), same S the ring radii below already use, and only
+// the render step (see simToRenderScale/renderGraph/attachDrag) stretches
+// whichever axis is larger back out to fill the real container. Confirmed
+// against the same harness: rendered width usage goes from 42% to 80%.
+function simToRenderScale() {
+  const S = Math.min(svgW, svgH);
+  return { S, x: svgW / S, y: svgH / S };
+}
+
 function layoutInitialPositions() {
-  const cx = svgW / 2, cy = svgH / 2;
+  const S = Math.min(svgW, svgH);
+  const cx = S / 2, cy = S / 2;
   const rings = { member: Math.min(svgW, svgH) * 0.22, text: Math.min(svgW, svgH) * 0.36, theme: Math.min(svgW, svgH) * 0.46 };
   const byType = { member: [], text: [], theme: [] };
   graphNodes.forEach(n => byType[n.type].push(n));
@@ -185,7 +206,8 @@ function prefersReducedMotion() {
 }
 
 function simTick() {
-  const cx = svgW / 2, cy = svgH / 2;
+  const S = Math.min(svgW, svgH);
+  const cx = S / 2, cy = S / 2;
   const nodes = graphNodes;
   const REPEL = 650;
   const SPRING = 0.02;
@@ -237,8 +259,8 @@ function simTick() {
     }
     n.x += n.vx;
     n.y += n.vy;
-    n.x = Math.max(n.r, Math.min(svgW - n.r, n.x));
-    n.y = Math.max(n.r, Math.min(svgH - n.r, n.y));
+    n.x = Math.max(n.r, Math.min(S - n.r, n.x));
+    n.y = Math.max(n.r, Math.min(S - n.r, n.y));
     kinetic += n.vx * n.vx + n.vy * n.vy;
   });
   return kinetic;
@@ -356,14 +378,14 @@ function scheduleHoverRender() {
 // higher-priority label already placed. Nothing is hidden permanently —
 // zooming in (now supported via wheel/pinch) spreads nodes apart and lets
 // more labels clear the collision test.
-function computeLabelDecisions(highlight) {
+function computeLabelDecisions(highlight, scale) {
   const decision = new Map();
   const placedBoxes = [];
 
   function box(n) {
     const w = n.label.length * 6.5 + 4;
     const h = 15;
-    const cx = n.x, cy = n.y + n.r + 12 + h / 2 - 5;
+    const cx = n.x * scale.x, cy = n.y * scale.y + n.r + 12 + h / 2 - 5;
     return { x0: cx - w / 2, y0: cy - h / 2, x1: cx + w / 2, y1: cy + h / 2 };
   }
   function overlaps(a, b) {
@@ -397,6 +419,9 @@ function renderGraph() {
   const anyFilterActive = searchTerm || visibleTypes.size < 3;
   const focusId = selectedId || hoveredId;
   const highlight = focusId ? connectedIds(focusId) : null;
+  // #235 — nodes live in a square sim-space (see simToRenderScale); stretch
+  // back out to the real container here, at the only step that draws pixels.
+  const scale = simToRenderScale();
 
   linksLayer.innerHTML = '';
   graphLinks.forEach(l => {
@@ -405,8 +430,8 @@ function renderGraph() {
     const dim = highlight && !(highlight.has(l.a) && highlight.has(l.b));
     const dominant = dominantOrigin(l.parts);
     const line = document.createElementNS(SVG_NS, 'line');
-    line.setAttribute('x1', a.x); line.setAttribute('y1', a.y);
-    line.setAttribute('x2', b.x); line.setAttribute('y2', b.y);
+    line.setAttribute('x1', a.x * scale.x); line.setAttribute('y1', a.y * scale.y);
+    line.setAttribute('x2', b.x * scale.x); line.setAttribute('y2', b.y * scale.y);
     line.setAttribute('class', `graph-edge graph-edge-${dominant}${dim ? ' dim' : ''}`);
     line.setAttribute('stroke-width', Math.min(6, 1 + l.weight * 0.5));
     line.addEventListener('mouseenter', (ev) => showEdgeTooltip(ev, l));
@@ -417,14 +442,14 @@ function renderGraph() {
 
   nodesLayer.innerHTML = '';
   let anyVisible = false;
-  const labelDecision = computeLabelDecisions(highlight);
+  const labelDecision = computeLabelDecisions(highlight, scale);
   graphNodes.forEach(n => {
     if (!nodeVisible(n)) return;
     anyVisible = true;
     const dim = highlight && !highlight.has(n.id);
     const g = document.createElementNS(SVG_NS, 'g');
     g.setAttribute('class', `graph-node graph-node-${n.type}${n.id === selectedId ? ' selected' : ''}${dim ? ' dim' : ''}`);
-    g.setAttribute('transform', `translate(${n.x},${n.y})`);
+    g.setAttribute('transform', `translate(${n.x * scale.x},${n.y * scale.y})`);
     g.setAttribute('tabindex', '0');
     g.setAttribute('role', 'button');
     g.setAttribute('aria-label', `${n.type}: ${n.label}`);
@@ -594,9 +619,14 @@ function attachDrag(g, n) {
 
   function moveTo(clientX, clientY) {
     const rect = svgEl.getBoundingClientRect();
-    const scaleX = svgW / rect.width, scaleY = svgH / rect.height;
-    n.x = (clientX - rect.left) * scaleX / viewScale - viewX / viewScale;
-    n.y = (clientY - rect.top) * scaleY / viewScale - viewY / viewScale;
+    const pxToViewBox = { x: svgW / rect.width, y: svgH / rect.height };
+    const renderX = (clientX - rect.left) * pxToViewBox.x / viewScale - viewX / viewScale;
+    const renderY = (clientY - rect.top) * pxToViewBox.y / viewScale - viewY / viewScale;
+    // Drag lands in render space (real container pixels); n.x/n.y live in
+    // sim space (see simToRenderScale), so undo the render stretch here.
+    const scale = simToRenderScale();
+    n.x = renderX / scale.x;
+    n.y = renderY / scale.y;
     n.vx = 0; n.vy = 0;
     renderGraph();
   }
