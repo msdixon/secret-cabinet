@@ -28,7 +28,6 @@ const path = require('path');
 
 const express = require('express');
 const Anthropic = require('@anthropic-ai/sdk');
-const crypto = require('crypto');
 
 const session = require('express-session');
 const FileStore = require('session-file-store')(session);
@@ -37,6 +36,15 @@ const dayOne = require('./dayone');
 const multer = require('multer');
 const PDFParser = require('pdf2json');
 const { buildMemberSection, runRound, stripInternalBlankLines, proposeCast } = require('./pipeline');
+const roster = require('./roster');
+const transcriptFormat = require('./transcript-format');
+const readingRoom = require('./reading-room');
+const lodgePrompts = require('./lodge-prompts');
+const library = require('./library');
+const citations = require('./citations');
+const graph = require('./graph');
+const sessionsStore = require('./sessions-store');
+const auth = require('./auth');
 
 // ─── Environment flags ────────────────────────────────────────────────────────
 const IS_LOCAL = process.env.LOCAL === 'true' || process.env.NODE_ENV !== 'production';
@@ -84,6 +92,11 @@ app.use(express.json({ limit: '4mb' }));
 app.use(express.urlencoded({ extended: false }));
 
 // ─── Auth (passphrase, deployed only) ────────────────────────────────────────
+// See auth.js (#193) for the extracted login page/routes/guard. Mounting
+// order stays explicit here: session middleware, then the login/logout
+// routes, then the requireAuth guard applied last — requireAuth must run
+// before express.static below (a prior bug let static short-circuit the
+// gate; see auth.js's createRequireAuth comment).
 
 const PASSPHRASE = process.env.PASSPHRASE || null;
 
@@ -110,80 +123,8 @@ app.use(session({
   },
 }));
 
-// Login page — only served when PASSPHRASE is set and session is not authenticated
-app.get('/login', (req, res) => {
-  if (!PASSPHRASE || req.session.authed) return res.redirect('/');
-  res.send(`<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>The Secret-Cabin-et</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: #1a1510; color: #c8b89a; font-family: 'Georgia', serif;
-           display: flex; align-items: center; justify-content: center; min-height: 100vh; }
-    .gate { text-align: center; width: 320px; }
-    h1 { font-size: 1.1rem; letter-spacing: .2em; text-transform: uppercase;
-         color: #8b7355; margin-bottom: 2rem; }
-    input[type=password] { width: 100%; padding: .75rem 1rem; background: #0d0b08;
-      border: 1px solid #3a3228; color: #c8b89a; font-family: inherit; font-size: 1rem;
-      border-radius: 2px; outline: none; text-align: center; letter-spacing: .15em; }
-    input[type=password]:focus { border-color: #8b7355; }
-    button { margin-top: 1rem; width: 100%; padding: .75rem; background: transparent;
-      border: 1px solid #5a4a3a; color: #a89070; font-family: inherit; font-size: .85rem;
-      letter-spacing: .15em; text-transform: uppercase; cursor: pointer; border-radius: 2px; }
-    button:hover { border-color: #8b7355; color: #c8b89a; }
-    .error { margin-top: 1rem; color: #a05050; font-size: .85rem; }
-  </style>
-</head>
-<body>
-  <div class="gate">
-    <h1>The Secret-Cabin-et</h1>
-    <form method="POST" action="/login">
-      <input type="password" name="passphrase" placeholder="Enter passphrase" autofocus>
-      <button type="submit">Enter</button>
-      ${req.query.error ? '<p class="error">Incorrect passphrase.</p>' : ''}
-    </form>
-  </div>
-</body>
-</html>`);
-});
-
-app.post('/login', (req, res) => {
-  if (req.body.passphrase === PASSPHRASE) {
-    req.session.authed = true;
-    return res.redirect('/');
-  }
-  res.redirect('/login?error=1');
-});
-
-app.get('/logout', (req, res) => {
-  req.session.destroy(() => res.redirect('/login'));
-});
-
-// Auth guard — applied to all routes except login/logout
-// Must run before express.static: static previously short-circuited the gate,
-// serving index.html to anyone while only the API calls it makes 401'd.
-function requireAuth(req, res, next) {
-  if (!PASSPHRASE) return next(); // no passphrase set = open
-  if (req.path === '/api/config') return next(); // health check — always public
-  // #38: the reading room is the one intentionally public surface — gated by
-  // session.published inside the route handler itself, not by passphrase.
-  // Authoring/publishing stays behind the passphrase; only the rendered
-  // output is reachable here. Portraits must also bypass: the reading room
-  // page embeds them directly, and on a deployed (PASSPHRASE-set) instance
-  // an unauthenticated visitor's <img> requests would otherwise 401. Static
-  // character art, not sensitive on its own — safe to open regardless of
-  // whether any session happens to be published.
-  if (req.path.startsWith('/reading-room/')) return next();
-  if (req.path.startsWith('/portraits/')) return next();
-  if (req.session.authed) return next();
-  if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'Unauthorized' });
-  res.redirect('/login');
-}
-
-app.use(requireAuth);
+auth.registerAuthRoutes(app, PASSPHRASE);
+app.use(auth.createRequireAuth(PASSPHRASE));
 
 // #84 — member page + knowledge-graph visualization, a clean URL for the
 // meta-level research view (not tucked in a drawer, per the issue).
@@ -195,107 +136,56 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use('/vendor/babylonjs', express.static(path.join(__dirname, 'node_modules/babylonjs')));
 
 // ─── Lodge roster ────────────────────────────────────────────────────────────
-// Loaded from roster.json; reloadRoster() refreshes in-memory copy after writes.
+// Loaded from roster.json; reloadLodgeRoster() refreshes in-memory copy after
+// writes. See roster.js for the extracted, Express-agnostic implementation
+// (#193) — this section just owns the in-memory ROSTER singleton and the
+// brief cache that the module's functions take as explicit parameters.
 
 const ROSTER_FILE = path.join(MEMBERS_DIR, 'roster.json');
 let ROSTER = [];
 
-// One-line sketch per member, for #185's casting call — the model needs to
-// know who these people *are* to say which of them a document would draw, and
-// roster.json carries only names and glyphs. Shorter than the dossier's
-// version on purpose: this one is paid for 30-odd times in a single prompt.
-// Cached because it re-reads and re-parses every character file; cleared by
-// reloadRoster(), which is the only point at which those files can change.
-// Declared here rather than beside memberBrief() below so reloadRoster()'s
-// call at module load doesn't hit the temporal dead zone.
+// Cache for roster.memberBrief(), cleared whenever the roster is reloaded —
+// the only point at which member character files can change.
 const briefCache = new Map();
 
-// Small pool of neutral symbols for members without a hand-picked glyph (the
-// original 12 carry meaningful ones set by hand in roster.json). Cycles once
-// exhausted — see #80.
-const FALLBACK_GLYPHS = [
-  '☉', '♀', '♂', '♄', '♅', '♆', '♇', '☄',
-  '★', '☆', '✪', '✴', '✷', '✹', '✵', '❋',
-  '◆', '◇', '▲', '▽', '⬟', '⬢', '⌖', '✻',
-];
-
-// Deterministic-ish: picks the first pool symbol not already in use by the
-// roster, so glyphs stay distinct as long as the pool has room; cycles by
-// roster size once it doesn't.
-function assignGlyph(roster) {
-  const used = new Set(roster.map(m => m.glyph).filter(Boolean));
-  const free = FALLBACK_GLYPHS.find(g => !used.has(g));
-  return free || FALLBACK_GLYPHS[roster.length % FALLBACK_GLYPHS.length];
-}
-
-function reloadRoster() {
-  const all = JSON.parse(fs.readFileSync(ROSTER_FILE, 'utf8'));
-  // Filter out any entry whose character file no longer exists on disk
-  ROSTER = all.filter(m => !m.file || fs.existsSync(path.join(MEMBERS_DIR, m.file)));
-  // Backfill glyphs for any member who doesn't have one yet (e.g. members
-  // added to roster.json before glyphs existed, or by hand without one)
-  let backfilled = false;
-  for (const m of ROSTER) {
-    if (!m.glyph) {
-      m.glyph = assignGlyph(ROSTER);
-      backfilled = true;
-    }
-  }
+function reloadLodgeRoster() {
+  ROSTER = roster.reloadRoster(ROSTER_FILE, MEMBERS_DIR);
   briefCache.clear();
-  // Rewrite roster.json if entries were removed or glyphs were backfilled
-  if (ROSTER.length < all.length || backfilled) {
-    fs.writeFileSync(ROSTER_FILE, JSON.stringify(ROSTER, null, 2) + '\n', 'utf8');
-  }
 }
-reloadRoster();
+reloadLodgeRoster();
 
 const lodgeContext = fs.readFileSync(path.join(PROMPTS_DIR, 'lodge-context.md'), 'utf8');
 const axesDoc = fs.readFileSync(path.join(__dirname, 'AXES.md'), 'utf8');
 
 function loadMemberFile(filename) {
-  if (!filename) return '';
-  const p = path.join(MEMBERS_DIR, filename);
-  return fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : '';
+  return roster.loadMemberFile(MEMBERS_DIR, filename);
 }
 
 function memberBrief(member) {
-  if (briefCache.has(member.id)) return briefCache.get(member.id);
-  const text = loadMemberFile(member.file);
-  const brief = text ? extractSection(text, 'WHO YOU ARE', 200) : null;
-  briefCache.set(member.id, brief);
-  return brief;
+  return roster.memberBrief(MEMBERS_DIR, briefCache, member);
 }
 
 function castingRoster() {
-  return ROSTER.map(m => ({ id: m.id, name: m.name, brief: memberBrief(m) }));
+  return roster.castingRoster(MEMBERS_DIR, briefCache, ROSTER);
 }
 
 // ─── Session persistence ──────────────────────────────────────────────────────
+// See sessions-store.js (#193) for the extracted implementation.
 
 function makeSessionId(entry) {
-  const date = new Date().toISOString().slice(0, 10);
-  const slug = entry.trim().slice(0, 40).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-  const hash = crypto.createHash('md5').update(entry).digest('hex').slice(0, 6);
-  return `${date}-${slug}-${hash}`;
+  return sessionsStore.makeSessionId(entry);
 }
 
-// Branch IDs can't reuse makeSessionId's hash-of-entry-text — the entry is
-// identical to the parent's, so same-day branches would collide. Mix in the
-// parent id, branch point, and wall-clock time for uniqueness.
 function makeBranchId(parent, roundIndex) {
-  const date = new Date().toISOString().slice(0, 10);
-  const slug = parent.entry.trim().slice(0, 40).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-  const hash = crypto.createHash('md5').update(`${parent.id}:${roundIndex}:${Date.now()}:${Math.random()}`).digest('hex').slice(0, 6);
-  return `${date}-${slug}-branch-${hash}`;
+  return sessionsStore.makeBranchId(parent, roundIndex);
 }
 
 function saveSession(session) {
-  fs.writeFileSync(path.join(SESSIONS_DIR, `${session.id}.json`), JSON.stringify(session, null, 2));
+  return sessionsStore.saveSession(SESSIONS_DIR, session);
 }
 
 function loadSession(id) {
-  const p = path.join(SESSIONS_DIR, `${id}.json`);
-  return fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, 'utf8')) : null;
+  return sessionsStore.loadSession(SESSIONS_DIR, id);
 }
 
 // ─── Anthropic call helpers ───────────────────────────────────────────────────
@@ -308,247 +198,49 @@ function openSSE(res) {
   });
 }
 
-// ── Speaker header recognition (mirrors public/app.js's alias index) ──────
-// Members sign with a short form (surname, first name, or nickname), not
-// their full roster name — see roster.json's `aliases` field and the
-// comment above buildAliasIndex in public/app.js for the full rationale.
-// Kept in sync with that client-side logic; if one changes, change both.
-const ALIAS_STOPWORDS = new Set(['of', 'the', 'van', 'der', 'de', 'la', 'lady', 'sir', 'dr', 'st']);
-
-function normalizeSpeaker(s) {
-  return s.normalize('NFD').replace(/[̀-ͯ]/g, '')
-    .replace(/['’]/g, '').toLowerCase().replace(/[\s-]+/g, ' ').trim();
-}
-
-function buildSpeakerHeaderSet(roster) {
-  const owner = new Map(); // normalized key -> member id, or null if ambiguous
-  const register = (key, id) => {
-    const k = normalizeSpeaker(key);
-    if (!k) return;
-    if (owner.has(k) && owner.get(k) !== id) owner.set(k, null);
-    else if (!owner.has(k)) owner.set(k, id);
-  };
-  roster.forEach(m => {
-    register(m.name, m.id);
-    m.name.split(/[\s-]+/)
-      .filter(tok => tok.length > 2 && !ALIAS_STOPWORDS.has(tok.toLowerCase()))
-      .forEach(tok => register(tok, m.id));
-    (m.aliases || []).forEach(a => register(a, m.id));
-  });
-  const set = new Set();
-  owner.forEach((id, k) => { if (id != null) set.add(k); });
-  return set;
-}
-
 // ─── Reading room (public, read-only) — #38 ───────────────────────────────────
 // A session explicitly marked published renders at /reading-room/:id with no
 // login and no client JS: just the source document and the transcript, typeset.
 // Whole-session only for this MVP — no per-round curation, no portraits, no
 // annotations (matches the issue's "no generation controls, no member grid").
-
-function escapeHtml(s) {
-  return String(s)
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-}
-
-// Mirrors public/app.js's renderTranscriptInto parsing (same speaker-header
-// heuristics, via the same buildSpeakerHeaderSet/normalizeSpeaker used above)
-// but emits static server-rendered HTML — this page ships with no client JS.
-function renderRoundHtml(text) {
-  const headers = buildSpeakerHeaderSet(ROSTER);
-  const lines = (text || '').split('\n');
-  let speaker = null, textLines = [];
-  let html = '';
-
-  const renderSpeechHtml = body => escapeHtml(body)
-    .split('\n')
-    .map(line => {
-      const t = line.trim();
-      const m = t.match(/^\*(.+)\*$/);
-      if (m && !m[1].includes('*')) return `<p class="rr-action">${m[1]}</p>`;
-      return line.replace(/\*([^*\n]+?)\*/g, '<em>$1</em>');
-    })
-    .join('<br>');
-
-  const flush = () => {
-    if (!speaker || !textLines.length) return;
-    const body = textLines.join('\n').trim();
-    html += `<div class="rr-turn"><div class="rr-speaker">${escapeHtml(speaker)}</div><div class="rr-speech">${renderSpeechHtml(body)}</div></div>\n`;
-    speaker = null; textLines = [];
-  };
-
-  lines.forEach(line => {
-    const t = line.trim();
-    if (!t) { flush(); return; }
-    if (t === '---' || t === '—' || t === '--') return;
-    const isAction = /^\*[^*\n]+\*$/.test(t);
-    if (isAction && !speaker) {
-      html += `<p class="rr-stage-action">${escapeHtml(t.slice(1, -1))}</p>\n`;
-      return;
-    }
-    const bare = t.replace(/:$/, '');
-    const isKnownName = headers.has(normalizeSpeaker(bare));
-    const looksLikeName = !t.includes(' ') && t.length < 30 && /^[A-Z]/.test(t) && !t.includes('*');
-    if (isKnownName || looksLikeName) { flush(); speaker = bare; textLines = []; }
-    else if (speaker) textLines.push(t);
-  });
-  flush();
-  return html;
-}
+// Rendering itself lives in reading-room.js (#193); server.js just wires the
+// current ROSTER in.
+//
+// Speaker-header recognition lives in transcript-format.js (#193); aliased
+// here for the Obsidian exporter below.
+const { buildSpeakerHeaderSet, normalizeSpeaker } = transcriptFormat;
 
 function renderReadingRoomPage(session) {
-  const members = (session.members || [])
-    .map(id => ROSTER.find(m => m.id === id))
-    .filter(Boolean);
-  const title = (session.entry || 'A meeting').trim().slice(0, 80);
-  const roundsHtml = (session.rounds || []).map(r =>
-    `<section class="rr-round"><h2 class="rr-round-label">${escapeHtml(r.label)}</h2>${renderRoundHtml(r.text)}</section>`
-  ).join('\n');
-  // Portraits are AI-generated placeholders, disclosed in MANIFEST.md; not
-  // every roster entry has one yet (see #80), so a broken image just hides
-  // itself rather than showing a placeholder icon — same convention as the
-  // dossier drawer's portrait (public/app.js).
-  const membersHtml = members.map(m => `<span class="rr-member">
-      <img class="rr-portrait" src="/portraits/${escapeHtml(m.id)}.png" alt="" loading="lazy" onerror="this.style.display='none'">
-      <span class="rr-member-name">${escapeHtml(m.name)}</span>
-    </span>`).join('');
-
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${escapeHtml(title)} — The Secret-Cabin-et</title>
-<meta name="description" content="A published salon transcript from The Secret-Cabin-et.">
-<meta name="robots" content="noindex, follow">
-<style>
-  @import url('https://fonts.googleapis.com/css2?family=UnifrakturMaguntia&family=IM+Fell+English:ital@0;1&family=Crimson+Pro:ital,wght@0,300;0,400;0,600;1,300;1,400&display=swap');
-  :root {
-    --bg:#0e0b08; --panel:#17120d; --border:#3a2e1e; --amber:#c8922a; --amber-dim:#7a5418;
-    --cream:#e8dfc8; --muted:#c0a882; --ash:#9a8a74; --footer:#5a4a3a;
-  }
-  @media (prefers-color-scheme: light) {
-    :root {
-      --bg:#f2e8d0; --panel:#e8dcc0; --border:#cbb98f; --amber:#8a5f14; --amber-dim:#a07a2a;
-      --cream:#2a2015; --muted:#4a3d28; --ash:#6a5a42; --footer:#a0906e;
-    }
-  }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--cream); font-family: 'Crimson Pro', Georgia, serif; font-size: 18px; line-height: 1.75; }
-  .rr-wrap { max-width: 680px; margin: 0 auto; padding: 64px 24px 96px; }
-  .rr-masthead { text-align: center; margin-bottom: 8px; }
-  .rr-masthead-name { font-family: 'UnifrakturMaguntia', serif; font-size: 26px; color: var(--amber); letter-spacing: 2px; }
-  .rr-masthead-tag { font-family: 'IM Fell English', serif; font-style: italic; font-size: 12px; color: var(--ash); letter-spacing: 3px; text-transform: uppercase; margin-top: 6px; }
-  .rr-meta { text-align: center; font-family: 'IM Fell English', serif; font-size: 13px; color: var(--ash); margin: 28px 0 4px; }
-  .rr-members { display: flex; flex-wrap: wrap; justify-content: center; gap: 18px 22px; margin-bottom: 40px; }
-  .rr-member { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 68px; }
-  .rr-portrait { width: 56px; height: 56px; border-radius: 50%; object-fit: cover; border: 1px solid var(--amber-dim); }
-  .rr-member-name { font-family: 'IM Fell English', serif; font-style: italic; font-size: 12px; color: var(--muted); text-align: center; line-height: 1.3; }
-  .rr-source { border-left: 3px solid var(--amber-dim); background: var(--panel); padding: 18px 22px; margin-bottom: 48px; font-style: italic; color: var(--muted); white-space: pre-wrap; }
-  .rr-round { margin-bottom: 48px; }
-  .rr-round-label { font-family: 'IM Fell English', serif; font-size: 13px; letter-spacing: 3px; text-transform: uppercase; color: var(--ash); text-align: center; margin-bottom: 28px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
-  .rr-turn { margin-bottom: 28px; }
-  .rr-speaker { font-family: 'IM Fell English', serif; font-size: 14px; letter-spacing: 1px; color: var(--amber); margin-bottom: 4px; }
-  .rr-speech { color: var(--cream); }
-  .rr-speech .rr-action { font-style: italic; color: var(--ash); margin: 4px 0; }
-  .rr-stage-action { font-style: italic; color: var(--ash); text-align: center; margin: 20px 0; }
-  .rr-footer { text-align: center; margin-top: 72px; font-family: 'IM Fell English', serif; font-size: 11px; letter-spacing: 1px; color: var(--footer); line-height: 1.8; }
-</style>
-</head>
-<body>
-  <div class="rr-wrap">
-    <header class="rr-masthead">
-      <div class="rr-masthead-name">The Secret-Cabin-et</div>
-      <div class="rr-masthead-tag">Reading Room</div>
-    </header>
-    <div class="rr-meta">${escapeHtml(session.date || '')}</div>
-    <div class="rr-members">${membersHtml}</div>
-    <div class="rr-source">${escapeHtml(session.entry || '')}</div>
-    ${roundsHtml}
-    <footer class="rr-footer">Published from a private session of The Secret-Cabin-et.<br>An imaginative exercise, not a historical record.</footer>
-  </div>
-</body>
-</html>`;
+  return readingRoom.renderReadingRoomPage(session, ROSTER);
 }
 
-// Post-process raw Claude transcript text: append ' —' after speaker name lines
-// so plain-text exports clearly distinguish speakers from speech.
 function formatTranscriptText(text) {
-  const headers = buildSpeakerHeaderSet(ROSTER);
-  return text.split('\n').map(line => {
-    const t = line.trim();
-    const bare = t.endsWith(':') ? t.slice(0, -1) : t;
-    return headers.has(normalizeSpeaker(bare)) ? `${bare} —` : line;
-  }).join('\n');
+  return transcriptFormat.formatTranscriptText(text, ROSTER);
 }
 
 // ─── Round prompts ────────────────────────────────────────────────────────────
-
-const DEFAULT_ROUND_INSTRUCTIONS = [
-  'The room stirs. Write the first movement — initial reactions to whatever the material woke up. Not every member must engage with the document directly; some may respond to the room\'s reaction to it before responding to it themselves. 3-5 members speak. There is no author to address.',
-  'The document recedes. The conversation follows what it raised. Members are now talking to each other about the actual question that has surfaced — disagreements crystallize, alliances form, citations come out, someone is irritated, someone is more interested than they wanted to be. References to the document are welcome but not required; the room is no longer obliged to it. 3-5 members speak. Receipts may be deployed. Actions in asterisks.',
-  'The conversation has gone where it has gone. It may have left the document entirely. Final movement: the room arrives somewhere, or it doesn\'t. Someone may say the thing that persists as an ember. Someone may push back hard at a point that has been allowed to stand too long. Someone may simply observe the fire. 2-4 members. Let it end as it ends.',
-];
-const EXTRA_ROUND_INSTRUCTION = 'A thread unresolved, a silence wanting breaking, a late arrival to the argument, a member who passed earlier returning with something they have just thought of. 2-4 members speak.';
-
-// The exact speaker count for a round is now a hard number handed to the
-// director, not a range for it to interpret — these mirror the upper end of
-// the prose guidance above (the prose itself is left as-is; it's now soft
-// framing for the director's judgment about *who*, not an enforced count).
-// #73 exposed round *count* to the user (session.roundCount, below); per-round
-// speaker count remains this fixed default — still no user-facing control,
-// deferred as a separate follow-up.
-const SPEAKER_COUNTS = [5, 5, 4]; // rounds 1-3
-const EXTRA_ROUND_SPEAKER_COUNT = 4;
-const INTERJECT_SPEAKER_COUNT = 3; // today's prose only ever suggested "2-3", never enforced — a new explicit assumption
+// See lodge-prompts.js (#193) for the extracted, Express-agnostic
+// implementation. Thin wrappers here supply the current ROSTER and
+// stripInternalBlankLines so existing call sites are unchanged.
 
 function speakerCountForRound(index) {
-  return SPEAKER_COUNTS[index] || EXTRA_ROUND_SPEAKER_COUNT;
+  return lodgePrompts.speakerCountForRound(index);
 }
 
 function buildRoundPrompt(index, entry, instructions, artifact = null, isTranscriptSource = false) {
-  const instr = instructions?.[index] || DEFAULT_ROUND_INSTRUCTIONS[index] || EXTRA_ROUND_INSTRUCTION;
-  if (index === 0) {
-    const artifactMember = artifact?.memberId ? ROSTER.find(m => m.id === artifact.memberId) : null;
-    const artifactHint = artifactMember
-      ? `\n\n${artifactMember.name} has private context from before the meeting. They should speak in this round.`
-      : '';
-    const preamble = isTranscriptSource
-      ? `A record has been passed around the table — minutes of a previous gathering, authorship uncertain, date unclear. The room considers it.\n\n"${entry}"`
-      : `The document has just been read aloud:\n\n"${entry}"`;
-    return `${preamble}\n\n${instr}${artifactHint}`;
-  }
-  return instr;
+  return lodgePrompts.buildRoundPrompt(index, entry, instructions, artifact, isTranscriptSource, ROSTER);
 }
 
-// ─── Player-as-member ─────────────────────────────────────────────────────────
-// A human can write turns as one voice in the room instead of only observing.
-// Mode 'member': the human stands in for an existing roster seat — that
-// member is excluded from the AI director's selectable pool everywhere for
-// the session (convene/round/interject), so the AI never also generates
-// lines for the seat the human is voicing. Mode 'custom': a free-text
-// identity, added as an *extra* voice — nothing is excluded, since it isn't
-// standing in for a roster seat.
-
 function playerDirectorPool(memberIds, playerMode, playerMemberId) {
-  return (playerMode === 'member' && playerMemberId)
-    ? memberIds.filter(id => id !== playerMemberId)
-    : memberIds;
+  return lodgePrompts.playerDirectorPool(memberIds, playerMode, playerMemberId);
 }
 
 function resolvePlayerName(playerMode, playerMemberId, playerName) {
-  if (playerMode === 'member') return ROSTER.find(m => m.id === playerMemberId)?.name || null;
-  if (playerMode === 'custom') return playerName?.trim() || null;
-  return null;
+  return lodgePrompts.resolvePlayerName(playerMode, playerMemberId, playerName, ROSTER);
 }
 
-// Builds the { speakerName, text } object runRound expects, or null if no
-// turn was submitted this round (the player passed, or isn't active).
 function buildPrecedingTurn(speakerName, playerTurn) {
-  const text = playerTurn?.text?.trim();
-  if (!speakerName || !text) return null;
-  return { speakerName, text: stripInternalBlankLines(text) };
+  return lodgePrompts.buildPrecedingTurn(speakerName, playerTurn, stripInternalBlankLines);
 }
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
@@ -719,7 +411,7 @@ app.post('/api/interject', async (req, res) => {
       presentMemberIds: playerDirectorPool(session.members, session.playerMode, session.playerMemberId),
       artifact: null, notes: {},
       roundPrompt: prompt, conversationHistory: session.conversationHistory.slice(-6),
-      speakerCount: Math.min(INTERJECT_SPEAKER_COUNT, session.members.length), round: session.rounds.length,
+      speakerCount: Math.min(lodgePrompts.INTERJECT_SPEAKER_COUNT, session.members.length), round: session.rounds.length,
       disposition: session.disposition || {},
       onChunk: chunk => res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`),
       onSpeakerStart: memberId => res.write(`data: ${JSON.stringify({ speaking: memberId })}\n\n`),
@@ -1017,267 +709,14 @@ app.patch('/api/sessions/:id/annotations', (req, res) => {
   res.json({ count: annotations.length });
 });
 
-// #153 part 1 — for citations the extraction pass matched to a library entry,
-// re-judge the verdict against that entry's actual excerpt text instead of
-// trusting a title/source-only match against the model's memory. Memory can
-// be wrong even when the title matches (see #157: fabricated source_urls
-// slipped past exactly this kind of surface-level check). One batched call
-// covering every matched citation in the round, not one call each; skipped
-// entirely (no extra call) if nothing matched.
-async function groundAgainstLibraryText(citations, libraryLookup) {
-  const matched = citations
-    .map((c, index) => ({ c, index }))
-    .filter(({ c }) => c.libraryMatch && libraryLookup[c.libraryMatch]?.text);
-  if (!matched.length) return new Map();
-
-  const system = `You are checking whether citations from a transcript are actually supported by the real source text they were matched to. This is a stricter check than general knowledge — treat each "Excerpt" below as ground truth, not your training data.
-
-For each numbered item, judge whether its "Transcript quote" is genuinely consistent with its "Excerpt":
-- "verified": the excerpt clearly supports the quote/claim as attributed
-- "unverified": the excerpt contradicts it, or doesn't contain/support what's being attributed to it
-- "uncertain": the excerpt doesn't clearly settle it either way (e.g. adjacent material, but not this specific claim)`;
-
-  const itemsText = matched.map(({ c, index }) => {
-    const entry = libraryLookup[c.libraryMatch];
-    return `### Item ${index}\nWork cited: ${c.work}\nTranscript quote: "${c.quote}"\n\nExcerpt from "${entry.title}" (${entry.source}):\n${entry.text}`;
-  }).join('\n\n---\n\n');
-
-  const response = await client.messages.create({
-    model: MODEL,
-    max_tokens: 2000,
-    system,
-    messages: [{ role: 'user', content: itemsText }],
-    tools: [{
-      name: 'report_grounded_verdicts',
-      description: 'Report a text-grounded verdict for each numbered item.',
-      input_schema: {
-        type: 'object',
-        properties: {
-          verdicts: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                index: { type: 'integer', description: 'The item number from the prompt.' },
-                verdict: { type: 'string', enum: ['verified', 'unverified', 'uncertain'] },
-                note: { type: 'string', description: 'One-sentence reasoning, referencing the excerpt directly.' },
-              },
-              required: ['index', 'verdict', 'note'],
-            },
-          },
-        },
-        required: ['verdicts'],
-      },
-    }],
-    tool_choice: { type: 'tool', name: 'report_grounded_verdicts' },
-  });
-
-  const block = response.content.find(b => b.type === 'tool_use');
-  const verdicts = block?.input?.verdicts || [];
-  return new Map(verdicts.map(v => [v.index, v]));
+// Citation verification (#153) lives in citations.js (#193); thin wrappers
+// here supply the current client/model.
+function groundAgainstLibraryText(citationsList, libraryLookup) {
+  return citations.groundAgainstLibraryText(client, MODEL, citationsList, libraryLookup);
 }
 
-// #153 part 2 — for citations the extraction pass could NOT match to a
-// library entry, attempt a real lookup against open-data sources before
-// falling back to the model's own unconfirmed judgment. Hand-rolled fetches
-// (decided 2026-08-05) rather than Anthropic's hosted web-search tool — that
-// route is #111's proposal, kept open as a fallback tier, not this one.
-// Tiered by closeness to primary text: archive.org full-text "search inside"
-// scanned books, then Wikisource's proofread transcriptions, then Wikipedia
-// (existence only, not quote-level), then Wikidata (biographical/factual
-// claims). Bounded to MAX_WEB_ESCALATIONS lookups per run — these are free
-// public APIs shared with everyone else using them, not something to hammer
-// on a long transcript. Session-scoped only for now (v1 decision): results
-// aren't written back into prompts/library/ — that stays a human-curated
-// promotion step via scripts/build-citation-manifest.js, gated by
-// verify-library-sources.js (#157).
-const MAX_WEB_ESCALATIONS = 6;
-const WEB_FETCH_TIMEOUT_MS = 8000;
-
-async function fetchWithTimeout(url, opts = {}) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), WEB_FETCH_TIMEOUT_MS);
-  try {
-    return await fetch(url, { ...opts, signal: controller.signal });
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-const normalizeForWebMatch = s => (s || '').replace(/[*"'“”‘’]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
-
-const STOPWORDS = new Set(['the', 'and', 'of', 'a', 'an', 'to', 'in', 'on', 'by', 'or', 'from', 'with', 'his', 'her']);
-const tokenizeForWebMatch = s => normalizeForWebMatch(s).split(/[^a-z0-9]+/).filter(Boolean);
-// A famous phrase can turn up verbatim inside a completely unrelated book
-// that merely quotes it (found in testing: a Dickens opening line matched a
-// stand-up comedy memoir that happened to quote it). Requiring at least one
-// significant word from the cited work to appear in the matched doc's title
-// or creator keeps a real phrase-hit from being credited to the wrong book.
-// Word-set comparison, not substring — a naive .includes() lets "tale"
-// false-match inside "tales" (also caught in testing).
-function worksOverlap(work, doc) {
-  const haystackWords = new Set(tokenizeForWebMatch(`${doc.title || ''} ${doc.creator || ''}`));
-  const words = tokenizeForWebMatch(work).filter(w => w.length > 3 && !STOPWORDS.has(w));
-  return words.some(w => haystackWords.has(w));
-}
-
-// Tier 1: archive.org full-text search across scanned books — the closest
-// available thing to genuine quote-grounding for public-domain works. Same
-// fetch pattern as scripts/verify-library-sources.js's archive.org check.
-async function tryArchiveOrgFullText(work, quote) {
-  if (!quote) return { status: 'not-found' };
-  const q = `"${quote.replace(/"/g, '')}" AND mediatype:texts`;
-  const url = `https://archive.org/advancedsearch.php?q=${encodeURIComponent(q)}&fl[]=identifier&fl[]=title&fl[]=creator&output=json&rows=5`;
-  try {
-    const res = await fetchWithTimeout(url);
-    if (!res.ok) return { status: 'error', reason: `HTTP ${res.status}` };
-    const data = await res.json();
-    const docs = data?.response?.docs || [];
-    const doc = docs.find(d => worksOverlap(work, d));
-    if (!doc) return { status: 'not-found' };
-    return {
-      status: 'confirmed',
-      webSourceUrl: `https://archive.org/details/${doc.identifier}`,
-      webSourceTitle: doc.title || doc.identifier,
-      note: `Confirmed: this phrase was found via archive.org full-text search inside "${doc.title || doc.identifier}".`,
-    };
-  } catch (err) {
-    return { status: 'error', reason: err.message };
-  }
-}
-
-// Tier 2: Wikisource — human-transcribed, proofread primary texts (already
-// used for the Julian of Norwich entry via #155). Only counts as a hit if
-// the quote actually appears in the page's extract, not just a title match.
-async function tryWikisource(work, quote) {
-  const searchUrl = `https://en.wikisource.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(work)}&srlimit=1&format=json&origin=*`;
-  try {
-    const searchRes = await fetchWithTimeout(searchUrl);
-    if (!searchRes.ok) return { status: 'error', reason: `HTTP ${searchRes.status}` };
-    const searchData = await searchRes.json();
-    const title = searchData?.query?.search?.[0]?.title;
-    if (!title) return { status: 'not-found' };
-
-    const extractUrl = `https://en.wikisource.org/w/api.php?action=query&prop=extracts&explaintext=1&titles=${encodeURIComponent(title)}&format=json&origin=*`;
-    const extractRes = await fetchWithTimeout(extractUrl);
-    if (!extractRes.ok) return { status: 'error', reason: `HTTP ${extractRes.status}` };
-    const extractData = await extractRes.json();
-    const extract = Object.values(extractData?.query?.pages || {})[0]?.extract || '';
-    const snippet = normalizeForWebMatch(quote).split(' ').slice(0, 8).join(' ');
-    if (!snippet || !normalizeForWebMatch(extract).includes(snippet)) return { status: 'not-found' };
-    return {
-      status: 'confirmed',
-      webSourceUrl: `https://en.wikisource.org/wiki/${encodeURIComponent(title.replace(/ /g, '_'))}`,
-      webSourceTitle: title,
-      note: `Confirmed against Wikisource's transcription of "${title}".`,
-    };
-  } catch (err) {
-    return { status: 'error', reason: err.message };
-  }
-}
-
-// Tier 3: Wikipedia summary — confirms the work/author exists and roughly
-// what it's about, not that this specific quote is accurate. A hit here
-// stays "uncertain (unconfirmed)", never "verified".
-async function tryWikipediaSummary(work) {
-  const searchUrl = `https://en.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(work)}&limit=1&format=json&origin=*`;
-  try {
-    const searchRes = await fetchWithTimeout(searchUrl);
-    if (!searchRes.ok) return { status: 'error', reason: `HTTP ${searchRes.status}` };
-    const [, titles] = await searchRes.json();
-    const title = titles?.[0];
-    if (!title) return { status: 'not-found' };
-
-    const summaryRes = await fetchWithTimeout(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title.replace(/ /g, '_'))}`);
-    if (summaryRes.status === 404) return { status: 'not-found' };
-    if (!summaryRes.ok) return { status: 'error', reason: `HTTP ${summaryRes.status}` };
-    const data = await summaryRes.json();
-    if (data.type === 'disambiguation') return { status: 'not-found' };
-    return {
-      status: 'existence-only',
-      webSourceUrl: data.content_urls?.desktop?.page || `https://en.wikipedia.org/wiki/${encodeURIComponent(title.replace(/ /g, '_'))}`,
-      webSourceTitle: data.title || title,
-      note: `"${work}" exists per Wikipedia, but this specific quote/claim wasn't independently confirmed — uncertain (unconfirmed).`,
-    };
-  } catch (err) {
-    return { status: 'error', reason: err.message };
-  }
-}
-
-// Tier 4: Wikidata — narrow use for factual/biographical claims (dates,
-// authorship) rather than quoted text. Same existence-only ceiling as tier 3.
-async function tryWikidata(work) {
-  const url = `https://www.wikidata.org/w/api.php?action=wbsearchentities&search=${encodeURIComponent(work)}&language=en&format=json&origin=*`;
-  try {
-    const res = await fetchWithTimeout(url);
-    if (!res.ok) return { status: 'error', reason: `HTTP ${res.status}` };
-    const data = await res.json();
-    const hit = data?.search?.[0];
-    if (!hit) return { status: 'not-found' };
-    return {
-      status: 'existence-only',
-      webSourceUrl: `https://www.wikidata.org/wiki/${hit.id}`,
-      webSourceTitle: hit.label || work,
-      note: `"${work}" exists as a Wikidata entity${hit.description ? ` (${hit.description})` : ''}, but this specific quote/claim wasn't independently confirmed — uncertain (unconfirmed).`,
-    };
-  } catch (err) {
-    return { status: 'error', reason: err.message };
-  }
-}
-
-// Runs the tiers in order for one citation. A "confirmed" or "existence-only"
-// hit becomes real web-grounded evidence, overriding the model's own guess.
-// A clean miss across every tier (no matches, no errors) means the work
-// genuinely isn't found in these open sources — falls back to the model's
-// original memory-based verdict, unchanged, rather than punishing citations
-// of real but un-archived modern scholarship. Only an actual technical
-// failure (network error, timeout, rate-limit) on every tier degrades the
-// verdict to "uncertain (unconfirmed)" — we attempted a check and couldn't
-// complete it, so trusting bare memory alone would be worse than saying so.
-async function escalateCitationToWeb(citation) {
-  const tiers = [
-    () => tryArchiveOrgFullText(citation.work, citation.quote),
-    () => tryWikisource(citation.work, citation.quote),
-    () => tryWikipediaSummary(citation.work),
-    () => tryWikidata(citation.work),
-  ];
-  let sawError = false;
-  for (const tier of tiers) {
-    const result = await tier();
-    if (result.status === 'confirmed') {
-      return { verdict: 'verified', note: result.note, source: 'web', webSourceUrl: result.webSourceUrl, webSourceTitle: result.webSourceTitle };
-    }
-    if (result.status === 'existence-only') {
-      return { verdict: 'uncertain', note: result.note, source: 'web', webSourceUrl: result.webSourceUrl, webSourceTitle: result.webSourceTitle };
-    }
-    if (result.status === 'error') sawError = true;
-  }
-  if (sawError) {
-    return {
-      verdict: 'uncertain',
-      note: `${citation.note} — uncertain (unconfirmed): web verification was attempted but unavailable.`,
-      source: 'model-knowledge',
-    };
-  }
-  return null;
-}
-
-async function escalateCitationsToWeb(citations) {
-  const unmatched = citations
-    .map((c, index) => ({ c, index }))
-    .filter(({ c }) => !c.libraryMatch)
-    .slice(0, MAX_WEB_ESCALATIONS);
-
-  const results = new Map();
-  for (const { c, index } of unmatched) {
-    try {
-      const outcome = await escalateCitationToWeb(c);
-      if (outcome) results.set(index, outcome);
-    } catch (err) {
-      console.error('Web escalation error for citation', index, err);
-    }
-  }
-  return results;
+function escalateCitationsToWeb(citationsList) {
+  return citations.escalateCitationsToWeb(citationsList);
 }
 
 // POST /api/sessions/:id/verify-citations — extract & judge citations across the whole session
@@ -1554,20 +993,6 @@ app.get('/api/members', (req, res) => {
   res.json(ROSTER);
 });
 
-// Extract the first substantive paragraph after a character file's section
-// header. Shared by the dossier route (long form, for reading) and casting's
-// member briefs (short form, for the model's judgment).
-function extractSection(text, sectionName, limit = 320) {
-  const re = new RegExp(`## ${sectionName}[\\s\\S]*?\\n\\n([^#\\n][\\s\\S]*?)(?:\\n\\n---|\n\n##|$)`);
-  const m = text.match(re);
-  if (!m) return null;
-  const para = m[1].split(/\n\n/)[0].trim()
-    .replace(/\*([^*]+)\*/g, '$1') // strip asterisk emphasis
-    .replace(/\n/g, ' ')
-    .slice(0, limit);
-  return para || null;
-}
-
 // GET /api/members/:id/dossier — parse and return brief + voice from character file
 app.get('/api/members/:id/dossier', (req, res) => {
   const member = ROSTER.find(m => m.id === req.params.id);
@@ -1578,8 +1003,8 @@ app.get('/api/members/:id/dossier', (req, res) => {
   res.json({
     id: member.id,
     name: member.name,
-    bio: extractSection(text, 'WHO YOU ARE'),
-    voice: extractSection(text, 'HOW YOU SPEAK'),
+    bio: roster.extractSection(text, 'WHO YOU ARE'),
+    voice: roster.extractSection(text, 'HOW YOU SPEAK'),
   });
 });
 
@@ -1663,7 +1088,7 @@ ${relationships || '(not specified — infer from historical record)'}`;
 
     fs.writeFileSync(filePath, characterFile, 'utf8');
 
-    const newMember = { id, name: name.trim(), file, glyph: assignGlyph(ROSTER) };
+    const newMember = { id, name: name.trim(), file, glyph: roster.assignGlyph(ROSTER) };
     ROSTER.push(newMember);
     fs.writeFileSync(ROSTER_FILE, JSON.stringify(ROSTER, null, 2), 'utf8');
 
@@ -1714,125 +1139,14 @@ app.get('/api/config', (req, res) => {
 });
 
 // ─── Knowledge graph ──────────────────────────────────────────────────────────
+// See graph.js (#193) for the extracted implementation.
 
 const GRAPH_FILE = path.join(PROMPTS_DIR, 'graph', 'graph.json');
-
-/**
- * Build the full graph at query time from three sources:
- *   1. Historical seed edges (graph.json)
- *   2. Library-derived edges (member↔text, text↔theme) from library.json
- *   3. Session-derived edges (co-convened members, discussed text, theme tags) from sessions/
- *
- * Returns { nodes: [...], edges: [...] }
- */
-function buildGraph() {
-  const edges = [];
-  const nodeMap = new Map(); // id → node
-
-  function ensureNode(id, type, label) {
-    if (!nodeMap.has(id)) nodeMap.set(id, { id, type, label });
-  }
-
-  // ── 1. Roster nodes ────────────────────────────────────────────────────────
-  ROSTER.forEach(m => ensureNode(m.id, 'member', m.name));
-
-  // ── 2. Historical seed edges ───────────────────────────────────────────────
-  if (fs.existsSync(GRAPH_FILE)) {
-    const seed = JSON.parse(fs.readFileSync(GRAPH_FILE, 'utf8'));
-    (seed.edges || []).forEach(e => {
-      ensureNode(e.source, 'member', e.source);
-      ensureNode(e.target, 'member', e.target);
-      edges.push({ ...e, weight: 1 });
-    });
-  }
-
-  // ── 3. Library-derived edges ───────────────────────────────────────────────
-  const LIBRARY_FILE_PATH = path.join(PROMPTS_DIR, 'library', 'library.json');
-  if (fs.existsSync(LIBRARY_FILE_PATH)) {
-    const library = JSON.parse(fs.readFileSync(LIBRARY_FILE_PATH, 'utf8'));
-    library.forEach(entry => {
-      ensureNode(entry.id, 'text', entry.title);
-      // member → text
-      (entry.members || []).forEach(memberId => {
-        ensureNode(memberId, 'member', memberId);
-        edges.push({ source: memberId, target: entry.id, type: 'appears-in', origin: 'library', weight: 1 });
-      });
-      // text → theme
-      (entry.themes || []).forEach(theme => {
-        ensureNode(theme, 'theme', theme);
-        edges.push({ source: entry.id, target: theme, type: 'touches', origin: 'library', weight: 1 });
-      });
-      // member → theme (direct, for easier querying)
-      (entry.members || []).forEach(memberId => {
-        (entry.themes || []).forEach(theme => {
-          edges.push({ source: memberId, target: theme, type: 'associated-with', origin: 'library', weight: 1 });
-        });
-      });
-    });
-  }
-
-  // ── 4. Session-derived edges ───────────────────────────────────────────────
-  const sessionEdges = new Map(); // key → edge with accumulated weight
-
-  function accumulateEdge(source, target, type, origin, sessionId) {
-    const key = `${source}|${target}|${type}`;
-    if (sessionEdges.has(key)) {
-      sessionEdges.get(key).weight++;
-      if (sessionId) sessionEdges.get(key).sessions.push(sessionId);
-    } else {
-      sessionEdges.set(key, { source, target, type, origin, weight: 1, sessions: sessionId ? [sessionId] : [] });
-    }
-  }
-
-  if (fs.existsSync(SESSIONS_DIR)) {
-    fs.readdirSync(SESSIONS_DIR)
-      .filter(f => f.endsWith('.json') && f !== '.gitkeep')
-      .forEach(f => {
-        try {
-          const s = JSON.parse(fs.readFileSync(path.join(SESSIONS_DIR, f), 'utf8'));
-          const members = s.members || [];
-          const tags = s.tags || [];
-          const sid = s.id;
-
-          // Ensure session node
-          ensureNode(sid, 'session', s.entry?.slice(0, 60) || sid);
-
-          // session → member (co-convened)
-          members.forEach(mid => {
-            ensureNode(mid, 'member', mid);
-            accumulateEdge(sid, mid, 'convened', 'session', null);
-            // member co-occurrence with other members
-            members.forEach(mid2 => {
-              if (mid < mid2) accumulateEdge(mid, mid2, 'co-convened', 'session', sid);
-            });
-          });
-
-          // session → tags as themes
-          tags.forEach(tag => {
-            ensureNode(tag, 'theme', tag);
-            accumulateEdge(sid, tag, 'tagged', 'session', null);
-            // member → theme via session tag
-            members.forEach(mid => {
-              accumulateEdge(mid, tag, 'associated-with', 'session', sid);
-            });
-          });
-        } catch (_) {}
-      });
-  }
-
-  sessionEdges.forEach(e => edges.push(e));
-
-  return {
-    nodes: Array.from(nodeMap.values()),
-    edges,
-    generated: new Date().toISOString(),
-  };
-}
 
 // GET /api/graph — return full knowledge graph
 app.get('/api/graph', (req, res) => {
   try {
-    res.json(buildGraph());
+    res.json(graph.buildGraph(ROSTER, GRAPH_FILE, LIBRARY_FILE, SESSIONS_DIR));
   } catch (err) {
     console.error('Graph error:', err);
     res.status(500).json({ error: 'Failed to build graph' });
@@ -1846,15 +1160,11 @@ const LIBRARY_FILE = path.join(LIBRARY_DIR, 'library.json');
 const ARCHIVE_IMAGE_FILE = path.join(__dirname, 'public', 'archive', 'metadata.json');
 
 function loadLibraryIndex() {
-  if (!fs.existsSync(LIBRARY_FILE)) return [];
-  return JSON.parse(fs.readFileSync(LIBRARY_FILE, 'utf8'));
+  return library.loadLibraryIndex(LIBRARY_FILE);
 }
 
-// Archival images (#30) keyed by library entry id — see public/archive/metadata.json.
-// Kept separate from library.json/frontmatter since not every entry has an image yet.
 function loadArchiveImageIndex() {
-  if (!fs.existsSync(ARCHIVE_IMAGE_FILE)) return {};
-  return JSON.parse(fs.readFileSync(ARCHIVE_IMAGE_FILE, 'utf8')).entries || {};
+  return library.loadArchiveImageIndex(ARCHIVE_IMAGE_FILE);
 }
 
 // GET /api/library — list all entries (index only, no full text)
@@ -1903,72 +1213,22 @@ app.get('/api/library/:id', (req, res) => {
   }
 });
 
-// `citation`/`source_url` live only in each entry's .md frontmatter, not in
-// library.json's index — this reads them out. Shared by the internal
-// citation-grounding lookup below and GET /api/library/:id (#84).
 function parseLibraryFrontmatter(raw) {
-  const frontmatter = raw.match(/^---\n([\s\S]*?)\n---/)?.[1] || '';
-  const citation = frontmatter.match(/^citation:\s*"?(.*?)"?$/m)?.[1] || null;
-  const source_url = frontmatter.match(/^source_url:\s*"?(.*?)"?$/m)?.[1] || null;
-  return { citation, source_url };
+  return library.parseLibraryFrontmatter(raw);
 }
 
-// #187 — the library entry a member actually *wrote*, for injection into
-// their speaker prompt as a voice-register exemplar. Internal-only; not
-// exposed as a route.
-//
-// Keyed on `author`, deliberately not on `members`. `members` is an
-// association list — it includes everyone an entry concerns, so Waite's 1911
-// preface lists Pamela Colman Smith and Jung's 1916 text lists Corbin.
-// Matching on it would hand a member someone else's prose under the heading
-// "how you actually write", which is a fabrication of voice; `author` is the
-// one member whose hand the text is in. A member with no authored entry
-// returns null and their prompt is built exactly as it was before #187.
-//
-// One entry per author today. If an author ever gains a second, the first in
-// library.json order wins — deterministic, and a curator wanting a specific
-// one as the exemplar should order the file accordingly.
 function loadVoiceExemplar(memberId) {
-  if (!memberId) return null;
-  const entry = loadLibraryIndex().find(e => e.author === memberId);
-  if (!entry) return null;
-  const filePath = path.join(LIBRARY_DIR, entry.file);
-  if (!fs.existsSync(filePath)) return null;
-  const raw = fs.readFileSync(filePath, 'utf8');
-  const text = raw.replace(/^---[\s\S]*?---\n/, '').trim();
-  if (!text) return null;
-  return {
-    id: entry.id,
-    title: entry.title,
-    source: entry.source,
-    date: entry.date,
-    translated: !!entry.translated,
-    text,
-  };
+  return library.loadVoiceExemplar(LIBRARY_DIR, LIBRARY_FILE, memberId);
 }
 
-// Internal-only: read the `citation`/`source_url` frontmatter fields (plus
-// the full excerpt body, for #153 part 1's text-grounded re-check) that
-// loadLibraryIndex()/library.json don't carry, for cross-referencing a
-// verified citation to its grounding source. Not exposed via a public route.
 function loadLibraryCitationLookup() {
-  const lookup = {};
-  for (const entry of loadLibraryIndex()) {
-    const filePath = path.join(LIBRARY_DIR, entry.file);
-    if (!fs.existsSync(filePath)) continue;
-    const raw = fs.readFileSync(filePath, 'utf8');
-    const { citation, source_url } = parseLibraryFrontmatter(raw);
-    const text = raw.replace(/^---[\s\S]*?---\n/, '').trim();
-    lookup[entry.id] = { title: entry.title, source: entry.source, citation, source_url, text };
-  }
-  return lookup;
+  return library.loadLibraryCitationLookup(LIBRARY_DIR, LIBRARY_FILE);
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function buildTranscriptHeader(entry, memberIds, date) {
-  const names = memberIds.map(id => ROSTER.find(m => m.id === id)?.name).filter(Boolean).join(', ');
-  return `THE SECRET-CABIN-ET\nMeeting Notes — ${date}\nAssembled: ${names}\n\nSource material:\n${entry}\n`;
+  return transcriptFormat.buildTranscriptHeader(entry, memberIds, date, ROSTER);
 }
 
 // ─── Start ────────────────────────────────────────────────────────────────────
