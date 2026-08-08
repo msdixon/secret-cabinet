@@ -29,6 +29,7 @@ const { buildMemberSection, runRound, stripInternalBlankLines, proposeCast } = r
 
 // ─── Environment flags ────────────────────────────────────────────────────────
 const IS_LOCAL = process.env.LOCAL === 'true' || process.env.NODE_ENV !== 'production';
+const MODEL = process.env.MODEL || 'claude-sonnet-4-6';
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
@@ -543,7 +544,7 @@ app.post('/api/convene', async (req, res) => {
   openSSE(res);
   try {
     const { fullRoundText: text, disposition } = await runRound({
-      client, model: 'claude-sonnet-4-6', lodgeContext, ROSTER, loadMemberFile, loadVoiceExemplar,
+      client, model: MODEL, lodgeContext, ROSTER, loadMemberFile, loadVoiceExemplar,
       presentMemberIds: playerDirectorPool(members, effectivePlayerMode, effectivePlayerMemberId),
       artifact: artifact || null, notes: notes || {},
       roundPrompt, conversationHistory: [],
@@ -598,7 +599,7 @@ app.post('/api/cast', async (req, res) => {
 
   try {
     const result = await proposeCast({
-      client, model: 'claude-sonnet-4-6', lodgeContext,
+      client, model: MODEL, lodgeContext,
       roster: castingRoster(),
       regularIds: Array.isArray(regulars) ? regulars : [],
       documentText: entry,
@@ -635,7 +636,7 @@ app.post('/api/round', async (req, res) => {
   openSSE(res);
   try {
     const { fullRoundText: text, disposition } = await runRound({
-      client, model: 'claude-sonnet-4-6', lodgeContext, ROSTER, loadMemberFile, loadVoiceExemplar,
+      client, model: MODEL, lodgeContext, ROSTER, loadMemberFile, loadVoiceExemplar,
       presentMemberIds: playerDirectorPool(session.members, session.playerMode, session.playerMemberId),
       artifact: null, notes: {},
       roundPrompt, conversationHistory: session.conversationHistory.slice(-6),
@@ -683,7 +684,7 @@ app.post('/api/interject', async (req, res) => {
   openSSE(res);
   try {
     const { fullRoundText: response, disposition } = await runRound({
-      client, model: 'claude-sonnet-4-6', lodgeContext, ROSTER, loadMemberFile, loadVoiceExemplar,
+      client, model: MODEL, lodgeContext, ROSTER, loadMemberFile, loadVoiceExemplar,
       presentMemberIds: playerDirectorPool(session.members, session.playerMode, session.playerMemberId),
       artifact: null, notes: {},
       roundPrompt: prompt, conversationHistory: session.conversationHistory.slice(-6),
@@ -730,7 +731,7 @@ app.post('/api/prototype/round', async (req, res) => {
   openSSE(res);
   try {
     const { fullRoundText, speakerOrder } = await runRound({
-      client, model: 'claude-sonnet-4-6', lodgeContext, ROSTER, loadMemberFile, loadVoiceExemplar,
+      client, model: MODEL, lodgeContext, ROSTER, loadMemberFile, loadVoiceExemplar,
       presentMemberIds: members, artifact: null, notes: {},
       roundPrompt, conversationHistory: [],
       speakerCount: speakerCount || Math.min(members.length, 5),
@@ -1011,7 +1012,7 @@ For each numbered item, judge whether its "Transcript quote" is genuinely consis
   }).join('\n\n---\n\n');
 
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-6',
+    model: MODEL,
     max_tokens: 2000,
     system,
     messages: [{ role: 'user', content: itemsText }],
@@ -1275,7 +1276,7 @@ ${libraryList}
 The "quote" field must be a verbatim excerpt (~10-25 words) copied exactly from the transcript text below, so it can be located in the original.`;
 
     const response = await client.messages.create({
-      model: 'claude-sonnet-4-6',
+      model: MODEL,
       max_tokens: 4000,
       system,
       messages: [{ role: 'user', content: roundsText }],
@@ -1622,7 +1623,7 @@ ${relationships || '(not specified — infer from historical record)'}`;
 
   try {
     const response = await client.messages.create({
-      model: 'claude-sonnet-4-6',
+      model: MODEL,
       max_tokens: 7000,
       system: systemPrompt,
       messages: [{ role: 'user', content: userMessage }],
