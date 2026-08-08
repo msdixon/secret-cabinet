@@ -18,7 +18,6 @@ const path = require('path');
 
 const express = require('express');
 const Anthropic = require('@anthropic-ai/sdk');
-const crypto = require('crypto');
 
 const session = require('express-session');
 
@@ -33,6 +32,7 @@ const lodgePrompts = require('./lodge-prompts');
 const library = require('./library');
 const citations = require('./citations');
 const graph = require('./graph');
+const sessionsStore = require('./sessions-store');
 
 // ─── Environment flags ────────────────────────────────────────────────────────
 const IS_LOCAL = process.env.LOCAL === 'true' || process.env.NODE_ENV !== 'production';
@@ -205,31 +205,22 @@ function castingRoster() {
 }
 
 // ─── Session persistence ──────────────────────────────────────────────────────
+// See sessions-store.js (#193) for the extracted implementation.
 
 function makeSessionId(entry) {
-  const date = new Date().toISOString().slice(0, 10);
-  const slug = entry.trim().slice(0, 40).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-  const hash = crypto.createHash('md5').update(entry).digest('hex').slice(0, 6);
-  return `${date}-${slug}-${hash}`;
+  return sessionsStore.makeSessionId(entry);
 }
 
-// Branch IDs can't reuse makeSessionId's hash-of-entry-text — the entry is
-// identical to the parent's, so same-day branches would collide. Mix in the
-// parent id, branch point, and wall-clock time for uniqueness.
 function makeBranchId(parent, roundIndex) {
-  const date = new Date().toISOString().slice(0, 10);
-  const slug = parent.entry.trim().slice(0, 40).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-  const hash = crypto.createHash('md5').update(`${parent.id}:${roundIndex}:${Date.now()}:${Math.random()}`).digest('hex').slice(0, 6);
-  return `${date}-${slug}-branch-${hash}`;
+  return sessionsStore.makeBranchId(parent, roundIndex);
 }
 
 function saveSession(session) {
-  fs.writeFileSync(path.join(SESSIONS_DIR, `${session.id}.json`), JSON.stringify(session, null, 2));
+  return sessionsStore.saveSession(SESSIONS_DIR, session);
 }
 
 function loadSession(id) {
-  const p = path.join(SESSIONS_DIR, `${id}.json`);
-  return fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, 'utf8')) : null;
+  return sessionsStore.loadSession(SESSIONS_DIR, id);
 }
 
 // ─── Anthropic call helpers ───────────────────────────────────────────────────
