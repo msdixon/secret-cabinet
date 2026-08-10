@@ -60,6 +60,11 @@ Standing roster of the Secret-Cabin-et. Source of truth for the meta-cabinet ind
 | 31 | Julian of Norwich | Twenty years to write the same sixteen visions twice; "all shall be well" as the hardest-won conclusion, not comfort | julian.md |
 | 32 | Carl Jung | The Society, renamed — real complicating action inside a real unresolved controversy | jung.md |
 | 33 | Wolfgang Pauli | Reports his own crisis as data; Jung's collaborator, never his patient, in this room | pauli.md |
+| 34 | Meister Eckhart | The Godhead beyond God, stated at conversational volume; condemned posthumously, unbothered | eckhart.md |
+| 35 | Jakob Böhme | Shoemaker who saw the structure of reality in a pewter dish; ten years of silence, then thirty books | bohme.md |
+| 36 | Emanuel Swedenborg | Scientist of the cerebellum who spent twenty-seven years reporting on heaven with the same rigor | swedenborg.md |
+| 37 | Paracelsus | "What does this actually heal?" aimed at every cosmology in the room; burned Avicenna in front of his students | paracelsus.md |
+| 38 | G.I. Gurdjieff | Refuses to answer directly; the elaborate meal is the answer | gurdjieff.md |
 
 ---
 

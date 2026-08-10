@@ -209,5 +209,45 @@
     "name": "Wolfgang Pauli",
     "file": "pauli.md",
     "glyph": "⬟"
+  },
+  {
+    "id": "eckhart",
+    "name": "Meister Eckhart",
+    "file": "eckhart.md",
+    "glyph": "●"
+  },
+  {
+    "id": "bohme",
+    "name": "Jakob Böhme",
+    "file": "bohme.md",
+    "aliases": [
+      "Behmen"
+    ],
+    "glyph": "🜂"
+  },
+  {
+    "id": "swedenborg",
+    "name": "Emanuel Swedenborg",
+    "file": "swedenborg.md",
+    "glyph": "⬢"
+  },
+  {
+    "id": "paracelsus",
+    "name": "Paracelsus",
+    "file": "paracelsus.md",
+    "aliases": [
+      "Theophrastus",
+      "von Hohenheim"
+    ],
+    "glyph": "🜍"
+  },
+  {
+    "id": "gurdjieff",
+    "name": "G.I. Gurdjieff",
+    "file": "gurdjieff.md",
+    "aliases": [
+      "G"
+    ],
+    "glyph": "✳"
   }
 ]
