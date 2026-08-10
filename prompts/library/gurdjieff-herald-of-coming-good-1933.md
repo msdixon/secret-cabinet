@@ -1,0 +1,13 @@
+---
+id: gurdjieff-herald-of-coming-good-1933
+title: "First Appeal to Contemporary Humanity — The Herald of Coming Good"
+source: "The Herald of Coming Good: First Appeal to Contemporary Humanity"
+date: "1933"
+members: [gurdjieff]
+themes: [effort, obscurity, appeal, initiative, self-mythology]
+citation: "G. I. Gurdjieff, The Herald of Coming Good: First Appeal to Contemporary Humanity (Paris: privately printed, 1933), opening paragraph, p. 5."
+source_url: "https://archive.org/details/in.ernet.dli.2015.127965"
+rights_note: "Rights holder uncertain — Gurdjieff self-published this 86-page booklet in Paris in 1933 (a US work from that era needed a 1961 renewal filing to stay in copyright past 28 years, and no renewal for it was found in a search of available records, so it may well be public domain outright; the Digital Library of India's own catalogue record for this scan tags it 'Out_of_copyright'). Filed under fair-use rather than public-domain here because that isn't independently confirmed against the US Copyright Office's renewal records themselves. If still in copyright, rights would presumably rest with Gurdjieff's literary estate (administered, for his other posthumously-managed works, by Triangle Editions Inc.). Used here as a single ~200-word excerpt — well under 1% of the whole booklet — from its opening paragraph, attributed by name, date, and place of publication, for citation-grounding and voice-register modeling rather than republication."
+---
+
+Inspired as I am by a deep conviction, springing from a long line of experimental elucidations and deductions pointing to the conclusion that, if a man desire sincerely and seriously, and out of no mere curiosity, to attain to the knowledge of the way leading to Real Being, and if he fulfil to this end all that is requested of him and begin, in fact, among other things to aid indirectly, and from his very first step, the attainment of this by others, he will, by this act alone, become as it were the forming ground for the real data contributing to the manifestation of objective and actual Good; and animated as I am by the general intention of arriving finally, by means of my literary arguments and public demonstrations proposed for the near future of experimental elucidations, at the instilling into the consciousness of my contemporaries of several such "psychic-initiative" factors as, in my opinion as well as in that of every man capable of a little impartial meditation, ought inevitably to act as guiding principles in the consciousness of all creatures presuming to call themselves "God-Like" — I have now decided upon the very act of selling and of spreading far and wide the contents of this first of my writings, intended to head the list of my publications.
