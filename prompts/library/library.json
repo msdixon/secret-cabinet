@@ -250,5 +250,65 @@
     "members": ["dion-fortune", "jung"],
     "themes": ["unconscious", "dissociation", "auto-suggestion", "mechanism", "psychology"],
     "file": "fortune-machinery-of-the-mind-1922.md"
+  },
+  {
+    "id": "eckhart-riddance-one-eye",
+    "title": "The Eye Wherein I See God — Sermon XCVI: Riddance",
+    "source": "Sermon XCVI: Riddance (Qui audit me non confundetur)",
+    "date": "c. 1300",
+    "author": "eckhart",
+    "translated": true,
+    "license": "public-domain",
+    "members": ["eckhart"],
+    "themes": ["union", "godhead", "self-abandonment", "mysticism", "sermon"],
+    "file": "eckhart-riddance-one-eye.md"
+  },
+  {
+    "id": "bohme-signature-rerum-1621",
+    "title": "The Signature as a Lute — Signatura Rerum, Chapter I",
+    "source": "Signatura Rerum, or The Signature of All Things",
+    "date": "1621",
+    "author": "bohme",
+    "translated": true,
+    "license": "public-domain",
+    "members": ["bohme"],
+    "themes": ["signature", "correspondence", "craft", "nature", "hidden-knowledge"],
+    "file": "bohme-signature-rerum-1621.md"
+  },
+  {
+    "id": "swedenborg-heaven-hell-preface-1758",
+    "title": "It Has Been Granted Me — Preface to Heaven and Hell",
+    "source": "Heaven and Its Wonders and Hell, from Things Heard and Seen",
+    "date": "1758",
+    "author": "swedenborg",
+    "translated": true,
+    "license": "public-domain",
+    "members": ["swedenborg"],
+    "themes": ["revelation", "observation", "angels", "empirical-testimony", "correspondence"],
+    "file": "swedenborg-heaven-hell-preface-1758.md"
+  },
+  {
+    "id": "paracelsus-paragranum-preface-1530",
+    "title": "After Me, Ye — Preface to Paragranum",
+    "source": "Paragranum (Das Buch Paragranum)",
+    "date": "c. 1530",
+    "author": "paracelsus",
+    "translated": true,
+    "license": "public-domain",
+    "members": ["paracelsus"],
+    "themes": ["medicine", "authority", "nature", "defiance", "healing"],
+    "file": "paracelsus-paragranum-preface-1530.md"
+  },
+  {
+    "id": "gurdjieff-herald-of-coming-good-1933",
+    "title": "First Appeal to Contemporary Humanity — The Herald of Coming Good",
+    "source": "The Herald of Coming Good: First Appeal to Contemporary Humanity",
+    "date": "1933",
+    "author": "gurdjieff",
+    "translated": false,
+    "license": "fair-use",
+    "members": ["gurdjieff"],
+    "themes": ["effort", "obscurity", "appeal", "initiative", "self-mythology"],
+    "file": "gurdjieff-herald-of-coming-good-1933.md"
   }
 ]
