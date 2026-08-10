@@ -37,7 +37,14 @@ function makeMetric(phase, { round, memberId, attempts, usage, latencyMs, skippe
     round: round ?? null,
     memberId: memberId || null,
     attempts: attempts ?? 1,
-    usage: usage ? { input_tokens: usage.input_tokens, output_tokens: usage.output_tokens } : null,
+    usage: usage ? {
+      input_tokens: usage.input_tokens,
+      output_tokens: usage.output_tokens,
+      // #190: proof the cache breakpoints are actually paying off — a
+      // non-zero read here on a repeat director/speaker call is the signal
+      // to look for, not just a lower input_tokens count.
+      cache_read_input_tokens: usage.cache_read_input_tokens ?? null,
+    } : null,
     latencyMs: latencyMs ?? null,
     skipped: !!skipped,
     error: error || null,
@@ -61,6 +68,50 @@ function makeMetric(phase, { round, memberId, attempts, usage, latencyMs, skippe
     residueNote: residueNote || null,
     timestamp: new Date().toISOString(),
   };
+}
+
+// ── Prompt caching (#190) ───────────────────────────────────────────────────
+//
+// Every director and speaker system prompt opens with the same lodge-context
+// block (member roster, room framing), and within a round every director and
+// speaker call reuses the identical conversationHistory slice. Anthropic's
+// cache is prefix-based (tools -> system -> messages) — marking the end of
+// each of those two stable prefixes with a cache_control breakpoint lets
+// same-speaker-across-beats and director-across-rounds calls skip
+// re-processing what they already sent, instead of resending the whole
+// prefix at full price every time. Speaker system prompts diverge right
+// after lodgeContext (each member's own file, exemplar, disposition), so the
+// messages-tier breakpoint is the one shared across *every* call in a round,
+// not just repeats of the same speaker.
+
+// `system` must start with `lodgeContext` — true of every system prompt this
+// module builds (buildDirectorPrompt, buildCastingPrompt,
+// buildSpeakerSystemPrompt all open with it). Falls back to the plain string
+// if that ever stops being true, rather than caching the wrong prefix.
+function buildCachedSystem(system, lodgeContext) {
+  if (!lodgeContext || !system.startsWith(lodgeContext)) return system;
+  const rest = system.slice(lodgeContext.length);
+  const blocks = [{ type: 'text', text: lodgeContext, cache_control: { type: 'ephemeral' } }];
+  if (rest) blocks.push({ type: 'text', text: rest });
+  return blocks;
+}
+
+// Marks the end of `conversationHistory` as a cache breakpoint. The same
+// array is passed unmodified to every director/speaker call within a round,
+// and — so long as the session's slice(-6) window hasn't dropped anything —
+// across rounds too, so this is what lets those repeat calls skip
+// reprocessing history they've already paid for. Returns a new array; never
+// mutates the caller's.
+function withHistoryCacheControl(conversationHistory) {
+  if (!conversationHistory?.length) return conversationHistory || [];
+  const lastIndex = conversationHistory.length - 1;
+  return conversationHistory.map((message, i) => {
+    if (i !== lastIndex) return message;
+    const content = typeof message.content === 'string'
+      ? [{ type: 'text', text: message.content, cache_control: { type: 'ephemeral' } }]
+      : message.content;
+    return { ...message, content };
+  });
 }
 
 // ── Shared retry helper ──────────────────────────────────────────────────────
@@ -149,14 +200,14 @@ Choose between ${minCount} and ${maxCount} of the present members as this round'
 // `tool` defaults to the per-round director's own schema; the pre-convene
 // casting call (#185) passes its own so the two questions stay legible in
 // the transcript of what was actually asked.
-async function callDirector({ client, model, system, conversationHistory, userMessage, presentIds, minCount, maxCount, tool }) {
+async function callDirector({ client, model, system, conversationHistory, userMessage, presentIds, minCount, maxCount, tool, lodgeContext }) {
   const schema = tool || buildDirectorToolSchema(presentIds, minCount, maxCount);
   const start = Date.now();
-  const messages = [...conversationHistory, { role: 'user', content: userMessage }];
+  const messages = [...withHistoryCacheControl(conversationHistory), { role: 'user', content: userMessage }];
   const response = await client.messages.create({
     model,
     max_tokens: 500,
-    system,
+    system: buildCachedSystem(system, lodgeContext),
     messages,
     tools: [schema],
     tool_choice: { type: 'tool', name: schema.name },
@@ -185,7 +236,7 @@ async function runDirectorSelection({
   client, model, system, userMessage, conversationHistory = [],
   candidateIds, minCount, maxCount, tool,
   phase = 'director', round = null, onMetric,
-  invalidNote, fallbackIds, fallbackNote,
+  invalidNote, fallbackIds, fallbackNote, lodgeContext,
 }) {
   const correction = invalidNote
     || ` Your previous selection was invalid — it must be between ${minCount} and ${maxCount} present member ids, no duplicates, drawn only from: ${candidateIds.join(', ')}. Choose again.`;
@@ -196,7 +247,7 @@ async function runDirectorSelection({
       const { speakers, reasoning, usage, latencyMs } = await callDirector({
         client, model, system, conversationHistory,
         userMessage: userMessage + (attempt === 2 ? correction : ''),
-        presentIds: candidateIds, minCount, maxCount, tool,
+        presentIds: candidateIds, minCount, maxCount, tool, lodgeContext,
       });
       lastReasoning = reasoning || lastReasoning;
       onMetric?.(makeMetric(phase, { round, attempts: attempt, usage, latencyMs, reasoning }));
@@ -222,7 +273,7 @@ async function selectSpeakers({ client, model, lodgeContext, presentMembers, ins
     client, model, system, userMessage, conversationHistory,
     candidateIds: presentIds, minCount, maxCount,
     tool: buildDirectorToolSchema(presentIds, minCount, maxCount),
-    phase: 'director', round, onMetric,
+    phase: 'director', round, onMetric, lodgeContext,
     // Deterministic fallback: first `maxCount` present members, in roster order.
     fallbackIds: presentMembers.slice(0, maxCount).map(m => m.id),
     fallbackNote: 'director failed twice — used deterministic fallback',
@@ -354,7 +405,7 @@ async function proposeCast({
     client, model, system, userMessage,
     candidateIds, minCount, maxCount,
     tool: buildCastingToolSchema(candidateIds, minCount, maxCount),
-    phase: 'casting', onMetric,
+    phase: 'casting', onMetric, lodgeContext,
     invalidNote: ` Your previous selection was invalid — it must be between ${minCount} and ${maxCount} member ids, no duplicates, drawn only from: ${candidateIds.join(', ')}. Choose again.`,
     // Deterministic fallback: the first `minCount` candidates in roster order.
     // Roster order is roughly the order the lodge was founded in, which is a
@@ -740,13 +791,13 @@ const SPEAKER_MAX_TOKENS = 1100;
 // Streams the response (same delta shape streamClaude already forwards to
 // the client), and still captures usage/latency via stream.finalMessage() —
 // live streaming and per-call metrics are not mutually exclusive.
-async function callSpeakerTurn({ client, model, system, conversationHistory, userMessage, onChunk }) {
+async function callSpeakerTurn({ client, model, system, conversationHistory, userMessage, onChunk, lodgeContext }) {
   const start = Date.now();
-  const messages = [...conversationHistory, { role: 'user', content: userMessage }];
+  const messages = [...withHistoryCacheControl(conversationHistory), { role: 'user', content: userMessage }];
   const stream = client.messages.stream({
     model,
     max_tokens: SPEAKER_MAX_TOKENS,
-    system,
+    system: buildCachedSystem(system, lodgeContext),
     messages,
   });
 
@@ -1060,7 +1111,7 @@ async function runRound({ client, model, lodgeContext, ROSTER, loadMemberFile,
     onSpeakerStart?.(memberId);
     try {
       const { result, attempts } = await withOneRetry(() =>
-        callSpeakerTurn({ client, model, system, conversationHistory, userMessage, onChunk }));
+        callSpeakerTurn({ client, model, system, conversationHistory, userMessage, onChunk, lodgeContext }));
       onMetric?.(makeMetric('speaker', { round, memberId, attempts, usage: result.usage, latencyMs: result.latencyMs, voiceExemplar: voiceExemplar?.id }));
 
       const contextBeforeTurn = roundSoFar;
@@ -1123,6 +1174,8 @@ module.exports = {
   buildMemberSection,
   makeMetric,
   withOneRetry,
+  buildCachedSystem,
+  withHistoryCacheControl,
   buildDirectorToolSchema,
   buildDirectorPrompt,
   callDirector,

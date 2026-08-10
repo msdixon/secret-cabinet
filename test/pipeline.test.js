@@ -37,6 +37,10 @@ const {
   buildSpeakerSystemPrompt,
   buildSpeakerUserMessage,
   makeMetric,
+  buildCachedSystem,
+  withHistoryCacheControl,
+  callDirector,
+  callSpeakerTurn,
 } = require('../pipeline.js');
 
 // pickNextSpeaker is weighted-random. Rather than seed a PRNG, sweep rng
@@ -799,6 +803,25 @@ test('makeMetric — residueNote attribution', async t => {
   });
 });
 
+// #190 — the signal that a cache breakpoint actually paid off on a given
+// call, not just a lower input_tokens count (which caching also produces,
+// but which is indistinguishable from "this call was just smaller").
+test('makeMetric — cache_read_input_tokens attribution', async t => {
+  await t.test('captures cache_read_input_tokens off usage when present', () => {
+    const metric = makeMetric('speaker', { usage: { input_tokens: 50, output_tokens: 10, cache_read_input_tokens: 3200 } });
+    assert.equal(metric.usage.cache_read_input_tokens, 3200);
+  });
+
+  await t.test('is null when usage does not carry it (no caching involved, or not yet GA in the response)', () => {
+    const metric = makeMetric('speaker', { usage: { input_tokens: 50, output_tokens: 10 } });
+    assert.equal(metric.usage.cache_read_input_tokens, null);
+  });
+
+  await t.test('usage itself stays null when no usage is given at all', () => {
+    assert.equal(makeMetric('speaker', {}).usage, null);
+  });
+});
+
 // #185 — the pre-convene casting call. The load-bearing promise here is that
 // the user's regulars are *input*, not a suggestion the model is free to
 // drop: proposeCast has to keep them in the cast no matter what comes back,
@@ -987,5 +1010,161 @@ test('proposeCast', async t => {
     });
     assert.deepEqual(result.regulars, ['crowley']);
     assert.equal(result.cast.includes('someone-deleted'), false);
+  });
+});
+
+// #190 — prompt caching on the two prefixes every director/speaker call
+// shares: the lodge-context system block, and (within a round, or across
+// rounds until the session's slice(-6) window drops something) the
+// conversation history. These pin the shape actually sent to the API, not
+// just the pure split logic — a cache_control breakpoint in the wrong spot
+// silently caches nothing rather than erroring.
+
+test('buildCachedSystem', async t => {
+  await t.test('splits into a cached lodge-context block and an uncached rest', () => {
+    const blocks = buildCachedSystem(`${LODGE}\n\n---\n\nrest of the prompt`, LODGE);
+    assert.deepEqual(blocks, [
+      { type: 'text', text: LODGE, cache_control: { type: 'ephemeral' } },
+      { type: 'text', text: '\n\n---\n\nrest of the prompt' },
+    ]);
+  });
+
+  await t.test('returns just the cached block when the prefix is the whole string', () => {
+    const blocks = buildCachedSystem(LODGE, LODGE);
+    assert.deepEqual(blocks, [{ type: 'text', text: LODGE, cache_control: { type: 'ephemeral' } }]);
+  });
+
+  await t.test('falls back to the plain string when lodgeContext is not actually the prefix', () => {
+    assert.equal(buildCachedSystem('something else entirely', LODGE), 'something else entirely');
+  });
+
+  await t.test('falls back to the plain string when no lodgeContext is given', () => {
+    assert.equal(buildCachedSystem('a system prompt', undefined), 'a system prompt');
+  });
+});
+
+test('withHistoryCacheControl', async t => {
+  await t.test('marks only the last message, wrapping its string content as a cached text block', () => {
+    const history = [
+      { role: 'user', content: 'round 1 prompt' },
+      { role: 'assistant', content: 'round 1 text' },
+    ];
+    const result = withHistoryCacheControl(history);
+    assert.equal(result[0], history[0], 'earlier messages are untouched, not just equal');
+    assert.deepEqual(result[1], {
+      role: 'assistant',
+      content: [{ type: 'text', text: 'round 1 text', cache_control: { type: 'ephemeral' } }],
+    });
+  });
+
+  await t.test('does not mutate the caller\'s array or its messages', () => {
+    const history = [{ role: 'user', content: 'hello' }];
+    const original = JSON.parse(JSON.stringify(history));
+    withHistoryCacheControl(history);
+    assert.deepEqual(history, original);
+  });
+
+  await t.test('is a no-op on empty or missing history', () => {
+    assert.deepEqual(withHistoryCacheControl([]), []);
+    assert.deepEqual(withHistoryCacheControl(undefined), []);
+  });
+
+  await t.test('leaves already-structured content alone rather than double-wrapping it', () => {
+    const history = [{ role: 'assistant', content: [{ type: 'text', text: 'already a block' }] }];
+    const result = withHistoryCacheControl(history);
+    assert.deepEqual(result[0].content, [{ type: 'text', text: 'already a block' }]);
+  });
+});
+
+// Mirrors fakeCastingClient's "record what it was asked" pattern, generic
+// enough for callDirector's tool-call shape.
+function fakeToolCallClient(reply) {
+  const asked = [];
+  return {
+    asked,
+    messages: {
+      create: async (req) => {
+        asked.push(req);
+        return { content: [{ type: 'tool_use', input: reply }], usage: { input_tokens: 100, output_tokens: 20 } };
+      },
+    },
+  };
+}
+
+test('callDirector — cache_control wiring', async t => {
+  await t.test('caches the lodge-context prefix of the system prompt', async () => {
+    const client = fakeToolCallClient({ speakers: ['crowley'], reasoning: 'r' });
+    await callDirector({
+      client, model: 'test-model',
+      system: `${LODGE}\n\n---\n\nround instructions`,
+      conversationHistory: [], userMessage: 'go',
+      presentIds: ['crowley'], minCount: 1, maxCount: 1, lodgeContext: LODGE,
+    });
+    assert.deepEqual(client.asked[0].system, [
+      { type: 'text', text: LODGE, cache_control: { type: 'ephemeral' } },
+      { type: 'text', text: '\n\n---\n\nround instructions' },
+    ]);
+  });
+
+  await t.test('caches the tail of a shared conversation history', async () => {
+    const client = fakeToolCallClient({ speakers: ['crowley'], reasoning: 'r' });
+    const history = [{ role: 'user', content: 'prior round' }, { role: 'assistant', content: 'prior text' }];
+    await callDirector({
+      client, model: 'test-model', system: LODGE, conversationHistory: history, userMessage: 'go',
+      presentIds: ['crowley'], minCount: 1, maxCount: 1, lodgeContext: LODGE,
+    });
+    assert.deepEqual(client.asked[0].messages[1], {
+      role: 'assistant',
+      content: [{ type: 'text', text: 'prior text', cache_control: { type: 'ephemeral' } }],
+    });
+    assert.deepEqual(history[1], { role: 'assistant', content: 'prior text' }, 'the caller\'s history is untouched');
+  });
+});
+
+// Minimal fake streaming client for callSpeakerTurn — one text delta plus a
+// finalMessage() carrying usage, which is all callSpeakerTurn reads besides
+// the deltas it forwards live.
+function fakeStreamingClient({ text = 'a turn', usage = { input_tokens: 50, output_tokens: 10 } } = {}) {
+  const asked = [];
+  return {
+    asked,
+    messages: {
+      stream: (req) => {
+        asked.push(req);
+        return {
+          [Symbol.asyncIterator]: async function* () {
+            yield { type: 'content_block_delta', delta: { type: 'text_delta', text } };
+          },
+          finalMessage: async () => ({ usage }),
+        };
+      },
+    },
+  };
+}
+
+test('callSpeakerTurn — cache_control wiring', async t => {
+  await t.test('caches the lodge-context prefix of the speaker system prompt', async () => {
+    const client = fakeStreamingClient();
+    await callSpeakerTurn({
+      client, model: 'test-model',
+      system: `${LODGE}\n\n---\n\nmember-specific prompt`,
+      conversationHistory: [], userMessage: 'go', lodgeContext: LODGE,
+    });
+    assert.deepEqual(client.asked[0].system, [
+      { type: 'text', text: LODGE, cache_control: { type: 'ephemeral' } },
+      { type: 'text', text: '\n\n---\n\nmember-specific prompt' },
+    ]);
+  });
+
+  await t.test('caches the tail of the shared round history', async () => {
+    const client = fakeStreamingClient();
+    const history = [{ role: 'user', content: 'prior round' }, { role: 'assistant', content: 'prior text' }];
+    await callSpeakerTurn({
+      client, model: 'test-model', system: LODGE, conversationHistory: history, userMessage: 'go', lodgeContext: LODGE,
+    });
+    assert.deepEqual(client.asked[0].messages[1], {
+      role: 'assistant',
+      content: [{ type: 'text', text: 'prior text', cache_control: { type: 'ephemeral' } }],
+    });
   });
 });
