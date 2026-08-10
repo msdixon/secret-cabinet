@@ -620,7 +620,7 @@ test('buildVoiceExemplarSection', async t => {
 // the only thing standing between "small, capped drift" and an unbounded
 // per-member file that grows for the life of the app, so its cap behaviour
 // and its never-cut-mid-fragment guarantee are pinned here rather than
-// trusted to review. See AXES.md's Axis 4 for why the cap is deliberately
+// trusted to review. See docs/AXES.md's Axis 4 for why the cap is deliberately
 // not larger than #188's disposition cap.
 test('mergeResidue', async t => {
   await t.test('starts fresh residue from a first note when there is no prior text', () => {

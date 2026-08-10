@@ -3,7 +3,7 @@
 
 *A living decision-reference, in the same spirit as [AXES.md](AXES.md) — but AXES.md governs how individual members are written (voice, historical framing, casting), while this file governs how the app itself is designed and built (UI, features, architecture trade-offs). When a design or architecture decision has to be made — build this feature or not, which of two implementations, how far to push polish — check here first. If a new case reveals a principle was framed too narrowly, refine the entry itself; don't just resolve the one decision in front of you and let the principle quietly drift.*
 
-Established 2026-08-08, at Rachel's request, stress-tested against [PROJECT.md](PROJECT.md)'s stated purposes and existing precedent (mainly AXES.md) before being locked in — not written speculatively from scratch.
+Established 2026-08-08, at Rachel's request, stress-tested against [PROJECT.md](../PROJECT.md)'s stated purposes and existing precedent (mainly AXES.md) before being locked in — not written speculatively from scratch.
 
 ---
 

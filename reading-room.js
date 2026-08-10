@@ -65,7 +65,7 @@ function renderReadingRoomPage(session, roster) {
   const roundsHtml = (session.rounds || []).map(r =>
     `<section class="rr-round"><h2 class="rr-round-label">${escapeHtml(r.label)}</h2>${renderRoundHtml(r.text, roster)}</section>`
   ).join('\n');
-  // Portraits are AI-generated placeholders, disclosed in MANIFEST.md; not
+  // Portraits are AI-generated placeholders, disclosed in docs/MANIFEST.md; not
   // every roster entry has one yet (see #80), so a broken image just hides
   // itself rather than showing a placeholder icon — same convention as the
   // dossier drawer's portrait (public/app.js).

@@ -6,7 +6,7 @@ The living project doc. Answers what this is, why it exists, where it's heading,
 
 ## What this is
 
-A local/private web app that convenes a salon of historical esotericists — see [MANIFEST.md](MANIFEST.md) for the current full roster — to discuss a document the user provides, across multiple rounds of in-character cross-talk. Sessions are saved, searchable, taggable, and exportable to Day One, Obsidian, or Ulysses.
+A local/private web app that convenes a salon of historical esotericists — see [docs/MANIFEST.md](docs/MANIFEST.md) for the current full roster — to discuss a document the user provides, across multiple rounds of in-character cross-talk. Sessions are saved, searchable, taggable, and exportable to Day One, Obsidian, or Ulysses.
 
 ## Why it exists
 
@@ -43,7 +43,7 @@ Full sequencing rationale lives in [issue #118](https://github.com/msdixon/secre
 
 **Against the north star specifically:** the atmosphere/presence thread was stalled behind two undecided, non-technical questions since 2026-07-13. Both were decided 2026-07-27:
 
-- [#116](https://github.com/msdixon/secret-cabinet/issues/116) — **decided: phased AI-generation.** Batch 1 generates portraits for the full current roster against a checked-in baseline ([public/portraits/STYLE_GUIDE.md](public/portraits/STYLE_GUIDE.md)), reconvene to human-validate before generating anything further (including portraits for members added after batch 1). AI-generated placeholders for this stage, not commissioned/licensed art — disclosed in [MANIFEST.md](MANIFEST.md). Post-MVP path to move beyond AI generation is intentionally still open, tracked as a follow-up to revisit rather than decided now. Unblocks #27; #26/#28 (3D texture use) still wait on #117 for format requirements.
+- [#116](https://github.com/msdixon/secret-cabinet/issues/116) — **decided: phased AI-generation.** Batch 1 generates portraits for the full current roster against a checked-in baseline ([public/portraits/STYLE_GUIDE.md](public/portraits/STYLE_GUIDE.md)), reconvene to human-validate before generating anything further (including portraits for members added after batch 1). AI-generated placeholders for this stage, not commissioned/licensed art — disclosed in [docs/MANIFEST.md](docs/MANIFEST.md). Post-MVP path to move beyond AI generation is intentionally still open, tracked as a follow-up to revisit rather than decided now. Unblocks #27; #26/#28 (3D texture use) still wait on #117 for format requirements.
 - [#117](https://github.com/msdixon/secret-cabinet/issues/117) — **decided: Babylon.js.** Taken deliberately over Three.js for its built-in physics/WebXR/character-animation tooling — a bet that pays off as the Atmosphere/presence thread continues into #28 and beyond, accepted against ~8-9x Three.js's bundle size since this is a local/personal tool, not a public product. A real architectural step-change for a codebase that's otherwise stayed framework-free; taken on purpose because the north star is being treated as a real target. Unblocked #26, which shipped through three phases (2026-07-28 → 2026-07-31); #28 avatar presence followed 2026-08-01.
 
 **Separately, codebase health:**
@@ -69,12 +69,12 @@ The full workflow/priority tracker — including Backlog-status items, bugs, and
 ## How this doc relates to everything else
 
 - **[README.md](README.md)** — setup and usage for actually running the app. User-facing, not a planning doc. (Currently stale on roster size — flagged, not yet fixed.)
-- **[MANIFEST.md](MANIFEST.md)** — standing member roster, kept current, same format as sibling repos for the meta-cabinet index.
-- **[AXES.md](AXES.md)** — interpretive lenses for writing individual members (voice, historical framing, casting). **[PRINCIPLES.md](PRINCIPLES.md)** is its counterpart for the app itself — design and code-architecture guardrails (verifiability, voice, entertainment, accessibility, sustainability), not character writing. Both are living, revised-as-decisions-reveal-gaps documents, not one-time decisions.
+- **[docs/MANIFEST.md](docs/MANIFEST.md)** — standing member roster, kept current, same format as sibling repos for the meta-cabinet index.
+- **[docs/AXES.md](docs/AXES.md)** — interpretive lenses for writing individual members (voice, historical framing, casting). **[docs/PRINCIPLES.md](docs/PRINCIPLES.md)** is its counterpart for the app itself — design and code-architecture guardrails (verifiability, voice, entertainment, accessibility, sustainability), not character writing. Both are living, revised-as-decisions-reveal-gaps documents, not one-time decisions.
 - **[GitHub Project board #2](https://github.com/msdixon/secret-cabinet/projects/2)** — workflow and priority tracker. Houses bugs, milestone markers, and parked "spikes" (investigation issues like #118 that surface a decision or non-urgent finding mid-work, get filed, and wait in Backlog rather than blocking the thing in progress). **Review at a high level weekly** to catch stale or unprioritized issues — that review is a standing responsibility, not a one-off.
   **Labeling (revised 2026-08-05):** priority lives entirely in the **Status** field — `Icebox → Backlog → Todo → In Progress → Done`, arranged left-to-right by readiness to be worked, Eisenhower-style (urgency × importance), not by technical horizon. Issue labels carry a separate, orthogonal signal — `complexity: small | moderate | large | unscoped` — an effort/maturity estimate decoupled from both timing and priority; `unscoped` marks work that's important enough to keep but not yet estimable (needs a scoping pass/spike first), which is where most of the old long-horizon vision items landed. This replaced the old `tier-0`–`tier-3` labels, which had drifted stale by binding scope to fixed time windows ("months 3-9") in a project with no fixed start date — see STATUS.md, 2026-08-05.
 - **[STATUS.md](STATUS.md)** — dated, one-line-per-entry log of what shipped or changed, appended to as it happens.
-- **[MODEL-REVIEW.md](MODEL-REVIEW.md)** — quarterly checklist for revisiting the `MODEL` constant in `server.js` against newer generations; decision rule and review log live there.
+- **[docs/MODEL-REVIEW.md](docs/MODEL-REVIEW.md)** — quarterly checklist for revisiting the `MODEL` constant in `server.js` against newer generations; decision rule and review log live there.
 - **Claude's memory files** — narrative context: why a decision was made, what was tried and rejected, collaboration-style notes. Not authoritative for current state — if memory and this doc disagree, this doc (and the board) win.
 
 ---

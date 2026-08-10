@@ -23,7 +23,7 @@ The founding eight — cast per session like everyone else, not permanently seat
 | Teresa of Ávila | Went in directly without a system; her irony is only legible to the women |
 | Ibn Arabi | Radical clarity, few words, holds receipts and deploys once at the right moment |
 
-The roster keeps growing — every member above is cast per session rather than always seated. See `MANIFEST.md` for the current full list; it's the source of truth, so this README doesn't go stale every time a member is added.
+The roster keeps growing — every member above is cast per session rather than always seated. See `docs/MANIFEST.md` for the current full list; it's the source of truth, so this README doesn't go stale every time a member is added.
 
 The room exists outside time. Members do not remember previous meetings. No one knows they are being observed.
 

@@ -4,7 +4,7 @@ Source of truth for generating member portraits (#116, #27). Every generation ru
 
 ## Status
 
-AI-generated, proof-of-concept register for this stage of the project. Not commissioned or licensed illustration. See [MANIFEST.md](../../MANIFEST.md) for the standing disclosure note.
+AI-generated, proof-of-concept register for this stage of the project. Not commissioned or licensed illustration. See [MANIFEST.md](../../docs/MANIFEST.md) for the standing disclosure note.
 
 ## Baseline register (from #27)
 

@@ -574,7 +574,7 @@ Let this govern *how* you speak tonight, never *what* you speak about. Do not qu
 // on the rare beat that earns it. Zero added latency, zero added API calls.
 //
 // Voice fidelity is the paramount constraint (per #166's scoping) — see
-// AXES.md's Axis 4 for the drift-toward-sameness risk this format resists:
+// docs/AXES.md's Axis 4 for the drift-toward-sameness risk this format resists:
 // fragments must stay short, concrete, and instance-grounded, and the
 // oldest erode off the cap long before accumulated residue could ever
 // outweigh the character file's fixed voice.

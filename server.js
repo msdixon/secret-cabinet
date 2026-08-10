@@ -161,7 +161,7 @@ function reloadLodgeRoster() {
 reloadLodgeRoster();
 
 const lodgeContext = fs.readFileSync(path.join(PROMPTS_DIR, 'lodge-context.md'), 'utf8');
-const axesDoc = fs.readFileSync(path.join(__dirname, 'AXES.md'), 'utf8');
+const axesDoc = fs.readFileSync(path.join(__dirname, 'docs', 'AXES.md'), 'utf8');
 
 function loadMemberFile(filename) {
   return roster.loadMemberFile(MEMBERS_DIR, filename);

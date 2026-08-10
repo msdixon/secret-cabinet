@@ -460,11 +460,11 @@ a.archival-image-link:hover { border-color:var(--lodge-amber-dim); cursor:pointe
    record is the same conversation rendered continuously in its own scrolling
    window, so a long session never grows the page. Heights are viewport-
    relative with floors/caps rather than exactly equal — see
-   DESIGN-184-STAGE-DEFAULT.md for why "similar" beats "identical" here.
+   docs/archive/DESIGN-184-STAGE-DEFAULT.md for why "similar" beats "identical" here.
 
    Revision: only one pane is ever VISIBLE at a time (.stage-only vs
    .collapsed, toggled by witness.js) — showing the same streaming text in
-   both was unreadable, not "linked." See DESIGN-184-STAGE-DEFAULT.md's
+   both was unreadable, not "linked." See docs/archive/DESIGN-184-STAGE-DEFAULT.md's
    Revision section and witness.js's collapseStage()/reopenStage(). */
 .stage-record { display:flex; flex-direction:column; background:var(--lodge-surface); border:1px solid var(--lodge-border); border-radius:2px; overflow:hidden; }
 

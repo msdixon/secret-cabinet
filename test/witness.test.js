@@ -4,7 +4,7 @@
 // target for both extraction and tests ("the smallest, most isolated thing to
 // write first tests against"), so it is where the frontend suite starts.
 //
-// #184 (defaults inversion, see DESIGN-184-STAGE-DEFAULT.md) reshaped this
+// #184 (defaults inversion, see docs/archive/DESIGN-184-STAGE-DEFAULT.md) reshaped this
 // module significantly: the stage and the record are now two permanent
 // panes rendering the same conversation, never one swapped for the other,
 // so the old toggleLive()/getLiveStageEl() DOM-move tests are gone and

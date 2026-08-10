@@ -12,7 +12,7 @@
 // argument, the same way app.js hands scene.js activeMembers via
 // updateSeats([...activeMembers]).
 //
-// #184 (defaults inversion, see DESIGN-184-STAGE-DEFAULT.md): the stage
+// #184 (defaults inversion, see docs/archive/DESIGN-184-STAGE-DEFAULT.md): the stage
 // (#witness-stage) and the record (app.js's #transcript-content) are two
 // permanent panes rendering the same conversation, never one swapped for the
 // other -- the old toggleLive()/getLiveStageEl() DOM re-parenting is gone.
@@ -35,7 +35,7 @@
 // a still-running convene). The record keeps accumulating while hidden;
 // live annotation during an active convene is deferred rather than
 // designed for, since a hidden pane isn't a workable annotation surface.
-// See DESIGN-184-STAGE-DEFAULT.md's Revision section.
+// See docs/archive/DESIGN-184-STAGE-DEFAULT.md's Revision section.
 window.Witness = (function () {
   let deps = null; // core helpers/data -- see configure() below
 
