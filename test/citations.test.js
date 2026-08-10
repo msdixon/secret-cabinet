@@ -82,7 +82,7 @@ test('groundAgainstLibraryText', async t => {
     await c.groundAgainstLibraryText(fakeClient, 'test-model', citationsList, lookup, m => metrics.push(m));
     assert.equal(metrics.length, 1);
     assert.equal(metrics[0].phase, 'citation-grounding');
-    assert.deepEqual(metrics[0].usage, { input_tokens: 111, output_tokens: 22 });
+    assert.deepEqual(metrics[0].usage, { input_tokens: 111, output_tokens: 22, cache_read_input_tokens: null });
   });
 
   await t.test('does not call onMetric when nothing matched (no call was made)', async () => {
