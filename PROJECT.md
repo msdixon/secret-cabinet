@@ -27,7 +27,7 @@ The architectural frontier (previously tracked under the now-retired `tier-3` la
 | Thread | Status | Items |
 |---|---|---|
 | **Interactivity / agency** | 2 of 3 shipped | #31 player-as-member (done), #33 branching sessions (done), #32 investigation mode (parked — see below) |
-| **Atmosphere / presence — the north-star thread** | defaults-inversion arc complete | #26 3D salon ✅, #27 portraits ✅, #28 avatar presence ✅, #184 stage-as-default-view ✅, #185 director-cast-with-regulars ✅, #186 Continue/Preserve after-panel ✅ — arc complete. #29 voice synth and #17 ambient audio deliberately iceboxed (2026-08-06): less important, buildable at any later point |
+| **Atmosphere / presence — the north-star thread** | defaults-inversion arc complete | #26 3D salon ✅, #27 portraits ✅, #28 avatar presence ✅, #184 stage-as-default-view ✅, #185 director-cast-with-regulars ✅, #186 Continue/Preserve after-panel ✅ — arc complete. #29 voice synth and #17 ambient audio deliberately iceboxed (2026-08-06): less important, buildable at any later point. Two follow-on UX issues opened 2026-08-08 sit in this thread but don't reopen it: #232 (camera should track the active speaker instead of auto-rotating) and #233 (3D room and transcript should be one stacked view, not tabs) |
 | **Research-grounding** | v2 complete | #36 citation verification ✅ (v1), #153 retrieval-grounded v2 ✅ — shipped in three parts (library grounding PR #171, provenance field PR #173, web-escalation PR #183; #111 closed as subsumed), #37 scholarly export ✅ (carries the provenance data), #30 archival image integration ✅ — ongoing: #35a hand-curated library growth, which now also feeds #187 (voice exemplars) |
 | **Voices / interiority — opened by the 2026-08-06 review** | 4 of 4 shipped | #187 library excerpts as register exemplars ✅, #188 intra-session disposition state ✅, #203 interruption-as-intent scheduling ✅, #166 cross-session residue ✅ (rung (a) of #195's amnesia ladder, scoped 2026-08-08 — rungs (b)/(c) deliberately deferred) |
 
@@ -54,6 +54,7 @@ Current Todo-status backlog (no ranking implied — pick next tranche with Rache
 
 - [#35](https://github.com/msdixon/secret-cabinet/issues/35) archival ingestion pipeline, 35a track (hand-curated growth continues; 35b bulk tooling deferred)
 - [#141](https://github.com/msdixon/secret-cabinet/issues/141) evaluation harness (unscoped — what "conversation quality" means is the decision, not the code)
+- [#219](https://github.com/msdixon/secret-cabinet/issues/219) dialog tone/pacing tuning + incremental-reveal UX (unscoped — needs a scoping pass, same shape as #194/#196/#203)
 
 The full workflow/priority tracker — including Backlog-status items, bugs, and parked spikes — is the [GitHub Project board](https://github.com/msdixon/secret-cabinet/projects/2) ("Secret-Cabin-et Roadmap", project #2). This doc names the shape of the plan; the board is where status actually lives.
 
