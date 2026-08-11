@@ -10,6 +10,9 @@
 // slight scale-up on whichever seated member is currently generating —
 // server-side signal added in pipeline.js's runRound (onSpeakerStart),
 // carried over SSE as a `speaking` field, consumed in app.js's streamPost.
+// #232: the same setSpeaking(memberId) call is also live mode's only signal
+// of who's talking, so it doubles as the camera-framing trigger below —
+// no separate "are we live" flag needed.
 window.LodgeScene = (function () {
   const LODGE_BG = '#0e0b08';
   const LODGE_FIRE = '#d4621a';
@@ -28,7 +31,18 @@ window.LodgeScene = (function () {
   const AVATAR_HEIGHT = 1.4;
   const AVATAR_Y = 1.3; // hovers above the seat marker, roughly head height
 
+  // #232: camera framing. Default is the room's original resting shot;
+  // SPEAKER_RADIUS pulls in closer once someone's talking, echoing the
+  // seat glow's own "leaning in" read. CAMERA_FRAME_MS matches a natural
+  // turn-taking glance, not a slow cinematic pan.
+  const CAMERA_DEFAULT_ALPHA = -Math.PI / 2;
+  const CAMERA_DEFAULT_RADIUS = 12;
+  const CAMERA_SPEAKER_RADIUS = 9;
+  const CAMERA_FRAME_MS = 900;
+  const CAMERA_FPS = 60;
+
   let sceneRef = null;
+  let cameraRef = null;
   let seatMeshes = [];
   const portraitTextures = {}; // memberId -> BABYLON.Texture, cached across seat reassignment
 
@@ -81,7 +95,7 @@ window.LodgeScene = (function () {
       avatarMat.backFaceCulling = false;
       avatar.material = avatarMat;
 
-      const seatEntry = { mesh: seat, seatMat, avatar, avatarMat, memberId: null };
+      const seatEntry = { mesh: seat, seatMat, avatar, avatarMat, memberId: null, angle };
       applySeatState(seatEntry, 'empty');
       seatMeshes.push(seatEntry);
     }
@@ -136,6 +150,56 @@ window.LodgeScene = (function () {
     return portraitTextures[memberId];
   }
 
+  // Shortest angular delta from `from` to `to`, wrapped to (-PI, PI] --
+  // camera.alpha is unbounded (same as the old auto-rotate's `+=`), so the
+  // animation target is `from + delta`, never a raw `to`, to guarantee the
+  // camera swings the short way instead of possibly the long way round.
+  function shortestAngleDelta(from, to) {
+    let delta = (to - from) % (Math.PI * 2);
+    if (delta > Math.PI) delta -= Math.PI * 2;
+    if (delta < -Math.PI) delta += Math.PI * 2;
+    return delta;
+  }
+
+  // Built lazily (not at module load) -- BABYLON isn't guaranteed loaded
+  // yet when this IIFE first runs (see test/module-convention.test.js,
+  // which loads every public/ module in isolation to pin exactly that).
+  let cameraEasing = null;
+  function getCameraEasing() {
+    if (!cameraEasing) {
+      cameraEasing = new BABYLON.CubicEase();
+      cameraEasing.setEasingMode(BABYLON.EasingFunction.EASINGMODE_EASEINOUT);
+    }
+    return cameraEasing;
+  }
+
+  function animateCameraProp(camera, property, toValue) {
+    if (!sceneRef) return;
+    sceneRef.stopAnimation(camera, `camera-${property}`);
+    BABYLON.Animation.CreateAndStartAnimation(
+      `camera-${property}`, camera, property, CAMERA_FPS,
+      Math.round((CAMERA_FRAME_MS / 1000) * CAMERA_FPS),
+      camera[property], toValue, BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT,
+      getCameraEasing()
+    );
+  }
+
+  // #232: swings the camera toward whichever seat is speaking (angle = 0
+  // pulls the camera to the same ray as that seat, so it sits between the
+  // camera and the table center — foregrounded and close, per the shared
+  // trig basis with buildTableAndSeats' own seat placement) and pulls in
+  // closer. Clearing to no speaker eases back to the room's resting shot,
+  // rather than freezing wherever the last speaker left it.
+  function frameCamera(memberId) {
+    if (!cameraRef) return;
+    const seat = memberId && seatMeshes.find(s => s.memberId === memberId);
+    const targetAlpha = seat ? cameraRef.alpha + shortestAngleDelta(cameraRef.alpha, seat.angle)
+      : cameraRef.alpha + shortestAngleDelta(cameraRef.alpha, CAMERA_DEFAULT_ALPHA);
+    const targetRadius = seat ? CAMERA_SPEAKER_RADIUS : CAMERA_DEFAULT_RADIUS;
+    animateCameraProp(cameraRef, 'alpha', targetAlpha);
+    animateCameraProp(cameraRef, 'radius', targetRadius);
+  }
+
   let currentSpeakingId = null;
 
   // Assigns the given member ids to seats in order, up to SEAT_COUNT.
@@ -145,7 +209,8 @@ window.LodgeScene = (function () {
     if (!sceneRef || !seatMeshes.length) return;
     const ids = memberIds || [];
     // Occupancy changed -- whatever was mid-generation before this render
-    // is no longer meaningful (round ended, session switched, etc).
+    // is no longer meaningful (round ended, session switched, etc), so the
+    // camera (#232) eases back to the resting shot along with the seats.
     currentSpeakingId = null;
     seatMeshes.forEach((seat, i) => {
       const id = ids[i] || null;
@@ -158,6 +223,7 @@ window.LodgeScene = (function () {
         seat.avatar.isVisible = false;
       }
     });
+    frameCamera(null);
   }
 
   // #28: brightens whichever seated member is currently generating a turn,
@@ -171,6 +237,7 @@ window.LodgeScene = (function () {
       if (!seat.memberId) return; // empty seats aren't affected either way
       applySeatState(seat, seat.memberId === currentSpeakingId ? 'speaking' : 'occupied');
     });
+    frameCamera(currentSpeakingId);
   }
 
   function init(canvas) {
@@ -184,9 +251,11 @@ window.LodgeScene = (function () {
       scene.fogDensity = 0.035;
 
       const camera = new BABYLON.ArcRotateCamera(
-        'camera', -Math.PI / 2, Math.PI / 2.5, 12, new BABYLON.Vector3(0, 1, 0), scene
+        'camera', CAMERA_DEFAULT_ALPHA, Math.PI / 2.5, CAMERA_DEFAULT_RADIUS,
+        new BABYLON.Vector3(0, 1, 0), scene
       );
       // Deliberately no attachControl — not interactive this phase.
+      cameraRef = camera;
 
       // Light *colors* need to be bright/warm regardless of the dark theme
       // tokens — those describe surface/background hues, not illumination.
@@ -220,13 +289,9 @@ window.LodgeScene = (function () {
       buildTableAndSeats(scene);
       sceneRef = scene;
 
-      // Slow fixed rotation — reads as "alive" without being a navigation feature.
-      // Cut to a third of the original rate (was 0.0015) -- the initial speed
-      // read as a spinning top rather than a slow drift.
-      scene.onBeforeRenderObservable.add(() => {
-        camera.alpha += 0.0005 * engine.getDeltaTime();
-      });
-
+      // #232: no continuous auto-rotate — the camera holds the resting shot
+      // and only moves when frameCamera() (via setSpeaking) swings it to
+      // whoever's talking, easing back here once no one is.
       engine.runRenderLoop(() => scene.render());
 
       const ro = new ResizeObserver(() => engine.resize());
