@@ -167,6 +167,7 @@ window.Sessions = (function () {
             <button class="session-reconvene-btn" onclick="window.Sessions.reconveneOnSession('${s.id}')" title="Use this transcript as the document for a new session">↩ Reconvene</button>
             <button class="session-thread-btn" onclick="window.Sessions.assignThreadUI('${s.id}', '${deps.escapeHTML(s.threadId||'')}', '${deps.escapeHTML(s.threadName||'')}', this)">⬡ Thread</button>
             <button class="session-compare-btn" id="compare-btn-${s.id}" onclick="window.Sessions.toggleCompareSelect('${s.id}', this)">⊕ Compare</button>
+            <button class="session-metrics-btn" onclick="window.Metrics.toggle('${s.id}')" title="Tokens, cost, and the director's casting rationale for this session">⚙ Metrics</button>
             <button class="session-publish-btn${s.published ? ' is-published' : ''}" onclick="window.Sessions.togglePublish('${s.id}', ${!!s.published}, this)" title="${s.published ? 'Unpublish from the public reading room' : 'Publish to the public reading room'}">${s.published ? '★ Unpublish' : '☆ Publish'}</button>
             <button class="session-delete-btn" onclick="window.Sessions.deleteSession('${s.id}', this)">Delete</button>
           </div>
