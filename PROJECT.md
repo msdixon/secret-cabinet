@@ -54,7 +54,7 @@ Current Todo-status backlog (no ranking implied — pick next tranche with Rache
 
 - [#35](https://github.com/msdixon/secret-cabinet/issues/35) archival ingestion pipeline, 35a track (hand-curated growth continues; 35b bulk tooling deferred)
 - [#141](https://github.com/msdixon/secret-cabinet/issues/141) evaluation harness (unscoped — what "conversation quality" means is the decision, not the code)
-- [#219](https://github.com/msdixon/secret-cabinet/issues/219) dialog tone/pacing tuning + incremental-reveal UX (unscoped — needs a scoping pass, same shape as #194/#196/#203)
+- [#219](https://github.com/msdixon/secret-cabinet/issues/219) dialog tone/pacing tuning + incremental-reveal UX — delivery/pacing half shipped (PR #256): a turn now renders as several same-speaker bubbles at natural pause points instead of one block. Tone/prompt tuning (`CROWDED_WORDS_PER_VOICE`, `buildSpeakerSystemPrompt`'s length guidance) deliberately deferred to reassess once pacing alone has been read against real sessions — issue stays open for that half
 
 The full workflow/priority tracker — including Backlog-status items, bugs, and parked spikes — is the [GitHub Project board](https://github.com/msdixon/secret-cabinet/projects/2) ("Secret-Cabin-et Roadmap", project #2). This doc names the shape of the plan; the board is where status actually lives.
 
