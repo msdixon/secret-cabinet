@@ -292,6 +292,7 @@
 
         <button class="lodge-btn" id="verify-citations-btn" onclick="verifyCitations()">Verify Citations ⚑</button>
         <button class="lodge-btn" style="border-color:var(--lodge-ash);color:var(--lodge-ash);" onclick="startWitness()" title="Watch the transcript play back with reading-time pacing">◎ Watch</button>
+        <button class="lodge-btn" style="border-color:var(--lodge-ash);color:var(--lodge-ash);" onclick="window.Metrics.toggle()" title="Tokens, cost, and the director's casting rationale for this session">⚙ Metrics</button>
 
         <div class="menu-wrap">
           <button class="lodge-btn" id="preserve-btn" onclick="toggleAfterMenu('preserve-menu')">Preserve ▾</button>
@@ -376,6 +377,21 @@
   </div>
 </div>
 
+<!-- Metrics drawer (#191): per-session tokens/cost/casting-rationale, the
+     observability data makeMetric already persists in generationMetrics but
+     nothing previously read. Same on-demand drawer chrome as Export Settings
+     (#186) rather than new UI. -->
+<div class="metrics-overlay" id="metrics-overlay" onclick="window.Metrics.close()"></div>
+<div class="metrics-drawer" id="metrics-drawer">
+  <div class="sessions-drawer-header">
+    <span class="sessions-drawer-title">Session Metrics</span>
+    <button class="sessions-close-btn" onclick="window.Metrics.close()">✕</button>
+  </div>
+  <div class="metrics-body" id="metrics-body">
+    <div class="sessions-empty">No session loaded.</div>
+  </div>
+</div>
+
 <script src="/vendor/babylonjs/babylon.js"></script>
 <script src="beats.js"></script>
 <script src="scene/scene.js"></script>
@@ -383,6 +399,7 @@
 <script src="export.js"></script>
 <script src="sessions.js"></script>
 <script src="casting.js"></script>
+<script src="metrics.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
