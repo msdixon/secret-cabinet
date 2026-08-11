@@ -35,7 +35,7 @@ const FileStore = require('session-file-store')(session);
 const dayOne = require('./dayone');
 const multer = require('multer');
 const PDFParser = require('pdf2json');
-const { buildMemberSection, runRound, stripInternalBlankLines, proposeCast, makeMetric } = require('./pipeline');
+const { buildMemberSection, runRound, stripInternalBlankLines, proposeCast, makeMetric, countWords, BREATH_BUDGET_WORDS } = require('./pipeline');
 const roster = require('./roster');
 const transcriptFormat = require('./transcript-format');
 const readingRoom = require('./reading-room');
@@ -224,17 +224,24 @@ function formatTranscriptText(text) {
   return transcriptFormat.formatTranscriptText(text, ROSTER);
 }
 
-// ─── Round prompts ────────────────────────────────────────────────────────────
-// See lodge-prompts.js (#193) for the extracted, Express-agnostic
-// implementation. Thin wrappers here supply the current ROSTER and
-// stripInternalBlankLines so existing call sites are unchanged.
+// ─── Passage prompts ──────────────────────────────────────────────────────────
+// See lodge-prompts.js (#193, reshaped for #244 per #194's migration
+// sketch) for the extracted, Express-agnostic implementation. Thin wrappers
+// here supply the current ROSTER so existing call sites are unchanged.
 
-function speakerCountForRound(index) {
-  return lodgePrompts.speakerCountForRound(index);
+// Total words spent across a session's segments so far — the "words spent"
+// half of the arc note's progress key (see lodge-prompts.js's
+// arcNoteForProgress). Segments predating #244 count too; a word is a word
+// regardless of which round-vs-passage era generated it.
+function wordsSpentSoFar(rounds) {
+  return (rounds || []).reduce((sum, r) => sum + countWords(r.text || ''), 0);
 }
 
-function buildRoundPrompt(index, entry, instructions, artifact = null, isTranscriptSource = false) {
-  return lodgePrompts.buildRoundPrompt(index, entry, instructions, artifact, isTranscriptSource, ROSTER);
+function buildPassagePrompt({ entry, meetingNote, isFirst, artifact = null, isTranscriptSource = false, wordsSpent = 0 }) {
+  return lodgePrompts.buildPassagePrompt({
+    entry, meetingNote, isFirst, artifact, isTranscriptSource, roster: ROSTER,
+    wordsSpent, breathBudget: BREATH_BUDGET_WORDS,
+  });
 }
 
 function playerDirectorPool(memberIds, playerMode, playerMemberId) {
@@ -251,18 +258,22 @@ function buildPrecedingTurn(speakerName, playerTurn) {
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
-// POST /api/convene — start a session and stream round 1
+// POST /api/convene — start a session and stream its first passage
 app.post('/api/convene', async (req, res) => {
   const { entry, members } = req.body;
   if (!entry?.trim()) return res.status(400).json({ error: 'entry is required' });
   if (!members?.length) return res.status(400).json({ error: 'at least one member is required' });
 
-  const { roundInstructions, roundCount, artifact, notes, sourceSessionId,
+  const { roundInstructions, meetingNote, roundCount, artifact, notes, sourceSessionId,
     playerMode, playerMemberId, playerName, playerTurn, castMetrics } = req.body;
   const isTranscriptSource = !!sourceSessionId;
   const id = makeSessionId(entry);
   const date = new Date().toISOString().slice(0, 10);
-  const roundPrompt = buildRoundPrompt(0, entry, roundInstructions, artifact || null, isTranscriptSource);
+  // #194 touchpoint 2: roundInstructions (array) collapses to meetingNote
+  // (single free-text field). deriveMeetingNote handles both since nothing
+  // stops a caller from still sending the old shape.
+  const effectiveMeetingNote = lodgePrompts.deriveMeetingNote({ meetingNote, roundInstructions });
+  const passagePrompt = buildPassagePrompt({ entry, meetingNote: effectiveMeetingNote, isFirst: true, artifact: artifact || null, isTranscriptSource, wordsSpent: 0 });
   // #225 — the pre-convene casting call's usage rides in on the request body
   // (see /api/cast) rather than being held server-side; validate the shape
   // rather than trusting it wholesale since it's client-supplied.
@@ -277,12 +288,12 @@ app.post('/api/convene', async (req, res) => {
 
   openSSE(res);
   try {
-    const { fullRoundText: text, disposition, residueUpdates } = await runRound({
+    const { fullRoundText: text, disposition, residueUpdates, beats, endedBy, lullNote } = await runRound({
       client, model: MODEL, lodgeContext, ROSTER, loadMemberFile, loadVoiceExemplar, loadResidue,
       presentMemberIds: playerDirectorPool(members, effectivePlayerMode, effectivePlayerMemberId),
       artifact: artifact || null, notes: notes || {},
-      roundPrompt, conversationHistory: [],
-      speakerCount: speakerCountForRound(0), round: 0, precedingTurn,
+      roundPrompt: passagePrompt, conversationHistory: [],
+      speakerCount: lodgePrompts.DEFAULT_POOL_SIZE, round: 0, precedingTurn,
       disposition: {},
       onChunk: chunk => res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`),
       onSpeakerStart: memberId => res.write(`data: ${JSON.stringify({ speaking: memberId })}\n\n`),
@@ -293,19 +304,23 @@ app.post('/api/convene', async (req, res) => {
       },
     });
     const history = [
-      { role: 'user', content: roundPrompt },
+      { role: 'user', content: passagePrompt },
       { role: 'assistant', content: text },
     ];
     const session = {
       id, date, entry, members,
-      roundInstructions: roundInstructions || null,
+      meetingNote: effectiveMeetingNote || null,
       roundCount: roundCount || 3,
       artifact: artifact || null,
       notes: notes || {},
       sourceSessionId: sourceSessionId || null,
       conversationHistory: history,
-      rounds: [{ label: 'First Movement', text, historyLength: history.length }],
-      transcriptText: buildTranscriptHeader(entry, members, date) + `\n— First Movement —\n\n${formatTranscriptText(text)}\n`,
+      // #244: label is now the passage's own lull note (director-authored
+      // or stock fallback) rather than a fixed "First Movement" — see
+      // #194 touchpoint 4. beats/endedBy are new, forward-provision fields
+      // (#194 touchpoint 8); existing renderers only ever read label/text.
+      rounds: [{ label: lullNote, text, historyLength: history.length, beats, endedBy }],
+      transcriptText: buildTranscriptHeader(entry, members, date) + `\n— ${lullNote} —\n\n${formatTranscriptText(text)}\n`,
       generationMetrics,
       playerMode: effectivePlayerMode,
       playerMemberId: effectivePlayerMemberId,
@@ -315,7 +330,7 @@ app.post('/api/convene', async (req, res) => {
     };
     saveSession(session);
     saveResidueUpdates(residueUpdates);
-    res.write(`data: ${JSON.stringify({ done: true, sessionId: id, round: 1, label: 'First Movement', text })}\n\n`);
+    res.write(`data: ${JSON.stringify({ done: true, sessionId: id, round: 1, label: lullNote, text })}\n\n`);
   } catch (err) {
     console.error('Convene error:', err);
     res.write(`data: ${JSON.stringify({ error: err.message || 'Failed to convene lodge' })}\n\n`);
@@ -360,7 +375,11 @@ app.post('/api/cast', async (req, res) => {
   }
 });
 
-// POST /api/round — stream the next round into an existing session
+// POST /api/round — the continue path (#194 touchpoint 5: "One More Turn"
+// renamed in-stream to "Continue"; this route's own behavior is unchanged —
+// generate the next passage into the session). The old client drives its
+// own loop with a preordained round count and calls this once per round; it
+// never sees a `lull` endedBy, since it decides when to stop on its own.
 app.post('/api/round', async (req, res) => {
   const { sessionId, playerTurn } = req.body;
   if (!sessionId) return res.status(400).json({ error: 'sessionId required' });
@@ -369,10 +388,9 @@ app.post('/api/round', async (req, res) => {
   if (!session) return res.status(404).json({ error: 'Session not found' });
 
   const roundIndex = session.rounds.length;
-  const roundPrompt = buildRoundPrompt(roundIndex, session.entry, session.roundInstructions);
-
-  const labels = ['First Movement', 'The Room Responds', 'Final Embers', 'One More Turn'];
-  const label = labels[Math.min(roundIndex, labels.length - 1)];
+  const meetingNote = lodgePrompts.deriveMeetingNote(session);
+  const wordsSpent = wordsSpentSoFar(session.rounds);
+  const passagePrompt = buildPassagePrompt({ entry: session.entry, meetingNote, isFirst: false, wordsSpent });
 
   session.generationMetrics = session.generationMetrics || [];
 
@@ -381,12 +399,12 @@ app.post('/api/round', async (req, res) => {
 
   openSSE(res);
   try {
-    const { fullRoundText: text, disposition, residueUpdates } = await runRound({
+    const { fullRoundText: text, disposition, residueUpdates, beats, endedBy, lullNote } = await runRound({
       client, model: MODEL, lodgeContext, ROSTER, loadMemberFile, loadVoiceExemplar, loadResidue,
       presentMemberIds: playerDirectorPool(session.members, session.playerMode, session.playerMemberId),
       artifact: null, notes: {},
-      roundPrompt, conversationHistory: session.conversationHistory.slice(-6),
-      speakerCount: speakerCountForRound(roundIndex), round: roundIndex, precedingTurn,
+      roundPrompt: passagePrompt, conversationHistory: session.conversationHistory.slice(-6),
+      speakerCount: lodgePrompts.DEFAULT_POOL_SIZE, round: roundIndex, precedingTurn,
       disposition: session.disposition || {},
       onChunk: chunk => res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`),
       onSpeakerStart: memberId => res.write(`data: ${JSON.stringify({ speaking: memberId })}\n\n`),
@@ -397,10 +415,10 @@ app.post('/api/round', async (req, res) => {
       },
     });
 
-    session.conversationHistory.push({ role: 'user', content: roundPrompt });
+    session.conversationHistory.push({ role: 'user', content: passagePrompt });
     session.conversationHistory.push({ role: 'assistant', content: text });
-    session.rounds.push({ label, text, historyLength: session.conversationHistory.length });
-    session.transcriptText += `\n— ${label} —\n\n${formatTranscriptText(text)}\n`;
+    session.rounds.push({ label: lullNote, text, historyLength: session.conversationHistory.length, beats, endedBy });
+    session.transcriptText += `\n— ${lullNote} —\n\n${formatTranscriptText(text)}\n`;
     session.disposition = disposition || {};
     if (precedingTurn) {
       session.playerTurns = session.playerTurns || [];
@@ -409,7 +427,7 @@ app.post('/api/round', async (req, res) => {
 
     saveSession(session);
     saveResidueUpdates(residueUpdates);
-    res.write(`data: ${JSON.stringify({ done: true, round: roundIndex + 1, label, text })}\n\n`);
+    res.write(`data: ${JSON.stringify({ done: true, round: roundIndex + 1, label: lullNote, text })}\n\n`);
   } catch (err) {
     console.error('Round error:', err);
     res.write(`data: ${JSON.stringify({ error: 'Failed to generate round' })}\n\n`);
@@ -473,7 +491,7 @@ app.post('/api/prototype/round', async (req, res) => {
   if (!entry?.trim()) return res.status(400).json({ error: 'entry is required' });
   if (!members?.length) return res.status(400).json({ error: 'at least one member is required' });
 
-  const roundPrompt = buildRoundPrompt(0, entry, null, null, false);
+  const roundPrompt = buildPassagePrompt({ entry, isFirst: true, isTranscriptSource: false });
   const metrics = [];
 
   openSSE(res);
@@ -907,6 +925,10 @@ app.post('/api/sessions/:id/branch', (req, res) => {
     id, date,
     entry: parent.entry,
     members: [...parent.members],
+    // #244: meetingNote is the current field; roundInstructions carries
+    // forward untouched for a legacy parent that still only has that (see
+    // lodgePrompts.deriveMeetingNote, which reads either).
+    meetingNote: parent.meetingNote || null,
     roundInstructions: parent.roundInstructions || null,
     roundCount: parent.roundCount || 3,
     artifact: parent.artifact || null,

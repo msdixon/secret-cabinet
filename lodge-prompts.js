@@ -9,32 +9,60 @@
 // convene/round/interject routes all call identically. Roster and the
 // stripInternalBlankLines helper are passed in explicitly rather than read
 // from a module-level singleton, following roster.js's convention.
+//
+// #244 (per #194's migration sketch): a meeting is now a sequence of
+// passages separated by lulls, not a preordained count of rounds. The old
+// per-round instructions indexed by round number become a continuous "arc
+// note" keyed to meeting progress instead — see arcNoteForProgress below.
 
-const DEFAULT_ROUND_INSTRUCTIONS = [
-  'The room stirs. Write the first movement — initial reactions to whatever the material woke up. Not every member must engage with the document directly; some may respond to the room\'s reaction to it before responding to it themselves. 3-5 members speak. There is no author to address.',
-  'The document recedes. The conversation follows what it raised. Members are now talking to each other about the actual question that has surfaced — disagreements crystallize, alliances form, citations come out, someone is irritated, someone is more interested than they wanted to be. References to the document are welcome but not required; the room is no longer obliged to it. 3-5 members speak. Receipts may be deployed. Actions in asterisks.',
-  'The conversation has gone where it has gone. It may have left the document entirely. Final movement: the room arrives somewhere, or it doesn\'t. Someone may say the thing that persists as an ember. Someone may push back hard at a point that has been allowed to stand too long. Someone may simply observe the fire. 2-4 members. Let it end as it ends.',
-];
-const EXTRA_ROUND_INSTRUCTION = 'A thread unresolved, a silence wanting breaking, a late arrival to the argument, a member who passed earlier returning with something they have just thought of. 2-4 members speak.';
+// #194 touchpoint 2: the three-part arc (reactions -> unbound cross-talk ->
+// embers) survives as *tendency*, not boundary. The old prose's explicit
+// speaker-count hints ("3-5 members speak") are dropped here — pool sizing
+// is handed to the director programmatically (minCount/maxCount), not
+// threaded through instruction prose anymore.
+const ARC_NOTES = {
+  opening: 'The room stirs. Initial reactions to whatever the material woke up — not every member need engage with the document directly; some may respond to the room\'s reaction to it before responding to it themselves. There is no author to address.',
+  crosstalk: 'The document recedes. The conversation follows what it raised. Members are now talking to each other about the actual question that has surfaced — disagreements crystallize, alliances form, citations come out, someone is irritated, someone is more interested than they wanted to be. References to the document are welcome but not required; the room is no longer obliged to it. Receipts may be deployed. Actions in asterisks.',
+  embers: 'The conversation has gone where it has gone. It may have left the document entirely. The room may be arriving somewhere, or it may not. Someone may say the thing that persists as an ember. Someone may push back hard at a point that has been allowed to stand too long. Someone may simply observe the fire.',
+  extended: 'A thread unresolved, a silence wanting breaking, a late arrival to the argument, a member who passed earlier returning with something they have just thought of.',
+};
 
-// The exact speaker count for a round is now a hard number handed to the
-// director, not a range for it to interpret — these mirror the upper end of
-// the prose guidance above (the prose itself is left as-is; it's now soft
-// framing for the director's judgment about *who*, not an enforced count).
-// #73 exposed round *count* to the user (session.roundCount, below); per-round
-// speaker count remains this fixed default — still no user-facing control,
-// deferred as a separate follow-up.
-const SPEAKER_COUNTS = [5, 5, 4]; // rounds 1-3
-const EXTRA_ROUND_SPEAKER_COUNT = 4;
-const INTERJECT_SPEAKER_COUNT = 3; // today's prose only ever suggested "2-3", never enforced — a new explicit assumption
+// Multiples of the breath budget (pipeline.js's BREATH_BUDGET_WORDS) at
+// which the arc note advances to the next stage. Starting calibration, not
+// tuned — due for review alongside the breath budget itself at the
+// 2026-08-19 pacing follow-up, now folded into #244's combined
+// passage-length/lull-cadence review.
+const ARC_STAGE_BOUNDARIES = { crosstalk: 1, embers: 3, extended: 5 };
 
-function speakerCountForRound(index) {
-  return SPEAKER_COUNTS[index] || EXTRA_ROUND_SPEAKER_COUNT;
+// Replaces DEFAULT_ROUND_INSTRUCTIONS[index] lookups: continuous instead of
+// switched at round boundaries, keyed on words spent so far this meeting
+// rather than a round counter that no longer exists.
+function arcNoteForProgress({ wordsSpent = 0, breathBudget } = {}) {
+  const budget = breathBudget || 1000;
+  const ratio = wordsSpent / budget;
+  if (ratio < ARC_STAGE_BOUNDARIES.crosstalk) return ARC_NOTES.opening;
+  if (ratio < ARC_STAGE_BOUNDARIES.embers) return ARC_NOTES.crosstalk;
+  if (ratio < ARC_STAGE_BOUNDARIES.extended) return ARC_NOTES.embers;
+  return ARC_NOTES.extended;
 }
 
-function buildRoundPrompt(index, entry, instructions, artifact = null, isTranscriptSource = false, roster = []) {
-  const instr = instructions?.[index] || DEFAULT_ROUND_INSTRUCTIONS[index] || EXTRA_ROUND_INSTRUCTION;
-  if (index === 0) {
+// #194 touchpoint 2: SPEAKER_COUNTS/speakerCountForRound retire — pool
+// sizing beyond the opening consult is already dynamic on re-consult
+// (pipeline.js's selectSpeakers mid-passage re-ask). The opening consult of
+// any passage just needs one flat default now, not a per-round taper.
+const DEFAULT_POOL_SIZE = 5;
+const INTERJECT_SPEAKER_COUNT = 3; // today's prose only ever suggested "2-3", never enforced — a new explicit assumption
+
+// Replaces buildRoundPrompt. `isFirst` replaces the old `index === 0` check
+// (the only place round position mattered structurally — the document-read
+// preamble); the arc note itself is now progress-keyed instead of
+// index-keyed. `meetingNote`, if the user supplied one, overrides the arc
+// note entirely for the whole meeting — same override semantics the old
+// per-round `instructions[index]` had, just collapsed from an array to one
+// free-text field (#194 touchpoint 2).
+function buildPassagePrompt({ entry, meetingNote, isFirst = false, artifact = null, isTranscriptSource = false, roster = [], wordsSpent = 0, breathBudget }) {
+  const instr = meetingNote?.trim() || arcNoteForProgress({ wordsSpent, breathBudget });
+  if (isFirst) {
     const artifactMember = artifact?.memberId ? roster.find(m => m.id === artifact.memberId) : null;
     const artifactHint = artifactMember
       ? `\n\n${artifactMember.name} has private context from before the meeting. They should speak in this round.`
@@ -45,6 +73,20 @@ function buildRoundPrompt(index, entry, instructions, artifact = null, isTranscr
     return `${preamble}\n\n${instr}${artifactHint}`;
   }
   return instr;
+}
+
+// #194 touchpoint 2: legacy sessions carry a `roundInstructions` array
+// (indexed by round); continuing one joins it into a single note rather
+// than migrating the field. "Not worth more cleverness than that" — the
+// field was rarely used past session creation.
+function deriveMeetingNote(session) {
+  if (session?.meetingNote?.trim()) return session.meetingNote.trim();
+  const legacy = session?.roundInstructions;
+  if (Array.isArray(legacy) && legacy.length) {
+    const joined = legacy.filter(Boolean).map(s => s.trim()).filter(Boolean).join(' ');
+    return joined || null;
+  }
+  return null;
 }
 
 // ─── Player-as-member ─────────────────────────────────────────────────────────
@@ -77,13 +119,13 @@ function buildPrecedingTurn(speakerName, playerTurn, stripInternalBlankLines) {
 }
 
 module.exports = {
-  DEFAULT_ROUND_INSTRUCTIONS,
-  EXTRA_ROUND_INSTRUCTION,
-  SPEAKER_COUNTS,
-  EXTRA_ROUND_SPEAKER_COUNT,
+  ARC_NOTES,
+  ARC_STAGE_BOUNDARIES,
+  arcNoteForProgress,
+  DEFAULT_POOL_SIZE,
   INTERJECT_SPEAKER_COUNT,
-  speakerCountForRound,
-  buildRoundPrompt,
+  buildPassagePrompt,
+  deriveMeetingNote,
   playerDirectorPool,
   resolvePlayerName,
   buildPrecedingTurn,

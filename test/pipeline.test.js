@@ -41,6 +41,12 @@ const {
   withHistoryCacheControl,
   callDirector,
   callSpeakerTurn,
+  runRound,
+  BREATH_BUDGET_WORDS,
+  LULL_NOTE_MAX_CHARS,
+  STOCK_LULL_NOTES,
+  pickStockLullNote,
+  resolveLullNote,
 } = require('../pipeline.js');
 
 // pickNextSpeaker is weighted-random. Rather than seed a PRNG, sweep rng
@@ -1166,5 +1172,162 @@ test('callSpeakerTurn — cache_control wiring', async t => {
       role: 'assistant',
       content: [{ type: 'text', text: 'prior text', cache_control: { type: 'ephemeral' } }],
     });
+  });
+});
+
+// #244 — runRound's new passage-end vocabulary (endedBy, lullNote, beats).
+
+test('resolveLullNote', async t => {
+  await t.test('trims and hard-caps a director-authored note', () => {
+    const overlong = 'x'.repeat(LULL_NOTE_MAX_CHARS + 50);
+    assert.equal(resolveLullNote(`  ${overlong}  `).length, LULL_NOTE_MAX_CHARS);
+  });
+
+  await t.test('falls back to a stock note when the director wrote nothing', () => {
+    assert.ok(STOCK_LULL_NOTES.includes(resolveLullNote(null)));
+    assert.ok(STOCK_LULL_NOTES.includes(resolveLullNote('   ')));
+  });
+});
+
+test('pickStockLullNote', async t => {
+  await t.test('is deterministic against a fixed rng and always a listed note', () => {
+    for (let i = 0; i < STOCK_LULL_NOTES.length; i++) {
+      const rng = () => i / STOCK_LULL_NOTES.length;
+      assert.equal(pickStockLullNote(rng), STOCK_LULL_NOTES[i]);
+    }
+  });
+});
+
+// Handles both director consult calls (tool: select_speakers) and
+// disposition calls (tool: update_disposition) via messages.create, plus
+// speaker turns via messages.stream — enough surface for runRound's full
+// beat loop. `windingDownOnConsult` is the pattern of `true`/`false`
+// returned across successive select_speakers calls (initial pool first,
+// then each re-consult); it runs out, later calls repeat the last entry.
+function fakePassageClient({ speakerText = 'A turn.', windingDownOnConsult = [false], lullNote = null } = {}) {
+  let selectCalls = 0;
+  const asked = [];
+  return {
+    asked,
+    messages: {
+      create: async (req) => {
+        asked.push(req);
+        const toolName = req.tools?.[0]?.name;
+        if (toolName === 'select_speakers') {
+          const i = Math.min(selectCalls, windingDownOnConsult.length - 1);
+          const windingDown = windingDownOnConsult[i];
+          selectCalls++;
+          return {
+            content: [{ type: 'tool_use', input: { speakers: ['crowley'], reasoning: 'r', windingDown, lullNote: windingDown ? lullNote : null } }],
+            usage: { input_tokens: 10, output_tokens: 5 },
+          };
+        }
+        // update_disposition
+        return {
+          content: [{ type: 'tool_use', input: { reflection: 'Considering.', waitingOnMemberId: 'none' } }],
+          usage: { input_tokens: 8, output_tokens: 4 },
+        };
+      },
+      stream: () => ({
+        [Symbol.asyncIterator]: async function* () {
+          yield { type: 'content_block_delta', delta: { type: 'text_delta', text: speakerText } };
+        },
+        finalMessage: async () => ({ usage: { input_tokens: 20, output_tokens: 10 } }),
+      }),
+    },
+  };
+}
+
+const SINGLE_MEMBER_ROSTER = [{ id: 'crowley', name: 'Crowley', file: 'crowley.md' }];
+const loadMemberFile = () => 'Crowley\'s character file.';
+
+test('runRound — passage end-causes and beats (#244)', async t => {
+  await t.test('ends with endedBy "lull" and the director\'s own note when it judges the room winding down', async () => {
+    // Single-member pool exhausts deterministically after 2 beats
+    // (MAX_TURNS_PER_POOL_MEMBER), forcing exactly one re-consult — which
+    // this fake answers with windingDown: true.
+    const client = fakePassageClient({ windingDownOnConsult: [false, true], lullNote: 'The fire settles; Yeats refills his glass.' });
+    const result = await runRound({
+      client, model: 'test-model', lodgeContext: LODGE, ROSTER: SINGLE_MEMBER_ROSTER, loadMemberFile,
+      presentMemberIds: ['crowley'], artifact: null, notes: {},
+      roundPrompt: 'Opening prompt', conversationHistory: [],
+      speakerCount: 1, round: 0, disposition: {},
+    });
+    assert.equal(result.endedBy, 'lull');
+    assert.equal(result.lullNote, 'The fire settles; Yeats refills his glass.');
+    assert.equal(result.beats.length, 2);
+    assert.deepEqual(result.beats.map(b => b.memberId), ['crowley', 'crowley']);
+    assert.deepEqual(result.beats.map(b => b.text), ['A turn.', 'A turn.']);
+  });
+
+  await t.test('falls back to a stock lull note when the director judges winding down but writes nothing', async () => {
+    const client = fakePassageClient({ windingDownOnConsult: [false, true], lullNote: null });
+    const result = await runRound({
+      client, model: 'test-model', lodgeContext: LODGE, ROSTER: SINGLE_MEMBER_ROSTER, loadMemberFile,
+      presentMemberIds: ['crowley'], artifact: null, notes: {},
+      roundPrompt: 'Opening prompt', conversationHistory: [],
+      speakerCount: 1, round: 0, disposition: {},
+    });
+    assert.equal(result.endedBy, 'lull');
+    assert.ok(STOCK_LULL_NOTES.includes(result.lullNote));
+  });
+
+  await t.test('defaults to endedBy "budget" (with a resolved stock lull note) when the director never judges a wind-down', async () => {
+    const client = fakePassageClient({ windingDownOnConsult: [false] });
+    const result = await runRound({
+      client, model: 'test-model', lodgeContext: LODGE, ROSTER: SINGLE_MEMBER_ROSTER, loadMemberFile,
+      presentMemberIds: ['crowley'], artifact: null, notes: {},
+      roundPrompt: 'Opening prompt', conversationHistory: [],
+      speakerCount: 1, round: 0, disposition: {},
+    });
+    // Short fixed speaker turns never spend BREATH_BUDGET_WORDS, so the
+    // MAX_TOTAL_BEATS safety net is what actually ends this passage —
+    // still 'budget', per runRound's single default for every non-lull exit.
+    assert.equal(result.endedBy, 'budget');
+    assert.ok(STOCK_LULL_NOTES.includes(result.lullNote));
+    assert.ok(result.beats.length > 0);
+  });
+
+  await t.test('includes the player\'s preceding turn as a beat with memberId null', async () => {
+    const client = fakePassageClient({ windingDownOnConsult: [true] });
+    const result = await runRound({
+      client, model: 'test-model', lodgeContext: LODGE, ROSTER: SINGLE_MEMBER_ROSTER, loadMemberFile,
+      presentMemberIds: ['crowley'], artifact: null, notes: {},
+      roundPrompt: 'Opening prompt', conversationHistory: [],
+      speakerCount: 1, round: 0, disposition: {},
+      precedingTurn: { speakerName: 'A Visitor', text: 'I have a question.' },
+    });
+    assert.deepEqual(result.beats[0], { memberId: null, text: 'I have a question.' });
+  });
+
+  await t.test('excludes a failed speaker turn from beats but still ends the passage cleanly', async () => {
+    const client = fakePassageClient({ windingDownOnConsult: [false, true] });
+    let streamCalls = 0;
+    const originalStream = client.messages.stream;
+    // withOneRetry makes 2 stream() calls for a beat that fails outright —
+    // fail both of the first beat's attempts (calls 1-2), then let every
+    // later call (the second beat's single attempt) succeed normally.
+    client.messages.stream = (req) => {
+      streamCalls++;
+      if (streamCalls <= 2) {
+        return {
+          [Symbol.asyncIterator]: async function* () { throw new Error('network blip'); },
+          finalMessage: async () => { throw new Error('network blip'); },
+        };
+      }
+      return originalStream(req);
+    };
+    const result = await runRound({
+      client, model: 'test-model', lodgeContext: LODGE, ROSTER: SINGLE_MEMBER_ROSTER, loadMemberFile,
+      presentMemberIds: ['crowley'], artifact: null, notes: {},
+      roundPrompt: 'Opening prompt', conversationHistory: [],
+      speakerCount: 1, round: 0, disposition: {},
+    });
+    // Two beats were attempted (spokenCounts still credits the failed one,
+    // triggering the re-consult that ends the passage via lull), but only
+    // the surviving, successful one is in `beats`.
+    assert.equal(result.beats.length, 1);
+    assert.equal(result.beats[0].text, 'A turn.');
+    assert.ok(result.fullRoundText.length > 0);
   });
 });
