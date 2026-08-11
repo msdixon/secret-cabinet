@@ -650,7 +650,9 @@ window.Sessions = (function () {
     });
 
     const entries = await Promise.all(memberIds.map(id =>
-      fetch(`/api/members/${id}/dossier`).then(r => r.json()).catch(() => null)
+      fetch(`/api/members/${id}/dossier`)
+        .then(r => r.ok ? r.json() : null)
+        .catch(() => null)
     ));
 
     body.innerHTML = '';
