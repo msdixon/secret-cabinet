@@ -428,3 +428,32 @@ test('dossier highlighting', async t => {
     assert.doesNotThrow(() => Sessions.highlightDossierEntry('nobody'));
   });
 });
+
+test('dossier building', async t => {
+  // #260 — a session can reference a member id later removed from roster.json.
+  // The dossier endpoint 404s for it; that response is truthy, so a check
+  // that only degrades on network/parse failure would let it through and
+  // crash the render on `d.name`.
+  await t.test('drops an entry whose member no longer exists in the roster', async t2 => {
+    const { document, module: Sessions } = boot(t2, {
+      fetchImpl: url => url.includes('crowley')
+        ? jsonOk({ id: 'crowley', name: 'Crowley' })
+        : Promise.resolve({ ok: false, json: () => Promise.resolve({ error: 'not found' }) }),
+    });
+
+    await Sessions.buildDossier(['crowley', 'jack-parsons']);
+
+    const entries = [...document.querySelectorAll('.dossier-entry')];
+    assert.deepEqual(entries.map(e => e.id), ['dossier-crowley']);
+  });
+
+  await t.test('still degrades an entry on network failure', async t2 => {
+    const { document, module: Sessions } = boot(t2, {
+      fetchImpl: () => Promise.reject(new Error('offline')),
+    });
+
+    await Sessions.buildDossier(['crowley']);
+
+    assert.equal(document.querySelectorAll('.dossier-entry').length, 0);
+  });
+});

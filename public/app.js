@@ -1576,6 +1576,17 @@ function castingDeps() {
 window.Casting.configure(castingDeps());
 initCastingTriggers();
 
+// window.Metrics (#191) reads currentSessionId only for the after-panel's
+// footer button (no-arg toggle()) — the Past Meetings list passes its own
+// session id explicitly and never touches this.
+function metricsDeps() {
+  return {
+    getCore: () => ({ currentSessionId, MEMBERS }),
+    escapeHTML,
+  };
+}
+window.Metrics.configure(metricsDeps());
+
 initRecordScroll();
 
 window.Export.applyEnvConfig();
