@@ -33,7 +33,7 @@ const session = require('express-session');
 const FileStore = require('session-file-store')(session);
 
 const dayOne = require('./dayone');
-const { buildMemberSection, runRound, stripInternalBlankLines, proposeCast, makeMetric } = require('./pipeline');
+const { buildMemberSection, runRound, stripInternalBlankLines, proposeCast, makeMetric, countWords, BREATH_BUDGET_WORDS } = require('./pipeline');
 const roster = require('./roster');
 const transcriptFormat = require('./transcript-format');
 const readingRoom = require('./reading-room');
@@ -214,17 +214,24 @@ function formatTranscriptText(text) {
   return transcriptFormat.formatTranscriptText(text, ROSTER);
 }
 
-// ─── Round prompts ────────────────────────────────────────────────────────────
-// See lodge-prompts.js (#193) for the extracted, Express-agnostic
-// implementation. Thin wrappers here supply the current ROSTER and
-// stripInternalBlankLines so existing call sites are unchanged.
+// ─── Passage prompts ──────────────────────────────────────────────────────────
+// See lodge-prompts.js (#193, reshaped for #244 per #194's migration
+// sketch) for the extracted, Express-agnostic implementation. Thin wrappers
+// here supply the current ROSTER so existing call sites are unchanged.
 
-function speakerCountForRound(index) {
-  return lodgePrompts.speakerCountForRound(index);
+// Total words spent across a session's segments so far — the "words spent"
+// half of the arc note's progress key (see lodge-prompts.js's
+// arcNoteForProgress). Segments predating #244 count too; a word is a word
+// regardless of which round-vs-passage era generated it.
+function wordsSpentSoFar(rounds) {
+  return (rounds || []).reduce((sum, r) => sum + countWords(r.text || ''), 0);
 }
 
-function buildRoundPrompt(index, entry, instructions, artifact = null, isTranscriptSource = false) {
-  return lodgePrompts.buildRoundPrompt(index, entry, instructions, artifact, isTranscriptSource, ROSTER);
+function buildPassagePrompt({ entry, meetingNote, isFirst, artifact = null, isTranscriptSource = false, wordsSpent = 0 }) {
+  return lodgePrompts.buildPassagePrompt({
+    entry, meetingNote, isFirst, artifact, isTranscriptSource, roster: ROSTER,
+    wordsSpent, breathBudget: BREATH_BUDGET_WORDS,
+  });
 }
 
 function playerDirectorPool(memberIds, playerMode, playerMemberId) {
@@ -360,7 +367,8 @@ registerConveneRoutes(app, {
   client, model: MODEL, lodgeContext, roster: ROSTER,
   loadMemberFile, loadVoiceExemplar, loadResidue,
   castingRoster,
-  speakerCountForRound, buildRoundPrompt, playerDirectorPool, resolvePlayerName, buildPrecedingTurn,
+  buildPassagePrompt, wordsSpentSoFar, defaultPoolSize: lodgePrompts.DEFAULT_POOL_SIZE, deriveMeetingNote: lodgePrompts.deriveMeetingNote,
+  playerDirectorPool, resolvePlayerName, buildPrecedingTurn,
   interjectSpeakerCount: lodgePrompts.INTERJECT_SPEAKER_COUNT,
   makeSessionId, saveSession, loadSession, saveResidueUpdates,
   formatTranscriptText, buildTranscriptHeader,

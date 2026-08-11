@@ -61,8 +61,10 @@ function makeDeps(overrides = {}) {
     client: {}, model: 'test-model', lodgeContext: 'context', roster: [{ id: 'crowley', name: 'Crowley' }, { id: 'jung', name: 'Carl Jung' }],
     loadMemberFile: () => 'member text', loadVoiceExemplar: () => null, loadResidue: () => '',
     castingRoster: () => [{ id: 'crowley', name: 'Crowley', brief: 'brief' }],
-    speakerCountForRound: () => 2,
-    buildRoundPrompt: (index, entry) => `PROMPT(${index}): ${entry}`,
+    buildPassagePrompt: ({ entry, isFirst }) => `PROMPT(${isFirst}): ${entry}`,
+    wordsSpentSoFar: () => 0,
+    defaultPoolSize: 2,
+    deriveMeetingNote: () => null,
     playerDirectorPool: members => members,
     resolvePlayerName: (mode, id, name) => name || null,
     buildPrecedingTurn: (speakerName, playerTurn) => (playerTurn ? { speakerName, text: playerTurn } : null),
@@ -80,7 +82,11 @@ function makeDeps(overrides = {}) {
       onChunk?.('world');
       onSpeakerEnd?.('crowley', 'Crowley', 'hello world');
       onMetric?.({ phase: 'speaker', memberId: 'crowley' });
-      return { fullRoundText: 'Crowley —\nhello world', speakerOrder: ['crowley'], disposition: { crowley: 'engaged' }, residueUpdates: { crowley: 'a note' } };
+      return {
+        fullRoundText: 'Crowley —\nhello world', speakerOrder: ['crowley'],
+        disposition: { crowley: 'engaged' }, residueUpdates: { crowley: 'a note' },
+        beats: [{ memberId: 'crowley', text: 'hello world' }], endedBy: 'budget', lullNote: 'The room draws breath.',
+      };
     },
     proposeCast: async () => ({ cast: ['crowley'], additions: ['crowley'], regulars: [], reasoning: 'fits the room' }),
     ...overrides,
@@ -119,12 +125,17 @@ test('POST /api/convene', async t => {
     assert.ok(events.find(e => e.speakerDone));
     const done = events.find(e => e.done);
     assert.equal(done.round, 1);
-    assert.equal(done.label, 'First Movement');
+    assert.equal(done.label, 'The room draws breath.');
     assert.ok(done.sessionId);
 
     const saved = deps.savedSessions.get(done.sessionId);
     assert.equal(saved.rounds.length, 1);
     assert.equal(saved.rounds[0].text, 'Crowley —\nhello world');
+    // #244: label/endedBy/beats now come straight off runRound's return
+    // shape rather than a fixed round-index label.
+    assert.equal(saved.rounds[0].label, 'The room draws breath.');
+    assert.equal(saved.rounds[0].endedBy, 'budget');
+    assert.deepEqual(saved.rounds[0].beats, [{ memberId: 'crowley', text: 'hello world' }]);
     assert.deepEqual(deps.savedResidue[0], { crowley: 'a note' });
   });
 
@@ -205,7 +216,8 @@ test('POST /api/round', async t => {
     await app.routes['POST /api/round'](fakeReq({ sessionId: 's1' }), res);
     const saved = deps.savedSessions.get('s1');
     assert.equal(saved.rounds.length, 2);
-    assert.equal(saved.rounds[1].label, 'The Room Responds');
+    assert.equal(saved.rounds[1].label, 'The room draws breath.');
+    assert.equal(saved.rounds[1].endedBy, 'budget');
     assert.equal(saved.conversationHistory.length, 4);
   });
 });

@@ -170,8 +170,20 @@ function buildDirectorToolSchema(presentIds, minCount, maxCount) {
           type: 'string',
           description: 'Brief internal rationale for this pool — not shown to users, for review/logging only.',
         },
+        // #244: the exhaustion signal. A judgment about the whole evening,
+        // not just this pool — separate from whether the caller ends up
+        // acting on it (only the mid-passage re-consult path in runRound
+        // does, today).
+        windingDown: {
+          type: 'boolean',
+          description: 'Whether the room itself — the whole evening, not just this pool — is winding down: energy ebbing, threads settling, no one straining to speak. Usually false.',
+        },
+        lullNote: {
+          type: 'string',
+          description: 'Optional. If windingDown is true, one diegetic line marking the pause, in the room\'s register — an image or a small action, not a summary. E.g. "The fire settles; Yeats refills his glass." Leave out if nothing concrete comes to mind, or if windingDown is false.',
+        },
       },
-      required: ['speakers', 'reasoning'],
+      required: ['speakers', 'reasoning', 'windingDown'],
     },
   };
 }
@@ -197,7 +209,9 @@ ${rosterLines}
 THIS ROUND'S INSTRUCTION:
 ${instruction}${soFarBlock}
 
-Choose between ${minCount} and ${maxCount} of the present members as this round's candidate pool, ordered by priority. Not everyone in the pool is guaranteed to speak, and someone in the pool may end up speaking more than once — the room decides who actually goes, beat by beat, from among them. Base the pool on who has something to react to, who hasn't been heard from, and what this round's instruction calls for — not on alphabetical or arbitrary order.`;
+Choose between ${minCount} and ${maxCount} of the present members as this round's candidate pool, ordered by priority. Not everyone in the pool is guaranteed to speak, and someone in the pool may end up speaking more than once — the room decides who actually goes, beat by beat, from among them. Base the pool on who has something to react to, who hasn't been heard from, and what this round's instruction calls for — not on alphabetical or arbitrary order.
+
+Separately — and this is a judgment about the whole evening, not just this pool — say whether the room is winding down: energy ebbing, threads settling, no one straining to speak. This is usually false; most consults, the room still has more in it. If it is genuinely true, you may also write one diegetic line marking the pause — an image or a small action in the room's register, not a summary of what just happened.`;
 
   const userMessage = 'Choose this round\'s candidate pool.';
 
@@ -221,8 +235,11 @@ async function callDirector({ client, model, system, conversationHistory, userMe
   });
   const latencyMs = Date.now() - start;
   const block = response.content.find(b => b.type === 'tool_use');
-  const { speakers, reasoning } = block?.input || {};
-  return { speakers, reasoning, usage: response.usage, latencyMs };
+  // windingDown/lullNote are absent from the casting tool's schema (a
+  // different question, see buildCastingToolSchema) — undefined there
+  // degrades to false/null below, which proposeCast simply never reads.
+  const { speakers, reasoning, windingDown, lullNote } = block?.input || {};
+  return { speakers, reasoning, windingDown: !!windingDown, lullNote: lullNote || null, usage: response.usage, latencyMs };
 }
 
 function isValidSelection(speakers, presentIds, minCount, maxCount) {
@@ -251,7 +268,7 @@ async function runDirectorSelection({
   let lastReasoning = null;
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
-      const { speakers, reasoning, usage, latencyMs } = await callDirector({
+      const { speakers, reasoning, windingDown, lullNote, usage, latencyMs } = await callDirector({
         client, model, system, conversationHistory,
         userMessage: userMessage + (attempt === 2 ? correction : ''),
         presentIds: candidateIds, minCount, maxCount, tool, lodgeContext,
@@ -259,7 +276,7 @@ async function runDirectorSelection({
       lastReasoning = reasoning || lastReasoning;
       onMetric?.(makeMetric(phase, { round, attempts: attempt, usage, latencyMs, reasoning }));
       if (isValidSelection(speakers, candidateIds, minCount, maxCount)) {
-        return { speakers, reasoning, source: attempt === 1 ? 'director' : 'director-retry' };
+        return { speakers, reasoning, windingDown, lullNote, source: attempt === 1 ? 'director' : 'director-retry' };
       }
     } catch (err) {
       onMetric?.(makeMetric(phase, { round, attempts: attempt, error: err.message }));
@@ -267,7 +284,9 @@ async function runDirectorSelection({
   }
 
   onMetric?.(makeMetric(phase, { round, attempts: 2, skipped: true, error: fallbackNote, reasoning: lastReasoning }));
-  return { speakers: fallbackIds, reasoning: lastReasoning, source: 'fallback' };
+  // A director failure must never quietly read as an intentional lull —
+  // the fallback always reports the room as not winding down.
+  return { speakers: fallbackIds, reasoning: lastReasoning, windingDown: false, lullNote: null, source: 'fallback' };
 }
 
 // presentMembers must already be in roster order — the fallback pick
@@ -944,16 +963,47 @@ async function callDispositionUpdate({ client, model, system, userMessage, prese
 
 // ── Orchestrator ──────────────────────────────────────────────────────────
 
-// #164: total words a round budgets for itself — the actual stopping
-// condition now (the round ends when this is spent, not when a fixed
-// roster of speakers has each gone once). Rachel's calibration: "about the
-// length of a writer's morning pages." A starting number, not a hard
-// requirement — due for review against real sessions at the 2026-08-19
-// follow-up.
-const ROUND_WORD_BUDGET = 1000;
+// #164: total words a round budgeted for itself. #244 reframes it, per
+// #194's migration sketch: not "the size of a round" any more (rounds are
+// gone) but the breath budget per passage — how long the room goes between
+// chances to draw breath. Same starting number, different meaning. Rachel's
+// original calibration: "about the length of a writer's morning pages." A
+// starting number, not a hard requirement — due for review against real
+// sessions at the 2026-08-19 follow-up, now folded into a combined
+// passage-length/lull-cadence calibration review (see #244).
+const BREATH_BUDGET_WORDS = 1000;
 const MIN_WORDS_FOR_ANOTHER_BEAT = 40; // below this, not enough room left for a meaningful beat
 const POOL_SLACK = 2; // the director's candidate pool runs a little larger than the round's target speaker count
 const MAX_TOTAL_BEATS = 16; // hard safety net — budget/pool logic should always end the round before this binds
+
+// #244: a passage's stored `endedBy`. 'budget' — the breath budget ran out
+// (including the MAX_TOTAL_BEATS safety net, which should never actually
+// bind); 'lull' — the director explicitly judged the room winding down.
+// 'closed' isn't produced here at all: it's the outcome of the user
+// declining to continue *after* a lull, which #245's client-side "let it
+// end" action will be what actually sets it — this phase just keeps the
+// value out of runRound's own vocabulary so a future caller can't collide
+// with it.
+const PASSAGE_END_CAUSES = ['budget', 'lull', 'closed'];
+
+// #244, decision 2: director-written lull notes, with a small pre-seeded
+// stock rotation as fallback for when the director doesn't write one (or
+// writes one that fails validation) — covers every passage-ending pause,
+// not just director-judged ones, since a budget-exhausted passage reaches
+// the same diegetic lull the user sees either way.
+const LULL_NOTE_MAX_CHARS = 160;
+const STOCK_LULL_NOTES = [
+  'The room draws breath.',
+  'A quiet settles over the table.',
+  'Someone stirs the fire; no one speaks for a moment.',
+];
+function pickStockLullNote(rng = Math.random) {
+  return STOCK_LULL_NOTES[Math.floor(rng() * STOCK_LULL_NOTES.length)];
+}
+function resolveLullNote(directorNote, rng = Math.random) {
+  const trimmed = (directorNote || '').trim().slice(0, LULL_NOTE_MAX_CHARS);
+  return trimmed || pickStockLullNote(rng);
+}
 
 // Ties the director and per-speaker calls together into one round. Returns
 // { fullRoundText, speakerOrder } in the exact shape the caller already
@@ -1049,6 +1099,13 @@ async function runRound({ client, model, lodgeContext, ROSTER, loadMemberFile,
   // subsequent speaker this round reacts to it exactly as they would react
   // to another AI speaker, via the same "THE ROUND SO FAR" mechanism.
   let roundSoFar = '';
+  // #244: beats: [{memberId, text}] alongside the rolled-up roundSoFar —
+  // persisted forward-provision for beat-level branching (#33 v2) and side
+  // conversations (#196), so neither ever needs a second migration pass
+  // over stored sessions. Mirrors roundSoFar's content exactly (only
+  // successful, actually-spoken beats), including the player's own turn
+  // below.
+  const beatsList = [];
   if (precedingTurn) {
     const seed = `${precedingTurn.speakerName}\n${precedingTurn.text}`;
     onChunk?.(`${seed}\n\n`);
@@ -1059,6 +1116,7 @@ async function runRound({ client, model, lodgeContext, ROSTER, loadMemberFile,
     // view renders it as a proper attributed block instead of raw text.
     onSpeakerEnd?.(null, precedingTurn.speakerName, precedingTurn.text);
     roundSoFar = seed;
+    beatsList.push({ memberId: null, text: precedingTurn.text });
   }
 
   const initialPoolTarget = Math.min(presentMembers.length, effectiveCount + POOL_SLACK);
@@ -1071,8 +1129,15 @@ async function runRound({ client, model, lodgeContext, ROSTER, loadMemberFile,
   let spokenCounts = new Map();
   let lastSpeakerId = null;
   let beatsSinceConsult = 0;
-  let remainingBudget = ROUND_WORD_BUDGET;
+  let remainingBudget = BREATH_BUDGET_WORDS;
   let beats = 0;
+  // #244: why the passage ended. Defaults to 'budget' — every exit from
+  // this loop other than the director's explicit wind-down judgment below
+  // (pool/budget exhaustion, the MAX_TOTAL_BEATS safety net, a dry
+  // fallback) is some flavor of "ran out of room," so one default covers
+  // them all without a switch per exit point.
+  let endedBy = 'budget';
+  let directorLullNote = null;
 
   const speakerOrder = [];
 
@@ -1083,10 +1148,19 @@ async function runRound({ client, model, lodgeContext, ROSTER, loadMemberFile,
       // assumption), rather than re-asking for the round's original count.
       const nextCount = Math.max(1, Math.min(presentMembers.length, Math.ceil(remainingBudget / 150)));
       const nextPoolTarget = Math.min(presentMembers.length, nextCount + POOL_SLACK);
-      const { speakers: freshPool } = await selectSpeakers({
+      const { speakers: freshPool, windingDown, lullNote } = await selectSpeakers({
         client, model, lodgeContext, presentMembers, instruction: roundPrompt, conversationHistory,
         minCount: nextCount, maxCount: nextPoolTarget, round, onMetric, roundSoFar,
       });
+      // #244: the exhaustion signal. The director judging the room itself
+      // winding down ends the passage right here, before drawing from the
+      // fresh pool it just proposed — a passage that stops mid-thought
+      // reads worse than one that stops one beat early.
+      if (windingDown) {
+        endedBy = 'lull';
+        directorLullNote = lullNote;
+        break;
+      }
       pool = freshPool;
       spokenCounts = new Map();
       beatsSinceConsult = 0;
@@ -1125,6 +1199,7 @@ async function runRound({ client, model, lodgeContext, ROSTER, loadMemberFile,
       const settledText = stripInternalBlankLines(result.text);
       roundSoFar += (roundSoFar ? '\n\n' : '') + `${member.name}\n${settledText}`;
       speakerOrder.push(memberId);
+      beatsList.push({ memberId, text: settledText });
       onSpeakerEnd?.(memberId, member.name, settledText);
       onChunk?.('\n\n');
       remainingBudget -= countWords(settledText);
@@ -1174,7 +1249,13 @@ async function runRound({ client, model, lodgeContext, ROSTER, loadMemberFile,
     throw new Error('Every speaker failed this round — nothing to save.');
   }
 
-  return { fullRoundText: roundSoFar, speakerOrder, disposition: currentDisposition, residueUpdates };
+  // #244: every passage-ending pause gets a diegetic label — the director's
+  // own note when it judged the wind-down, a stock line otherwise (budget
+  // exhaustion reaches the same lull from the user's side; it just wasn't
+  // an authored moment).
+  const lullNote = resolveLullNote(directorLullNote);
+
+  return { fullRoundText: roundSoFar, speakerOrder, disposition: currentDisposition, residueUpdates, beats: beatsList, endedBy, lullNote };
 }
 
 module.exports = {
@@ -1219,4 +1300,10 @@ module.exports = {
   buildDispositionUserMessage,
   callDispositionUpdate,
   runRound,
+  BREATH_BUDGET_WORDS,
+  PASSAGE_END_CAUSES,
+  LULL_NOTE_MAX_CHARS,
+  STOCK_LULL_NOTES,
+  pickStockLullNote,
+  resolveLullNote,
 };
