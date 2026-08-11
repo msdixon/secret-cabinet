@@ -283,6 +283,10 @@ The "quote" field must be a verbatim excerpt (~10-25 words) copied exactly from 
       id, date,
       entry: parent.entry,
       members: [...parent.members],
+      // #244: meetingNote is the current field; roundInstructions carries
+      // forward untouched for a legacy parent that still only has that (see
+      // lodgePrompts.deriveMeetingNote, which reads either).
+      meetingNote: parent.meetingNote || null,
       roundInstructions: parent.roundInstructions || null,
       roundCount: parent.roundCount || 3,
       artifact: parent.artifact || null,

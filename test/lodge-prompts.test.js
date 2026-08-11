@@ -1,6 +1,9 @@
 'use strict';
 
 // #193 — lodge-prompts.js, extracted from server.js.
+// #244 reshaped this per #194's migration sketch: round-index-keyed prompts
+// become progress-keyed arc notes (passages/lulls, not rounds). Player-seat
+// logic is untouched by that migration.
 //
 // Round-shape and player-seat logic; no I/O. Roster and
 // stripInternalBlankLines are passed in explicitly, following roster.js's
@@ -16,57 +19,97 @@ const ROSTER = [
   { id: 'blavatsky', name: 'Blavatsky' },
 ];
 
-test('speakerCountForRound', async t => {
-  await t.test('returns the fixed count for rounds 0-2', () => {
-    assert.equal(lp.speakerCountForRound(0), 5);
-    assert.equal(lp.speakerCountForRound(1), 5);
-    assert.equal(lp.speakerCountForRound(2), 4);
+test('arcNoteForProgress', async t => {
+  await t.test('returns the opening note when little or nothing has been spent', () => {
+    assert.equal(lp.arcNoteForProgress({ wordsSpent: 0, breathBudget: 1000 }), lp.ARC_NOTES.opening);
+    assert.equal(lp.arcNoteForProgress({ wordsSpent: 999, breathBudget: 1000 }), lp.ARC_NOTES.opening);
   });
 
-  await t.test('falls back to the extra-round count beyond index 2', () => {
-    assert.equal(lp.speakerCountForRound(3), lp.EXTRA_ROUND_SPEAKER_COUNT);
-    assert.equal(lp.speakerCountForRound(99), lp.EXTRA_ROUND_SPEAKER_COUNT);
+  await t.test('advances to crosstalk past one breath budget', () => {
+    assert.equal(lp.arcNoteForProgress({ wordsSpent: 1000, breathBudget: 1000 }), lp.ARC_NOTES.crosstalk);
+    assert.equal(lp.arcNoteForProgress({ wordsSpent: 2999, breathBudget: 1000 }), lp.ARC_NOTES.crosstalk);
+  });
+
+  await t.test('advances to embers past three breath budgets', () => {
+    assert.equal(lp.arcNoteForProgress({ wordsSpent: 3000, breathBudget: 1000 }), lp.ARC_NOTES.embers);
+    assert.equal(lp.arcNoteForProgress({ wordsSpent: 4999, breathBudget: 1000 }), lp.ARC_NOTES.embers);
+  });
+
+  await t.test('advances to extended past five breath budgets, and stays there', () => {
+    assert.equal(lp.arcNoteForProgress({ wordsSpent: 5000, breathBudget: 1000 }), lp.ARC_NOTES.extended);
+    assert.equal(lp.arcNoteForProgress({ wordsSpent: 50000, breathBudget: 1000 }), lp.ARC_NOTES.extended);
+  });
+
+  await t.test('defaults breathBudget to 1000 when not given', () => {
+    assert.equal(lp.arcNoteForProgress({ wordsSpent: 0 }), lp.ARC_NOTES.opening);
+    assert.equal(lp.arcNoteForProgress(), lp.ARC_NOTES.opening);
   });
 });
 
-test('buildRoundPrompt', async t => {
-  await t.test('round 0 wraps the entry as freshly read aloud, using default instructions', () => {
-    const prompt = lp.buildRoundPrompt(0, 'the document text', null, null, false, ROSTER);
+test('buildPassagePrompt', async t => {
+  await t.test('the first passage wraps the entry as freshly read aloud, using the opening arc note', () => {
+    const prompt = lp.buildPassagePrompt({ entry: 'the document text', isFirst: true, wordsSpent: 0, roster: ROSTER });
     assert.match(prompt, /The document has just been read aloud/);
     assert.match(prompt, /the document text/);
-    assert.match(prompt, new RegExp(lp.DEFAULT_ROUND_INSTRUCTIONS[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+    assert.match(prompt, new RegExp(lp.ARC_NOTES.opening.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   });
 
-  await t.test('round 0 frames a transcript source differently from a fresh document', () => {
-    const prompt = lp.buildRoundPrompt(0, 'minutes text', null, null, true, ROSTER);
+  await t.test('the first passage frames a transcript source differently from a fresh document', () => {
+    const prompt = lp.buildPassagePrompt({ entry: 'minutes text', isFirst: true, isTranscriptSource: true, wordsSpent: 0, roster: ROSTER });
     assert.match(prompt, /minutes of a previous gathering/);
     assert.doesNotMatch(prompt, /just been read aloud/);
   });
 
-  await t.test('round 0 appends an artifact hint when the artifact member resolves', () => {
-    const prompt = lp.buildRoundPrompt(0, 'x', null, { memberId: 'crowley' }, false, ROSTER);
+  await t.test('the first passage appends an artifact hint when the artifact member resolves', () => {
+    const prompt = lp.buildPassagePrompt({ entry: 'x', isFirst: true, artifact: { memberId: 'crowley' }, wordsSpent: 0, roster: ROSTER });
     assert.match(prompt, /Crowley has private context from before the meeting/);
   });
 
   await t.test('no artifact hint when the artifact member id does not resolve', () => {
-    const prompt = lp.buildRoundPrompt(0, 'x', null, { memberId: 'ghost' }, false, ROSTER);
+    const prompt = lp.buildPassagePrompt({ entry: 'x', isFirst: true, artifact: { memberId: 'ghost' }, wordsSpent: 0, roster: ROSTER });
     assert.doesNotMatch(prompt, /private context/);
   });
 
-  await t.test('custom instructions override the default for that round index', () => {
-    const custom = ['Custom round zero.'];
-    const prompt = lp.buildRoundPrompt(0, 'x', custom, null, false, ROSTER);
-    assert.match(prompt, /Custom round zero\./);
+  await t.test('a user-supplied meeting note overrides the arc note entirely, for the first passage too', () => {
+    const prompt = lp.buildPassagePrompt({ entry: 'x', isFirst: true, meetingNote: 'Custom tone for tonight.', wordsSpent: 0, roster: ROSTER });
+    assert.match(prompt, /Custom tone for tonight\./);
+    assert.doesNotMatch(prompt, new RegExp(lp.ARC_NOTES.opening.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   });
 
-  await t.test('non-zero rounds return the instruction text alone, no preamble', () => {
-    const prompt = lp.buildRoundPrompt(1, 'x', null, null, false, ROSTER);
-    assert.equal(prompt, lp.DEFAULT_ROUND_INSTRUCTIONS[1]);
+  await t.test('a later passage returns the arc note alone, no preamble', () => {
+    const prompt = lp.buildPassagePrompt({ entry: 'x', isFirst: false, wordsSpent: 1500, breathBudget: 1000 });
+    assert.equal(prompt, lp.ARC_NOTES.crosstalk);
   });
 
-  await t.test('rounds beyond the default array fall back to the extra-round instruction', () => {
-    const prompt = lp.buildRoundPrompt(5, 'x', null, null, false, ROSTER);
-    assert.equal(prompt, lp.EXTRA_ROUND_INSTRUCTION);
+  await t.test('a later passage with a meeting note returns the note alone', () => {
+    const prompt = lp.buildPassagePrompt({ entry: 'x', isFirst: false, meetingNote: 'Stay on the document.', wordsSpent: 1500, breathBudget: 1000 });
+    assert.equal(prompt, 'Stay on the document.');
+  });
+});
+
+test('deriveMeetingNote', async t => {
+  await t.test('prefers an explicit meetingNote', () => {
+    assert.equal(lp.deriveMeetingNote({ meetingNote: '  Keep it sharp.  ', roundInstructions: ['old one'] }), 'Keep it sharp.');
+  });
+
+  await t.test('falls back to joining a legacy roundInstructions array', () => {
+    assert.equal(
+      lp.deriveMeetingNote({ roundInstructions: ['First.', 'Second.'] }),
+      'First. Second.',
+    );
+  });
+
+  await t.test('drops blank entries when joining the legacy array', () => {
+    assert.equal(
+      lp.deriveMeetingNote({ roundInstructions: ['First.', '  ', null, 'Second.'] }),
+      'First. Second.',
+    );
+  });
+
+  await t.test('returns null when neither field has anything usable', () => {
+    assert.equal(lp.deriveMeetingNote({}), null);
+    assert.equal(lp.deriveMeetingNote({ meetingNote: '   ', roundInstructions: [] }), null);
+    assert.equal(lp.deriveMeetingNote(null), null);
   });
 });
 
