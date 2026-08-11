@@ -145,7 +145,7 @@ window.Sessions = (function () {
           ? `<span class="session-thread-badge" onclick="window.Sessions.filterByThread('${deps.escapeHTML(s.threadId)}','${deps.escapeHTML(s.threadName || '')}')" title="View thread: ${deps.escapeHTML(s.threadName || '')}">⬡ ${deps.escapeHTML(s.threadName || s.threadId)}</span>`
           : '';
         const branchBadge = s.parentId
-          ? `<span class="session-branch-badge" title="Branched from round ${(s.branchRound ?? 0) + 1} of another meeting">⑂ branch</span>`
+          ? `<span class="session-branch-badge" title="Branched at pause ${(s.branchRound ?? 0) + 1} of another meeting">⑂ branch</span>`
           : '';
         const publishedBadge = s.published
           ? `<a class="session-published-badge" href="/reading-room/${s.id}" target="_blank" rel="noopener" title="View the public reading-room page">★ Public</a>`
@@ -343,10 +343,7 @@ window.Sessions = (function () {
       deps.setCurrentSessionId(session.id);
       deps.setSessionDate(session.date);
       deps.setCurrentEntry(session.entry || '');
-      deps.setCurrentRound(session.rounds?.length || 0);
-      const roundCount = session.roundCount || 3;
-      deps.setActiveConveneRoundCount(roundCount);
-      deps.setRoundCount(roundCount);
+      deps.setSegmentCount(session.rounds?.length || 0);
 
       // Restore player-as-member state before re-parsing rounds — the parser's
       // custom-identity recognition (isKnownSpeakerHeader) reads currentPlayerSpeakerName.
@@ -375,11 +372,29 @@ window.Sessions = (function () {
       const annotationMap = {};
       (session.annotations || []).forEach(a => { annotationMap[a.entryId] = a.note; });
 
-      // Re-render rounds from stored data
-      (session.rounds || []).forEach((round, idx) => {
-        const header = deps.addRoundHeader(round.label, idx);
-        deps.addBranchControl(header, idx);
-        deps.parseAndRenderTranscript(round.text);
+      // Re-render segments from stored data.
+      //
+      // #245: `label` means opposite things either side of the continuous-
+      // stream migration, and `endedBy` (written only since #244) is what
+      // tells them apart. Old segments carry an opening header naming the
+      // passage about to happen ("First Movement"), so it renders above them,
+      // exactly as it always did — an archived meeting still reads the way it
+      // did the night it was held. New ones carry the lull note that *ended*
+      // the passage, so it renders below, where the user saw it live.
+      //
+      // The branch control follows the divider either way: a lull is
+      // checkpoint-consistent in the same way a round boundary was, so
+      // roundIndex keeps its meaning and no stored branch needed migrating.
+      (session.rounds || []).forEach((segment, idx) => {
+        if (segment.endedBy) {
+          deps.setRenderSegment(idx);
+          deps.parseAndRenderTranscript(segment.text);
+          deps.addBranchControl(deps.addLullDivider(segment.label, idx), idx);
+        } else {
+          const header = deps.addRoundHeader(segment.label, idx);
+          deps.addBranchControl(header, idx);
+          deps.parseAndRenderTranscript(segment.text);
+        }
       });
 
       // Restore annotations after render (entry IDs are now stable)
@@ -574,12 +589,22 @@ window.Sessions = (function () {
 
     // Render each round into the panel
     const transcriptEl = document.getElementById(`${containerId}-transcript`);
-    (session.rounds || []).forEach(round => {
-      const hdr = document.createElement('div');
-      hdr.className = 'transcript-round-header';
-      hdr.innerHTML = `<div class="round-rule"></div><span class="round-rule-label">${round.label}</span><div class="round-rule"></div>`;
-      transcriptEl.appendChild(hdr);
-      renderTranscriptInto(transcriptEl, round.text);
+    // Same #245 label-placement rule as the main restore loop above, minus the
+    // branch controls — compare is read-only. The label is model output on new
+    // segments, so it's escaped here too.
+    (session.rounds || []).forEach(segment => {
+      const divider = document.createElement('div');
+      if (segment.endedBy) {
+        divider.className = 'transcript-lull';
+        divider.innerHTML = `<div class="lull-rule"></div><span class="lull-note">${deps.escapeHTML(segment.label)}</span><div class="lull-rule"></div>`;
+        renderTranscriptInto(transcriptEl, segment.text);
+        transcriptEl.appendChild(divider);
+      } else {
+        divider.className = 'transcript-round-header';
+        divider.innerHTML = `<div class="round-rule"></div><span class="round-rule-label">${deps.escapeHTML(segment.label)}</span><div class="round-rule"></div>`;
+        transcriptEl.appendChild(divider);
+        renderTranscriptInto(transcriptEl, segment.text);
+      }
     });
   }
 

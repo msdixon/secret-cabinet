@@ -15,7 +15,7 @@ const path = require('path');
 
 function registerSessionRoutes(app, {
   sessionsDir, loadSession, saveSession, roster,
-  makeBranchId, buildTranscriptHeader, formatTranscriptText, renderReadingRoomPage,
+  makeBranchId, buildTranscriptHeader, composeSegmentText, renderReadingRoomPage,
   client, model, makeMetric,
   loadLibraryCitationLookup, loadArchiveImageIndex,
   groundAgainstLibraryText, escalateCitationsToWeb,
@@ -254,6 +254,24 @@ The "quote" field must be a verbatim excerpt (~10-25 words) copied exactly from 
     res.json(session);
   });
 
+  // POST /api/sessions/:id/close — the user chose "Let it end" at a lull (#245)
+  //
+  // #244 defined `closed` as the third end-cause but left it unreachable, since
+  // nothing server-side decides it: budget and lull are the room's own reasons
+  // to pause, `closed` is the user's. This records it on the segment the meeting
+  // actually stopped after, which is what makes #164's pacing review able to
+  // tell "the room wound down and the user agreed" from "the user cut it off" —
+  // the two look identical without it.
+  app.post('/api/sessions/:id/close', (req, res) => {
+    const session = loadSession(req.params.id);
+    if (!session) return res.status(404).json({ error: 'Session not found' });
+    const last = session.rounds?.[session.rounds.length - 1];
+    if (!last) return res.status(400).json({ error: 'Session has no passages to close' });
+    last.endedBy = 'closed';
+    saveSession(session);
+    res.json({ ok: true, closedAt: session.rounds.length - 1 });
+  });
+
   // POST /api/sessions/:id/branch — fork a new session sharing history up to roundIndex
   // #33: lets the user explore an alternative path from any round boundary without
   // losing the original thread. No Claude call — a pure copy-and-truncate.
@@ -275,9 +293,7 @@ The "quote" field must be a verbatim excerpt (~10-25 words) copied exactly from 
     const id = makeBranchId(parent, roundIndex);
 
     let transcriptText = buildTranscriptHeader(parent.entry, parent.members, date);
-    branchedRounds.forEach(r => {
-      transcriptText += `\n— ${r.label} —\n\n${formatTranscriptText(r.text)}\n`;
-    });
+    branchedRounds.forEach(r => { transcriptText += composeSegmentText(r); });
 
     const branch = {
       id, date,

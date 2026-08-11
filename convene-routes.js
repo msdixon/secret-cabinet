@@ -28,7 +28,7 @@ function registerConveneRoutes(app, {
   playerDirectorPool, resolvePlayerName, buildPrecedingTurn,
   interjectSpeakerCount,
   makeSessionId, saveSession, loadSession, saveResidueUpdates,
-  formatTranscriptText, buildTranscriptHeader,
+  formatTranscriptText, composeSegmentText, buildTranscriptHeader,
   isLocal, runRound, proposeCast,
 }) {
   // POST /api/convene — start a session and stream its first passage
@@ -80,6 +80,12 @@ function registerConveneRoutes(app, {
         { role: 'user', content: passagePrompt },
         { role: 'assistant', content: text },
       ];
+      // #244: label is the passage's own lull note (director-authored or stock
+      // fallback) rather than a fixed "First Movement" — see #194 touchpoint 4.
+      // #245: that note *ends* the passage rather than opening it, so the
+      // transcript marker follows the text; composeSegmentText owns that
+      // placement for every writer of transcriptText.
+      const firstSegment = { label: lullNote, text, historyLength: history.length, beats, endedBy };
       const session = {
         id, date, entry, members,
         meetingNote: effectiveMeetingNote || null,
@@ -88,12 +94,8 @@ function registerConveneRoutes(app, {
         notes: notes || {},
         sourceSessionId: sourceSessionId || null,
         conversationHistory: history,
-        // #244: label is now the passage's own lull note (director-authored
-        // or stock fallback) rather than a fixed "First Movement" — see
-        // #194 touchpoint 4. beats/endedBy are new, forward-provision fields
-        // (#194 touchpoint 8); existing renderers only ever read label/text.
-        rounds: [{ label: lullNote, text, historyLength: history.length, beats, endedBy }],
-        transcriptText: buildTranscriptHeader(entry, members, date) + `\n— ${lullNote} —\n\n${formatTranscriptText(text)}\n`,
+        rounds: [firstSegment],
+        transcriptText: buildTranscriptHeader(entry, members, date) + composeSegmentText(firstSegment),
         generationMetrics,
         playerMode: effectivePlayerMode,
         playerMemberId: effectivePlayerMemberId,
@@ -190,8 +192,9 @@ function registerConveneRoutes(app, {
 
       session.conversationHistory.push({ role: 'user', content: passagePrompt });
       session.conversationHistory.push({ role: 'assistant', content: text });
-      session.rounds.push({ label: lullNote, text, historyLength: session.conversationHistory.length, beats, endedBy });
-      session.transcriptText += `\n— ${lullNote} —\n\n${formatTranscriptText(text)}\n`;
+      const segment = { label: lullNote, text, historyLength: session.conversationHistory.length, beats, endedBy };
+      session.rounds.push(segment);
+      session.transcriptText += composeSegmentText(segment);
       session.disposition = disposition || {};
       if (precedingTurn) {
         session.playerTurns = session.playerTurns || [];

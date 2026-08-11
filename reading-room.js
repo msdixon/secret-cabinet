@@ -62,8 +62,14 @@ function renderReadingRoomPage(session, roster) {
     .map(id => roster.find(m => m.id === id))
     .filter(Boolean);
   const title = (session.entry || 'A meeting').trim().slice(0, 80);
+  // #245: `endedBy` (written only since #244) separates a segment whose label
+  // opens it -- an old round header -- from one whose label is the lull that
+  // ended it, which belongs after the passage. Same discriminator the record
+  // and the stage use; see public/sessions.js's restore loop.
   const roundsHtml = (session.rounds || []).map(r =>
-    `<section class="rr-round"><h2 class="rr-round-label">${escapeHtml(r.label)}</h2>${renderRoundHtml(r.text, roster)}</section>`
+    r.endedBy
+      ? `<section class="rr-round">${renderRoundHtml(r.text, roster)}<div class="rr-lull">${escapeHtml(r.label)}</div></section>`
+      : `<section class="rr-round"><h2 class="rr-round-label">${escapeHtml(r.label)}</h2>${renderRoundHtml(r.text, roster)}</section>`
   ).join('\n');
   // Portraits are AI-generated placeholders, disclosed in docs/MANIFEST.md; not
   // every roster entry has one yet (see #80), so a broken image just hides
@@ -108,6 +114,7 @@ function renderReadingRoomPage(session, roster) {
   .rr-source { border-left: 3px solid var(--amber-dim); background: var(--panel); padding: 18px 22px; margin-bottom: 48px; font-style: italic; color: var(--muted); white-space: pre-wrap; }
   .rr-round { margin-bottom: 48px; }
   .rr-round-label { font-family: 'IM Fell English', serif; font-size: 13px; letter-spacing: 3px; text-transform: uppercase; color: var(--ash); text-align: center; margin-bottom: 28px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+  .rr-lull { font-family: 'IM Fell English', serif; font-style: italic; font-size: 13px; color: var(--ash); text-align: center; margin-top: 34px; padding-top: 22px; border-top: 1px solid var(--border); }
   .rr-turn { margin-bottom: 28px; }
   .rr-speaker { font-family: 'IM Fell English', serif; font-size: 14px; letter-spacing: 1px; color: var(--amber); margin-bottom: 4px; }
   .rr-speech { color: var(--cream); }

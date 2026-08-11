@@ -14,15 +14,14 @@ async function fetchMembers() {
   }
 }
 
-const ROUND_LABELS = ['First Movement', 'The Room Responds', 'Final Embers'];
-
 // Seeded at startup from the user's pinned regulars (#185, window.Casting);
 // empty until someone pins their first, and hand-castable from the grid
 // either way.
 let activeMembers = new Set();
-let currentRound = 0;
-let selectedRoundCount = 3;       // live round-count selector value
-let activeConveneRoundCount = 3;  // snapshot at convene() start; a mid-run selector change never affects an in-flight session
+// #245: how many passages the meeting has so far, not a position in a
+// preordained count of three. Nothing reads it to decide whether to keep
+// going — the user does that at each lull.
+let segmentCount = 0;
 let currentSessionId = null;
 let currentSourceSessionId = null; // set when reconvening on a prior transcript
 let transcriptText = '';
@@ -37,7 +36,7 @@ let playerMode = 'none';             // 'none' | 'member' | 'custom' — snapsho
 let playerMemberId = null;
 let playerName = null;
 let currentPlayerSpeakerName = null; // resolved display name; drives parser recognition of custom identities
-let sessionPlayerTurns = [];         // [{round, speakerName, text}]
+let sessionPlayerTurns = [];         // [{round, speakerName, text}] — `round` is the segment index (#245)
 let playerTurnsRevealed = false;
 
 // ── Render member tokens ──────────────────────────────────────────────────────
@@ -236,43 +235,102 @@ function setStatus(msg, thinking) {
   setEmber(thinking);
 }
 
-// ── Round pips ────────────────────────────────────────────────────────────────
-
-function updatePips() {
-  for (let i = 1; i <= 3; i++) {
-    const p = document.getElementById(`pip-${i}`);
-    if (i < currentRound) p.className = 'round-pip complete';
-    else if (i === currentRound) p.className = 'round-pip active';
-    else if (i > selectedRoundCount) p.className = 'round-pip inert';
-    else p.className = 'round-pip';
-  }
-}
-
-// ── Round count selector ─────────────────────────────────────────────────────
-
-function setRoundCount(n) {
-  selectedRoundCount = n;
-  document.querySelectorAll('.round-count-btn').forEach(b => {
-    b.classList.toggle('selected', Number(b.dataset.count) === n);
-  });
-  updatePips();
-}
-
 // ── Transcript rendering ──────────────────────────────────────────────────────
 
 // roundIndex is the session-relative round index (0-based) this header opens,
 // or null for headers that never enter session.rounds (interjections) — used
 // to tag the round's entries so player-turn markers can find them later.
 let currentRenderRound = null;
+
+// Passages no longer open with a header, so the segment index that tags each
+// entry (data-round, which player-turn markers match on) is set directly
+// rather than as a side effect of rendering one.
+function setRenderSegment(segmentIndex) {
+  currentRenderRound = segmentIndex;
+}
+
 function addRoundHeader(label, roundIndex = null) {
   currentRenderRound = roundIndex;
   const c = document.getElementById('transcript-content');
   const h = document.createElement('div');
   h.className = 'transcript-round-header';
-  h.innerHTML = `<div class="round-rule"></div><span class="round-rule-label">${label}</span><div class="round-rule"></div>`;
+  h.innerHTML = `<div class="round-rule"></div><span class="round-rule-label">${escapeHTML(label)}</span><div class="round-rule"></div>`;
   c.appendChild(h);
   transcriptText += `\n\n— ${label} —\n\n`;
   return h;
+}
+
+// #245: the lull — the pause the room takes when a passage runs out of breath.
+// It renders *after* the passage it ended (unlike the round headers it
+// replaces, which announced the passage about to happen), and reads as an
+// action line rather than a section heading, because that's what it is: the
+// fire settling, someone refilling a glass.
+//
+// The note is director-authored (or a stock line the server picked), so unlike
+// the fixed round labels it replaces it's model output — escape it.
+function addLullDivider(note, segmentIndex = null) {
+  const c = document.getElementById('transcript-content');
+  const el = document.createElement('div');
+  el.className = 'transcript-lull';
+  el.innerHTML = `<div class="lull-rule"></div><span class="lull-note">${escapeHTML(note)}</span><div class="lull-rule"></div>`;
+  c.appendChild(el);
+  transcriptText += `\n\n— ${note} —\n\n`;
+  if (segmentIndex !== null) el.dataset.segment = segmentIndex;
+  return el;
+}
+
+// The primary loop (#245): every passage ends at a lull, and the meeting only
+// goes on because the user says so here. There is no round count deciding it
+// in advance — that was the whole point of #194's first decision.
+//
+// A pending lull is the one place the app now waits indefinitely on the user
+// mid-meeting, so it needs an escape hatch: anything that wipes the transcript
+// out from under it (restoring another meeting, reconvening, starting a fresh
+// one) removes these buttons from the DOM, and without abandonLull() the
+// promise would never settle — leaving convene() suspended in its try block
+// and the Convene button disabled for good.
+let abandonLull = null;
+
+// The controls go on every copy of the lull it's given — the record's divider
+// and the stage's mirror of it — because only one of those panes is ever
+// visible at a time (see style.css's .stage-only/.collapsed pair), and during
+// a live meeting it's the stage. Attaching to just one would mean asking the
+// user to decide on a divider that's currently display:none.
+function awaitLull(els) {
+  return new Promise(resolve => {
+    const rows = els.filter(Boolean).map(el => {
+      const actions = document.createElement('div');
+      actions.className = 'lull-actions';
+      const cont = document.createElement('button');
+      cont.className = 'lull-btn continue';
+      cont.textContent = 'Continue';
+      const end = document.createElement('button');
+      end.className = 'lull-btn';
+      end.textContent = 'Let it end';
+      actions.append(cont, end);
+      el.appendChild(actions);
+      return { actions, cont, end };
+    });
+    recordFollow();
+    const choose = (choice) => {
+      abandonLull = null;
+      rows.forEach(r => r.actions.remove());
+      resolve(choice);
+    };
+    rows.forEach(r => {
+      r.cont.onclick = () => choose('continue');
+      r.end.onclick = () => choose('end');
+    });
+    abandonLull = () => choose('abandoned');
+  });
+}
+
+// Settles a lull nobody is going to answer, because its meeting is no longer
+// the one on screen. Deliberately not 'end': the meeting wasn't closed, it was
+// walked away from, and marking it closed server-side would be a lie in the
+// one field #164's pacing review reads.
+function releasePendingLull() {
+  if (abandonLull) abandonLull();
 }
 
 // #33: lets the user fork a new meeting sharing everything up to this round,
@@ -290,7 +348,7 @@ function addBranchControl(headerEl, roundIndex) {
 
 async function branchFromRound(roundIndex) {
   if (!currentSessionId) return;
-  if (!confirm('Branch from this round? A new meeting is created sharing everything up to here, and you continue from there — the original stays untouched.')) return;
+  if (!confirm('Branch from this lull? A new meeting is created sharing everything up to here, and you continue from there — the original stays untouched.')) return;
   setStatus('Branching...', true);
   try {
     const res = await fetch(`/api/sessions/${currentSessionId}/branch`, {
@@ -802,6 +860,7 @@ async function convene() {
   if (!entry) { setStatus('The room requires a document.', false); return; }
   if (activeMembers.size < 2) { setStatus('At least two must be present.', false); return; }
 
+  releasePendingLull();
   document.getElementById('transcript-empty').style.display = 'none';
   document.getElementById('transcript-content').innerHTML = '';
   window.Witness.liveReset();
@@ -811,14 +870,12 @@ async function convene() {
 
   lastSpeakerId = null; currentSpeakerSide = 'right';
   document.getElementById('convene-btn').disabled = true;
-  document.querySelectorAll('.round-count-btn').forEach(b => b.disabled = true);
   document.getElementById('after-panel').className = 'after-panel';
   document.getElementById('interject-form').style.display = 'none';
   closeAllAfterMenus();
 
   currentSessionId = null;
-  currentRound = 0;
-  activeConveneRoundCount = selectedRoundCount;
+  segmentCount = 0;
   sessionDate = new Date().toISOString().split('T')[0];
 
   // Re-enable the "Play as" controls in case the last thing shown was a
@@ -829,7 +886,7 @@ async function convene() {
   });
 
   // Snapshot "Play as" state — a mid-session change to the (now-hidden) controls
-  // should never affect an in-flight session, same principle as round count.
+  // should never affect an in-flight session.
   playerMode = document.getElementById('play-as-mode-select')?.value || 'none';
   playerMemberId = playerMode === 'member' ? (document.getElementById('play-as-member-select')?.value || null) : null;
   playerName = playerMode === 'custom' ? (document.getElementById('play-as-custom-name')?.value.trim() || null) : null;
@@ -851,105 +908,109 @@ async function convene() {
   const notes = window.Sessions.collectSessionNotes();
 
   try {
-    // Round 1
-    currentRound = 1;
-    updatePips();
-    const playerTurn1 = isPlayerActive() ? await awaitPlayerTurn('First Movement') : null;
-    setStatus('First Movement... the room is speaking.', true);
+    // The opening passage. Nothing decides how many follow it — see runLullLoop.
+    const playerTurn1 = isPlayerActive() ? await awaitPlayerTurn('The room gathers') : null;
+    setStatus('The room is speaking.', true);
     const txtBefore1 = transcriptText;
-    const h1 = addRoundHeader('First Movement', 0);
-    const sh1 = window.Witness.liveRoundHeader('First Movement');
+    setRenderSegment(0);
     const s1 = startStreamEntry();
     let d1;
     try {
-      d1 = await streamPost('/api/convene', { entry, members, roundCount: activeConveneRoundCount, artifact, notes, sourceSessionId: currentSourceSessionId || undefined, playerMode, playerMemberId, playerName, playerTurn: playerTurn1 || undefined, castMetrics: window.Casting.consumeMetrics() }, chunk => s1.append(chunk), s1.onSpeaking, s1.onSpeakerDone);
+      d1 = await streamPost('/api/convene', { entry, members, artifact, notes, sourceSessionId: currentSourceSessionId || undefined, playerMode, playerMemberId, playerName, playerTurn: playerTurn1 || undefined, castMetrics: window.Casting.consumeMetrics() }, chunk => s1.append(chunk), s1.onSpeaking, s1.onSpeakerDone);
       s1.finalize(d1.text);
       currentSessionId = d1.sessionId;
+      segmentCount = 1;
       window.Sessions.buildDossier(members);
       if (playerTurn1) {
         sessionPlayerTurns.push({ round: 0, speakerName: currentPlayerSpeakerName, text: playerTurn1.text });
         applyPlayerTurnMarkers(sessionPlayerTurns);
       }
     } catch (err) {
-      s1.abort(); h1.remove(); sh1.remove(); transcriptText = txtBefore1;
+      s1.abort(); transcriptText = txtBefore1;
       const msg = err.message && !err.message.startsWith('Server error')
         ? err.message
-        : 'The first movement could not begin. The fire may be low.';
+        : 'The room could not begin. The fire may be low.';
       setError(msg, convene);
       return;
     }
 
-    // Remaining rounds up to the selected round count
-    for (let i = 1; i < activeConveneRoundCount; i++) {
-      currentRound = i + 1;
-      updatePips();
-      const playerTurnI = isPlayerActive() ? await awaitPlayerTurn(ROUND_LABELS[i]) : null;
-      setStatus(`${ROUND_LABELS[i]}... the room is speaking.`, true);
-      await new Promise(r => setTimeout(r, 300));
-      const txtBefore = transcriptText;
-      const h = addRoundHeader(ROUND_LABELS[i], i);
-      const sh = window.Witness.liveRoundHeader(ROUND_LABELS[i]);
-      const s = startStreamEntry();
-      const ri = i;
-      try {
-        const d = await streamPost('/api/round', { sessionId: currentSessionId, playerTurn: playerTurnI || undefined }, chunk => s.append(chunk), s.onSpeaking, s.onSpeakerDone);
-        s.finalize(d.text);
-        if (playerTurnI) {
-          sessionPlayerTurns.push({ round: ri, speakerName: currentPlayerSpeakerName, text: playerTurnI.text });
-          applyPlayerTurnMarkers(sessionPlayerTurns);
-        }
-      } catch (err) {
-        s.abort(); h.remove(); sh.remove(); transcriptText = txtBefore;
-        showSessionControls();
-        setError(`${ROUND_LABELS[ri]} could not continue.`, () => resumeRounds(ri));
-        return;
-      }
-    }
-
-    showSessionControls();
-    window.Witness.collapseStage();
-    setStatus('The meeting has found its natural pause. The embers hold.', false);
+    await runLullLoop(d1.label);
   } finally {
     document.getElementById('convene-btn').disabled = false;
-    document.querySelectorAll('.round-count-btn').forEach(b => b.disabled = false);
   }
 }
 
-// Resume rounds starting from index i (used when a mid-convene round fails and user retries).
-async function resumeRounds(fromIndex) {
+// #245: the meeting, as it now is — passage, lull, and whatever the user
+// decides at the lull. The old shape (a `for` loop bounded by a number picked
+// before anyone spoke) is gone entirely; this loop has no exit condition of
+// its own, only the two the user chooses between.
+async function runLullLoop(lullNote) {
+  let note = lullNote;
+  while (true) {
+    const lull = addLullDivider(note, segmentCount - 1);
+    const stageLull = window.Witness.liveLull(note);
+    setStatus(note, false);
+    const choice = await awaitLull([lull, stageLull]);
+    if (choice === 'abandoned') return;
+    if (choice === 'end') { await closeMeeting(); return; }
+    const next = await runPassage(note);
+    if (next === null) return; // the error is on screen with its own retry
+    note = next;
+  }
+}
+
+// One passage into an open session. Returns the lull note that ended it, or
+// null if it failed (the caller stops; the retry link resumes the loop).
+async function runPassage(lullNote) {
+  const idx = segmentCount;
+  const playerTurn = isPlayerActive() ? await awaitPlayerTurn(lullNote) : null;
+  setStatus('The room takes it up again.', true);
+  await new Promise(r => setTimeout(r, 300));
+  const txtBefore = transcriptText;
+  setRenderSegment(idx);
+  const s = startStreamEntry();
+  try {
+    const d = await streamPost('/api/round', { sessionId: currentSessionId, playerTurn: playerTurn || undefined }, chunk => s.append(chunk), s.onSpeaking, s.onSpeakerDone);
+    s.finalize(d.text);
+    segmentCount = idx + 1;
+    if (playerTurn) {
+      sessionPlayerTurns.push({ round: idx, speakerName: currentPlayerSpeakerName, text: playerTurn.text });
+      applyPlayerTurnMarkers(sessionPlayerTurns);
+    }
+    return d.label;
+  } catch (err) {
+    s.abort(); transcriptText = txtBefore;
+    showSessionControls();
+    setError('The room could not go on.', () => resumeMeeting(lullNote));
+    return null;
+  }
+}
+
+// Retry path for a passage that failed mid-meeting: run it again from the lull
+// it stalled at, then hand back to the loop as if nothing had happened.
+async function resumeMeeting(lullNote) {
   if (!currentSessionId) return;
   document.getElementById('convene-btn').disabled = true;
-  document.querySelectorAll('.round-count-btn').forEach(b => b.disabled = true);
   try {
-    for (let i = fromIndex; i < activeConveneRoundCount; i++) {
-      currentRound = i + 1;
-      updatePips();
-      const playerTurnI = isPlayerActive() ? await awaitPlayerTurn(ROUND_LABELS[i]) : null;
-      setStatus(`${ROUND_LABELS[i]}... the room is speaking.`, true);
-      if (i > fromIndex) await new Promise(r => setTimeout(r, 300));
-      const txtBefore = transcriptText;
-      const h = addRoundHeader(ROUND_LABELS[i], i);
-      const sh = window.Witness.liveRoundHeader(ROUND_LABELS[i]);
-      const s = startStreamEntry();
-      const ri = i;
-      try {
-        const d = await streamPost('/api/round', { sessionId: currentSessionId, playerTurn: playerTurnI || undefined }, chunk => s.append(chunk), s.onSpeaking, s.onSpeakerDone);
-        s.finalize(d.text);
-        if (playerTurnI) {
-          sessionPlayerTurns.push({ round: ri, speakerName: currentPlayerSpeakerName, text: playerTurnI.text });
-          applyPlayerTurnMarkers(sessionPlayerTurns);
-        }
-      } catch (err) {
-        s.abort(); h.remove(); sh.remove(); transcriptText = txtBefore;
-        setError(`${ROUND_LABELS[ri]} could not continue.`, () => resumeRounds(ri));
-        return;
-      }
-    }
-    window.Witness.collapseStage();
-    setStatus('The meeting has found its natural pause. The embers hold.', false);
+    const next = await runPassage(lullNote);
+    if (next !== null) await runLullLoop(next);
   } finally {
     document.getElementById('convene-btn').disabled = false;
-    document.querySelectorAll('.round-count-btn').forEach(b => b.disabled = false);
+  }
+}
+
+// "Let it end" — the user's own end-cause. #244 defined `closed` as the third
+// one but left it unreachable server-side, because it isn't the room's
+// decision to make; this is the action that reaches it. Best-effort: a meeting
+// that ended is ended whether or not the marker saved.
+async function closeMeeting() {
+  showSessionControls();
+  window.Witness.collapseStage();
+  setStatus('The meeting has found its natural pause. The embers hold.', false);
+  try {
+    await fetch(`/api/sessions/${currentSessionId}/close`, { method: 'POST' });
+  } catch (e) {
+    console.warn('Could not record the meeting close', e);
   }
 }
 
@@ -958,7 +1019,6 @@ function showSessionControls() {
   document.getElementById('verify-citations-btn').className = 'lodge-btn visible';
   document.getElementById('reveal-player-turns-btn').className = 'lodge-btn' + (sessionPlayerTurns.length ? ' visible' : '');
   window.Export.updateScholarlyExportButton();
-  updatePips();
 }
 
 // ── Citation verification ────────────────────────────────────────────────────
@@ -1069,30 +1129,37 @@ function togglePlayerTurnReveal() {
     playerTurnsRevealed ? 'Hide Player Turns ◆' : 'Reveal Player Turns ◆';
 }
 
-// ── Additional round ──────────────────────────────────────────────────────────
+// ── Stir the room again ──────────────────────────────────────────────────────
+// #245: "One More Turn" was round vocabulary and retires with the rounds. What
+// it *did* survives, under a name for what it actually is — re-stirring a
+// meeting that already closed, which is a different act from continuing one
+// that's merely paused (that's the lull's Continue). One passage, then the
+// room settles back into its after-state rather than reopening the lull loop.
+//
+// Player turns stay AI-only here, as they were before (v1 scope limit); the
+// segment index is still tagged so its entries remain addressable.
 
-async function addRound() {
+async function stirRoom() {
   if (!currentSessionId) return;
-  const btn = document.getElementById('additional-round-btn');
+  const btn = document.getElementById('stir-room-btn');
   btn.disabled = true;
-  currentRound++;
-  updatePips();
-  setStatus('One More Turn... the room continues.', true);
+  const idx = segmentCount;
+  setStatus('The room is stirred, and takes it up again.', true);
   const txtBefore = transcriptText;
-  // Player turns are AI-only for "One More Turn" (v1 scope limit) — round
-  // index is still tagged so this round's entries are consistently addressable.
-  const h = addRoundHeader('One More Turn', currentRound - 1);
-  const sh = window.Witness.liveRoundHeader('One More Turn');
+  setRenderSegment(idx);
   const s = startStreamEntry();
 
   try {
     const d = await streamPost('/api/round', { sessionId: currentSessionId }, chunk => s.append(chunk), s.onSpeaking, s.onSpeakerDone);
     s.finalize(d.text);
+    segmentCount = idx + 1;
+    addLullDivider(d.label, idx);
+    window.Witness.liveLull(d.label);
+    await closeMeeting();
     setStatus('The embers hold a while longer.', false);
   } catch (err) {
-    s.abort(); h.remove(); sh.remove(); transcriptText = txtBefore; currentRound--;
-    updatePips();
-    setError('The turn could not complete.', addRound);
+    s.abort(); transcriptText = txtBefore;
+    setError('The room could not be stirred.', stirRoom);
   } finally {
     btn.disabled = false;
   }
@@ -1172,14 +1239,14 @@ function reconveneOnCurrentSession() {
   sel.value = `transcript:${currentSessionId}`;
 
   // Clear transcript view so user starts fresh
+  releasePendingLull();
   document.getElementById('transcript-content').innerHTML = '';
   document.getElementById('after-panel').className = 'after-panel';
   document.getElementById('interject-form').style.display = 'none';
   closeAllAfterMenus();
-  currentRound = 0;
+  segmentCount = 0;
   currentSessionId = null;
   transcriptText = '';
-  updatePips();
 
   window.scrollTo({ top: 0, behavior: 'smooth' });
   setStatus('The transcript has been placed on the table. Assemble a new room and reconvene.', false);
@@ -1212,12 +1279,15 @@ document.addEventListener('click', (e) => {
   if (!e.target.closest('.menu-wrap')) closeAllAfterMenus();
 });
 
-// Continue's "Branch" item branches from the meeting's current end, reusing
-// the per-round #33 branch machinery (normally only offered inline on a
-// restored session's individual round headers) with the latest round index.
-function branchFromLatestRound() {
-  if (!currentSessionId || currentRound < 1) return;
-  branchFromRound(currentRound - 1);
+// Continue's "Branch" item branches from the meeting's last lull, reusing the
+// #33 branch machinery (normally only offered inline on a restored session's
+// lulls) with the final segment index. #245 moved branch points from round
+// boundaries to lulls, but a lull is checkpoint-consistent in exactly the way
+// a round boundary was, so branchRound keeps its meaning and nothing stored
+// needed migrating.
+function branchFromLatestLull() {
+  if (!currentSessionId || segmentCount < 1) return;
+  branchFromRound(segmentCount - 1);
 }
 
 // ── Export settings drawer ──────────────────────────────────────────────────
@@ -1458,7 +1528,7 @@ function sessionsDeps() {
   return {
     getCore: () => ({
       MEMBERS, activeMembers, currentSessionId, currentEntry, currentSourceSessionId,
-      transcriptText, sessionDate, currentRound, activeConveneRoundCount,
+      transcriptText, sessionDate, segmentCount,
       playerMode, playerMemberId, playerName, currentPlayerSpeakerName,
       sessionPlayerTurns, playerTurnsRevealed,
     }),
@@ -1466,8 +1536,7 @@ function sessionsDeps() {
     setSessionDate: (d) => { sessionDate = d; },
     setCurrentEntry: (text) => { currentEntry = text; },
     setCurrentSourceSessionId: (id) => { currentSourceSessionId = id; },
-    setCurrentRound: (n) => { currentRound = n; },
-    setActiveConveneRoundCount: (n) => { activeConveneRoundCount = n; },
+    setSegmentCount: (n) => { segmentCount = n; },
     setPlayerMode: (m) => { playerMode = m; },
     setPlayerMemberId: (id) => { playerMemberId = id; },
     setPlayerName: (n) => { playerName = n; },
@@ -1477,14 +1546,15 @@ function sessionsDeps() {
     setTranscriptText: (t) => { transcriptText = t; },
     setActiveMembers: (set) => { activeMembers = set; },
     resetTranscriptCounters: () => {
+      releasePendingLull();
       _entryCounter = 0; lastSpeakerId = null; currentSpeakerSide = 'right';
       recordAttached = true;
       document.getElementById('record-live-pill')?.classList.remove('visible');
     },
     resetLiveStage: () => window.Witness.resetLiveStage(),
     escapeHTML, resolveMember, isKnownSpeakerHeader, renderActions,
-    setStatus, setRoundCount, restorePlayAsControlDisplay,
-    addRoundHeader, addBranchControl, parseAndRenderTranscript,
+    setStatus, restorePlayAsControlDisplay,
+    addRoundHeader, addLullDivider, setRenderSegment, addBranchControl, parseAndRenderTranscript,
     renderMembers, applyCitationFlags, applyPlayerTurnMarkers, showSessionControls,
   };
 }

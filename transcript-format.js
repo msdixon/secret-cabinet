@@ -56,6 +56,20 @@ function formatTranscriptText(text, roster) {
   }).join('\n');
 }
 
+// #245: a segment's `label` means opposite things either side of the
+// continuous-stream migration. Pre-#244 segments carry an opening header
+// ("First Movement") naming the passage about to happen; new ones carry the
+// lull note that ended it ("The fire settles"). `endedBy` tells them apart —
+// it exists only on segments written since #244 — so the marker sits above
+// the old and below the new, and an archived meeting still reads the way it
+// did the night it was held.
+function composeSegmentText(segment, roster) {
+  const body = formatTranscriptText(segment.text, roster);
+  return segment.endedBy
+    ? `\n${body}\n\n— ${segment.label} —\n`
+    : `\n— ${segment.label} —\n\n${body}\n`;
+}
+
 function buildTranscriptHeader(entry, memberIds, date, roster) {
   const names = memberIds.map(id => roster.find(m => m.id === id)?.name).filter(Boolean).join(', ');
   return `THE SECRET-CABIN-ET\nMeeting Notes — ${date}\nAssembled: ${names}\n\nSource material:\n${entry}\n`;
@@ -67,5 +81,6 @@ module.exports = {
   buildSpeakerHeaderSet,
   escapeHtml,
   formatTranscriptText,
+  composeSegmentText,
   buildTranscriptHeader,
 };

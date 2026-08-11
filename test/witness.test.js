@@ -122,6 +122,29 @@ test('replay: parsing a stored session into playback blocks', async t => {
     assert.match(entries[1].querySelector('.speaker-name').textContent, /Blavatsky/);
   });
 
+  // #245: same label-placement rule as the record and the reading room — a
+  // post-#244 segment's label is the lull that ended it, so on replay it plays
+  // after the passage, where the room actually drew breath.
+  await t.test('plays a post-#244 segment label as a lull after its passage', async t2 => {
+    const { document, module: Witness } = boot(t2);
+    await Witness.start({
+      id: 's1',
+      rounds: [{ label: 'The room draws breath.', text: 'Crowley:\nOne.', endedBy: 'lull' }],
+    }, makeDeps());
+    playToEnd(Witness, document);
+
+    const stage = document.getElementById('witness-stage');
+    assert.equal(stage.querySelectorAll('.witness-round-header').length, 0, 'no round header survives');
+    const lull = stage.querySelector('.transcript-lull .lull-note');
+    assert.match(lull.textContent, /The room draws breath\./);
+
+    const order = [...stage.children];
+    assert.ok(
+      order.indexOf(stage.querySelector('.transcript-entry')) < order.indexOf(stage.querySelector('.transcript-lull')),
+      'the passage plays before the lull that ended it',
+    );
+  });
+
   await t.test('#219: a long turn renders as multiple sequential bubbles for the same speaker, not one', async t2 => {
     const { document, module: Witness } = boot(t2);
     const w = n => Array.from({ length: n }, (_, i) => `w${i}`).join(' ');
