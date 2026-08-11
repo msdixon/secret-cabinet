@@ -15,6 +15,8 @@ const {
   isPoolExhausted,
   isValidSelection,
   stripInternalBlankLines,
+  splitIntoBeats,
+  BEAT_WORD_THRESHOLD,
   countWords,
   lengthTendencyOf,
   DISPOSITION_MAX_CHARS,
@@ -307,6 +309,66 @@ test('stripInternalBlankLines', async t => {
   await t.test('leaves text with no blank lines untouched', () => {
     const text = '*She sets down the glass.* The point is not the ritual.';
     assert.equal(stripInternalBlankLines(text), text);
+  });
+});
+
+// #219 — the delivery-pacing split. Reuses the words(n) deterministic
+// n-word-span helper defined below (with #187's trimToWordBudget tests) so
+// the threshold crossing lands exactly where each test wants it, rather
+// than relying on prose that happens to be the right length.
+test('splitIntoBeats', async t => {
+  await t.test('empty or whitespace-only text is no beats', () => {
+    assert.deepEqual(splitIntoBeats(''), []);
+    assert.deepEqual(splitIntoBeats('   \n\t  '), []);
+  });
+
+  await t.test('a short turn under the threshold is a single beat, unchanged', () => {
+    const text = 'A short reactive line.';
+    assert.deepEqual(splitIntoBeats(text), [text]);
+  });
+
+  await t.test('multiple short lines whose combined count stays under the threshold merge into one beat', () => {
+    const line1 = 'First short line.';
+    const line2 = 'Second short line.';
+    assert.deepEqual(splitIntoBeats(`${line1}\n${line2}`), [`${line1}\n${line2}`]);
+  });
+
+  await t.test('a beat closes at the next line break once the threshold is crossed, not mid-line', () => {
+    const line1 = `${words(30)}.`; // under threshold alone
+    const line2 = `${words(15)}.`; // combined with line1: 45, crosses threshold
+    const line3 = `${words(5)}.`;  // starts the next beat
+    const beats = splitIntoBeats([line1, line2, line3].join('\n'));
+    assert.deepEqual(beats, [`${line1}\n${line2}`, line3]);
+  });
+
+  await t.test('a single line with no internal breaks that alone overruns the threshold falls back to sentence boundaries', () => {
+    const s1 = `${words(20)}.`;
+    const s2 = `${words(20)}.`;
+    const s3 = `${words(10)}.`;
+    const line = `${s1} ${s2} ${s3}`; // one line, 50 words, no \n at all
+    const beats = splitIntoBeats(line);
+    assert.deepEqual(beats, [`${s1} ${s2}`, s3]);
+  });
+
+  await t.test('a blank line is dropped, same treatment as stripInternalBlankLines', () => {
+    assert.deepEqual(splitIntoBeats('First.\n\nSecond.'), ['First.\nSecond.']);
+  });
+
+  await t.test('never loses, duplicates, or reorders a word across the split', () => {
+    const s1 = `${words(20)}.`;
+    const s2 = `${words(20)}.`;
+    const line1 = `${words(10)}.`;
+    const text = `${line1}\n${s1} ${s2} ${words(15)}.`;
+    const beats = splitIntoBeats(text);
+    assert.deepEqual(
+      beats.flatMap(b => b.split(/\s+/)),
+      text.trim().split(/\s+/),
+    );
+  });
+
+  await t.test('BEAT_WORD_THRESHOLD is a sane positive tuning constant', () => {
+    assert.equal(typeof BEAT_WORD_THRESHOLD, 'number');
+    assert.ok(BEAT_WORD_THRESHOLD > 0);
   });
 });
 

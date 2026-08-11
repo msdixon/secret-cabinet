@@ -22,6 +22,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { loadPublicModule, assertIdsExistInIndexHtml } = require('./helpers/dom.js');
+const { splitIntoBeats } = require('../public/beats.js');
 
 // The elements witness.js reaches for by id. Kept in one place so the drift
 // guard below and the fixture can't disagree with each other.
@@ -69,6 +70,10 @@ function makeDeps(overrides = {}) {
     isKnownSpeakerHeader: (line, members) => members.some(m => line.replace(/:$/, '') === m.name),
     escapeHTML: s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'),
     renderActions: s => String(s),
+    // #219: the real implementation, not a stand-in -- replay's beat
+    // splitting is exactly the thing under test in the block below, so a
+    // dumb stub would test nothing.
+    splitIntoBeats,
     ...overrides,
   };
 }
@@ -115,6 +120,35 @@ test('replay: parsing a stored session into playback blocks', async t => {
     assert.match(entries[0].querySelector('.speaker-name').textContent, /Crowley/);
     assert.match(entries[0].querySelector('.speech-text').textContent, /not the point/);
     assert.match(entries[1].querySelector('.speaker-name').textContent, /Blavatsky/);
+  });
+
+  await t.test('#219: a long turn renders as multiple sequential bubbles for the same speaker, not one', async t2 => {
+    const { document, module: Witness } = boot(t2);
+    const w = n => Array.from({ length: n }, (_, i) => `w${i}`).join(' ');
+    const sentence1 = `${w(20)}.`;
+    const sentence2 = `${w(20)}.`;
+    const sentence3 = `${w(10)}.`;
+    // One line, no internal breaks -- three sentences totalling 50 words,
+    // so the running count actually crosses BEAT_WORD_THRESHOLD (40) with
+    // more content still to come, forcing a real split rather than just
+    // ending exactly at the crossing point.
+    const longTurn = `${sentence1} ${sentence2} ${sentence3}`;
+    await Witness.start({
+      rounds: [{ label: 'Round I', text: `Crowley:\n${longTurn}` }],
+    }, makeDeps());
+    playToEnd(Witness, document);
+
+    const entries = [...document.querySelectorAll('#witness-stage .transcript-entry')];
+    assert.ok(entries.length > 1, 'a long turn should split into more than one bubble');
+    entries.forEach(e => assert.match(e.querySelector('.speaker-name').textContent, /Crowley/));
+
+    // Every beat stays on the same side -- only an actual speaker change flips it.
+    const sides = entries.map(e => [...e.classList].find(c => c.startsWith('bubble-')));
+    assert.ok(sides.every(s => s === sides[0]), 'beats of the same turn should not alternate sides');
+
+    // No words lost, duplicated, or reordered across the split.
+    const combinedText = entries.map(e => e.querySelector('.speech-text').textContent).join(' ');
+    assert.deepEqual(combinedText.trim().split(/\s+/), longTurn.split(/\s+/));
   });
 
   await t.test('keeps a multi-paragraph speech as one block instead of dropping the trailing paragraph', async t2 => {
@@ -347,7 +381,7 @@ test('live mirroring (#184): the stage renders its own copy, independent of the 
     assert.equal(document.querySelectorAll('#witness-stage .witness-round-header').length, 0);
   });
 
-  await t.test('liveTypingStart/Append/liveClearTyping manage a growing placeholder, swapped by the next liveSpeech', t2 => {
+  await t.test('liveTypingStart/Set/liveClearTyping manage a growing placeholder, swapped by the next liveSpeech', t2 => {
     const { document, module: Witness } = boot(t2);
     Witness.configure(makeDeps());
 
@@ -356,8 +390,11 @@ test('live mirroring (#184): the stage renders its own copy, independent of the 
     assert.ok(typing, 'a typing placeholder should appear');
     assert.match(typing.querySelector('.speaker-name').textContent, /Crowley/);
 
-    Witness.liveTypingAppend('The book');
-    Witness.liveTypingAppend(' is not the point.');
+    // #219: liveTypingSet replaces the whole open-beat text each call
+    // (app.js recomputes it from the growing buffer via splitIntoBeats)
+    // rather than appending a raw delta.
+    Witness.liveTypingSet('The book');
+    Witness.liveTypingSet('The book is not the point.');
     assert.equal(document.querySelector('#witness-stage .typing-text').textContent, 'The book is not the point.');
 
     Witness.liveClearTyping();

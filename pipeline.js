@@ -7,6 +7,13 @@
 // work in a standalone test script (Stages 1-2) and inside a live route
 // (Stage 4), following the sibling-module pattern already used by dayone.js.
 
+// #219: splitIntoBeats lives in public/beats.js, not here, because the
+// browser needs it too (app.js live-streaming, witness.js replay) and
+// public/ has no bundler — see that file's top-of-file comment. Required
+// and re-exported here so it's tested the same way as this file's other
+// pure functions (test/pipeline.test.js).
+const { splitIntoBeats, BEAT_WORD_THRESHOLD } = require('./public/beats.js');
+
 // ── Member section (shared with the legacy full-blob prompt builder) ──────
 
 // Extracted from server.js's buildSystemPrompt so both the legacy full-blob
@@ -1203,6 +1210,8 @@ module.exports = {
   buildSpeakerSystemPrompt,
   buildSpeakerUserMessage,
   stripInternalBlankLines,
+  splitIntoBeats,
+  BEAT_WORD_THRESHOLD,
   callSpeakerTurn,
   DISPOSITION_MAX_CHARS,
   buildDispositionToolSchema,

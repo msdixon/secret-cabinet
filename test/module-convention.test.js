@@ -21,6 +21,11 @@ const { loadPublicModule, PUBLIC_DIR } = require('./helpers/dom.js');
 // casting → app); each is loaded in isolation here, which is the stronger
 // claim: no module needs another to be present just to define itself.
 const MODULES = [
+  // #219: beats.js is also require()-able from Node (pipeline.js does, so
+  // it's tested identically to that file's other pure functions) -- see
+  // its own top-of-file comment. In the browser it behaves exactly like
+  // the other modules below: one window.Beats, added the same way.
+  { file: 'beats.js', global: 'Beats', api: ['splitIntoBeats'] },
   { file: 'scene/scene.js', global: 'LodgeScene', api: ['init', 'updateSeats', 'setSpeaking'] },
   { file: 'witness.js', global: 'Witness', api: ['configure', 'liveReset', 'resetLiveStage', 'liveRoundHeader', 'liveSpeech', 'collapseStage', 'reopenStage', 'exitClicked', 'advance', 'start'] },
   { file: 'export.js', global: 'Export', api: ['configure', 'buildAnnotatedTranscript', 'exportMd'] },

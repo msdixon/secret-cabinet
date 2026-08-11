@@ -208,9 +208,13 @@ window.Witness = (function () {
     stage.scrollTop = stage.scrollHeight;
   }
 
-  function liveTypingAppend(chunk) {
+  // #219: replaces (not appends) the typing text with the current beat's
+  // full text so far. app.js recomputes the whole open beat via
+  // splitIntoBeats on every chunk rather than tracking a raw delta, and
+  // hands that over here -- see startStreamEntry's append().
+  function liveTypingSet(text) {
     if (!liveTypingEl) return;
-    liveTypingEl.querySelector('.typing-text').textContent += chunk;
+    liveTypingEl.querySelector('.typing-text').textContent = text;
     const stage = document.getElementById('witness-stage');
     if (stage) stage.scrollTop = stage.scrollHeight;
   }
@@ -281,12 +285,21 @@ window.Witness = (function () {
         if (!speaker || !textLines.length) return;
         const m = deps.resolveMember(speaker, deps.members);
         const annotation = Object.values(annotations).find(a => a.speaker === speaker)?.note || null;
-        blocks.push({
-          type: 'speech',
-          speaker,
-          text: textLines.join('\n').trim(),
-          memberId: m?.id || null,
-          annotation,
+        // #219: one turn, several bubbles -- same split app.js's live
+        // streaming uses, so a replayed turn paces the same way it did the
+        // night it was generated. The annotation (already only a loose
+        // speaker-name match, not turn-specific -- see the lookup above)
+        // goes on the last beat, the natural "end of turn" position,
+        // rather than repeating across every fragment.
+        const beats = deps.splitIntoBeats(textLines.join('\n').trim());
+        beats.forEach((beatText, i) => {
+          blocks.push({
+            type: 'speech',
+            speaker,
+            text: beatText,
+            memberId: m?.id || null,
+            annotation: i === beats.length - 1 ? annotation : null,
+          });
         });
         // Keep speaker across blank lines so multi-paragraph speeches aren't dropped
         if (!keepSpeaker) speaker = null;
@@ -597,7 +610,7 @@ window.Witness = (function () {
     liveRoundHeader,
     liveSpeech,
     liveTypingStart,
-    liveTypingAppend,
+    liveTypingSet,
     liveClearTyping,
     collapseStage,
     reopenStage,

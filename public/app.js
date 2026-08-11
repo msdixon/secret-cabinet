@@ -553,6 +553,20 @@ function isKnownSpeakerHeader(t, members) {
   return index.has(norm) && index.get(norm) != null;
 }
 
+// #219: deliberately not beat-split, unlike startStreamEntry's live path and
+// witness.js's stage replay. This is the record pane's parser -- used both
+// as the streaming safety net (finalize() below) and, via sessions.js's
+// restoreSession, to rebuild the record for EVERY saved session on load.
+// Saved annotations are keyed by entryId, a plain sequential counter
+// (`entry-${++_entryCounter}` in addSpeech) with no meaning beyond "the Nth
+// bubble this parse produced" -- restoring an old, annotated session has to
+// reproduce the exact same bubble count and order it had when the
+// annotation was saved, or the note lands on the wrong bubble. Splitting
+// turns into beats here would change that count for every existing
+// annotated session the moment this ships. The stage has no such
+// constraint (#184: stage entries carry no entryId, annotation stays
+// exclusively in the record), and a freshly-streamed turn's beats get their
+// entryId for the first time, so both of those split safely; this doesn't.
 function parseAndRenderTranscript(response) {
   const c0 = document.getElementById('transcript-content');
   const lines = response.split('\n');
@@ -659,6 +673,15 @@ async function streamPost(url, body, onChunk, onSpeaking, onSpeakerDone) {
 // we know whether the block is a normal turn or a pure-action line (addSpeech
 // decides that from the complete text, which isn't knowable mid-stream).
 //
+// #219: a turn is no longer one bubble -- window.Beats.splitIntoBeats runs
+// on the growing buffer after every chunk, and every beat but the last is
+// stable the moment it appears (see that function's own comment), so it's
+// swapped from "typing" to a real bubble immediately, same speaker, fresh
+// typing placeholder opened for whatever comes next. onSpeakerDone's
+// settled text is the authority for whichever beats hadn't closed yet by
+// the time the turn actually finished (closedBeats tracks how many were
+// already flushed live, so it never re-renders one twice).
+//
 // #184: every stage change here has a matching window.Witness.live*() call
 // right after it, mirroring the same beat into the stage a moment after the
 // record gets it -- the stage renders its own lightweight copy (see
@@ -667,47 +690,85 @@ async function streamPost(url, body, onChunk, onSpeaking, onSpeakerDone) {
 // finalize() only falls back to the old whole-text reparse if nothing
 // rendered live this round -- a safety net, not the normal path, so a
 // missed or malformed speakerDone event can't silently drop content. In that
-// rare case the record still gets the round correctly; only the stage misses
-// mirroring it, self-healing on the next round's beats.
+// rare case the record still gets the round correctly (as single bubbles
+// per turn, not beat-split -- see parseAndRenderTranscript's own note on
+// why it stays that way); only the stage misses mirroring it, self-healing
+// on the next round's beats.
 function startStreamEntry() {
   const c = document.getElementById('transcript-content');
   let typingEl = null;
   let renderedLive = false;
+  let buffer = '';
+  let closedBeats = 0;
+  let speakerName = '';
+  let speakerMemberId = null;
 
-  function clearTyping() {
+  function removeTyping() {
     if (typingEl) { typingEl.remove(); typingEl = null; }
     window.Witness.liveClearTyping();
+  }
+
+  function openTyping() {
+    typingEl = document.createElement('div');
+    typingEl.className = 'transcript-typing';
+    typingEl.innerHTML = `<div class="speaker-name">${escapeHTML(speakerName)}</div><div class="typing-text transcript-stream-live"></div>`;
+    c.appendChild(typingEl);
+    recordFollow();
+    window.Witness.liveTypingStart(speakerName);
   }
 
   return {
     append(chunk) {
       if (!typingEl) return; // nothing streaming yet worth showing raw (e.g. the name-header chunk before onSpeaking fires)
-      typingEl.querySelector('.typing-text').textContent += chunk;
+      buffer += chunk;
+      const beats = window.Beats.splitIntoBeats(buffer);
+      if (!beats.length) return;
+
+      // Every beat but the last is stable -- close it as a real bubble now
+      // instead of waiting for the whole turn, and open a fresh typing
+      // placeholder for the same speaker.
+      while (closedBeats < beats.length - 1) {
+        const settled = beats[closedBeats];
+        removeTyping();
+        addSpeech(speakerName, settled, false, speakerMemberId || undefined, null);
+        window.Witness.liveSpeech({ speaker: speakerName, text: settled, memberId: speakerMemberId || null });
+        closedBeats++;
+        openTyping();
+      }
+
+      typingEl.querySelector('.typing-text').textContent = beats[beats.length - 1];
       recordFollow();
-      window.Witness.liveTypingAppend(chunk);
+      window.Witness.liveTypingSet(beats[beats.length - 1]);
     },
     onSpeaking(memberId) {
-      clearTyping();
+      removeTyping();
+      buffer = '';
+      closedBeats = 0;
       const m = MEMBERS.find(mm => mm.id === memberId);
-      typingEl = document.createElement('div');
-      typingEl.className = 'transcript-typing';
-      typingEl.innerHTML = `<div class="speaker-name">${escapeHTML(m?.name || '…')}</div><div class="typing-text transcript-stream-live"></div>`;
-      c.appendChild(typingEl);
-      recordFollow();
-      window.Witness.liveTypingStart(m?.name || '…');
+      speakerName = m?.name || '…';
+      speakerMemberId = memberId;
+      openTyping();
     },
     onSpeakerDone({ memberId, name, text }) {
-      clearTyping();
-      addSpeech(name, text, false, memberId || undefined, null);
+      removeTyping();
+      // The remaining beats -- whatever hadn't already closed live -- come
+      // from the settled text, which is authoritative (post-trim, post-
+      // stripInternalBlankLines) rather than the raw streamed buffer.
+      const beats = window.Beats.splitIntoBeats(text);
+      beats.slice(closedBeats).forEach(beatText => {
+        addSpeech(name, beatText, false, memberId || undefined, null);
+        window.Witness.liveSpeech({ speaker: name, text: beatText, memberId: memberId || null });
+      });
       renderedLive = true;
-      window.Witness.liveSpeech({ speaker: name, text, memberId: memberId || null });
+      buffer = '';
+      closedBeats = 0;
     },
     finalize(fullText) {
-      clearTyping();
+      removeTyping();
       if (!renderedLive) parseAndRenderTranscript(fullText);
     },
     abort() {
-      clearTyping();
+      removeTyping();
     },
   };
 }
@@ -1214,6 +1275,11 @@ function witnessDeps() {
     escapeHTML,
     renderActions,
     restoreSession: restoreSessionIfDifferent,
+    // #219: witness.js splits each turn into beat bubbles on replay too,
+    // via the same pure function app.js's live streaming uses -- injected
+    // rather than read directly off window.Beats, per this module's own
+    // "everything comes in as deps" convention.
+    splitIntoBeats: window.Beats.splitIntoBeats,
   };
 }
 
