@@ -9,7 +9,7 @@ require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const Anthropic = require('@anthropic-ai/sdk');
-const { selectSpeakers, isValidSelection } = require('../pipeline');
+const { selectSpeakers, isValidSelection } = require('../src/pipeline');
 
 const ROOT = path.join(__dirname, '..');
 const ROSTER = JSON.parse(fs.readFileSync(path.join(ROOT, 'prompts/members/roster.json'), 'utf8'));

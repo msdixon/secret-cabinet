@@ -13,7 +13,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const { buildGraph } = require('../graph.js');
+const { buildGraph } = require('../src/graph.js');
 
 const ROSTER = [
   { id: 'crowley', name: 'Crowley' },

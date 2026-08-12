@@ -32,7 +32,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 const session = require('express-session');
 const FileStore = require('session-file-store')(session);
 
-const dayOne = require('./dayone');
+const dayOne = require('./src/dayone');
 const {
   buildMemberSection,
   runRound,
@@ -41,23 +41,23 @@ const {
   makeMetric,
   countWords,
   BREATH_BUDGET_WORDS,
-} = require('./pipeline');
-const roster = require('./roster');
-const transcriptFormat = require('./transcript-format');
-const readingRoom = require('./reading-room');
-const lodgePrompts = require('./lodge-prompts');
-const library = require('./library');
-const citations = require('./citations');
-const graph = require('./graph');
-const sessionsStore = require('./sessions-store');
-const auth = require('./auth');
-const { registerLibraryRoutes } = require('./library-routes');
-const { registerGraphRoutes } = require('./graph-routes');
-const { registerUploadRoutes } = require('./upload-routes');
-const { registerMemberRoutes } = require('./member-routes');
-const { registerExportRoutes } = require('./export-routes');
-const { registerSessionRoutes } = require('./session-routes');
-const { registerConveneRoutes } = require('./convene-routes');
+} = require('./src/pipeline');
+const roster = require('./src/roster');
+const transcriptFormat = require('./src/transcript-format');
+const readingRoom = require('./src/reading-room');
+const lodgePrompts = require('./src/lodge-prompts');
+const library = require('./src/library');
+const citations = require('./src/citations');
+const graph = require('./src/graph');
+const sessionsStore = require('./src/sessions-store');
+const auth = require('./src/auth');
+const { registerLibraryRoutes } = require('./src/routes/library');
+const { registerGraphRoutes } = require('./src/routes/graph');
+const { registerUploadRoutes } = require('./src/routes/upload');
+const { registerMemberRoutes } = require('./src/routes/member');
+const { registerExportRoutes } = require('./src/routes/export');
+const { registerSessionRoutes } = require('./src/routes/session');
+const { registerConveneRoutes } = require('./src/routes/convene');
 
 // ─── Environment flags ────────────────────────────────────────────────────────
 const IS_LOCAL = process.env.LOCAL === 'true' || process.env.NODE_ENV !== 'production';
@@ -352,9 +352,9 @@ app.get('/api/config', (req, res) => {
 });
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
-// Route handlers extracted per #193's second pass — see library-routes.js,
-// graph-routes.js, upload-routes.js, member-routes.js, export-routes.js,
-// session-routes.js, and convene-routes.js for the implementations. Every
+// Route handlers extracted per #193's second pass — see src/routes/ for the
+// implementations (library, graph, upload, member, export, session, convene;
+// the `-routes` suffix became the directory name in #272). Every
 // module takes its dependencies as an explicit parameter (no module-level
 // singletons), same convention the nine pure-logic modules from #193's first
 // pass established. Registered in dependency/risk order — lowest-risk

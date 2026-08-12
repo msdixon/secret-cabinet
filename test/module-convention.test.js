@@ -90,8 +90,13 @@ for (const { file, global: globalName, api } of MODULES) {
     });
 
     await t.test('is loaded by index.html', () => {
+      // #272: the modules live in public/js/ now, index.html still in public/,
+      // so the tag carries a `js/` prefix the MODULES entries above don't.
       const html = fs.readFileSync(path.join(PUBLIC_DIR, 'index.html'), 'utf8');
-      assert.ok(new RegExp(`<script src="${file}"`).test(html), `public/index.html has no <script src="${file}"> tag`);
+      assert.ok(
+        new RegExp(`<script src="js/${file}"`).test(html),
+        `public/index.html has no <script src="js/${file}"> tag`
+      );
     });
   });
 }

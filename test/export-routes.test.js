@@ -1,6 +1,6 @@
 'use strict';
 
-// #193 route-extraction — export-routes.js: Day One, Ulysses, Obsidian.
+// #193 route-extraction — src/routes/export.js: Day One, Ulysses, Obsidian.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -8,7 +8,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const { registerExportRoutes } = require('../export-routes.js');
+const { registerExportRoutes } = require('../src/routes/export.js');
 
 function fakeApp() {
   const routes = {};

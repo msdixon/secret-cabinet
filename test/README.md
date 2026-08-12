@@ -16,8 +16,10 @@ work. This is the decision.
 **Runner: Node's built-in `node:test` + `node:assert/strict`. No test-runner dependency.**
 
 The constraint that decided it is the one the issue named — `public/` has no bundler
-and no build step. `index.html` loads `scene/scene.js`, `witness.js`, `export.js`,
-`sessions.js` and `app.js` as plain `<script>` tags, and each extracted module
+and no build step. `index.html` loads `js/scene/scene.js`, `js/witness.js`,
+`js/export.js`, `js/sessions.js` and `js/app.js` as plain `<script>` tags
+(the `js/` prefix arrived with #272; `loadPublicModule` still takes a bare
+file name), and each extracted module
 ([#142](https://github.com/msdixon/secret-cabinet/issues/142)) is an IIFE assigning one
 `window.X`. Nothing in `public/` is an ES module or a CommonJS module, so *no* runner
 can `import` it directly.

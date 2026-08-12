@@ -7,7 +7,7 @@
 // rather than a separate file — it's a session-scoped route reusing the
 // same loadSession/saveSession pair as the rest, even though the citation
 // logic itself already lives in citations.js). No SSE/streaming state —
-// that's convene-routes.js's territory, extracted last for exactly that
+// that's routes/convene.js's territory, extracted last for exactly that
 // reason.
 
 const fs = require('fs');

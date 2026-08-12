@@ -1,6 +1,6 @@
 'use strict';
 
-// #193 route-extraction — upload-routes.js. The route is a two-handler
+// #193 route-extraction — src/routes/upload.js. The route is a two-handler
 // chain (multer middleware, then the extraction logic) — fakeApp records
 // both; tests exercise the extraction handler directly with a crafted
 // req.file, the same way multer would have populated it, rather than
@@ -9,7 +9,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { registerUploadRoutes, extractPdfText } = require('../upload-routes.js');
+const { registerUploadRoutes, extractPdfText } = require('../src/routes/upload.js');
 
 function fakeApp() {
   const routes = {};

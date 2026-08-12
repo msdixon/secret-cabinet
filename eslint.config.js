@@ -24,7 +24,7 @@ module.exports = [
     // catch bindings are this codebase's established swallow-the-error
     // idiom (see e.g. session-routes.js, library-routes.js) — not flagging
     // them, same as no-empty allowing an intentionally-empty catch.
-    files: ['*.js', 'scripts/**/*.js', 'test/**/*.js'],
+    files: ['*.js', 'src/**/*.js', 'scripts/**/*.js', 'test/**/*.js'],
     languageOptions: {
       sourceType: 'commonjs',
       ecmaVersion: 2022,

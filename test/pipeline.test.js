@@ -49,7 +49,7 @@ const {
   STOCK_LULL_NOTES,
   pickStockLullNote,
   resolveLullNote,
-} = require('../pipeline.js');
+} = require('../src/pipeline.js');
 
 // pickNextSpeaker is weighted-random. Rather than seed a PRNG, sweep rng
 // deterministically across [0,1) and count outcomes -- the resulting share

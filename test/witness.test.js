@@ -22,7 +22,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { loadPublicModule, assertIdsExistInIndexHtml } = require('./helpers/dom.js');
-const { splitIntoBeats } = require('../public/beats.js');
+const { splitIntoBeats } = require('../public/js/beats.js');
 
 // The elements witness.js reaches for by id. Kept in one place so the drift
 // guard below and the fixture can't disagree with each other.

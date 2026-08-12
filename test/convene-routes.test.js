@@ -1,8 +1,8 @@
 'use strict';
 
-// #193 route-extraction — convene-routes.js, the highest-risk module in
+// #193 route-extraction — src/routes/convene.js, the highest-risk module in
 // this pass: SSE streaming state and session create/mutate-in-flight (see
-// the module comment on convene-routes.js). runRound/proposeCast are faked
+// the module comment on src/routes/convene.js). runRound/proposeCast are faked
 // here at the pipeline.js boundary — their own internals are covered by
 // test/pipeline.test.js; what these tests exercise is the SSE event
 // sequence, session persistence, and error handling this module owns.
@@ -13,7 +13,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { registerConveneRoutes } = require('../convene-routes.js');
+const { registerConveneRoutes } = require('../src/routes/convene.js');
 
 function fakeApp() {
   const routes = {};

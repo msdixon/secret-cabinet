@@ -12,7 +12,7 @@ const {
   buildSpeakerSystemPrompt,
   buildSpeakerUserMessage,
   callSpeakerTurn,
-} = require('../pipeline');
+} = require('../src/pipeline');
 
 const ROOT = path.join(__dirname, '..');
 const ROSTER = JSON.parse(fs.readFileSync(path.join(ROOT, 'prompts/members/roster.json'), 'utf8'));

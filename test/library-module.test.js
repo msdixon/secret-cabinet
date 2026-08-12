@@ -11,7 +11,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const lib = require('../library.js');
+const lib = require('../src/library.js');
 
 function makeFixtureDir() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'library-test-'));
