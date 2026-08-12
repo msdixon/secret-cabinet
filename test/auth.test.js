@@ -11,7 +11,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const auth = require('../auth.js');
+const auth = require('../src/auth.js');
 
 function fakeReq({ path, session = {}, query = {}, body = {} } = {}) {
   return { path, session, query, body };

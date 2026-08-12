@@ -1,6 +1,6 @@
 'use strict';
 
-// #193 route-extraction — member-routes.js.
+// #193 route-extraction — src/routes/member.js.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -8,7 +8,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const { registerMemberRoutes } = require('../member-routes.js');
+const { registerMemberRoutes } = require('../src/routes/member.js');
 
 function fakeApp() {
   const routes = {};

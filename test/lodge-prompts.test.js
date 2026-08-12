@@ -12,7 +12,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const lp = require('../lodge-prompts.js');
+const lp = require('../src/lodge-prompts.js');
 
 const ROSTER = [
   { id: 'crowley', name: 'Crowley' },

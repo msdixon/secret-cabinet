@@ -8,7 +8,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const tf = require('../transcript-format.js');
+const tf = require('../src/transcript-format.js');
 
 const ROSTER = [
   { id: 'crowley', name: 'Aleister Crowley', aliases: ['Beast'] },

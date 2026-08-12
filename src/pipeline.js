@@ -12,7 +12,7 @@
 // public/ has no bundler — see that file's top-of-file comment. Required
 // and re-exported here so it's tested the same way as this file's other
 // pure functions (test/pipeline.test.js).
-const { splitIntoBeats, BEAT_WORD_THRESHOLD } = require('./public/beats.js');
+const { splitIntoBeats, BEAT_WORD_THRESHOLD } = require('../public/beats.js');
 
 // ── Member section (shared with the legacy full-blob prompt builder) ──────
 
