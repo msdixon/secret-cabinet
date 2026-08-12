@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=UnifrakturMaguntia&family=IM+Fell+English:ital@0;1&family=Crimson+Pro:ital,wght@0,300;0,400;0,600;1,300;1,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=UnifrakturMaguntia&family=IM+Fell+English:ital@0;1&family=Crimson+Pro:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Cinzel:wght@500;600&display=swap');
 :root {
   --lodge-bg: #0e0b08;
   --lodge-panel: #17120d;
@@ -224,7 +224,15 @@ a.lodge-btn { display:inline-block; text-decoration:none; }
 .bubble-body { background:rgba(23,18,13,0.5); border:1px solid var(--lodge-border); border-radius:2px 8px 8px 8px; padding:10px 14px; }
 .bubble-right .bubble-body { border-radius:8px 2px 8px 8px; }
 @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
-.speaker-name { font-family:'UnifrakturMaguntia',serif; font-size:19px; color:var(--lodge-amber); margin-bottom:5px; letter-spacing:1px; display:flex; align-items:center; gap:6px; }
+/* #266 — identity names (proper nouns) get their own typeface, distinct from
+   .panel-label's IM Fell English (functional labels) and .lodge-title's
+   UnifrakturMaguntia (masthead only, illegible-but-read-once is fine there,
+   a transcript full of repeated speaker headers is not). */
+.identity-name, .speaker-name, .witness-speaker, .dossier-name, .thread-header-name, .lodge-detail-name {
+  font-family: 'Cinzel', serif;
+  font-weight: 600;
+}
+.speaker-name { font-size:19px; color:var(--lodge-amber); margin-bottom:5px; letter-spacing:1px; display:flex; align-items:center; gap:6px; }
 .speaker-name.observer-voice { color:#a0c8a0; }
 .transcript-entry.bubble-right .speaker-name { justify-content:flex-end; }
 .speaker-glyph { font-family:'Georgia',serif; font-size:13px; opacity:0.6; letter-spacing:0; line-height:1; flex-shrink:0; }
@@ -360,7 +368,7 @@ a.archival-image-link:hover { border-color:var(--lodge-amber-dim); cursor:pointe
 .session-delete-btn:hover { border-color:#7a3030; color:#c07070; background:rgba(120,40,40,0.1); }
 /* Thread styles */
 .thread-header { padding:10px 14px 6px; border-bottom:1px solid var(--lodge-border); display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
-.thread-header-name { font-family:'UnifrakturMaguntia',serif; font-size:16px; color:var(--lodge-amber); }
+.thread-header-name { font-size:16px; color:var(--lodge-amber); letter-spacing:0.5px; }
 .thread-header-count { font-family:'IM Fell English',serif; font-size:11px; color:var(--lodge-ash); letter-spacing:1px; }
 .thread-clear-btn { background:none; border:none; color:var(--lodge-ash); font-family:'IM Fell English',serif; font-size:11px; cursor:pointer; margin-left:auto; letter-spacing:1px; }
 .thread-clear-btn:hover { color:var(--lodge-muted); }
@@ -431,7 +439,7 @@ a.archival-image-link:hover { border-color:var(--lodge-amber-dim); cursor:pointe
 .dossier-entry.highlighted { border-color:var(--lodge-amber); background:rgba(200,146,42,0.06); }
 .dossier-header { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
 .dossier-portrait { width:48px; height:48px; border-radius:50%; object-fit:cover; border:1px solid var(--lodge-border); flex-shrink:0; }
-.dossier-name { font-family:'UnifrakturMaguntia',serif; font-size:18px; color:var(--lodge-amber); letter-spacing:1px; }
+.dossier-name { font-size:18px; color:var(--lodge-amber); letter-spacing:1px; }
 .dossier-section-label { font-family:'IM Fell English',serif; font-size:12px; letter-spacing:2px; text-transform:uppercase; color:var(--lodge-muted); margin-bottom:4px; }
 .dossier-text { font-family:'Crimson Pro',serif; font-size:15px; line-height:1.6; color:var(--lodge-muted); }
 .dossier-toggle { background:none; border:none; color:var(--lodge-muted); font-family:'IM Fell English',serif; font-size:12px; letter-spacing:2px; cursor:pointer; margin-top:8px; padding:0; text-transform:uppercase; }
@@ -588,7 +596,7 @@ a.archival-image-link:hover { border-color:var(--lodge-amber-dim); cursor:pointe
 .witness-stage .transcript-typing .typing-text::after { content:'▍'; opacity:0.6; animation:witnessCursorBlink 1s step-end infinite; }
 @keyframes witnessCursorBlink { 50% { opacity:0; } }
 .witness-stage:empty::before { content:'The room is quiet. Convene to begin.'; display:block; text-align:center; margin-top:60px; font-family:'IM Fell English',serif; font-style:italic; font-size:14px; color:var(--lodge-muted); }
-.witness-speaker { font-family:'UnifrakturMaguntia',serif; font-size:22px; color:var(--lodge-amber); letter-spacing:1px; display:flex; align-items:baseline; gap:8px; opacity:0; animation:witnessslide 0.5s ease forwards; }
+.witness-speaker { font-size:22px; color:var(--lodge-amber); letter-spacing:1px; display:flex; align-items:baseline; gap:8px; opacity:0; animation:witnessslide 0.5s ease forwards; }
 .witness-speech { font-family:'Crimson Pro',serif; font-size:17px; line-height:1.8; color:var(--lodge-cream); max-width:680px; opacity:0; animation:witnessslide 0.5s ease 0.15s forwards; }
 .witness-annotation { font-family:'Crimson Pro',serif; font-size:14px; font-style:italic; color:var(--lodge-ash); margin-top:4px; padding-left:16px; border-left:2px solid var(--lodge-border); opacity:0; animation:witnessslide 0.5s ease 0.3s forwards; }
 /* Ghost: same element, class swap — use transition not animation so it visibly dims in place */
@@ -667,7 +675,7 @@ a.archival-image-link:hover { border-color:var(--lodge-amber-dim); cursor:pointe
 .lodge-detail-header { display:flex; align-items:center; gap:14px; margin-bottom:14px; }
 .lodge-detail-portrait { width:64px; height:64px; border-radius:50%; object-fit:cover; border:1px solid var(--lodge-border); flex-shrink:0; }
 .lodge-detail-archive-image { border-radius:2px; }
-.lodge-detail-name { font-family:'UnifrakturMaguntia',serif; font-size:24px; color:var(--lodge-amber); letter-spacing:1px; }
+.lodge-detail-name { font-size:24px; color:var(--lodge-amber); letter-spacing:1px; }
 .lodge-detail-kind { font-family:'IM Fell English',serif; font-size:12px; letter-spacing:1px; text-transform:uppercase; color:var(--lodge-muted); margin-top:2px; }
 .lodge-detail-section { margin-top:18px; }
 .lodge-citation { font-style:italic; }
