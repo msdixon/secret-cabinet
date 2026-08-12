@@ -134,8 +134,8 @@ window.Witness = (function () {
   function resetLiveStage() { clearStage(false); }
 
   // Enters "the record" view: stage hidden, record showing full height.
-  // Called on Exit (live or replay) and automatically once a convene
-  // reaches its natural pause -- see app.js's convene()/resumeRounds().
+  // Called on Exit (live or replay) and automatically once the user lets a
+  // meeting end at a lull -- see app.js's closeMeeting().
   function collapseStage() {
     const el = document.getElementById('stage-record');
     el?.classList.remove('stage-only');
@@ -178,6 +178,26 @@ window.Witness = (function () {
     const el = document.createElement('div');
     el.className = 'witness-round-header';
     el.innerHTML = `<div class="witness-rule"></div><span class="witness-round-label">${deps.escapeHTML(label)}</span><div class="witness-rule"></div>`;
+    stage.appendChild(el);
+    stage.scrollTop = stage.scrollHeight;
+    return el;
+  }
+
+  // #245's live counterpart to the replayed 'lull' block above — mirrors the
+  // record's divider onto the stage when a passage reaches its pause.
+  //
+  // Returns its element, and app.js needs it for more than error recovery this
+  // time: only one pane is ever visible (see the .stage-only/.collapsed note
+  // atop this file), and during a live meeting that pane is the stage. The
+  // Continue / Let it end controls have to hang off this copy, or the user
+  // would be asked to decide on a divider they cannot see.
+  function liveLull(note) {
+    markStageActive();
+    setHint('◉ Live — the room has paused');
+    const stage = document.getElementById('witness-stage');
+    const el = document.createElement('div');
+    el.className = 'transcript-lull';
+    el.innerHTML = `<div class="lull-rule"></div><span class="lull-note">${deps.escapeHTML(note)}</span><div class="lull-rule"></div>`;
     stage.appendChild(el);
     stage.scrollTop = stage.scrollHeight;
     return el;
@@ -276,7 +296,12 @@ window.Witness = (function () {
     const annotations = session.annotations || {};
 
     (session.rounds || []).forEach(round => {
-      blocks.push({ type: 'header', label: round.label });
+      // #245: `endedBy` (written only since #244) separates a segment whose
+      // label opens it -- an old round header -- from one whose label is the
+      // lull that ended it, which plays after the passage, where the room
+      // actually drew breath. Same discriminator sessions.js's restore uses.
+      const endsInLull = !!round.endedBy;
+      if (!endsInLull) blocks.push({ type: 'header', label: round.label });
 
       const lines = (round.text || '').split('\n');
       let speaker = null, textLines = [];
@@ -322,6 +347,7 @@ window.Witness = (function () {
         else if (speaker) textLines.push(t);
       });
       flush();
+      if (endsInLull) blocks.push({ type: 'lull', label: round.label });
     });
 
     return blocks;
@@ -344,6 +370,15 @@ window.Witness = (function () {
       const el = document.createElement('div');
       el.className = 'witness-round-header';
       el.innerHTML = `<div class="witness-rule"></div><span class="witness-round-label">${deps.escapeHTML(block.label)}</span><div class="witness-rule"></div>`;
+      stage.appendChild(el);
+      stage.scrollTop = stage.scrollHeight;
+      return WITNESS_PAUSE_AFTER_HEADER;
+    }
+
+    if (block.type === 'lull') {
+      const el = document.createElement('div');
+      el.className = 'transcript-lull';
+      el.innerHTML = `<div class="lull-rule"></div><span class="lull-note">${deps.escapeHTML(block.label)}</span><div class="lull-rule"></div>`;
       stage.appendChild(el);
       stage.scrollTop = stage.scrollHeight;
       return WITNESS_PAUSE_AFTER_HEADER;
@@ -608,6 +643,7 @@ window.Witness = (function () {
     liveReset,
     resetLiveStage,
     liveRoundHeader,
+    liveLull,
     liveSpeech,
     liveTypingStart,
     liveTypingSet,

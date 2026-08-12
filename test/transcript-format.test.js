@@ -73,6 +73,32 @@ test('formatTranscriptText', async t => {
   });
 });
 
+// #245: the `endedBy` discriminator is the whole point here — without it there
+// is no way to tell an opening round header from the lull that closed a
+// passage, since both live in the same `label` field.
+test('composeSegmentText', async t => {
+  await t.test('puts a post-#244 lull note after the passage it ended', () => {
+    const out = tf.composeSegmentText(
+      { label: 'The room draws breath.', text: 'Crowley\nOne.', endedBy: 'lull' },
+      ROSTER,
+    );
+    assert.equal(out, '\nCrowley —\nOne.\n\n— The room draws breath. —\n');
+  });
+
+  await t.test('leaves a pre-#244 round label above its passage, as it always was', () => {
+    const out = tf.composeSegmentText({ label: 'First Movement', text: 'Crowley\nOne.' }, ROSTER);
+    assert.equal(out, '\n— First Movement —\n\nCrowley —\nOne.\n');
+  });
+
+  await t.test('treats a user-closed segment as ending in a lull like any other', () => {
+    const out = tf.composeSegmentText(
+      { label: 'The fire settles.', text: 'Crowley\nOne.', endedBy: 'closed' },
+      ROSTER,
+    );
+    assert.match(out, /One\.\n\n— The fire settles\. —\n$/);
+  });
+});
+
 test('buildTranscriptHeader', async t => {
   await t.test('joins resolved member names and embeds the source entry', () => {
     const header = tf.buildTranscriptHeader('The source text.', ['crowley', 'blavatsky'], '2026-08-08', ROSTER);

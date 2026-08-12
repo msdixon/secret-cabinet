@@ -74,6 +74,9 @@ function makeDeps(overrides = {}) {
     loadSession: id => savedSessions.get(id) || null,
     saveResidueUpdates: updates => savedResidue.push(updates),
     formatTranscriptText: text => text,
+    composeSegmentText: segment => (segment.endedBy
+      ? `\n${segment.text}\n\n— ${segment.label} —\n`
+      : `\n— ${segment.label} —\n\n${segment.text}\n`),
     buildTranscriptHeader: (entry, members, date) => `HEADER(${date})\n${entry}\n`,
     isLocal: true,
     runRound: async ({ onSpeakerStart, onSpeakerEnd, onChunk, onMetric }) => {

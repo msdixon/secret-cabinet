@@ -214,6 +214,10 @@ function formatTranscriptText(text) {
   return transcriptFormat.formatTranscriptText(text, ROSTER);
 }
 
+function composeSegmentText(segment) {
+  return transcriptFormat.composeSegmentText(segment, ROSTER);
+}
+
 // ─── Passage prompts ──────────────────────────────────────────────────────────
 // See lodge-prompts.js (#193, reshaped for #244 per #194's migration
 // sketch) for the extracted, Express-agnostic implementation. Thin wrappers
@@ -357,7 +361,7 @@ registerExportRoutes(app, {
 
 registerSessionRoutes(app, {
   sessionsDir: SESSIONS_DIR, loadSession, saveSession, roster: ROSTER,
-  makeBranchId, buildTranscriptHeader, formatTranscriptText, renderReadingRoomPage,
+  makeBranchId, buildTranscriptHeader, composeSegmentText, renderReadingRoomPage,
   client, model: MODEL, makeMetric,
   loadLibraryCitationLookup, loadArchiveImageIndex,
   groundAgainstLibraryText, escalateCitationsToWeb,
@@ -371,7 +375,7 @@ registerConveneRoutes(app, {
   playerDirectorPool, resolvePlayerName, buildPrecedingTurn,
   interjectSpeakerCount: lodgePrompts.INTERJECT_SPEAKER_COUNT,
   makeSessionId, saveSession, loadSession, saveResidueUpdates,
-  formatTranscriptText, buildTranscriptHeader,
+  formatTranscriptText, composeSegmentText, buildTranscriptHeader,
   isLocal: IS_LOCAL, runRound, proposeCast,
 });
 
