@@ -55,7 +55,9 @@ function makeDeps(dir, overrides = {}) {
     roster: [{ id: 'crowley', name: 'Crowley' }, { id: 'jung', name: 'Carl Jung' }],
     makeBranchId: store.makeBranchId,
     buildTranscriptHeader: (entry, members, date) => `HEADER(${date})\n${entry}\n`,
-    formatTranscriptText: text => text,
+    composeSegmentText: segment => (segment.endedBy
+      ? `\n${segment.text}\n\n— ${segment.label} —\n`
+      : `\n— ${segment.label} —\n\n${segment.text}\n`),
     renderReadingRoomPage: session => `<html>${session.id}</html>`,
     client: { messages: { create: async () => ({ content: [{ type: 'tool_use', input: { citations: [] } }], usage: {} }) } },
     model: 'test-model',
@@ -236,6 +238,53 @@ test('GET /api/sessions/:id', async t => {
     const res = fakeRes();
     app.routes['GET /api/sessions/:id'](fakeReq({ params: { id: 's1' } }), res);
     assert.equal(res.body.id, 's1');
+  });
+});
+
+// #245: `closed` is the user's end-cause, not the room's — #244 defined it but
+// left it unreachable because nothing server-side decides it. This route is
+// what reaches it, and the distinction it records ("the room wound down and
+// the user agreed" vs. "the user cut it off") is what #164's pacing review
+// needs; the two are indistinguishable without it.
+test('POST /api/sessions/:id/close', async t => {
+  await t.test('marks the final segment as closed by the user', () => {
+    const dir = makeFixtureDir();
+    t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+    store.saveSession(dir, baseSession('s1', {
+      rounds: [
+        { label: 'The room draws breath.', text: 'a', endedBy: 'lull' },
+        { label: 'The fire settles.', text: 'b', endedBy: 'budget' },
+      ],
+    }));
+    const app = fakeApp();
+    registerSessionRoutes(app, makeDeps(dir));
+    const res = fakeRes();
+    app.routes['POST /api/sessions/:id/close'](fakeReq({ params: { id: 's1' } }), res);
+    assert.equal(res.body.closedAt, 1);
+    const saved = store.loadSession(dir, 's1');
+    assert.equal(saved.rounds[1].endedBy, 'closed');
+    assert.equal(saved.rounds[0].endedBy, 'lull', 'earlier passages keep their own end-cause');
+  });
+
+  await t.test('404s for a session that does not exist', () => {
+    const dir = makeFixtureDir();
+    t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+    const app = fakeApp();
+    registerSessionRoutes(app, makeDeps(dir));
+    const res = fakeRes();
+    app.routes['POST /api/sessions/:id/close'](fakeReq({ params: { id: 'nope' } }), res);
+    assert.equal(res.statusCode, 404);
+  });
+
+  await t.test('400s rather than closing a session with no passages', () => {
+    const dir = makeFixtureDir();
+    t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+    store.saveSession(dir, baseSession('s1', { rounds: [] }));
+    const app = fakeApp();
+    registerSessionRoutes(app, makeDeps(dir));
+    const res = fakeRes();
+    app.routes['POST /api/sessions/:id/close'](fakeReq({ params: { id: 's1' } }), res);
+    assert.equal(res.statusCode, 400);
   });
 });
 

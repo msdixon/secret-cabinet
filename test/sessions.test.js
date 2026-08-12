@@ -57,9 +57,8 @@ function makeDeps(document, calls) {
     setSessionDate: record('setSessionDate'),
     setCurrentEntry: record('setCurrentEntry'),
     setCurrentSourceSessionId: record('setCurrentSourceSessionId'),
-    setCurrentRound: record('setCurrentRound'),
-    setActiveConveneRoundCount: record('setActiveConveneRoundCount'),
-    setRoundCount: record('setRoundCount'),
+    setSegmentCount: record('setSegmentCount'),
+    setRenderSegment: record('setRenderSegment'),
     setPlayerMode: record('setPlayerMode'),
     setPlayerMemberId: record('setPlayerMemberId'),
     setPlayerName: record('setPlayerName'),
@@ -81,6 +80,13 @@ function makeDeps(document, calls) {
       h.className = 'round-header';
       document.getElementById('transcript-content').appendChild(h);
       return h;
+    },
+    addLullDivider: (note, idx) => {
+      calls.push(['addLullDivider', note, idx]);
+      const el = document.createElement('div');
+      el.className = 'transcript-lull';
+      document.getElementById('transcript-content').appendChild(el);
+      return el;
     },
     // Stands in for app.js's real parser: appends one entry with a stable
     // entryId, which is all the annotation-restore step downstream reads.
@@ -145,9 +151,7 @@ test('restoreSession', async t => {
     assert.equal(argFor(calls, 'setCurrentSessionId'), 'sess-1');
     assert.equal(argFor(calls, 'setSessionDate'), '1926-11-02');
     assert.equal(argFor(calls, 'setCurrentEntry'), 'the source document');
-    assert.equal(argFor(calls, 'setCurrentRound'), 2, 'current round is however many are stored');
-    assert.equal(argFor(calls, 'setRoundCount'), 4);
-    assert.equal(argFor(calls, 'setActiveConveneRoundCount'), 4);
+    assert.equal(argFor(calls, 'setSegmentCount'), 2, 'segment count is however many are stored');
     assert.deepEqual([...argFor(calls, 'setActiveMembers')], ['crowley', 'blavatsky']);
   });
 
@@ -181,6 +185,37 @@ test('restoreSession', async t => {
     assert.deepEqual(
       calls.filter(c => c[0] === 'parseAndRenderTranscript').map(c => c[1]),
       ['Crowley —\nOne.', 'Blavatsky —\nTwo.'],
+    );
+  });
+
+  // #245: a segment's label means opposite things either side of the
+  // continuous-stream migration, and `endedBy` is the only thing that says
+  // which. The pre-#244 session above must keep rendering its label as an
+  // opening header (asserted there); a post-#244 one renders the same field as
+  // the lull that *ended* the passage, so it comes after the text.
+  await t.test('renders a post-#244 segment label as a lull after its passage', async t2 => {
+    const streamed = {
+      ...SESSION,
+      rounds: [
+        { label: 'The room draws breath.', text: 'Crowley —\nOne.', endedBy: 'budget' },
+        { label: 'The fire settles.', text: 'Blavatsky —\nTwo.', endedBy: 'closed' },
+      ],
+    };
+    const { calls, module: Sessions } = boot(t2, { fetchImpl: () => jsonOk(streamed) });
+    await Sessions.restoreSession('sess-1');
+
+    assert.equal(calls.filter(c => c[0] === 'addRoundHeader').length, 0, 'no round headers survive');
+    assert.deepEqual(
+      calls.filter(c => c[0] === 'addLullDivider').map(c => [c[1], c[2]]),
+      [['The room draws breath.', 0], ['The fire settles.', 1]],
+    );
+    // The passage renders before the lull that ended it, not after.
+    const order = calls.map(c => c[0]);
+    assert.ok(order.indexOf('parseAndRenderTranscript') < order.indexOf('addLullDivider'));
+    // Branch points moved to lulls but kept their index meaning (#33/#194).
+    assert.deepEqual(
+      calls.filter(c => c[0] === 'addBranchControl').map(c => c[2]),
+      [0, 1],
     );
   });
 

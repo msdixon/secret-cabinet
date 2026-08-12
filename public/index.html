@@ -161,7 +161,7 @@
       </div>
       <div class="modal-body">
         <div class="panel-label" style="margin-bottom:4px;">Writing as <span id="player-turn-name-label" style="text-transform:none;letter-spacing:0;color:var(--lodge-cream);"></span></div>
-        <textarea class="arc-textarea" id="player-turn-text" rows="6" placeholder="Write your turn, or pass and let the room continue without you this round."></textarea>
+        <textarea class="arc-textarea" id="player-turn-text" rows="6" placeholder="Write your turn, or pass and let the room continue without you."></textarea>
         <div style="display:flex;gap:10px;margin-top:16px;">
           <button class="lodge-btn primary" id="player-turn-speak-btn">Speak</button>
           <button class="lodge-btn" id="player-turn-pass-btn">Pass</button>
@@ -203,20 +203,12 @@
 
     <div class="convene-panel">
       <div class="convene-row">
+        <!-- #245/#73: nothing here sets the meeting's length any more. Per
+             #194's first decision that's deliberate down to the absence of a
+             soft "brief sitting / full evening" temperament — any
+             pre-commitment re-imports the round frame through the side door.
+             How long the room sits is decided in the room, at each lull. -->
         <button class="lodge-btn primary" id="convene-btn" onclick="convene()">Convene the Lodge</button>
-        <div class="round-controls">
-          <span class="round-label">Rounds</span>
-          <div class="round-count-selector" id="round-count-selector">
-            <button type="button" class="round-count-btn" data-count="1" onclick="setRoundCount(1)">1</button>
-            <button type="button" class="round-count-btn" data-count="2" onclick="setRoundCount(2)">2</button>
-            <button type="button" class="round-count-btn selected" data-count="3" onclick="setRoundCount(3)">3</button>
-          </div>
-          <div class="round-pips" id="round-pips">
-            <div class="round-pip" id="pip-1"></div>
-            <div class="round-pip" id="pip-2"></div>
-            <div class="round-pip" id="pip-3"></div>
-          </div>
-        </div>
         <button class="lodge-btn" id="reveal-player-turns-btn" onclick="togglePlayerTurnReveal()">Reveal Player Turns ◆</button>
         <button class="lodge-btn sessions-btn" id="dossier-btn" onclick="window.Sessions.toggleDossier()" style="display:none;">The Assembled ↗</button>
       </div>
@@ -274,19 +266,23 @@
       <div class="panel-label" style="margin-bottom:10px;">III. After the Meeting</div>
 
       <!-- #186: the panel reads as two verbs, not a control board. Continue
-           folds "one more turn / interject / reconvene / branch" -- four ways
-           of extending the meeting -- behind one menu; Preserve folds every
-           export and its per-app config behind another. Verify Citations and
-           Watch stay top-level: they're how you read the meeting that already
-           happened, not machinery for continuing or preserving it. -->
+           folds four ways of extending the meeting behind one menu; Preserve
+           folds every export and its per-app config behind another. Verify
+           Citations and Watch stay top-level: they're how you read the meeting
+           that already happened, not machinery for continuing or preserving it.
+
+           #245: this Continue is the *container*, and its first item is now
+           "Stir the room again" -- re-stirring a meeting that already closed.
+           The in-stream Continue, at a lull, is the different and now-primary
+           verb: going on with a meeting that never ended. -->
       <div class="after-row">
         <div class="menu-wrap">
           <button class="lodge-btn" id="continue-btn" onclick="toggleAfterMenu('continue-menu')">Continue ▾</button>
           <div class="lodge-menu" id="continue-menu">
-            <button class="lodge-btn" id="additional-round-btn" onclick="addRound()">One More Turn ↻</button>
+            <button class="lodge-btn" id="stir-room-btn" onclick="stirRoom()" title="Draw one more passage out of a meeting that already closed">Stir the room again ↻</button>
             <button class="lodge-btn" id="interject-toggle-btn" style="border-color:#a0c8a0;color:#a0c8a0;" onclick="toggleInterjectForm()">Interject</button>
             <button class="lodge-btn" onclick="reconveneOnCurrentSession()" title="Use this transcript as the document for a new session">↩ Reconvene</button>
-            <button class="lodge-btn" onclick="branchFromLatestRound()" title="Branch from here — explore an alternate path from this point, original stays untouched">⑂ Branch</button>
+            <button class="lodge-btn" onclick="branchFromLatestLull()" title="Branch from here — explore an alternate path from this point, original stays untouched">⑂ Branch</button>
           </div>
         </div>
 
