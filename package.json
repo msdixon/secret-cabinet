@@ -10,7 +10,11 @@
     "update": "git pull origin main && npm install && lsof -ti :${PORT:-3132} | xargs kill -9 2>/dev/null; npm run dev",
     "citations": "node scripts/build-citation-manifest.js",
     "test": "node --test test/*.test.js",
-    "test:watch": "node --test --watch test/*.test.js"
+    "test:watch": "node --test --watch test/*.test.js",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write \"**/*.js\"",
+    "format:check": "prettier --check \"**/*.js\""
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.116.0",
@@ -24,6 +28,10 @@
     "session-file-store": "^1.5.0"
   },
   "devDependencies": {
-    "jsdom": "^29.1.1"
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.8.1",
+    "globals": "^17.11.0",
+    "jsdom": "^29.1.1",
+    "prettier": "^3.9.6"
   }
 }
