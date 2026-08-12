@@ -205,7 +205,12 @@ a.lodge-btn { display:inline-block; text-decoration:none; }
 .transcript-lull { display:flex; align-items:center; gap:14px; margin:22px 0 20px; animation:fadeIn 0.5s ease; }
 .lull-rule { flex:1; height:1px; background:linear-gradient(to right, transparent, var(--lodge-border)); }
 .lull-rule:last-of-type { background:linear-gradient(to left, transparent, var(--lodge-border)); }
-.lull-note { font-family:'IM Fell English','Crimson Pro',serif; font-style:italic; font-size:13px; color:var(--lodge-ash); letter-spacing:0.03em; text-align:center; opacity:0.85; }
+/* #246: a slow, continuous rise and fall rather than the one-shot fadeIn
+   everything else on the page gets — the note doesn't just arrive, it keeps
+   breathing for as long as it's the room's current state. Delayed so it
+   starts after the entrance settles, not layered on top of it. */
+.lull-note { font-family:'IM Fell English','Crimson Pro',serif; font-style:italic; font-size:13px; color:var(--lodge-ash); letter-spacing:0.03em; text-align:center; opacity:0.85; animation:lullBreathe 4.5s ease-in-out 0.6s infinite; }
+@keyframes lullBreathe { 0%,100% { opacity:0.85; } 50% { opacity:0.5; } }
 .lull-actions { display:flex; gap:8px; flex-shrink:0; }
 .lull-btn { font-family:'IM Fell English',serif; font-size:11px; letter-spacing:1px; background:transparent; border:1px solid var(--lodge-border); color:var(--lodge-muted); padding:3px 12px; border-radius:2px; cursor:pointer; white-space:nowrap; transition:all 0.2s; }
 .lull-btn:hover { border-color:var(--lodge-amber-dim); color:var(--lodge-amber); }

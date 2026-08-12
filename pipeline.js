@@ -997,12 +997,19 @@ const STOCK_LULL_NOTES = [
   'A quiet settles over the table.',
   'Someone stirs the fire; no one speaks for a moment.',
 ];
-function pickStockLullNote(rng = Math.random) {
-  return STOCK_LULL_NOTES[Math.floor(rng() * STOCK_LULL_NOTES.length)];
+// #246: memoryless over three options meant consecutive lulls repeated
+// about 1 in 3 — invisible while the client had nothing rendering these
+// notes, surfaced once #245 started showing them. excludePrevious lets the
+// caller keep the passage before this one from picking itself again;
+// falls back to the full rotation if that would leave nothing to choose from.
+function pickStockLullNote(rng = Math.random, excludePrevious = null) {
+  const pool = excludePrevious ? STOCK_LULL_NOTES.filter(n => n !== excludePrevious) : STOCK_LULL_NOTES;
+  const options = pool.length ? pool : STOCK_LULL_NOTES;
+  return options[Math.floor(rng() * options.length)];
 }
-function resolveLullNote(directorNote, rng = Math.random) {
+function resolveLullNote(directorNote, rng = Math.random, previousLullNote = null) {
   const trimmed = (directorNote || '').trim().slice(0, LULL_NOTE_MAX_CHARS);
-  return trimmed || pickStockLullNote(rng);
+  return trimmed || pickStockLullNote(rng, previousLullNote);
 }
 
 // Ties the director and per-speaker calls together into one round. Returns
@@ -1041,7 +1048,7 @@ function resolveLullNote(directorNote, rng = Math.random) {
 async function runRound({ client, model, lodgeContext, ROSTER, loadMemberFile,
   presentMemberIds, artifact, notes, roundPrompt, conversationHistory,
   speakerCount, round, onChunk, onMetric, onSpeakerStart, onSpeakerEnd, precedingTurn,
-  disposition, loadVoiceExemplar, loadResidue }) {
+  disposition, loadVoiceExemplar, loadResidue, previousLullNote }) {
 
   const presentMembers = ROSTER.filter(m => presentMemberIds.includes(m.id));
   const effectiveCount = Math.min(speakerCount, presentMembers.length);
@@ -1253,7 +1260,7 @@ async function runRound({ client, model, lodgeContext, ROSTER, loadMemberFile,
   // own note when it judged the wind-down, a stock line otherwise (budget
   // exhaustion reaches the same lull from the user's side; it just wasn't
   // an authored moment).
-  const lullNote = resolveLullNote(directorLullNote);
+  const lullNote = resolveLullNote(directorLullNote, undefined, previousLullNote);
 
   return { fullRoundText: roundSoFar, speakerOrder, disposition: currentDisposition, residueUpdates, beats: beatsList, endedBy, lullNote };
 }
