@@ -31,11 +31,13 @@ The room exists outside time. Members do not remember previous meetings. No one 
 
 ## Architecture
 
-- **`server.js`** — Express server. Proxies all Anthropic API calls server-side. A session is a continuous stream of passages separated by lulls — no preordained round count — each passage building on the last (genuine cross-talk, not parallel independent responses).
-- **`dayone.js`** — MCP client that spawns `/usr/local/bin/dayone mcp` via stdio. Handles journal fetch and transcript export.
+- **`server.js`** — Express server, and the only application file at the repo root. Proxies all Anthropic API calls server-side. A session is a continuous stream of passages separated by lulls — no preordained round count — each passage building on the last (genuine cross-talk, not parallel independent responses).
+- **`src/`** — Everything `server.js` requires: the salon engine (`pipeline.js`), roster/library/citation/graph logic, auth, and session persistence.
+- **`src/routes/`** — One module per route group (`convene`, `session`, `library`, `member`, `export`, `graph`, `upload`). Each exports a single `register<X>Routes(app, deps)` and takes its dependencies as an explicit parameter rather than reaching for module-level singletons.
+- **`src/dayone.js`** — MCP client that spawns `/usr/local/bin/dayone mcp` via stdio. Handles journal fetch and transcript export.
 - **`prompts/lodge-context.md`** — The shared system prompt foundation: the conceit of the room, the terms of being there, the voice parameters.
 - **`prompts/members/`** — One file per lodge member. Each character is built on top of the lodge context.
-- **`public/`** — Frontend served statically. Dark fire aesthetic. No framework.
+- **`public/`** — Frontend served statically. Dark fire aesthetic. No framework, no bundler, no build step: `index.html` and `lodge.html` sit at the top, scripts live in `public/js/` (each an IIFE assigning one `window.X`, loaded as plain `<script>` tags), styles in `public/css/`, and portraits/archival images in their own folders.
 - **`sessions/`** — Session JSON persisted locally. Not committed.
 
 ### Sibling relationship

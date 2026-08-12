@@ -13,7 +13,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const roster = require('../roster.js');
+const roster = require('../src/roster.js');
 
 function makeFixtureDir() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'roster-test-'));

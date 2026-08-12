@@ -1,6 +1,6 @@
 'use strict';
 
-// #193 route-extraction — session-routes.js: session CRUD, threads, branch,
+// #193 route-extraction — src/routes/session.js: session CRUD, threads, branch,
 // transcript, publish/reading-room, and verify-citations. loadSession/
 // saveSession are the real sessions-store.js functions against a real
 // tmpdir (same fixture pattern as sessions-store.test.js) — everything else
@@ -13,8 +13,8 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const { registerSessionRoutes } = require('../session-routes.js');
-const store = require('../sessions-store.js');
+const { registerSessionRoutes } = require('../src/routes/session.js');
+const store = require('../src/sessions-store.js');
 
 function fakeApp() {
   const routes = {};

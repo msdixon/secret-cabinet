@@ -1,11 +1,11 @@
 'use strict';
 
-// #193 route-extraction — graph-routes.js.
+// #193 route-extraction — src/routes/graph.js.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { registerGraphRoutes } = require('../graph-routes.js');
+const { registerGraphRoutes } = require('../src/routes/graph.js');
 
 function fakeApp() {
   const routes = {};

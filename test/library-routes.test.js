@@ -1,6 +1,6 @@
 'use strict';
 
-// #193 route-extraction — library-routes.js. Same fakeApp()/fakeReq()/
+// #193 route-extraction — src/routes/library.js. Same fakeApp()/fakeReq()/
 // fakeRes() convention as auth.test.js: handlers are recorded by
 // registerLibraryRoutes and invoked directly, no real server or supertest.
 
@@ -10,7 +10,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const { registerLibraryRoutes } = require('../library-routes.js');
+const { registerLibraryRoutes } = require('../src/routes/library.js');
 
 function fakeApp() {
   const routes = {};

@@ -19,6 +19,11 @@ const assert = require('node:assert/strict');
 const { JSDOM } = require('jsdom');
 
 const PUBLIC_DIR = path.join(__dirname, '..', '..', 'public');
+// #272 moved the script-tag modules into public/js/ (index.html itself stays
+// in public/). Two constants rather than one so loadPublicModule's callers
+// keep passing a bare 'casting.js' — the file names are what those tests are
+// about, not where the directory split put them.
+const PUBLIC_JS_DIR = path.join(PUBLIC_DIR, 'js');
 
 /**
  * Boot a jsdom window containing `bodyHtml`, then load public/<fileName>
@@ -52,7 +57,7 @@ function loadPublicModule(fileName, bodyHtml = '', beforeEval = null) {
   beforeEval?.(window);
 
   const before = new Set(Object.keys(window));
-  const src = fs.readFileSync(path.join(PUBLIC_DIR, fileName), 'utf8');
+  const src = fs.readFileSync(path.join(PUBLIC_JS_DIR, fileName), 'utf8');
   window.eval(src);
   const globalsAdded = Object.keys(window).filter(k => !before.has(k));
 
@@ -79,4 +84,4 @@ function assertIdsExistInIndexHtml(ids) {
   assert.deepEqual(missing, [], `ids missing from public/index.html: ${missing.join(', ')}`);
 }
 
-module.exports = { loadPublicModule, assertIdsExistInIndexHtml, PUBLIC_DIR };
+module.exports = { loadPublicModule, assertIdsExistInIndexHtml, PUBLIC_DIR, PUBLIC_JS_DIR };

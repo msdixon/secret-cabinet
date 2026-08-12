@@ -10,7 +10,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { renderRoundHtml, renderReadingRoomPage } = require('../reading-room.js');
+const { renderRoundHtml, renderReadingRoomPage } = require('../src/reading-room.js');
 
 const ROSTER = [
   { id: 'crowley', name: 'Crowley' },
