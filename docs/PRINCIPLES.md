@@ -72,7 +72,7 @@ This is written-principles-only, for now. It does not yet include the code-level
 
 **Revision note (2026-08-08):** An earlier draft split this principle into two facets — this one, plus a second "approachability" facet (esoteric material shouldn't require existing expertise), with technical accessibility gated behind a future multi-user or demo step. Rachel corrected both: approachability wasn't a principle she'd actually proposed, and gating technical accessibility on audience size was an unconfirmed assumption about her needs, not something she'd said. The facet and the gate are both removed; recorded here so neither gets silently reintroduced.
 
-**Existing precedent:** none yet in code — the one principle with the least implementation behind it so far, worth naming plainly rather than implying otherwise. Starts now, with intent, rather than waiting for an audit to reveal gaps.
+**Existing precedent:** [#266](https://github.com/msdixon/secret-cabinet/issues/266) (2026-08-12) — identity names (speaker headers, dossier/thread/detail names) moved off the blackletter `UnifrakturMaguntia` typeface onto Cinzel, since blackletter's unfamiliar lowercase glyphs read as illegible pseudo-caps at transcript sizes. This also settled a three-way typographic split worth naming so it isn't re-derived from the CSS each time: body text is Crimson Pro, functional labels (`.panel-label` and siblings) are IM Fell English with uppercase+letter-spacing, identity names (proper nouns — `.identity-name` and the selectors sharing it) are Cinzel, and UnifrakturMaguntia is reserved for `.lodge-title` alone, where it's read once rather than repeatedly.
 
 ---
 
