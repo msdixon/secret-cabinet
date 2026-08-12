@@ -22,15 +22,16 @@ function registerLibraryRoutes(app, { loadLibraryIndex, loadArchiveImageIndex, p
       let entries = loadLibraryIndex();
       const { member, theme, q } = req.query;
       if (member) entries = entries.filter(e => e.members?.includes(member));
-      if (theme)  entries = entries.filter(e => e.themes?.includes(theme));
+      if (theme) entries = entries.filter(e => e.themes?.includes(theme));
       if (q) {
         const terms = q.toLowerCase().split(/\s+/);
         entries = entries.filter(e =>
-          terms.every(t =>
-            e.title.toLowerCase().includes(t) ||
-            e.source.toLowerCase().includes(t) ||
-            e.themes?.some(th => th.includes(t)) ||
-            e.members?.some(m => m.includes(t))
+          terms.every(
+            t =>
+              e.title.toLowerCase().includes(t) ||
+              e.source.toLowerCase().includes(t) ||
+              e.themes?.some(th => th.includes(t)) ||
+              e.members?.some(m => m.includes(t))
           )
         );
       }

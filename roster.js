@@ -14,9 +14,30 @@ const path = require('path');
 // original 12 carry meaningful ones set by hand in roster.json). Cycles once
 // exhausted — see #80.
 const FALLBACK_GLYPHS = [
-  '☉', '♀', '♂', '♄', '♅', '♆', '♇', '☄',
-  '★', '☆', '✪', '✴', '✷', '✹', '✵', '❋',
-  '◆', '◇', '▲', '▽', '⬟', '⬢', '⌖', '✻',
+  '☉',
+  '♀',
+  '♂',
+  '♄',
+  '♅',
+  '♆',
+  '♇',
+  '☄',
+  '★',
+  '☆',
+  '✪',
+  '✴',
+  '✷',
+  '✹',
+  '✵',
+  '❋',
+  '◆',
+  '◇',
+  '▲',
+  '▽',
+  '⬟',
+  '⬢',
+  '⌖',
+  '✻',
 ];
 
 // Deterministic-ish: picks the first pool symbol not already in use by the
@@ -65,7 +86,9 @@ function extractSection(text, sectionName, limit = 320) {
   const re = new RegExp(`## ${sectionName}[\\s\\S]*?\\n\\n([^#\\n][\\s\\S]*?)(?:\\n\\n---|\n\n##|$)`);
   const m = text.match(re);
   if (!m) return null;
-  const para = m[1].split(/\n\n/)[0].trim()
+  const para = m[1]
+    .split(/\n\n/)[0]
+    .trim()
     .replace(/\*([^*]+)\*/g, '$1') // strip asterisk emphasis
     .replace(/\n/g, ' ')
     .slice(0, limit);

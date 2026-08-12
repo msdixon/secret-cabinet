@@ -51,7 +51,10 @@ const Beats = (function () {
     const trimmed = (text || '').trim();
     if (!trimmed) return [];
 
-    const lines = trimmed.split('\n').map(l => l.trim()).filter(Boolean);
+    const lines = trimmed
+      .split('\n')
+      .map(l => l.trim())
+      .filter(Boolean);
     const beats = [];
     let current = '';
     let currentWords = 0;
@@ -79,9 +82,7 @@ const Beats = (function () {
       // This single line alone overruns the threshold — no pause arrives
       // soon enough on its own, so fall back to sentence boundaries within
       // it rather than let one dense paragraph become one giant bubble.
-      const sentences = (line.match(/[^.!?]+(?:[.!?]+|$)/g) || [line])
-        .map(s => s.trim())
-        .filter(Boolean);
+      const sentences = (line.match(/[^.!?]+(?:[.!?]+|$)/g) || [line]).map(s => s.trim()).filter(Boolean);
       sentences.forEach((sentence, i) => {
         if (currentWords >= BEAT_WORD_THRESHOLD) closeBeat();
         appendToBeat(sentence, i === 0 ? '\n' : ' ');

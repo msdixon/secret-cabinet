@@ -18,29 +18,35 @@ const { escapeHtml, buildSpeakerHeaderSet, normalizeSpeaker } = require('./trans
 function renderRoundHtml(text, roster) {
   const headers = buildSpeakerHeaderSet(roster);
   const lines = (text || '').split('\n');
-  let speaker = null, textLines = [];
+  let speaker = null,
+    textLines = [];
   let html = '';
 
-  const renderSpeechHtml = body => escapeHtml(body)
-    .split('\n')
-    .map(line => {
-      const t = line.trim();
-      const m = t.match(/^\*(.+)\*$/);
-      if (m && !m[1].includes('*')) return `<p class="rr-action">${m[1]}</p>`;
-      return line.replace(/\*([^*\n]+?)\*/g, '<em>$1</em>');
-    })
-    .join('<br>');
+  const renderSpeechHtml = body =>
+    escapeHtml(body)
+      .split('\n')
+      .map(line => {
+        const t = line.trim();
+        const m = t.match(/^\*(.+)\*$/);
+        if (m && !m[1].includes('*')) return `<p class="rr-action">${m[1]}</p>`;
+        return line.replace(/\*([^*\n]+?)\*/g, '<em>$1</em>');
+      })
+      .join('<br>');
 
   const flush = () => {
     if (!speaker || !textLines.length) return;
     const body = textLines.join('\n').trim();
     html += `<div class="rr-turn"><div class="rr-speaker">${escapeHtml(speaker)}</div><div class="rr-speech">${renderSpeechHtml(body)}</div></div>\n`;
-    speaker = null; textLines = [];
+    speaker = null;
+    textLines = [];
   };
 
   lines.forEach(line => {
     const t = line.trim();
-    if (!t) { flush(); return; }
+    if (!t) {
+      flush();
+      return;
+    }
     if (t === '---' || t === '—' || t === '--') return;
     const isAction = /^\*[^*\n]+\*$/.test(t);
     if (isAction && !speaker) {
@@ -50,35 +56,42 @@ function renderRoundHtml(text, roster) {
     const bare = t.replace(/:$/, '');
     const isKnownName = headers.has(normalizeSpeaker(bare));
     const looksLikeName = !t.includes(' ') && t.length < 30 && /^[A-Z]/.test(t) && !t.includes('*');
-    if (isKnownName || looksLikeName) { flush(); speaker = bare; textLines = []; }
-    else if (speaker) textLines.push(t);
+    if (isKnownName || looksLikeName) {
+      flush();
+      speaker = bare;
+      textLines = [];
+    } else if (speaker) textLines.push(t);
   });
   flush();
   return html;
 }
 
 function renderReadingRoomPage(session, roster) {
-  const members = (session.members || [])
-    .map(id => roster.find(m => m.id === id))
-    .filter(Boolean);
+  const members = (session.members || []).map(id => roster.find(m => m.id === id)).filter(Boolean);
   const title = (session.entry || 'A meeting').trim().slice(0, 80);
   // #245: `endedBy` (written only since #244) separates a segment whose label
   // opens it -- an old round header -- from one whose label is the lull that
   // ended it, which belongs after the passage. Same discriminator the record
   // and the stage use; see public/sessions.js's restore loop.
-  const roundsHtml = (session.rounds || []).map(r =>
-    r.endedBy
-      ? `<section class="rr-round">${renderRoundHtml(r.text, roster)}<div class="rr-lull">${escapeHtml(r.label)}</div></section>`
-      : `<section class="rr-round"><h2 class="rr-round-label">${escapeHtml(r.label)}</h2>${renderRoundHtml(r.text, roster)}</section>`
-  ).join('\n');
+  const roundsHtml = (session.rounds || [])
+    .map(r =>
+      r.endedBy
+        ? `<section class="rr-round">${renderRoundHtml(r.text, roster)}<div class="rr-lull">${escapeHtml(r.label)}</div></section>`
+        : `<section class="rr-round"><h2 class="rr-round-label">${escapeHtml(r.label)}</h2>${renderRoundHtml(r.text, roster)}</section>`
+    )
+    .join('\n');
   // Portraits are AI-generated placeholders, disclosed in docs/MANIFEST.md; not
   // every roster entry has one yet (see #80), so a broken image just hides
   // itself rather than showing a placeholder icon — same convention as the
   // dossier drawer's portrait (public/app.js).
-  const membersHtml = members.map(m => `<span class="rr-member">
+  const membersHtml = members
+    .map(
+      m => `<span class="rr-member">
       <img class="rr-portrait" src="/portraits/${escapeHtml(m.id)}.png" alt="" loading="lazy" onerror="this.style.display='none'">
       <span class="rr-member-name">${escapeHtml(m.name)}</span>
-    </span>`).join('');
+    </span>`
+    )
+    .join('');
 
   return `<!DOCTYPE html>
 <html lang="en">

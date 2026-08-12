@@ -16,29 +16,60 @@ function openSSE(res) {
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
-    'Connection': 'keep-alive',
+    Connection: 'keep-alive',
   });
 }
 
-function registerConveneRoutes(app, {
-  client, model, lodgeContext, roster,
-  loadMemberFile, loadVoiceExemplar, loadResidue,
-  castingRoster,
-  buildPassagePrompt, wordsSpentSoFar, defaultPoolSize, deriveMeetingNote,
-  playerDirectorPool, resolvePlayerName, buildPrecedingTurn,
-  interjectSpeakerCount,
-  makeSessionId, saveSession, loadSession, saveResidueUpdates,
-  formatTranscriptText, composeSegmentText, buildTranscriptHeader,
-  isLocal, runRound, proposeCast,
-}) {
+function registerConveneRoutes(
+  app,
+  {
+    client,
+    model,
+    lodgeContext,
+    roster,
+    loadMemberFile,
+    loadVoiceExemplar,
+    loadResidue,
+    castingRoster,
+    buildPassagePrompt,
+    wordsSpentSoFar,
+    defaultPoolSize,
+    deriveMeetingNote,
+    playerDirectorPool,
+    resolvePlayerName,
+    buildPrecedingTurn,
+    interjectSpeakerCount,
+    makeSessionId,
+    saveSession,
+    loadSession,
+    saveResidueUpdates,
+    formatTranscriptText,
+    composeSegmentText,
+    buildTranscriptHeader,
+    isLocal,
+    runRound,
+    proposeCast,
+  }
+) {
   // POST /api/convene — start a session and stream its first passage
   app.post('/api/convene', async (req, res) => {
     const { entry, members } = req.body;
     if (!entry?.trim()) return res.status(400).json({ error: 'entry is required' });
     if (!members?.length) return res.status(400).json({ error: 'at least one member is required' });
 
-    const { roundInstructions, meetingNote, roundCount, artifact, notes, sourceSessionId,
-      playerMode, playerMemberId, playerName, playerTurn, castMetrics } = req.body;
+    const {
+      roundInstructions,
+      meetingNote,
+      roundCount,
+      artifact,
+      notes,
+      sourceSessionId,
+      playerMode,
+      playerMemberId,
+      playerName,
+      playerTurn,
+      castMetrics,
+    } = req.body;
     const isTranscriptSource = !!sourceSessionId;
     const id = makeSessionId(entry);
     const date = new Date().toISOString().slice(0, 10);
@@ -46,7 +77,14 @@ function registerConveneRoutes(app, {
     // (single free-text field). deriveMeetingNote handles both since nothing
     // stops a caller from still sending the old shape.
     const effectiveMeetingNote = deriveMeetingNote({ meetingNote, roundInstructions });
-    const passagePrompt = buildPassagePrompt({ entry, meetingNote: effectiveMeetingNote, isFirst: true, artifact: artifact || null, isTranscriptSource, wordsSpent: 0 });
+    const passagePrompt = buildPassagePrompt({
+      entry,
+      meetingNote: effectiveMeetingNote,
+      isFirst: true,
+      artifact: artifact || null,
+      isTranscriptSource,
+      wordsSpent: 0,
+    });
     // #225 — the pre-convene casting call's usage rides in on the request body
     // (see /api/cast) rather than being held server-side; validate the shape
     // rather than trusting it wholesale since it's client-supplied.
@@ -55,22 +93,40 @@ function registerConveneRoutes(app, {
       : [];
 
     const effectivePlayerMode = playerMode || 'none';
-    const effectivePlayerMemberId = effectivePlayerMode === 'member' ? (playerMemberId || null) : null;
+    const effectivePlayerMemberId = effectivePlayerMode === 'member' ? playerMemberId || null : null;
     const effectivePlayerName = resolvePlayerName(effectivePlayerMode, effectivePlayerMemberId, playerName);
     const precedingTurn = buildPrecedingTurn(effectivePlayerName, playerTurn);
 
     openSSE(res);
     try {
-      const { fullRoundText: text, disposition, residueUpdates, beats, endedBy, lullNote } = await runRound({
-        client, model, lodgeContext, ROSTER: roster, loadMemberFile, loadVoiceExemplar, loadResidue,
+      const {
+        fullRoundText: text,
+        disposition,
+        residueUpdates,
+        beats,
+        endedBy,
+        lullNote,
+      } = await runRound({
+        client,
+        model,
+        lodgeContext,
+        ROSTER: roster,
+        loadMemberFile,
+        loadVoiceExemplar,
+        loadResidue,
         presentMemberIds: playerDirectorPool(members, effectivePlayerMode, effectivePlayerMemberId),
-        artifact: artifact || null, notes: notes || {},
-        roundPrompt: passagePrompt, conversationHistory: [],
-        speakerCount: defaultPoolSize, round: 0, precedingTurn,
+        artifact: artifact || null,
+        notes: notes || {},
+        roundPrompt: passagePrompt,
+        conversationHistory: [],
+        speakerCount: defaultPoolSize,
+        round: 0,
+        precedingTurn,
         disposition: {},
         onChunk: chunk => res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`),
         onSpeakerStart: memberId => res.write(`data: ${JSON.stringify({ speaking: memberId })}\n\n`),
-        onSpeakerEnd: (memberId, name, text) => res.write(`data: ${JSON.stringify({ speakerDone: { memberId, name, text } })}\n\n`),
+        onSpeakerEnd: (memberId, name, text) =>
+          res.write(`data: ${JSON.stringify({ speakerDone: { memberId, name, text } })}\n\n`),
         onMetric: m => {
           generationMetrics.push(m);
           if (m.skipped) console.warn('[degraded]', m.phase, m.memberId || '', '—', m.error);
@@ -87,7 +143,10 @@ function registerConveneRoutes(app, {
       // placement for every writer of transcriptText.
       const firstSegment = { label: lullNote, text, historyLength: history.length, beats, endedBy };
       const session = {
-        id, date, entry, members,
+        id,
+        date,
+        entry,
+        members,
         meetingNote: effectiveMeetingNote || null,
         roundCount: roundCount || 3,
         artifact: artifact || null,
@@ -100,7 +159,9 @@ function registerConveneRoutes(app, {
         playerMode: effectivePlayerMode,
         playerMemberId: effectivePlayerMemberId,
         playerName: effectivePlayerMode === 'custom' ? effectivePlayerName : null,
-        playerTurns: precedingTurn ? [{ round: 0, speakerName: precedingTurn.speakerName, text: precedingTurn.text }] : [],
+        playerTurns: precedingTurn
+          ? [{ round: 0, speakerName: precedingTurn.speakerName, text: precedingTurn.text }]
+          : [],
         disposition: disposition || {},
       };
       saveSession(session);
@@ -134,7 +195,9 @@ function registerConveneRoutes(app, {
     const metrics = [];
     try {
       const result = await proposeCast({
-        client, model, lodgeContext,
+        client,
+        model,
+        lodgeContext,
         roster: castingRoster(),
         regularIds: Array.isArray(regulars) ? regulars : [],
         documentText: entry,
@@ -174,17 +237,35 @@ function registerConveneRoutes(app, {
 
     openSSE(res);
     try {
-      const { fullRoundText: text, disposition, residueUpdates, beats, endedBy, lullNote } = await runRound({
-        client, model, lodgeContext, ROSTER: roster, loadMemberFile, loadVoiceExemplar, loadResidue,
+      const {
+        fullRoundText: text,
+        disposition,
+        residueUpdates,
+        beats,
+        endedBy,
+        lullNote,
+      } = await runRound({
+        client,
+        model,
+        lodgeContext,
+        ROSTER: roster,
+        loadMemberFile,
+        loadVoiceExemplar,
+        loadResidue,
         presentMemberIds: playerDirectorPool(session.members, session.playerMode, session.playerMemberId),
-        artifact: null, notes: {},
-        roundPrompt: passagePrompt, conversationHistory: session.conversationHistory.slice(-6),
-        speakerCount: defaultPoolSize, round: roundIndex, precedingTurn,
+        artifact: null,
+        notes: {},
+        roundPrompt: passagePrompt,
+        conversationHistory: session.conversationHistory.slice(-6),
+        speakerCount: defaultPoolSize,
+        round: roundIndex,
+        precedingTurn,
         disposition: session.disposition || {},
         previousLullNote: session.rounds[session.rounds.length - 1]?.label || null,
         onChunk: chunk => res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`),
         onSpeakerStart: memberId => res.write(`data: ${JSON.stringify({ speaking: memberId })}\n\n`),
-        onSpeakerEnd: (memberId, name, text) => res.write(`data: ${JSON.stringify({ speakerDone: { memberId, name, text } })}\n\n`),
+        onSpeakerEnd: (memberId, name, text) =>
+          res.write(`data: ${JSON.stringify({ speakerDone: { memberId, name, text } })}\n\n`),
         onMetric: m => {
           session.generationMetrics.push(m);
           if (m.skipped) console.warn('[degraded]', m.phase, m.memberId || '', '—', m.error);
@@ -199,7 +280,11 @@ function registerConveneRoutes(app, {
       session.disposition = disposition || {};
       if (precedingTurn) {
         session.playerTurns = session.playerTurns || [];
-        session.playerTurns.push({ round: roundIndex, speakerName: precedingTurn.speakerName, text: precedingTurn.text });
+        session.playerTurns.push({
+          round: roundIndex,
+          speakerName: precedingTurn.speakerName,
+          text: precedingTurn.text,
+        });
       }
 
       saveSession(session);
@@ -225,16 +310,30 @@ function registerConveneRoutes(app, {
 
     openSSE(res);
     try {
-      const { fullRoundText: response, disposition, residueUpdates } = await runRound({
-        client, model, lodgeContext, ROSTER: roster, loadMemberFile, loadVoiceExemplar, loadResidue,
+      const {
+        fullRoundText: response,
+        disposition,
+        residueUpdates,
+      } = await runRound({
+        client,
+        model,
+        lodgeContext,
+        ROSTER: roster,
+        loadMemberFile,
+        loadVoiceExemplar,
+        loadResidue,
         presentMemberIds: playerDirectorPool(session.members, session.playerMode, session.playerMemberId),
-        artifact: null, notes: {},
-        roundPrompt: prompt, conversationHistory: session.conversationHistory.slice(-6),
-        speakerCount: Math.min(interjectSpeakerCount, session.members.length), round: session.rounds.length,
+        artifact: null,
+        notes: {},
+        roundPrompt: prompt,
+        conversationHistory: session.conversationHistory.slice(-6),
+        speakerCount: Math.min(interjectSpeakerCount, session.members.length),
+        round: session.rounds.length,
         disposition: session.disposition || {},
         onChunk: chunk => res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`),
         onSpeakerStart: memberId => res.write(`data: ${JSON.stringify({ speaking: memberId })}\n\n`),
-        onSpeakerEnd: (memberId, name, text) => res.write(`data: ${JSON.stringify({ speakerDone: { memberId, name, text } })}\n\n`),
+        onSpeakerEnd: (memberId, name, text) =>
+          res.write(`data: ${JSON.stringify({ speakerDone: { memberId, name, text } })}\n\n`),
         onMetric: m => {
           session.generationMetrics.push(m);
           if (m.skipped) console.warn('[degraded]', m.phase, m.memberId || '', '—', m.error);
@@ -273,9 +372,17 @@ function registerConveneRoutes(app, {
     openSSE(res);
     try {
       const { fullRoundText, speakerOrder } = await runRound({
-        client, model, lodgeContext, ROSTER: roster, loadMemberFile, loadVoiceExemplar,
-        presentMemberIds: members, artifact: null, notes: {},
-        roundPrompt, conversationHistory: [],
+        client,
+        model,
+        lodgeContext,
+        ROSTER: roster,
+        loadMemberFile,
+        loadVoiceExemplar,
+        presentMemberIds: members,
+        artifact: null,
+        notes: {},
+        roundPrompt,
+        conversationHistory: [],
         speakerCount: speakerCount || Math.min(members.length, 5),
         round: 0,
         onChunk: chunk => res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`),

@@ -9,10 +9,10 @@
 const fs = require('fs');
 const path = require('path');
 
-function registerMemberRoutes(app, {
-  roster, rosterModule, loadMemberFile, membersDir, rosterFile,
-  client, model, lodgeContext, axesDoc,
-}) {
+function registerMemberRoutes(
+  app,
+  { roster, rosterModule, loadMemberFile, membersDir, rosterFile, client, model, lodgeContext, axesDoc }
+) {
   // GET /api/members — return current roster
   app.get('/api/members', (req, res) => {
     res.json(roster);
@@ -39,12 +39,18 @@ function registerMemberRoutes(app, {
     if (!name?.trim() || !bio?.trim()) return res.status(400).json({ error: 'name and bio are required' });
 
     // Build a safe filename + id from the name
-    const id = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+    const id = name
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '');
     const file = `${id}.md`;
     const filePath = path.join(membersDir, file);
 
     if (fs.existsSync(filePath)) {
-      return res.status(409).json({ error: `A member file already exists for "${name}". Choose a different name or edit the file directly.` });
+      return res.status(409).json({
+        error: `A member file already exists for "${name}". Choose a different name or edit the file directly.`,
+      });
     }
 
     // Two canonical character files as format exemplars — deliberately stylistically
@@ -109,7 +115,10 @@ ${relationships || '(not specified — infer from historical record)'}`;
         system: systemPrompt,
         messages: [{ role: 'user', content: userMessage }],
       });
-      const characterFile = response.content.filter(b => b.type === 'text').map(b => b.text).join('');
+      const characterFile = response.content
+        .filter(b => b.type === 'text')
+        .map(b => b.text)
+        .join('');
 
       fs.writeFileSync(filePath, characterFile, 'utf8');
 

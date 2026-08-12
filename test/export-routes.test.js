@@ -12,7 +12,12 @@ const { registerExportRoutes } = require('../export-routes.js');
 
 function fakeApp() {
   const routes = {};
-  return { routes, post(path, handler) { routes[`POST ${path}`] = handler; } };
+  return {
+    routes,
+    post(path, handler) {
+      routes[`POST ${path}`] = handler;
+    },
+  };
 }
 
 function fakeReq(body = {}) {
@@ -23,8 +28,14 @@ function fakeRes() {
   const res = {
     statusCode: null,
     body: null,
-    status(code) { this.statusCode = code; return this; },
-    json(body) { this.body = body; return this; },
+    status(code) {
+      this.statusCode = code;
+      return this;
+    },
+    json(body) {
+      this.body = body;
+      return this;
+    },
   };
   return res;
 }
@@ -50,8 +61,12 @@ test('registerExportRoutes', async t => {
     const app = fakeApp();
     registerExportRoutes(app, makeDeps());
     [
-      'POST /api/dayone/journals', 'POST /api/dayone/entries', 'POST /api/dayone/fetch', 'POST /api/dayone/export',
-      'POST /api/ulysses/export', 'POST /api/export/obsidian',
+      'POST /api/dayone/journals',
+      'POST /api/dayone/entries',
+      'POST /api/dayone/fetch',
+      'POST /api/dayone/export',
+      'POST /api/ulysses/export',
+      'POST /api/export/obsidian',
     ].forEach(key => assert.equal(typeof app.routes[key], 'function', key));
   });
 });
@@ -93,7 +108,10 @@ test('Day One routes', async t => {
     const app = fakeApp();
     registerExportRoutes(app, makeDeps());
     const res = fakeRes();
-    await app.routes['POST /api/dayone/export'](fakeReq({ journalId: 'j1', journalName: 'Journal One', transcriptText: 'text', sessionDate: '2026-08-11' }), res);
+    await app.routes['POST /api/dayone/export'](
+      fakeReq({ journalId: 'j1', journalName: 'Journal One', transcriptText: 'text', sessionDate: '2026-08-11' }),
+      res
+    );
     assert.deepEqual(res.body, { success: true, journal: 'Journal One' });
   });
 });
@@ -137,7 +155,10 @@ test('POST /api/export/obsidian', async t => {
     const app = fakeApp();
     registerExportRoutes(app, makeDeps());
     const res = fakeRes();
-    app.routes['POST /api/export/obsidian'](fakeReq({ vaultPath: '/definitely/not/a/real/vault', transcriptText: 't' }), res);
+    app.routes['POST /api/export/obsidian'](
+      fakeReq({ vaultPath: '/definitely/not/a/real/vault', transcriptText: 't' }),
+      res
+    );
     assert.equal(res.statusCode, 400);
   });
 
@@ -147,9 +168,17 @@ test('POST /api/export/obsidian', async t => {
     registerExportRoutes(app, makeDeps());
     const res = fakeRes();
     const transcriptText = 'Crowley —\nSome opening line.';
-    app.routes['POST /api/export/obsidian'](fakeReq({
-      vaultPath: vault, transcriptText, sessionDate: '2026-08-11', members: ['Crowley'], tags: ['custom-tag'], sourceExcerpt: 'a test entry',
-    }), res);
+    app.routes['POST /api/export/obsidian'](
+      fakeReq({
+        vaultPath: vault,
+        transcriptText,
+        sessionDate: '2026-08-11',
+        members: ['Crowley'],
+        tags: ['custom-tag'],
+        sourceExcerpt: 'a test entry',
+      }),
+      res
+    );
 
     assert.equal(res.body.success, true);
     const written = fs.readFileSync(res.body.path, 'utf8');

@@ -33,7 +33,15 @@ const session = require('express-session');
 const FileStore = require('session-file-store')(session);
 
 const dayOne = require('./dayone');
-const { buildMemberSection, runRound, stripInternalBlankLines, proposeCast, makeMetric, countWords, BREATH_BUDGET_WORDS } = require('./pipeline');
+const {
+  buildMemberSection,
+  runRound,
+  stripInternalBlankLines,
+  proposeCast,
+  makeMetric,
+  countWords,
+  BREATH_BUDGET_WORDS,
+} = require('./pipeline');
 const roster = require('./roster');
 const transcriptFormat = require('./transcript-format');
 const readingRoom = require('./reading-room');
@@ -102,22 +110,26 @@ const PASSPHRASE = process.env.PASSPHRASE || null;
 // happens to be running. Fail loudly at startup rather than silently serving
 // a passphrase gate that isn't actually gating anything.
 if (!IS_LOCAL && PASSPHRASE && !process.env.SESSION_SECRET) {
-  console.error('SESSION_SECRET must be set when PASSPHRASE is set on a deployed instance. ' +
-    'Generate one with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
+  console.error(
+    'SESSION_SECRET must be set when PASSPHRASE is set on a deployed instance. ' +
+      "Generate one with: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\""
+  );
   process.exit(1);
 }
 
-app.use(session({
-  store: new FileStore({ path: AUTH_SESSIONS_DIR }),
-  secret: process.env.SESSION_SECRET || 'local-dev-secret-change-me',
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-    secure: !IS_LOCAL,
-    sameSite: 'lax',
-  },
-}));
+app.use(
+  session({
+    store: new FileStore({ path: AUTH_SESSIONS_DIR }),
+    secret: process.env.SESSION_SECRET || 'local-dev-secret-change-me',
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+      secure: !IS_LOCAL,
+      sameSite: 'lax',
+    },
+  })
+);
 
 auth.registerAuthRoutes(app, PASSPHRASE);
 app.use(auth.createRequireAuth(PASSPHRASE));
@@ -190,7 +202,7 @@ function openSSE(res) {
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
-    'Connection': 'keep-alive',
+    Connection: 'keep-alive',
   });
 }
 
@@ -231,10 +243,23 @@ function wordsSpentSoFar(rounds) {
   return (rounds || []).reduce((sum, r) => sum + countWords(r.text || ''), 0);
 }
 
-function buildPassagePrompt({ entry, meetingNote, isFirst, artifact = null, isTranscriptSource = false, wordsSpent = 0 }) {
+function buildPassagePrompt({
+  entry,
+  meetingNote,
+  isFirst,
+  artifact = null,
+  isTranscriptSource = false,
+  wordsSpent = 0,
+}) {
   return lodgePrompts.buildPassagePrompt({
-    entry, meetingNote, isFirst, artifact, isTranscriptSource, roster: ROSTER,
-    wordsSpent, breathBudget: BREATH_BUDGET_WORDS,
+    entry,
+    meetingNote,
+    isFirst,
+    artifact,
+    isTranscriptSource,
+    roster: ROSTER,
+    wordsSpent,
+    breathBudget: BREATH_BUDGET_WORDS,
   });
 }
 
@@ -337,46 +362,87 @@ app.get('/api/config', (req, res) => {
 // last — matching the order laid out in the seam-map comment on #193.
 
 registerLibraryRoutes(app, {
-  loadLibraryIndex, loadArchiveImageIndex,
+  loadLibraryIndex,
+  loadArchiveImageIndex,
   parseLibraryFrontmatter: library.parseLibraryFrontmatter,
   libraryDir: LIBRARY_DIR,
 });
 
 registerGraphRoutes(app, {
-  graph, roster: ROSTER,
-  graphFile: GRAPH_FILE, libraryFile: LIBRARY_FILE, sessionsDir: SESSIONS_DIR,
+  graph,
+  roster: ROSTER,
+  graphFile: GRAPH_FILE,
+  libraryFile: LIBRARY_FILE,
+  sessionsDir: SESSIONS_DIR,
 });
 
 registerUploadRoutes(app);
 
 registerMemberRoutes(app, {
-  roster: ROSTER, rosterModule: roster, loadMemberFile,
-  membersDir: MEMBERS_DIR, rosterFile: ROSTER_FILE,
-  client, model: MODEL, lodgeContext, axesDoc,
+  roster: ROSTER,
+  rosterModule: roster,
+  loadMemberFile,
+  membersDir: MEMBERS_DIR,
+  rosterFile: ROSTER_FILE,
+  client,
+  model: MODEL,
+  lodgeContext,
+  axesDoc,
 });
 
 registerExportRoutes(app, {
-  dayOne, isLocal: IS_LOCAL, buildSpeakerHeaderSet, normalizeSpeaker, roster: ROSTER,
+  dayOne,
+  isLocal: IS_LOCAL,
+  buildSpeakerHeaderSet,
+  normalizeSpeaker,
+  roster: ROSTER,
 });
 
 registerSessionRoutes(app, {
-  sessionsDir: SESSIONS_DIR, loadSession, saveSession, roster: ROSTER,
-  makeBranchId, buildTranscriptHeader, composeSegmentText, renderReadingRoomPage,
-  client, model: MODEL, makeMetric,
-  loadLibraryCitationLookup, loadArchiveImageIndex,
-  groundAgainstLibraryText, escalateCitationsToWeb,
+  sessionsDir: SESSIONS_DIR,
+  loadSession,
+  saveSession,
+  roster: ROSTER,
+  makeBranchId,
+  buildTranscriptHeader,
+  composeSegmentText,
+  renderReadingRoomPage,
+  client,
+  model: MODEL,
+  makeMetric,
+  loadLibraryCitationLookup,
+  loadArchiveImageIndex,
+  groundAgainstLibraryText,
+  escalateCitationsToWeb,
 });
 
 registerConveneRoutes(app, {
-  client, model: MODEL, lodgeContext, roster: ROSTER,
-  loadMemberFile, loadVoiceExemplar, loadResidue,
+  client,
+  model: MODEL,
+  lodgeContext,
+  roster: ROSTER,
+  loadMemberFile,
+  loadVoiceExemplar,
+  loadResidue,
   castingRoster,
-  buildPassagePrompt, wordsSpentSoFar, defaultPoolSize: lodgePrompts.DEFAULT_POOL_SIZE, deriveMeetingNote: lodgePrompts.deriveMeetingNote,
-  playerDirectorPool, resolvePlayerName, buildPrecedingTurn,
+  buildPassagePrompt,
+  wordsSpentSoFar,
+  defaultPoolSize: lodgePrompts.DEFAULT_POOL_SIZE,
+  deriveMeetingNote: lodgePrompts.deriveMeetingNote,
+  playerDirectorPool,
+  resolvePlayerName,
+  buildPrecedingTurn,
   interjectSpeakerCount: lodgePrompts.INTERJECT_SPEAKER_COUNT,
-  makeSessionId, saveSession, loadSession, saveResidueUpdates,
-  formatTranscriptText, composeSegmentText, buildTranscriptHeader,
-  isLocal: IS_LOCAL, runRound, proposeCast,
+  makeSessionId,
+  saveSession,
+  loadSession,
+  saveResidueUpdates,
+  formatTranscriptText,
+  composeSegmentText,
+  buildTranscriptHeader,
+  isLocal: IS_LOCAL,
+  runRound,
+  proposeCast,
 });
 
 // ─── Start ────────────────────────────────────────────────────────────────────
@@ -391,7 +457,7 @@ function startServer(port, attemptsLeft) {
   const server = app.listen(port, '0.0.0.0', () => {
     console.log(`The Secret-Cabin-et is open at http://localhost:${port}`);
   });
-  server.on('error', (err) => {
+  server.on('error', err => {
     if (IS_LOCAL && err.code === 'EADDRINUSE' && attemptsLeft > 0) {
       console.log(`Port ${port} is already in use, trying ${port + 1}...`);
       startServer(port + 1, attemptsLeft - 1);

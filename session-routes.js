@@ -13,29 +13,41 @@
 const fs = require('fs');
 const path = require('path');
 
-function registerSessionRoutes(app, {
-  sessionsDir, loadSession, saveSession, roster,
-  makeBranchId, buildTranscriptHeader, composeSegmentText, renderReadingRoomPage,
-  client, model, makeMetric,
-  loadLibraryCitationLookup, loadArchiveImageIndex,
-  groundAgainstLibraryText, escalateCitationsToWeb,
-}) {
+function registerSessionRoutes(
+  app,
+  {
+    sessionsDir,
+    loadSession,
+    saveSession,
+    roster,
+    makeBranchId,
+    buildTranscriptHeader,
+    composeSegmentText,
+    renderReadingRoomPage,
+    client,
+    model,
+    makeMetric,
+    loadLibraryCitationLookup,
+    loadArchiveImageIndex,
+    groundAgainstLibraryText,
+    escalateCitationsToWeb,
+  }
+) {
   // GET /api/sessions — list recent sessions, with optional ?q=, ?tag=, ?thread= filters
   app.get('/api/sessions', (req, res) => {
     const q = (req.query.q || '').trim().toLowerCase();
     const tag = (req.query.tag || '').trim().toLowerCase();
     const thread = (req.query.thread || '').trim().toLowerCase();
     try {
-      let sessions = fs.readdirSync(sessionsDir)
+      let sessions = fs
+        .readdirSync(sessionsDir)
         .filter(f => f.endsWith('.json'))
         .map(f => ({ file: f, mtime: fs.statSync(path.join(sessionsDir, f)).mtimeMs }))
         .sort((a, b) => b.mtime - a.mtime)
         .slice(0, 200)
         .map(({ file }) => {
           const d = JSON.parse(fs.readFileSync(path.join(sessionsDir, file), 'utf8'));
-          const memberNames = (d.members || [])
-            .map(id => roster.find(m => m.id === id)?.name)
-            .filter(Boolean);
+          const memberNames = (d.members || []).map(id => roster.find(m => m.id === id)?.name).filter(Boolean);
           return {
             id: d.id,
             date: d.date,
@@ -62,11 +74,13 @@ function registerSessionRoutes(app, {
         sessions = sessions.filter(s => s.tags.map(t => t.toLowerCase()).includes(tag));
       }
       if (q) {
-        sessions = sessions.filter(s =>
-          s._entry.includes(q) || s._transcript.includes(q) ||
-          s.tags.some(t => t.toLowerCase().includes(q)) ||
-          (s.threadName || '').toLowerCase().includes(q) ||
-          (s.date || '').includes(q)
+        sessions = sessions.filter(
+          s =>
+            s._entry.includes(q) ||
+            s._transcript.includes(q) ||
+            s.tags.some(t => t.toLowerCase().includes(q)) ||
+            (s.threadName || '').toLowerCase().includes(q) ||
+            (s.date || '').includes(q)
         );
       }
 
@@ -80,13 +94,15 @@ function registerSessionRoutes(app, {
   app.get('/api/threads', (req, res) => {
     try {
       const threads = {};
-      fs.readdirSync(sessionsDir).filter(f => f.endsWith('.json')).forEach(file => {
-        const d = JSON.parse(fs.readFileSync(path.join(sessionsDir, file), 'utf8'));
-        if (d.threadId && d.threadName) {
-          if (!threads[d.threadId]) threads[d.threadId] = { id: d.threadId, name: d.threadName, count: 0 };
-          threads[d.threadId].count++;
-        }
-      });
+      fs.readdirSync(sessionsDir)
+        .filter(f => f.endsWith('.json'))
+        .forEach(file => {
+          const d = JSON.parse(fs.readFileSync(path.join(sessionsDir, file), 'utf8'));
+          if (d.threadId && d.threadName) {
+            if (!threads[d.threadId]) threads[d.threadId] = { id: d.threadId, name: d.threadName, count: 0 };
+            threads[d.threadId].count++;
+          }
+        });
       res.json(Object.values(threads).sort((a, b) => a.name.localeCompare(b.name)));
     } catch (err) {
       res.status(500).json({ error: 'Failed to list threads' });
@@ -99,7 +115,11 @@ function registerSessionRoutes(app, {
     const session = loadSession(req.params.id);
     if (!session) return res.status(404).json({ error: 'Session not found' });
     if (threadId && threadName) {
-      session.threadId = threadId.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/(^-|-$)/g, '');
+      session.threadId = threadId
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9-]/g, '-')
+        .replace(/(^-|-$)/g, '');
       session.threadName = threadName.trim();
     } else {
       delete session.threadId;
@@ -133,7 +153,8 @@ function registerSessionRoutes(app, {
 
       const libraryLookup = loadLibraryCitationLookup();
       const libraryList = Object.entries(libraryLookup)
-        .map(([id, e]) => `${id}: ${e.title} — ${e.source}`).join('\n');
+        .map(([id, e]) => `${id}: ${e.title} — ${e.source}`)
+        .join('\n');
 
       const system = `You are reviewing a transcript from a salon conversation among historical figures for citation accuracy. Members cite real texts, authors, and historical claims in free-form prose.
 
@@ -153,34 +174,41 @@ The "quote" field must be a verbatim excerpt (~10-25 words) copied exactly from 
         max_tokens: 4000,
         system,
         messages: [{ role: 'user', content: roundsText }],
-        tools: [{
-          name: 'report_citations',
-          description: 'Report every citation found in the transcript, with a verdict for each.',
-          input_schema: {
-            type: 'object',
-            properties: {
-              citations: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  properties: {
-                    speaker: { type: 'string', description: 'As written in the transcript\'s "Name —" line.' },
-                    quote: { type: 'string', description: 'Verbatim ~10-25 word excerpt from the transcript containing the citation.' },
-                    work: { type: 'string', description: 'The cited work, author, or claim as named.' },
-                    verdict: { type: 'string', enum: ['verified', 'unverified', 'uncertain'] },
-                    note: { type: 'string', description: 'One-sentence reasoning for the verdict.' },
-                    libraryMatch: { type: ['string', 'null'], description: 'Matching library entry id, or null.' },
+        tools: [
+          {
+            name: 'report_citations',
+            description: 'Report every citation found in the transcript, with a verdict for each.',
+            input_schema: {
+              type: 'object',
+              properties: {
+                citations: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      speaker: { type: 'string', description: 'As written in the transcript\'s "Name —" line.' },
+                      quote: {
+                        type: 'string',
+                        description: 'Verbatim ~10-25 word excerpt from the transcript containing the citation.',
+                      },
+                      work: { type: 'string', description: 'The cited work, author, or claim as named.' },
+                      verdict: { type: 'string', enum: ['verified', 'unverified', 'uncertain'] },
+                      note: { type: 'string', description: 'One-sentence reasoning for the verdict.' },
+                      libraryMatch: { type: ['string', 'null'], description: 'Matching library entry id, or null.' },
+                    },
+                    required: ['speaker', 'quote', 'work', 'verdict', 'note'],
                   },
-                  required: ['speaker', 'quote', 'work', 'verdict', 'note'],
                 },
               },
+              required: ['citations'],
             },
-            required: ['citations'],
           },
-        }],
+        ],
         tool_choice: { type: 'tool', name: 'report_citations' },
       });
-      session.generationMetrics.push(makeMetric('citation-extraction', { usage: response.usage, latencyMs: Date.now() - extractStart }));
+      session.generationMetrics.push(
+        makeMetric('citation-extraction', { usage: response.usage, latencyMs: Date.now() - extractStart })
+      );
 
       const archiveImages = loadArchiveImageIndex();
       const block = response.content.find(b => b.type === 'tool_use');
@@ -188,7 +216,9 @@ The "quote" field must be a verbatim excerpt (~10-25 words) copied exactly from 
       // #153 part 1 — re-check library-matched citations against the entry's
       // actual text, rather than trusting the extraction pass's title/source
       // match. Skipped (no extra call) when nothing matched this round.
-      const grounded = await groundAgainstLibraryText(rawCitations, libraryLookup, m => session.generationMetrics.push(m));
+      const grounded = await groundAgainstLibraryText(rawCitations, libraryLookup, m =>
+        session.generationMetrics.push(m)
+      );
       // #153 part 2 — for citations that didn't match a library entry, attempt
       // a real web lookup (capped, see MAX_WEB_ESCALATIONS) before trusting the
       // model's own memory-based verdict.
@@ -206,7 +236,7 @@ The "quote" field must be a verbatim excerpt (~10-25 words) copied exactly from 
           // matched: a libraryMatch that didn't make it through grounding (e.g.
           // the entry was missing text) stays "model-knowledge", same failure
           // mode #157 found in treating "has a link" as "was verified".
-          source: refined ? 'library' : (web ? web.source : 'model-knowledge'),
+          source: refined ? 'library' : web ? web.source : 'model-knowledge',
           libraryCitation: match?.citation || null,
           librarySourceUrl: match?.source_url || null,
           libraryImage: image?.image || null,
@@ -293,10 +323,13 @@ The "quote" field must be a verbatim excerpt (~10-25 words) copied exactly from 
     const id = makeBranchId(parent, roundIndex);
 
     let transcriptText = buildTranscriptHeader(parent.entry, parent.members, date);
-    branchedRounds.forEach(r => { transcriptText += composeSegmentText(r); });
+    branchedRounds.forEach(r => {
+      transcriptText += composeSegmentText(r);
+    });
 
     const branch = {
-      id, date,
+      id,
+      date,
       entry: parent.entry,
       members: [...parent.members],
       // #244: meetingNote is the current field; roundInstructions carries
@@ -346,7 +379,10 @@ The "quote" field must be a verbatim excerpt (~10-25 words) copied exactly from 
           // Find annotation by speaker name match
           const note = Object.values(annotations).find(a => a.speaker === speaker)?.note;
           if (note) {
-            while (i + 1 < lines.length && lines[i + 1] !== '') { i++; result.push(lines[i]); }
+            while (i + 1 < lines.length && lines[i + 1] !== '') {
+              i++;
+              result.push(lines[i]);
+            }
             result.push(`  ↳ ${note}`);
           }
         }
@@ -362,17 +398,25 @@ The "quote" field must be a verbatim excerpt (~10-25 words) copied exactly from 
       const byRound = new Map(playerTurns.map(pt => [pt.round, pt]));
       const lines = transcript.split('\n');
       const result = [];
-      let roundIdx = -1, markedThisRound = false, i = 0;
+      let roundIdx = -1,
+        markedThisRound = false,
+        i = 0;
       while (i < lines.length) {
         result.push(lines[i]);
         // Round dividers ("— First Movement —") also match the looser
         // speaker-header pattern below, so they must be checked first.
         const isDivider = /^— (.+) —$/.test(lines[i]);
-        if (isDivider) { roundIdx++; markedThisRound = false; }
+        if (isDivider) {
+          roundIdx++;
+          markedThisRound = false;
+        }
         const speakerMatch = !isDivider && lines[i].match(/^(.+) —$/);
         if (speakerMatch && !markedThisRound && byRound.has(roundIdx)) {
           markedThisRound = true;
-          while (i + 1 < lines.length && lines[i + 1] !== '') { i++; result.push(lines[i]); }
+          while (i + 1 < lines.length && lines[i + 1] !== '') {
+            i++;
+            result.push(lines[i]);
+          }
           result.push('  ⟡ played by a human participant, live');
         }
         i++;
@@ -380,9 +424,7 @@ The "quote" field must be a verbatim excerpt (~10-25 words) copied exactly from 
       transcript = result.join('\n');
     }
 
-    const memberNames = (session.members || [])
-      .map(id => roster.find(m => m.id === id)?.name)
-      .filter(Boolean);
+    const memberNames = (session.members || []).map(id => roster.find(m => m.id === id)?.name).filter(Boolean);
 
     res.json({
       id: session.id,

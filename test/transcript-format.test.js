@@ -68,8 +68,10 @@ test('buildSpeakerHeaderSet', async t => {
 
 test('escapeHtml', async t => {
   await t.test('escapes the five HTML-significant characters', () => {
-    assert.equal(tf.escapeHtml(`<a href="x">O'Brien & Sons</a>`),
-      '&lt;a href=&quot;x&quot;&gt;O&#39;Brien &amp; Sons&lt;/a&gt;');
+    assert.equal(
+      tf.escapeHtml(`<a href="x">O'Brien & Sons</a>`),
+      '&lt;a href=&quot;x&quot;&gt;O&#39;Brien &amp; Sons&lt;/a&gt;'
+    );
   });
 });
 
@@ -93,7 +95,7 @@ test('composeSegmentText', async t => {
   await t.test('puts a post-#244 lull note after the passage it ended', () => {
     const out = tf.composeSegmentText(
       { label: 'The room draws breath.', text: 'Crowley\nOne.', endedBy: 'lull' },
-      ROSTER,
+      ROSTER
     );
     assert.equal(out, '\nCrowley —\nOne.\n\n— The room draws breath. —\n');
   });
@@ -104,10 +106,7 @@ test('composeSegmentText', async t => {
   });
 
   await t.test('treats a user-closed segment as ending in a lull like any other', () => {
-    const out = tf.composeSegmentText(
-      { label: 'The fire settles.', text: 'Crowley\nOne.', endedBy: 'closed' },
-      ROSTER,
-    );
+    const out = tf.composeSegmentText({ label: 'The fire settles.', text: 'Crowley\nOne.', endedBy: 'closed' }, ROSTER);
     assert.match(out, /One\.\n\n— The fire settles\. —\n$/);
   });
 });

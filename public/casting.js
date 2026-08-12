@@ -36,12 +36,12 @@ window.Casting = (function () {
   const DOC_FINGERPRINT_CHARS = 400;
 
   let regulars = loadRegulars();
-  let proposal = null;        // { cast, additions, regulars, reasoning, source }
+  let proposal = null; // { cast, additions, regulars, reasoning, source }
   let pending = false;
-  let handCast = false;       // the user has touched the grid for this document
-  let proposedFor = null;     // fingerprint of the document last proposed on
-  let lastMetrics = [];       // #225 — usage from the most recent /api/cast call,
-                               // held here until app.js's convene call claims it
+  let handCast = false; // the user has touched the grid for this document
+  let proposedFor = null; // fingerprint of the document last proposed on
+  let lastMetrics = []; // #225 — usage from the most recent /api/cast call,
+  // held here until app.js's convene call claims it
 
   function configure(injectedDeps) {
     deps = injectedDeps;
@@ -168,7 +168,7 @@ window.Casting = (function () {
     activeMembers.clear();
     proposal.cast.forEach(id => activeMembers.add(id));
     proposal = null;
-    render();          // this panel is ours to clear, not renderMembers()'s
+    render(); // this panel is ours to clear, not renderMembers()'s
     deps.renderMembers();
     deps.setStatus('The room has assembled. Convene when you are ready.', false);
   }
@@ -211,10 +211,13 @@ window.Casting = (function () {
       panel.className = 'cast-proposal';
       document.getElementById('cast-proposal-title').textContent = 'The document would draw';
       document.getElementById('cast-proposal-names').innerHTML = proposal.cast
-        .map(id => `<span class="cast-proposal-name${proposal.regulars.includes(id) ? ' regular' : ''}">${escape(nameOf(id))}</span>`)
+        .map(
+          id =>
+            `<span class="cast-proposal-name${proposal.regulars.includes(id) ? ' regular' : ''}">${escape(nameOf(id))}</span>`
+        )
         .join('');
-      document.getElementById('cast-proposal-reason').textContent = proposal.reasoning
-        || 'Your regulars already fill the room tonight.';
+      document.getElementById('cast-proposal-reason').textContent =
+        proposal.reasoning || 'Your regulars already fill the room tonight.';
       document.getElementById('cast-proposal-actions').style.display = 'flex';
     } else {
       panel.style.display = 'none';
@@ -224,7 +227,7 @@ window.Casting = (function () {
     // The cold-open hint: shown only when the room is genuinely empty and
     // nothing else in this panel is speaking for itself.
     const hint = document.getElementById('members-cast-hint');
-    if (hint) hint.style.display = (!pending && !proposal && activeMembers.size === 0) ? 'block' : 'none';
+    if (hint) hint.style.display = !pending && !proposal && activeMembers.size === 0 ? 'block' : 'none';
   }
 
   // Names come from the roster, which is user-authored (+ Invite to the

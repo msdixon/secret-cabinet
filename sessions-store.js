@@ -12,7 +12,12 @@ const crypto = require('crypto');
 
 function makeSessionId(entry) {
   const date = new Date().toISOString().slice(0, 10);
-  const slug = entry.trim().slice(0, 40).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+  const slug = entry
+    .trim()
+    .slice(0, 40)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
   const hash = crypto.createHash('md5').update(entry).digest('hex').slice(0, 6);
   return `${date}-${slug}-${hash}`;
 }
@@ -22,8 +27,17 @@ function makeSessionId(entry) {
 // parent id, branch point, and wall-clock time for uniqueness.
 function makeBranchId(parent, roundIndex) {
   const date = new Date().toISOString().slice(0, 10);
-  const slug = parent.entry.trim().slice(0, 40).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-  const hash = crypto.createHash('md5').update(`${parent.id}:${roundIndex}:${Date.now()}:${Math.random()}`).digest('hex').slice(0, 6);
+  const slug = parent.entry
+    .trim()
+    .slice(0, 40)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
+  const hash = crypto
+    .createHash('md5')
+    .update(`${parent.id}:${roundIndex}:${Date.now()}:${Math.random()}`)
+    .digest('hex')
+    .slice(0, 6);
   return `${date}-${slug}-branch-${hash}`;
 }
 

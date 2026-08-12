@@ -26,7 +26,7 @@ function writeMemberFile(membersDir, filename, { who = 'A member of the room.', 
   fs.writeFileSync(
     path.join(membersDir, filename),
     `# NAME\n\n## WHO YOU ARE\n\n${who}\n\nMore detail follows.\n\n## HOW YOU SPEAK\n\n${speak}\n`,
-    'utf8',
+    'utf8'
   );
 }
 
@@ -64,16 +64,26 @@ test('reloadRoster', async t => {
     t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
     writeMemberFile(membersDir, 'crowley.md');
     const rosterFile = path.join(membersDir, 'roster.json');
-    fs.writeFileSync(rosterFile, JSON.stringify([
-      { id: 'crowley', name: 'Crowley', file: 'crowley.md', glyph: '☉' },
-      { id: 'ghost', name: 'Ghost', file: 'missing.md', glyph: '♀' },
-    ]), 'utf8');
+    fs.writeFileSync(
+      rosterFile,
+      JSON.stringify([
+        { id: 'crowley', name: 'Crowley', file: 'crowley.md', glyph: '☉' },
+        { id: 'ghost', name: 'Ghost', file: 'missing.md', glyph: '♀' },
+      ]),
+      'utf8'
+    );
 
     const result = roster.reloadRoster(rosterFile, membersDir);
-    assert.deepEqual(result.map(m => m.id), ['crowley']);
+    assert.deepEqual(
+      result.map(m => m.id),
+      ['crowley']
+    );
     // Rewritten to disk without the dropped entry
     const onDisk = JSON.parse(fs.readFileSync(rosterFile, 'utf8'));
-    assert.deepEqual(onDisk.map(m => m.id), ['crowley']);
+    assert.deepEqual(
+      onDisk.map(m => m.id),
+      ['crowley']
+    );
   });
 
   await t.test('keeps an entry with no file field (no existence check applies)', () => {
@@ -83,7 +93,10 @@ test('reloadRoster', async t => {
     fs.writeFileSync(rosterFile, JSON.stringify([{ id: 'nofile', name: 'No File', glyph: '☉' }]), 'utf8');
 
     const result = roster.reloadRoster(rosterFile, membersDir);
-    assert.deepEqual(result.map(m => m.id), ['nofile']);
+    assert.deepEqual(
+      result.map(m => m.id),
+      ['nofile']
+    );
   });
 
   await t.test('backfills a missing glyph and persists it', () => {

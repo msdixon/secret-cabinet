@@ -125,8 +125,12 @@ function registerExportRoutes(app, { dayOne, isLocal, buildSpeakerHeaderSet, nor
       if (!fs.existsSync(cabinetDir)) fs.mkdirSync(cabinetDir, { recursive: true });
 
       // Build filename from date + source slug
-      const slug = (sourceExcerpt || 'meeting').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 40);
-      const filename = `${sessionDate || new Date().toISOString().slice(0,10)}-${slug}.md`;
+      const slug = (sourceExcerpt || 'meeting')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)/g, '')
+        .slice(0, 40);
+      const filename = `${sessionDate || new Date().toISOString().slice(0, 10)}-${slug}.md`;
       const filePath = path.join(cabinetDir, filename);
 
       // YAML frontmatter
@@ -136,10 +140,13 @@ function registerExportRoutes(app, { dayOne, isLocal, buildSpeakerHeaderSet, nor
 
       // Format transcript: bold speaker names for Obsidian scanning
       const obsidianHeaders = buildSpeakerHeaderSet(roster);
-      const obsidianTranscript = transcriptText.split('\n').map(line => {
-        const bare = line.replace(/ —$/, '').trim();
-        return obsidianHeaders.has(normalizeSpeaker(bare)) ? `**${bare}**` : line;
-      }).join('\n');
+      const obsidianTranscript = transcriptText
+        .split('\n')
+        .map(line => {
+          const bare = line.replace(/ —$/, '').trim();
+          return obsidianHeaders.has(normalizeSpeaker(bare)) ? `**${bare}**` : line;
+        })
+        .join('\n');
 
       fs.writeFileSync(filePath, frontmatter + obsidianTranscript, 'utf8');
       res.json({ success: true, filename, path: filePath });

@@ -55,23 +55,47 @@ test('buildPassagePrompt', async t => {
   });
 
   await t.test('the first passage frames a transcript source differently from a fresh document', () => {
-    const prompt = lp.buildPassagePrompt({ entry: 'minutes text', isFirst: true, isTranscriptSource: true, wordsSpent: 0, roster: ROSTER });
+    const prompt = lp.buildPassagePrompt({
+      entry: 'minutes text',
+      isFirst: true,
+      isTranscriptSource: true,
+      wordsSpent: 0,
+      roster: ROSTER,
+    });
     assert.match(prompt, /minutes of a previous gathering/);
     assert.doesNotMatch(prompt, /just been read aloud/);
   });
 
   await t.test('the first passage appends an artifact hint when the artifact member resolves', () => {
-    const prompt = lp.buildPassagePrompt({ entry: 'x', isFirst: true, artifact: { memberId: 'crowley' }, wordsSpent: 0, roster: ROSTER });
+    const prompt = lp.buildPassagePrompt({
+      entry: 'x',
+      isFirst: true,
+      artifact: { memberId: 'crowley' },
+      wordsSpent: 0,
+      roster: ROSTER,
+    });
     assert.match(prompt, /Crowley has private context from before the meeting/);
   });
 
   await t.test('no artifact hint when the artifact member id does not resolve', () => {
-    const prompt = lp.buildPassagePrompt({ entry: 'x', isFirst: true, artifact: { memberId: 'ghost' }, wordsSpent: 0, roster: ROSTER });
+    const prompt = lp.buildPassagePrompt({
+      entry: 'x',
+      isFirst: true,
+      artifact: { memberId: 'ghost' },
+      wordsSpent: 0,
+      roster: ROSTER,
+    });
     assert.doesNotMatch(prompt, /private context/);
   });
 
   await t.test('a user-supplied meeting note overrides the arc note entirely, for the first passage too', () => {
-    const prompt = lp.buildPassagePrompt({ entry: 'x', isFirst: true, meetingNote: 'Custom tone for tonight.', wordsSpent: 0, roster: ROSTER });
+    const prompt = lp.buildPassagePrompt({
+      entry: 'x',
+      isFirst: true,
+      meetingNote: 'Custom tone for tonight.',
+      wordsSpent: 0,
+      roster: ROSTER,
+    });
     assert.match(prompt, /Custom tone for tonight\./);
     assert.doesNotMatch(prompt, new RegExp(lp.ARC_NOTES.opening.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   });
@@ -82,28 +106,31 @@ test('buildPassagePrompt', async t => {
   });
 
   await t.test('a later passage with a meeting note returns the note alone', () => {
-    const prompt = lp.buildPassagePrompt({ entry: 'x', isFirst: false, meetingNote: 'Stay on the document.', wordsSpent: 1500, breathBudget: 1000 });
+    const prompt = lp.buildPassagePrompt({
+      entry: 'x',
+      isFirst: false,
+      meetingNote: 'Stay on the document.',
+      wordsSpent: 1500,
+      breathBudget: 1000,
+    });
     assert.equal(prompt, 'Stay on the document.');
   });
 });
 
 test('deriveMeetingNote', async t => {
   await t.test('prefers an explicit meetingNote', () => {
-    assert.equal(lp.deriveMeetingNote({ meetingNote: '  Keep it sharp.  ', roundInstructions: ['old one'] }), 'Keep it sharp.');
+    assert.equal(
+      lp.deriveMeetingNote({ meetingNote: '  Keep it sharp.  ', roundInstructions: ['old one'] }),
+      'Keep it sharp.'
+    );
   });
 
   await t.test('falls back to joining a legacy roundInstructions array', () => {
-    assert.equal(
-      lp.deriveMeetingNote({ roundInstructions: ['First.', 'Second.'] }),
-      'First. Second.',
-    );
+    assert.equal(lp.deriveMeetingNote({ roundInstructions: ['First.', 'Second.'] }), 'First. Second.');
   });
 
   await t.test('drops blank entries when joining the legacy array', () => {
-    assert.equal(
-      lp.deriveMeetingNote({ roundInstructions: ['First.', '  ', null, 'Second.'] }),
-      'First. Second.',
-    );
+    assert.equal(lp.deriveMeetingNote({ roundInstructions: ['First.', '  ', null, 'Second.'] }), 'First. Second.');
   });
 
   await t.test('returns null when neither field has anything usable', () => {

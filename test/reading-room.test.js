@@ -75,15 +75,18 @@ test('renderReadingRoomPage', async t => {
   // #245: same label-placement rule the record and the stage use — a pre-#244
   // segment's label opens it, a post-#244 one is the lull that ended it.
   await t.test('renders a post-#244 segment label as a lull below its passage', () => {
-    const html = renderReadingRoomPage({
-      ...SESSION,
-      rounds: [{ label: 'The room draws breath.', text: 'Crowley\nHello there, friend.', endedBy: 'lull' }],
-    }, ROSTER);
+    const html = renderReadingRoomPage(
+      {
+        ...SESSION,
+        rounds: [{ label: 'The room draws breath.', text: 'Crowley\nHello there, friend.', endedBy: 'lull' }],
+      },
+      ROSTER
+    );
     assert.doesNotMatch(html, /rr-round-label">/, 'no round heading is emitted (the CSS rule itself may remain)');
     assert.match(html, /rr-lull">The room draws breath\.</);
     assert.ok(
       html.indexOf('Hello there, friend.') < html.indexOf('rr-lull">'),
-      'the passage precedes the lull that ended it',
+      'the passage precedes the lull that ended it'
     );
   });
 

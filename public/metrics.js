@@ -17,7 +17,7 @@ window.Metrics = (function () {
   // 'claude-sonnet-4-6'). A deployment overriding MODEL via env var will see
   // a slightly-off estimate — acceptable for a labeled "estimated cost", and
   // cheaper than threading the actual model name through every stored metric.
-  const PRICE_PER_MILLION = { input: 3.00, output: 15.00, cacheRead: 0.30 };
+  const PRICE_PER_MILLION = { input: 3.0, output: 15.0, cacheRead: 0.3 };
 
   const PHASE_LABELS = {
     director: 'Director (per-round casting)',
@@ -35,9 +35,11 @@ window.Metrics = (function () {
   }
 
   function estimateCost({ input, output, cacheRead }) {
-    return (input / 1e6) * PRICE_PER_MILLION.input
-      + (output / 1e6) * PRICE_PER_MILLION.output
-      + (cacheRead / 1e6) * PRICE_PER_MILLION.cacheRead;
+    return (
+      (input / 1e6) * PRICE_PER_MILLION.input +
+      (output / 1e6) * PRICE_PER_MILLION.output +
+      (cacheRead / 1e6) * PRICE_PER_MILLION.cacheRead
+    );
   }
 
   function reasonLabel(r) {
@@ -71,18 +73,28 @@ window.Metrics = (function () {
           const member = members.find(mm => mm.id === m.memberId);
           bySpeaker.set(m.memberId, {
             name: member?.name || m.memberId,
-            calls: 0, input: 0, output: 0, cacheRead: 0, skipped: 0,
+            calls: 0,
+            input: 0,
+            output: 0,
+            cacheRead: 0,
+            skipped: 0,
           });
         }
         const s = bySpeaker.get(m.memberId);
-        s.calls++; s.input += input; s.output += output; s.cacheRead += cacheRead;
+        s.calls++;
+        s.input += input;
+        s.output += output;
+        s.cacheRead += cacheRead;
         if (m.skipped) s.skipped++;
       } else {
         if (!byPhase.has(m.phase)) {
           byPhase.set(m.phase, { phase: m.phase, calls: 0, input: 0, output: 0, cacheRead: 0 });
         }
         const p = byPhase.get(m.phase);
-        p.calls++; p.input += input; p.output += output; p.cacheRead += cacheRead;
+        p.calls++;
+        p.input += input;
+        p.output += output;
+        p.cacheRead += cacheRead;
       }
 
       if (m.reasoning) reasonings.push({ phase: m.phase, round: m.round, reasoning: m.reasoning });
@@ -90,7 +102,7 @@ window.Metrics = (function () {
 
     return {
       totals,
-      bySpeaker: [...bySpeaker.values()].sort((a, b) => (b.input + b.output) - (a.input + a.output)),
+      bySpeaker: [...bySpeaker.values()].sort((a, b) => b.input + b.output - (a.input + a.output)),
       byPhase: [...byPhase.values()],
       reasonings,
     };
@@ -110,9 +122,10 @@ window.Metrics = (function () {
     // #190 verification: the whole point of surfacing this distinctly rather
     // than folding it into total input — a non-zero share here is the signal
     // that repeat director/speaker calls are actually hitting the cache.
-    const cacheShare = (totals.input + totals.cacheRead) > 0
-      ? Math.round((totals.cacheRead / (totals.input + totals.cacheRead)) * 100)
-      : 0;
+    const cacheShare =
+      totals.input + totals.cacheRead > 0
+        ? Math.round((totals.cacheRead / (totals.input + totals.cacheRead)) * 100)
+        : 0;
 
     const summaryHtml = `
       <div class="metrics-summary">
@@ -125,11 +138,14 @@ window.Metrics = (function () {
       ${totals.skipped ? `<div class="metrics-note">⚠ ${totals.skipped} call${totals.skipped !== 1 ? 's' : ''} degraded or skipped this session.</div>` : ''}
     `;
 
-    const speakerHtml = bySpeaker.length ? `
+    const speakerHtml = bySpeaker.length
+      ? `
       <div class="dossier-section-label">Per-speaker breakdown</div>
       <table class="metrics-table">
         <thead><tr><th>Speaker</th><th>Calls</th><th>In</th><th>Out</th><th>Cache</th><th>Skip</th></tr></thead>
-        <tbody>${bySpeaker.map(s => `
+        <tbody>${bySpeaker
+          .map(
+            s => `
           <tr>
             <td>${deps.escapeHTML(s.name)}</td>
             <td>${s.calls}</td>
@@ -137,31 +153,46 @@ window.Metrics = (function () {
             <td>${formatNum(s.output)}</td>
             <td>${formatNum(s.cacheRead)}</td>
             <td>${s.skipped ? `⚠${s.skipped}` : '—'}</td>
-          </tr>`).join('')}</tbody>
-      </table>` : '';
+          </tr>`
+          )
+          .join('')}</tbody>
+      </table>`
+      : '';
 
-    const phaseHtml = byPhase.length ? `
+    const phaseHtml = byPhase.length
+      ? `
       <div class="dossier-section-label">Other calls</div>
       <table class="metrics-table">
         <thead><tr><th>Phase</th><th>Calls</th><th>In</th><th>Out</th><th>Cache</th></tr></thead>
-        <tbody>${byPhase.map(p => `
+        <tbody>${byPhase
+          .map(
+            p => `
           <tr>
             <td>${deps.escapeHTML(PHASE_LABELS[p.phase] || p.phase)}</td>
             <td>${p.calls}</td>
             <td>${formatNum(p.input)}</td>
             <td>${formatNum(p.output)}</td>
             <td>${formatNum(p.cacheRead)}</td>
-          </tr>`).join('')}</tbody>
-      </table>` : '';
+          </tr>`
+          )
+          .join('')}</tbody>
+      </table>`
+      : '';
 
-    const rationaleHtml = reasonings.length ? `
+    const rationaleHtml = reasonings.length
+      ? `
       <div class="dossier-section-label">Why the room chose these voices tonight</div>
-      ${reasonings.map(r => `
+      ${reasonings
+        .map(
+          r => `
         <div class="metrics-reasoning">
           <div class="metrics-reasoning-tag">${deps.escapeHTML(reasonLabel(r))}</div>
           <div class="dossier-text">${deps.escapeHTML(r.reasoning)}</div>
-        </div>`).join('')}
-    ` : '';
+        </div>`
+        )
+        .join('')}
+    `
+      : '';
 
     body.innerHTML = summaryHtml + speakerHtml + phaseHtml + rationaleHtml;
   }
@@ -182,7 +213,10 @@ window.Metrics = (function () {
     try {
       const session = await fetch(`/api/sessions/${sessionId}`).then(r => r.json());
       if (loadedSessionId !== sessionId) return; // superseded by a later toggle()
-      if (session.error) { body.innerHTML = '<div class="sessions-empty">Could not load metrics.</div>'; return; }
+      if (session.error) {
+        body.innerHTML = '<div class="sessions-empty">Could not load metrics.</div>';
+        return;
+      }
       render(session);
     } catch (e) {
       if (loadedSessionId === sessionId) body.innerHTML = '<div class="sessions-empty">Could not load metrics.</div>';
@@ -195,7 +229,10 @@ window.Metrics = (function () {
   function toggle(sessionId) {
     const id = sessionId || deps.getCore().currentSessionId;
     if (!id) return;
-    if (isOpen && loadedSessionId === id) { closeMetrics(); return; }
+    if (isOpen && loadedSessionId === id) {
+      closeMetrics();
+      return;
+    }
     isOpen = true;
     document.getElementById('metrics-overlay').classList.add('open');
     document.getElementById('metrics-drawer').classList.add('open');

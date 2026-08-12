@@ -33,15 +33,24 @@ const MEMBERS = [
 
 const DEFAULT_RESPONSE = {
   ok: true,
-  json: { cast: ['crowley', 'jung'], additions: ['crowley', 'jung'], regulars: [], reasoning: 'Both would want at this.', source: 'director' },
+  json: {
+    cast: ['crowley', 'jung'],
+    additions: ['crowley', 'jung'],
+    regulars: [],
+    reasoning: 'Both would want at this.',
+    source: 'director',
+  },
 };
 
 // Boots casting.js against a fake core and a stubbed fetch, and hands back the
 // seams a test asserts on: what the room now holds, how many calls were made,
 // and what each one asked for. `regulars` is written before the module loads,
 // because that is when a real page's stored pins would already be there.
-function boot(t, { activeMembers = new Set(), members = MEMBERS, entry = 'a document', regulars = null, respond } = {}) {
-  const loaded = loadPublicModule('casting.js', FIXTURE, (window) => {
+function boot(
+  t,
+  { activeMembers = new Set(), members = MEMBERS, entry = 'a document', regulars = null, respond } = {}
+) {
+  const loaded = loadPublicModule('casting.js', FIXTURE, window => {
     if (regulars) window.localStorage.setItem('sc-regulars', JSON.stringify(regulars));
   });
   t.after(loaded.cleanup);
@@ -58,8 +67,10 @@ function boot(t, { activeMembers = new Set(), members = MEMBERS, entry = 'a docu
   loaded.module.configure({
     getCore: () => ({ activeMembers, MEMBERS: members }),
     getEntry: () => entry,
-    renderMembers: () => { renders++; },
-    setStatus: (msg) => statuses.push(msg),
+    renderMembers: () => {
+      renders++;
+    },
+    setStatus: msg => statuses.push(msg),
   });
 
   return { ...loaded, activeMembers, calls, statuses, renderCount: () => renders };
@@ -68,8 +79,12 @@ function boot(t, { activeMembers = new Set(), members = MEMBERS, entry = 'a docu
 test('casting.js — regulars', async t => {
   await t.test('the ids this fixture stubs still exist in index.html', () => {
     assertIdsExistInIndexHtml([
-      'cast-proposal', 'cast-proposal-title', 'cast-proposal-names',
-      'cast-proposal-reason', 'cast-proposal-actions', 'members-cast-hint',
+      'cast-proposal',
+      'cast-proposal-title',
+      'cast-proposal-names',
+      'cast-proposal-reason',
+      'cast-proposal-actions',
+      'members-cast-hint',
     ]);
   });
 
@@ -105,7 +120,7 @@ test('casting.js — regulars', async t => {
   });
 
   await t.test('a corrupted stored value costs the pins, not the page', t2 => {
-    const loaded = loadPublicModule('casting.js', FIXTURE, (window) => {
+    const loaded = loadPublicModule('casting.js', FIXTURE, window => {
       window.localStorage.setItem('sc-regulars', '{not json');
     });
     t2.after(loaded.cleanup);
@@ -199,9 +214,7 @@ test('casting.js — the proposal', async t => {
 
   await t.test('a failed proposal shows nothing, says why, and stays retryable', async t2 => {
     const b = boot(t2, {
-      respond: (n) => n === 1
-        ? { ok: false, json: { error: 'the fire is low' } }
-        : DEFAULT_RESPONSE,
+      respond: n => (n === 1 ? { ok: false, json: { error: 'the fire is low' } } : DEFAULT_RESPONSE),
     });
     await b.module.requestProposal();
     assert.equal(b.document.getElementById('cast-proposal').style.display, 'none');
@@ -216,12 +229,21 @@ test('casting.js — the proposal', async t => {
   // #225 — the casting call's usage has nowhere to live server-side (no
   // session exists yet), so it rides along in the /api/cast response and
   // app.js claims it via consumeMetrics() right before /api/convene.
-  await t.test('consumeMetrics hands back the last response\'s metrics, then clears them', async t2 => {
+  await t.test("consumeMetrics hands back the last response's metrics, then clears them", async t2 => {
     const b = boot(t2, {
-      respond: () => ({ ok: true, json: { ...DEFAULT_RESPONSE.json, metrics: [{ phase: 'casting', usage: { input_tokens: 1, output_tokens: 2 } }] } }),
+      respond: () => ({
+        ok: true,
+        json: {
+          ...DEFAULT_RESPONSE.json,
+          metrics: [{ phase: 'casting', usage: { input_tokens: 1, output_tokens: 2 } }],
+        },
+      }),
     });
     await b.module.requestProposal();
-    assert.deepEqual([...b.module.consumeMetrics()], [{ phase: 'casting', usage: { input_tokens: 1, output_tokens: 2 } }]);
+    assert.deepEqual(
+      [...b.module.consumeMetrics()],
+      [{ phase: 'casting', usage: { input_tokens: 1, output_tokens: 2 } }]
+    );
     assert.deepEqual([...b.module.consumeMetrics()], [], 'a second read must not resend the same call');
   });
 
@@ -249,13 +271,25 @@ test('casting.js — render', async t => {
     assert.equal(b.document.getElementById('members-cast-hint').style.display, 'none');
   });
 
-  await t.test('marks regulars in the proposal as already coming, not as the model\'s choices', async t2 => {
+  await t.test("marks regulars in the proposal as already coming, not as the model's choices", async t2 => {
     const b = boot(t2, {
-      respond: () => ({ ok: true, json: { cast: ['yeats', 'jung'], additions: ['jung'], regulars: ['yeats'], reasoning: 'Jung would dispute it.', source: 'director' } }),
+      respond: () => ({
+        ok: true,
+        json: {
+          cast: ['yeats', 'jung'],
+          additions: ['jung'],
+          regulars: ['yeats'],
+          reasoning: 'Jung would dispute it.',
+          source: 'director',
+        },
+      }),
     });
     await b.module.requestProposal();
     const names = [...b.document.getElementById('cast-proposal-names').children];
-    assert.deepEqual(names.map(n => n.textContent), ['Yeats', 'Jung']);
+    assert.deepEqual(
+      names.map(n => n.textContent),
+      ['Yeats', 'Jung']
+    );
     assert.equal(names[0].className, 'cast-proposal-name regular');
     assert.equal(names[1].className, 'cast-proposal-name');
     assert.equal(b.document.getElementById('cast-proposal-reason').textContent, 'Jung would dispute it.');
@@ -263,7 +297,10 @@ test('casting.js — render', async t => {
 
   await t.test('a regulars-only proposal explains itself instead of showing a blank rationale', async t2 => {
     const b = boot(t2, {
-      respond: () => ({ ok: true, json: { cast: ['yeats'], additions: [], regulars: ['yeats'], reasoning: null, source: 'regulars' } }),
+      respond: () => ({
+        ok: true,
+        json: { cast: ['yeats'], additions: [], regulars: ['yeats'], reasoning: null, source: 'regulars' },
+      }),
     });
     await b.module.requestProposal();
     assert.match(b.document.getElementById('cast-proposal-reason').textContent, /regulars already fill the room/);
@@ -272,7 +309,10 @@ test('casting.js — render', async t => {
   await t.test('escapes member names rather than trusting the user-authored roster', async t2 => {
     const b = boot(t2, {
       members: [{ id: 'crowley', name: '<img src=x onerror=alert(1)>' }],
-      respond: () => ({ ok: true, json: { cast: ['crowley'], additions: ['crowley'], regulars: [], reasoning: 'r', source: 'director' } }),
+      respond: () => ({
+        ok: true,
+        json: { cast: ['crowley'], additions: ['crowley'], regulars: [], reasoning: 'r', source: 'director' },
+      }),
     });
     await b.module.requestProposal();
     const el = b.document.getElementById('cast-proposal-names');

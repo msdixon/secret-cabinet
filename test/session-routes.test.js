@@ -20,10 +20,18 @@ function fakeApp() {
   const routes = {};
   return {
     routes,
-    get(path, handler) { routes[`GET ${path}`] = handler; },
-    post(path, handler) { routes[`POST ${path}`] = handler; },
-    patch(path, handler) { routes[`PATCH ${path}`] = handler; },
-    delete(path, handler) { routes[`DELETE ${path}`] = handler; },
+    get(path, handler) {
+      routes[`GET ${path}`] = handler;
+    },
+    post(path, handler) {
+      routes[`POST ${path}`] = handler;
+    },
+    patch(path, handler) {
+      routes[`PATCH ${path}`] = handler;
+    },
+    delete(path, handler) {
+      routes[`DELETE ${path}`] = handler;
+    },
   };
 }
 
@@ -36,9 +44,18 @@ function fakeRes() {
     statusCode: null,
     body: null,
     sentText: null,
-    status(code) { this.statusCode = code; return this; },
-    json(body) { this.body = body; return this; },
-    send(text) { this.sentText = text; return this; },
+    status(code) {
+      this.statusCode = code;
+      return this;
+    },
+    json(body) {
+      this.body = body;
+      return this;
+    },
+    send(text) {
+      this.sentText = text;
+      return this;
+    },
   };
   return res;
 }
@@ -52,14 +69,18 @@ function makeDeps(dir, overrides = {}) {
     sessionsDir: dir,
     loadSession: id => store.loadSession(dir, id),
     saveSession: session => store.saveSession(dir, session),
-    roster: [{ id: 'crowley', name: 'Crowley' }, { id: 'jung', name: 'Carl Jung' }],
+    roster: [
+      { id: 'crowley', name: 'Crowley' },
+      { id: 'jung', name: 'Carl Jung' },
+    ],
     makeBranchId: store.makeBranchId,
     buildTranscriptHeader: (entry, members, date) => `HEADER(${date})\n${entry}\n`,
-    composeSegmentText: segment => (segment.endedBy
-      ? `\n${segment.text}\n\n— ${segment.label} —\n`
-      : `\n— ${segment.label} —\n\n${segment.text}\n`),
+    composeSegmentText: segment =>
+      segment.endedBy ? `\n${segment.text}\n\n— ${segment.label} —\n` : `\n— ${segment.label} —\n\n${segment.text}\n`,
     renderReadingRoomPage: session => `<html>${session.id}</html>`,
-    client: { messages: { create: async () => ({ content: [{ type: 'tool_use', input: { citations: [] } }], usage: {} }) } },
+    client: {
+      messages: { create: async () => ({ content: [{ type: 'tool_use', input: { citations: [] } }], usage: {} }) },
+    },
     model: 'test-model',
     makeMetric: (phase, data) => ({ phase, ...data }),
     loadLibraryCitationLookup: () => ({}),
@@ -72,10 +93,16 @@ function makeDeps(dir, overrides = {}) {
 
 function baseSession(id, extra = {}) {
   return {
-    id, date: '2026-08-11', entry: 'The source entry', members: ['crowley', 'jung'],
-    conversationHistory: [], rounds: [{ label: 'First Movement', text: 'Crowley —\nHello.', historyLength: 2 }],
+    id,
+    date: '2026-08-11',
+    entry: 'The source entry',
+    members: ['crowley', 'jung'],
+    conversationHistory: [],
+    rounds: [{ label: 'First Movement', text: 'Crowley —\nHello.', historyLength: 2 }],
     transcriptText: 'HEADER\n— First Movement —\n\nCrowley —\nHello.\n',
-    generationMetrics: [], playerTurns: [], disposition: {},
+    generationMetrics: [],
+    playerTurns: [],
+    disposition: {},
     ...extra,
   };
 }
@@ -102,7 +129,10 @@ test('GET /api/sessions', async t => {
     registerSessionRoutes(app, makeDeps(dir));
     const res = fakeRes();
     app.routes['GET /api/sessions'](fakeReq({ query: { q: 'silence' } }), res);
-    assert.deepEqual(res.body.map(s => s.id), ['s1']);
+    assert.deepEqual(
+      res.body.map(s => s.id),
+      ['s1']
+    );
   });
 
   await t.test('?thread= filters and sorts chronologically oldest-first', () => {
@@ -114,7 +144,10 @@ test('GET /api/sessions', async t => {
     registerSessionRoutes(app, makeDeps(dir));
     const res = fakeRes();
     app.routes['GET /api/sessions'](fakeReq({ query: { thread: 't1' } }), res);
-    assert.deepEqual(res.body.map(s => s.id), ['s2', 's1']);
+    assert.deepEqual(
+      res.body.map(s => s.id),
+      ['s2', 's1']
+    );
   });
 });
 
@@ -141,7 +174,10 @@ test('PATCH /api/sessions/:id/thread', async t => {
     const app = fakeApp();
     registerSessionRoutes(app, makeDeps(dir));
     const res = fakeRes();
-    app.routes['PATCH /api/sessions/:id/thread'](fakeReq({ params: { id: 's1' }, body: { threadId: 'My Thread!', threadName: 'My Thread' } }), res);
+    app.routes['PATCH /api/sessions/:id/thread'](
+      fakeReq({ params: { id: 's1' }, body: { threadId: 'My Thread!', threadName: 'My Thread' } }),
+      res
+    );
     assert.equal(res.body.threadId, 'my-thread');
     assert.equal(store.loadSession(dir, 's1').threadId, 'my-thread');
   });
@@ -175,7 +211,10 @@ test('PATCH /api/sessions/:id/annotations', async t => {
     const app = fakeApp();
     registerSessionRoutes(app, makeDeps(dir));
     const res = fakeRes();
-    app.routes['PATCH /api/sessions/:id/annotations'](fakeReq({ params: { id: 's1' }, body: { annotations: 'x' } }), res);
+    app.routes['PATCH /api/sessions/:id/annotations'](
+      fakeReq({ params: { id: 's1' }, body: { annotations: 'x' } }),
+      res
+    );
     assert.equal(res.statusCode, 400);
   });
 
@@ -186,7 +225,10 @@ test('PATCH /api/sessions/:id/annotations', async t => {
     const app = fakeApp();
     registerSessionRoutes(app, makeDeps(dir));
     const res = fakeRes();
-    app.routes['PATCH /api/sessions/:id/annotations'](fakeReq({ params: { id: 's1' }, body: { annotations: [{ note: 'x' }] } }), res);
+    app.routes['PATCH /api/sessions/:id/annotations'](
+      fakeReq({ params: { id: 's1' }, body: { annotations: [{ note: 'x' }] } }),
+      res
+    );
     assert.deepEqual(res.body, { count: 1 });
   });
 });
@@ -199,7 +241,10 @@ test('PATCH /api/sessions/:id/tags', async t => {
     const app = fakeApp();
     registerSessionRoutes(app, makeDeps(dir));
     const res = fakeRes();
-    app.routes['PATCH /api/sessions/:id/tags'](fakeReq({ params: { id: 's1' }, body: { tags: [' one ', '', 'two'] } }), res);
+    app.routes['PATCH /api/sessions/:id/tags'](
+      fakeReq({ params: { id: 's1' }, body: { tags: [' one ', '', 'two'] } }),
+      res
+    );
     assert.deepEqual(res.body.tags, ['one', 'two']);
   });
 });
@@ -250,12 +295,15 @@ test('POST /api/sessions/:id/close', async t => {
   await t.test('marks the final segment as closed by the user', () => {
     const dir = makeFixtureDir();
     t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
-    store.saveSession(dir, baseSession('s1', {
-      rounds: [
-        { label: 'The room draws breath.', text: 'a', endedBy: 'lull' },
-        { label: 'The fire settles.', text: 'b', endedBy: 'budget' },
-      ],
-    }));
+    store.saveSession(
+      dir,
+      baseSession('s1', {
+        rounds: [
+          { label: 'The room draws breath.', text: 'a', endedBy: 'lull' },
+          { label: 'The fire settles.', text: 'b', endedBy: 'budget' },
+        ],
+      })
+    );
     const app = fakeApp();
     registerSessionRoutes(app, makeDeps(dir));
     const res = fakeRes();
@@ -303,9 +351,15 @@ test('POST /api/sessions/:id/branch', async t => {
   await t.test('creates a truncated copy sharing history up to roundIndex', () => {
     const dir = makeFixtureDir();
     t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
-    store.saveSession(dir, baseSession('s1', {
-      conversationHistory: [{ role: 'user', content: 'a' }, { role: 'assistant', content: 'b' }],
-    }));
+    store.saveSession(
+      dir,
+      baseSession('s1', {
+        conversationHistory: [
+          { role: 'user', content: 'a' },
+          { role: 'assistant', content: 'b' },
+        ],
+      })
+    );
     const app = fakeApp();
     registerSessionRoutes(app, makeDeps(dir));
     const res = fakeRes();
@@ -322,10 +376,13 @@ test('GET /api/sessions/:id/transcript', async t => {
   await t.test('weaves in a player-turn marker at the right round', () => {
     const dir = makeFixtureDir();
     t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
-    store.saveSession(dir, baseSession('s1', {
-      transcriptText: 'HEADER\n— First Movement —\n\nCrowley —\nHello there.\n',
-      playerTurns: [{ round: 0, speakerName: 'You', text: 'A player line' }],
-    }));
+    store.saveSession(
+      dir,
+      baseSession('s1', {
+        transcriptText: 'HEADER\n— First Movement —\n\nCrowley —\nHello there.\n',
+        playerTurns: [{ round: 0, speakerName: 'You', text: 'A player line' }],
+      })
+    );
     const app = fakeApp();
     registerSessionRoutes(app, makeDeps(dir));
     const res = fakeRes();
@@ -342,7 +399,10 @@ test('PATCH /api/sessions/:id/publish + GET /reading-room/:id', async t => {
     const app = fakeApp();
     registerSessionRoutes(app, makeDeps(dir));
     const publishRes = fakeRes();
-    app.routes['PATCH /api/sessions/:id/publish'](fakeReq({ params: { id: 's1' }, body: { published: true } }), publishRes);
+    app.routes['PATCH /api/sessions/:id/publish'](
+      fakeReq({ params: { id: 's1' }, body: { published: true } }),
+      publishRes
+    );
     assert.equal(publishRes.body.published, true);
     assert.equal(publishRes.body.url, '/reading-room/s1');
 
@@ -389,11 +449,25 @@ test('POST /api/sessions/:id/verify-citations', async t => {
     t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
     store.saveSession(dir, baseSession('s1'));
     const app = fakeApp();
-    const rawCitation = { speaker: 'Crowley', quote: 'a quote', work: 'A Work', verdict: 'uncertain', note: 'n', libraryMatch: null };
-    registerSessionRoutes(app, makeDeps(dir, {
-      client: { messages: { create: async () => ({ content: [{ type: 'tool_use', input: { citations: [rawCitation] } }], usage: {} }) } },
-      groundAgainstLibraryText: async () => new Map([[0, { verdict: 'verified', note: 'grounded' }]]),
-    }));
+    const rawCitation = {
+      speaker: 'Crowley',
+      quote: 'a quote',
+      work: 'A Work',
+      verdict: 'uncertain',
+      note: 'n',
+      libraryMatch: null,
+    };
+    registerSessionRoutes(
+      app,
+      makeDeps(dir, {
+        client: {
+          messages: {
+            create: async () => ({ content: [{ type: 'tool_use', input: { citations: [rawCitation] } }], usage: {} }),
+          },
+        },
+        groundAgainstLibraryText: async () => new Map([[0, { verdict: 'verified', note: 'grounded' }]]),
+      })
+    );
     const res = fakeRes();
     await app.routes['POST /api/sessions/:id/verify-citations'](fakeReq({ params: { id: 's1' } }), res);
     assert.equal(res.body.citations.length, 1);
@@ -407,9 +481,18 @@ test('POST /api/sessions/:id/verify-citations', async t => {
     t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
     store.saveSession(dir, baseSession('s1'));
     const app = fakeApp();
-    registerSessionRoutes(app, makeDeps(dir, {
-      client: { messages: { create: async () => { throw new Error('API error'); } } },
-    }));
+    registerSessionRoutes(
+      app,
+      makeDeps(dir, {
+        client: {
+          messages: {
+            create: async () => {
+              throw new Error('API error');
+            },
+          },
+        },
+      })
+    );
     const res = fakeRes();
     await app.routes['POST /api/sessions/:id/verify-citations'](fakeReq({ params: { id: 's1' } }), res);
     assert.equal(res.statusCode, 500);

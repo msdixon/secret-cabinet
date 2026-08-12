@@ -13,15 +13,26 @@ const { registerUploadRoutes, extractPdfText } = require('../upload-routes.js');
 
 function fakeApp() {
   const routes = {};
-  return { routes, post(path, ...handlers) { routes[`POST ${path}`] = handlers; } };
+  return {
+    routes,
+    post(path, ...handlers) {
+      routes[`POST ${path}`] = handlers;
+    },
+  };
 }
 
 function fakeRes() {
   const res = {
     statusCode: null,
     body: null,
-    status(code) { this.statusCode = code; return this; },
-    json(body) { this.body = body; return this; },
+    status(code) {
+      this.statusCode = code;
+      return this;
+    },
+    json(body) {
+      this.body = body;
+      return this;
+    },
   };
   return res;
 }
@@ -52,7 +63,9 @@ test('POST /api/upload — extraction handler', async t => {
 
   await t.test('reads a .txt file as UTF-8 and normalises line endings', async () => {
     const res = fakeRes();
-    const req = { file: { originalname: 'notes.txt', mimetype: 'text/plain', buffer: Buffer.from('line one\r\nline two\r\n') } };
+    const req = {
+      file: { originalname: 'notes.txt', mimetype: 'text/plain', buffer: Buffer.from('line one\r\nline two\r\n') },
+    };
     await handler(req, res);
     assert.equal(res.body.text, 'line one\nline two');
     assert.equal(res.body.filename, 'notes.txt');

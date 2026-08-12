@@ -15,8 +15,13 @@
 const ALIAS_STOPWORDS = new Set(['of', 'the', 'van', 'der', 'de', 'la', 'lady', 'sir', 'dr', 'st']);
 
 function normalizeSpeaker(s) {
-  return s.normalize('NFD').replace(/[̀-ͯ]/g, '')
-    .replace(/['’]/g, '').toLowerCase().replace(/[\s-]+/g, ' ').trim();
+  return s
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/['’]/g, '')
+    .toLowerCase()
+    .replace(/[\s-]+/g, ' ')
+    .trim();
 }
 
 function buildSpeakerHeaderSet(roster) {
@@ -29,31 +34,40 @@ function buildSpeakerHeaderSet(roster) {
   };
   roster.forEach(m => {
     register(m.name, m.id);
-    m.name.split(/[\s-]+/)
+    m.name
+      .split(/[\s-]+/)
       .filter(tok => tok.length > 2 && !ALIAS_STOPWORDS.has(tok.toLowerCase()))
       .forEach(tok => register(tok, m.id));
     (m.aliases || []).forEach(a => register(a, m.id));
   });
   const set = new Set();
-  owner.forEach((id, k) => { if (id != null) set.add(k); });
+  owner.forEach((id, k) => {
+    if (id != null) set.add(k);
+  });
   return set;
 }
 
 function escapeHtml(s) {
   return String(s)
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 // Post-process raw Claude transcript text: append ' —' after speaker name lines
 // so plain-text exports clearly distinguish speakers from speech.
 function formatTranscriptText(text, roster) {
   const headers = buildSpeakerHeaderSet(roster);
-  return text.split('\n').map(line => {
-    const t = line.trim();
-    const bare = t.endsWith(':') ? t.slice(0, -1) : t;
-    return headers.has(normalizeSpeaker(bare)) ? `${bare} —` : line;
-  }).join('\n');
+  return text
+    .split('\n')
+    .map(line => {
+      const t = line.trim();
+      const bare = t.endsWith(':') ? t.slice(0, -1) : t;
+      return headers.has(normalizeSpeaker(bare)) ? `${bare} —` : line;
+    })
+    .join('\n');
 }
 
 // #245: a segment's `label` means opposite things either side of the
@@ -65,13 +79,14 @@ function formatTranscriptText(text, roster) {
 // did the night it was held.
 function composeSegmentText(segment, roster) {
   const body = formatTranscriptText(segment.text, roster);
-  return segment.endedBy
-    ? `\n${body}\n\n— ${segment.label} —\n`
-    : `\n— ${segment.label} —\n\n${body}\n`;
+  return segment.endedBy ? `\n${body}\n\n— ${segment.label} —\n` : `\n— ${segment.label} —\n\n${body}\n`;
 }
 
 function buildTranscriptHeader(entry, memberIds, date, roster) {
-  const names = memberIds.map(id => roster.find(m => m.id === id)?.name).filter(Boolean).join(', ');
+  const names = memberIds
+    .map(id => roster.find(m => m.id === id)?.name)
+    .filter(Boolean)
+    .join(', ');
   return `THE SECRET-CABIN-ET\nMeeting Notes — ${date}\nAssembled: ${names}\n\nSource material:\n${entry}\n`;
 }
 
