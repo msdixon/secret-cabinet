@@ -37,7 +37,7 @@ The room exists outside time. Members do not remember previous meetings. No one 
 - **`src/dayone.js`** — MCP client that spawns `/usr/local/bin/dayone mcp` via stdio. Handles journal fetch and transcript export.
 - **`prompts/lodge-context.md`** — The shared system prompt foundation: the conceit of the room, the terms of being there, the voice parameters.
 - **`prompts/members/`** — One file per lodge member. Each character is built on top of the lodge context.
-- **`public/`** — Frontend served statically. Dark fire aesthetic. No framework.
+- **`public/`** — Frontend served statically. Dark fire aesthetic. No framework, no bundler, no build step: `index.html` and `lodge.html` sit at the top, scripts live in `public/js/` (each an IIFE assigning one `window.X`, loaded as plain `<script>` tags), styles in `public/css/`, and portraits/archival images in their own folders.
 - **`sessions/`** — Session JSON persisted locally. Not committed.
 
 ### Sibling relationship
