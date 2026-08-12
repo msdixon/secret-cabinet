@@ -51,6 +51,19 @@ test('buildSpeakerHeaderSet', async t => {
     assert.ok(headers.has('aleister crowley'));
     assert.ok(headers.has('crowley smith'));
   });
+
+  // Regression: pixie's roster `name` ("Coleman-Smith") is a surname-only
+  // shorthand, not the full name her own character file signs her as
+  // ("Pamela Colman Smith") — a full-name signature is a whole-line exact
+  // match, not a token match, so neither `name`'s tokens nor a bare-first-name
+  // alias covers it. A multi-word alias is the fix; this pins that shape.
+  await t.test('a multi-word alias covers a full name that differs from the short `name` field', () => {
+    const roster = [{ id: 'pixie', name: 'Coleman-Smith', aliases: ['Pamela', 'Pamela Colman Smith'] }];
+    const headers = tf.buildSpeakerHeaderSet(roster);
+    assert.ok(headers.has('pamela colman smith'));
+    assert.ok(headers.has('coleman smith'));
+    assert.ok(headers.has('pamela'));
+  });
 });
 
 test('escapeHtml', async t => {
