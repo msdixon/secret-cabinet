@@ -1249,6 +1249,14 @@ test('resolveLullNote', async t => {
     assert.ok(STOCK_LULL_NOTES.includes(resolveLullNote(null)));
     assert.ok(STOCK_LULL_NOTES.includes(resolveLullNote('   ')));
   });
+
+  await t.test('#246: never repeats the previous lull note back to back, even when the rng would pick it', () => {
+    const previous = STOCK_LULL_NOTES[0];
+    const rngAlwaysFirst = () => 0; // would pick STOCK_LULL_NOTES[0] with no exclusion
+    const note = resolveLullNote(null, rngAlwaysFirst, previous);
+    assert.notEqual(note, previous);
+    assert.ok(STOCK_LULL_NOTES.includes(note));
+  });
 });
 
 test('pickStockLullNote', async t => {
@@ -1256,6 +1264,16 @@ test('pickStockLullNote', async t => {
     for (let i = 0; i < STOCK_LULL_NOTES.length; i++) {
       const rng = () => i / STOCK_LULL_NOTES.length;
       assert.equal(pickStockLullNote(rng), STOCK_LULL_NOTES[i]);
+    }
+  });
+
+  await t.test('#246: excludes the previous note from the pool it draws from', () => {
+    const excluded = STOCK_LULL_NOTES[1];
+    // Sweep the full rng range — every draw must land on one of the two
+    // remaining notes, never the excluded one.
+    for (let i = 0; i < 20; i++) {
+      const rng = () => i / 20;
+      assert.notEqual(pickStockLullNote(rng, excluded), excluded);
     }
   });
 });

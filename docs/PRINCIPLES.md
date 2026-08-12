@@ -9,7 +9,7 @@ Established 2026-08-08, at Rachel's request, stress-tested against [PROJECT.md](
 
 ## How to use this file
 
-Five principles, below — plus one explicit interaction to understand before treating any of the first three as standalone: **Voice, Verifiability, and Entertainment (Principles 1–3) form a deliberate, productive triangle, not a hierarchy** — see the section right after Principle 3. Principle 4 (Accessibility) is unconditional, not gated on anything. One further principle, Security, is tracked but deliberately not yet promoted to full weight — see the closing section.
+Six principles, below — plus one explicit interaction to understand before treating any of the first three as standalone: **Voice, Verifiability, and Entertainment (Principles 1–3) form a deliberate, productive triangle, not a hierarchy** — see the section right after Principle 3. Principle 4 (Accessibility) is unconditional, not gated on anything. One further principle, Security, is tracked but deliberately not yet promoted to full weight — see the closing section.
 
 This is written-principles-only, for now. It does not yet include the code-level "design system" layer (tokens, component conventions) or a redesign — those are deliberately separate future work ([#236](https://github.com/msdixon/secret-cabinet/issues/236)), because Rachel isn't sold on the current UI and wants the principles settled before scaffolding is built on top of them.
 
@@ -85,6 +85,16 @@ This is written-principles-only, for now. It does not yet include the code-level
 **Existing precedent this formalizes:** #142 and #193's module extractions (`witness.js`, `export.js`, `sessions.js`, nine `server.js` modules), the `window.X` + `configure(deps)` script-tag/IIFE convention used consistently across those extractions, and the "codebase health" thread PROJECT.md already tracks as separate from feature work.
 
 **Portfolio modifier (same shape as Principle 1's):** a codebase shown as a portfolio artifact needs to hold up to a technical reviewer, not just run correctly — raises the bar on this principle exactly when purpose #2 is in play, same as Principle 1.
+
+---
+
+## Principle 6 — Diegetic Over Control-Panel
+
+**What it means:** When a UI surface could read either as an in-fiction moment — the room performing itself — or as an exposed app control panel — toggles, a blank selection grid, a wall of standing buttons — default to the diegetic shape. This is about the *resting state*, not about removing manual control: override stays available where it earns its keep (#185 keeps hand-casting as a first-class option right alongside the auto-proposed cast), it just isn't what the user faces before they've done anything.
+
+**Why it's a principle, not just a shared instinct:** Four separate decisions converged on the same move independently before anyone named it as a pattern: #184 replaced a manual live/transcript toggle with the stage as the default view; #185 replaced a cold-open grid of unselected member tokens with a director-proposed cast; #186 collapsed roughly eleven standing controls plus permanently-visible export config into two verbs; and the #194 continuous-stream migration (#244/#245/#246) removed the round-count selector and progress pips entirely, replacing them with lulls the room narrates itself into and out of — no override was reintroduced there, the boldest instance of the four. That many independent arrivals at the same shape is a signal worth encoding as a guardrail, not re-deriving from scratch on the next feature that faces the same fork.
+
+**Existing precedent this formalizes:** [#184](https://github.com/msdixon/secret-cabinet/issues/184) (stage as default live view), [#185](https://github.com/msdixon/secret-cabinet/issues/185) (director-proposed casting with pinned regulars), [#186](https://github.com/msdixon/secret-cabinet/issues/186) (Continue/Preserve two-verb after-panel), [#194](https://github.com/msdixon/secret-cabinet/issues/194)/[#244](https://github.com/msdixon/secret-cabinet/issues/244)/[#245](https://github.com/msdixon/secret-cabinet/issues/245)/[#246](https://github.com/msdixon/secret-cabinet/issues/246) (passages and lulls replacing rounds, pips, and a preordained count). Reinforces Principle 3 (Entertainment) in practice — a control panel reads as software; a room drawing breath reads as a room — but it's stated as its own principle because it's a UI-shape rule applicable independent of whether the surface in question is otherwise about entertainment at all.
 
 ---
 
