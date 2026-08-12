@@ -114,7 +114,16 @@ function renderReadingRoomPage(session, roster) {
   .rr-source { border-left: 3px solid var(--amber-dim); background: var(--panel); padding: 18px 22px; margin-bottom: 48px; font-style: italic; color: var(--muted); white-space: pre-wrap; }
   .rr-round { margin-bottom: 48px; }
   .rr-round-label { font-family: 'IM Fell English', serif; font-size: 13px; letter-spacing: 3px; text-transform: uppercase; color: var(--ash); text-align: center; margin-bottom: 28px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
-  .rr-lull { font-family: 'IM Fell English', serif; font-style: italic; font-size: 13px; color: var(--ash); text-align: center; margin-top: 34px; padding-top: 22px; border-top: 1px solid var(--border); }
+  /* #246: was a mirror of .rr-round-label (border, uppercase, letter-spaced) —
+     a lull isn't a new chapter, it's the room pausing, so it gets a softer
+     shape: rules that fade toward the margins instead of a hard line, and
+     sentence-case italic instead of a heading. Same visual language as the
+     live app's .lull-rule/.lull-note, adapted to this page's own tokens
+     since it ships with no client JS and can't share that stylesheet. */
+  .rr-lull { display: flex; align-items: center; gap: 18px; margin: 34px 0 8px; font-family: 'IM Fell English', serif; font-style: italic; font-size: 13px; color: var(--ash); text-align: center; opacity: 0.85; animation: rrLullBreathe 4.5s ease-in-out 0.6s infinite; }
+  .rr-lull::before, .rr-lull::after { content: ''; flex: 1; height: 1px; background: linear-gradient(to right, transparent, var(--border)); }
+  .rr-lull::after { background: linear-gradient(to left, transparent, var(--border)); }
+  @keyframes rrLullBreathe { 0%, 100% { opacity: 0.85; } 50% { opacity: 0.5; } }
   .rr-turn { margin-bottom: 28px; }
   .rr-speaker { font-family: 'IM Fell English', serif; font-size: 14px; letter-spacing: 1px; color: var(--amber); margin-bottom: 4px; }
   .rr-speech { color: var(--cream); }

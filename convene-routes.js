@@ -181,6 +181,7 @@ function registerConveneRoutes(app, {
         roundPrompt: passagePrompt, conversationHistory: session.conversationHistory.slice(-6),
         speakerCount: defaultPoolSize, round: roundIndex, precedingTurn,
         disposition: session.disposition || {},
+        previousLullNote: session.rounds[session.rounds.length - 1]?.label || null,
         onChunk: chunk => res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`),
         onSpeakerStart: memberId => res.write(`data: ${JSON.stringify({ speaking: memberId })}\n\n`),
         onSpeakerEnd: (memberId, name, text) => res.write(`data: ${JSON.stringify({ speakerDone: { memberId, name, text } })}\n\n`),

@@ -31,7 +31,7 @@ The room exists outside time. Members do not remember previous meetings. No one 
 
 ## Architecture
 
-- **`server.js`** — Express server. Proxies all Anthropic API calls server-side. Three rounds of conversation per session, each round building on the previous (genuine cross-talk, not parallel independent responses).
+- **`server.js`** — Express server. Proxies all Anthropic API calls server-side. A session is a continuous stream of passages separated by lulls — no preordained round count — each passage building on the last (genuine cross-talk, not parallel independent responses).
 - **`dayone.js`** — MCP client that spawns `/usr/local/bin/dayone mcp` via stdio. Handles journal fetch and transcript export.
 - **`prompts/lodge-context.md`** — The shared system prompt foundation: the conceit of the room, the terms of being there, the voice parameters.
 - **`prompts/members/`** — One file per lodge member. Each character is built on top of the lodge context.
@@ -78,7 +78,7 @@ From any Claude Code session:
 /secret-lodge
 ```
 
-Fetches the latest PreSeedings entry and runs the full three-round lodge conversation inline. `/secret-lodge 2` uses the second most recent entry. The server must be running.
+Fetches the latest PreSeedings entry and runs the full lodge conversation inline, passage by passage until the room reaches a lull. `/secret-lodge 2` uses the second most recent entry. The server must be running.
 
 ---
 
@@ -88,9 +88,9 @@ Fetches the latest PreSeedings entry and runs the full three-round lodge convers
 2. Open `http://localhost:3132`
 3. Paste a research note, or fetch the latest Day One entry
 4. Adjust which members are present for this session
-5. **Convene the Lodge** — runs three rounds automatically
+5. **Convene the Lodge** — the room speaks in passages until it reaches a lull, then waits: **Continue**, or let it end
 6. **Silent Bob Protocol** — interject into the conversation as an anonymous presence; the room responds
-7. **One More Turn** — extend the meeting
+7. **Stir the room again** — after a meeting ends, re-open it from the after-panel
 8. Export the transcript to Day One or download as `.txt`
 
 ---
