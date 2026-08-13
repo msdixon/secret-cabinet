@@ -1,3 +1,6 @@
+
+/* ─── Fonts & design tokens ────────────────────────────────────────────── */
+
 @import url('https://fonts.googleapis.com/css2?family=UnifrakturMaguntia&family=IM+Fell+English:ital@0;1&family=Crimson+Pro:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Cinzel:wght@500;600&display=swap');
 :root {
   --lodge-bg: #0e0b08;
@@ -26,6 +29,9 @@
   --lodge-graph-theme-fill: #8880b8;
   --lodge-graph-edge-library: #a89468;
 }
+
+/* ─── Global reset & masthead ──────────────────────────────────────────── */
+
 * { box-sizing: border-box; margin: 0; padding: 0; }
 .lodge-root { background: var(--lodge-bg); color: var(--lodge-cream); font-family: 'Crimson Pro', Georgia, serif; }
 .lodge-mantel {
@@ -45,6 +51,8 @@
 .mantel-nav { display:flex; justify-content:center; padding:0 20px 12px; }
 .mantel-sessions-btn { font-size:12px; padding:5px 16px; border-color:var(--lodge-border); color:var(--lodge-muted); }
 .mantel-sessions-btn:hover { border-color:var(--lodge-amber-dim); color:var(--lodge-cream); }
+
+/* ─── Hearth glow & embers ─────────────────────────────────────────────── */
 
 .hearth-glow {
   width: 100%; height: 48px; position: relative; overflow: hidden;
@@ -98,6 +106,8 @@
   80% { opacity:0.3; }
   100% { opacity:0; transform: translateY(-22px) scale(0.3) translateX(8px); }
 }
+
+/* ─── Convene panel — journal input & member roster ────────────────────── */
 
 .lodge-body { display:flex; flex-direction:column; flex:1; padding:20px 24px; gap:20px; max-width:960px; width:100%; margin:0 auto; }
 .panel-label { font-family:'IM Fell English',serif; font-size:13px; letter-spacing:2px; text-transform:uppercase; color:var(--lodge-muted); margin-bottom:8px; }
@@ -189,6 +199,9 @@ a.lodge-btn { display:inline-block; text-decoration:none; }
 .cast-proposal-name.regular::before { content:'✦ '; font-size:10px; }
 .cast-proposal-reason { font-family:'Crimson Pro',serif; font-size:13px; font-style:italic; color:var(--lodge-muted); margin-top:8px; line-height:1.5; max-width:64ch; }
 .cast-proposal-actions { display:flex; gap:8px; margin-top:12px; }
+
+/* ─── Transcript — rounds, lulls & message bubbles ─────────────────────── */
+
 .transcript-empty { text-align:center; padding:40px 20px; color:var(--lodge-muted); font-family:'IM Fell English',serif; font-style:italic; font-size:15px; line-height:1.8; }
 .transcript-round-header { display:flex; align-items:center; gap:12px; margin:20px 0 14px; }
 .transcript-round-header:first-child { margin-top:0; }
@@ -253,6 +266,9 @@ a.lodge-btn { display:inline-block; text-decoration:none; }
 .interject-input { background:var(--lodge-panel); border:1px solid var(--lodge-ash); border-left:3px solid #a0c8a0; color:var(--lodge-cream); font-family:'Crimson Pro',serif; font-size:15px; font-style:italic; padding:8px 12px; border-radius:0 2px 2px 0; flex:1; }
 .interject-input:focus { outline:none; border-left-color:#c0e0c0; }
 .interject-input::placeholder { color:var(--lodge-ash); }
+
+/* ─── Action menus & status bar ────────────────────────────────────────── */
+
 /* #186: Continue/Preserve dropdown menus, replacing the ~11-control sprawl */
 .menu-wrap { position:relative; display:inline-block; }
 .lodge-menu { display:none; flex-direction:column; gap:2px; position:absolute; top:calc(100% + 6px); left:0; min-width:230px; background:var(--lodge-panel); border:1px solid var(--lodge-border); border-radius:2px; padding:6px; box-shadow:0 10px 28px rgba(0,0,0,0.5); z-index:50; }
@@ -272,6 +288,9 @@ a.lodge-btn { display:inline-block; text-decoration:none; }
 #verify-citations-btn.visible { display:inline-block; }
 #reveal-player-turns-btn { display:none; }
 #reveal-player-turns-btn.visible { display:inline-block; }
+
+/* ─── Convene panel controls — artifact & play-as arcs ─────────────────── */
+
 /* Convene panel — convene button is primary; arc config sits below, demoted */
 .convene-panel { background:var(--lodge-surface); border:1px solid var(--lodge-border); border-radius:2px; display:flex; flex-direction:column; }
 .convene-row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; padding:12px 14px; }
@@ -293,6 +312,8 @@ a.lodge-btn { display:inline-block; text-decoration:none; }
 .playeras-panel .arc-summary { font-size:11px; padding:8px 14px; color:var(--lodge-ash); }
 .playeras-panel .arc-summary-note { color:var(--lodge-ash); }
 .playeras-panel .arc-fields { padding:0 14px 12px; gap:8px; }
+
+/* ─── Transcript annotations & citations ───────────────────────────────── */
 
 /* Player turn markers — invisible unless revealed, right-badge + background tint
    (distinct from .annotated's left border and .flagged-citation's right border) */
@@ -339,7 +360,7 @@ a.lodge-btn { display:inline-block; text-decoration:none; }
 a.archival-image-link:hover { border-color:var(--lodge-amber-dim); cursor:pointer; }
 .archival-image-link img { display:block; max-height:120px; width:auto; border-radius:1px; filter:sepia(0.15); }
 
-/* Sessions drawer */
+/* ─── Sessions drawer ──────────────────────────────────────────────────── */
 .sessions-btn { border-color:var(--lodge-ash); color:var(--lodge-muted); }
 .sessions-btn:hover { border-color:var(--lodge-amber-dim); color:var(--lodge-cream); }
 .sessions-count { display:inline-block; background:rgba(200,146,42,0.2); color:var(--lodge-amber); font-size:11px; padding:1px 5px; border-radius:8px; margin-left:4px; font-family:'Crimson Pro',serif; vertical-align:middle; }
@@ -403,7 +424,7 @@ a.archival-image-link:hover { border-color:var(--lodge-amber-dim); cursor:pointe
 .add-tag-btn:hover { border-color:var(--lodge-amber-dim); color:var(--lodge-muted); }
 .tag-input { background:var(--lodge-surface); border:1px solid var(--lodge-amber-dim); color:var(--lodge-cream); font-family:'Crimson Pro',serif; font-size:12px; padding:2px 6px; border-radius:2px; width:80px; }
 
-/* Comparative mode */
+/* ─── Comparative mode ─────────────────────────────────────────────────── */
 .compare-bar { display:none; align-items:center; gap:10px; padding:8px 12px; background:rgba(200,146,42,0.08); border-bottom:1px solid var(--lodge-amber-dim); flex-shrink:0; }
 .compare-bar-hint { font-family:'IM Fell English',serif; font-style:italic; font-size:12px; color:var(--lodge-amber); flex:1; }
 .compare-bar-go { font-size:12px; padding:5px 14px; }
@@ -429,7 +450,7 @@ a.archival-image-link:hover { border-color:var(--lodge-amber-dim); cursor:pointe
 .compare-panel-source { font-family:'Crimson Pro',serif; font-style:italic; font-size:14px; color:var(--lodge-cream); line-height:1.5; }
 .compare-panel-transcript { padding:16px 20px; flex:1; }
 
-/* Dossier drawer (slides from right, below sessions drawer) */
+/* ─── Dossier drawer (slides from right, below sessions drawer) ────────── */
 .dossier-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.4); z-index:100; }
 .dossier-overlay.open { display:block; }
 .dossier-drawer { position:fixed; top:0; right:0; width:360px; max-width:96vw; height:100vh; background:var(--lodge-panel); border-left:1px solid var(--lodge-border); z-index:101; display:flex; flex-direction:column; transform:translateX(100%); transition:transform 0.25s ease; overflow:hidden; }
@@ -447,7 +468,7 @@ a.archival-image-link:hover { border-color:var(--lodge-amber-dim); cursor:pointe
 .dossier-voice { display:none; margin-top:10px; }
 .dossier-voice.open { display:block; }
 
-/* Export settings drawer (#186) — per-app config for Preserve, opened on demand */
+/* ─── Export settings drawer (#186) — per-app config for Preserve, opened on demand ─── */
 .export-settings-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:100; }
 .export-settings-overlay.open { display:block; }
 .export-settings-drawer { position:fixed; top:0; right:0; width:340px; max-width:95vw; height:100vh; background:var(--lodge-panel); border-left:1px solid var(--lodge-border); z-index:101; display:flex; flex-direction:column; transform:translateX(100%); transition:transform 0.25s ease; }
@@ -456,6 +477,8 @@ a.archival-image-link:hover { border-color:var(--lodge-amber-dim); cursor:pointe
 .settings-field { display:flex; flex-direction:column; gap:6px; }
 .settings-field > span:first-child { font-family:'IM Fell English',serif; font-size:12px; font-style:italic; letter-spacing:0.5px; color:var(--lodge-muted); }
 .settings-field .ulysses-group-input { width:100%; font-size:14px; padding:8px 10px; }
+
+/* ─── Metrics drawer ───────────────────────────────────────────────────── */
 
 /* Metrics drawer (#191) — reuses .sessions-drawer-header/.sessions-close-btn
    chrome; only the overlay/drawer shell and body content are new, same split
@@ -479,7 +502,7 @@ a.archival-image-link:hover { border-color:var(--lodge-amber-dim); cursor:pointe
 .session-metrics-btn { background:transparent; border:1px solid var(--lodge-border); color:var(--lodge-ash); font-family:'IM Fell English',serif; font-size:11px; padding:4px 6px; border-radius:2px; cursor:pointer; letter-spacing:0; flex:1; min-width:0; text-align:center; }
 .session-metrics-btn:hover { border-color:var(--lodge-amber-dim); color:var(--lodge-muted); }
 
-/* Add member modal */
+/* ─── Add member modal ─────────────────────────────────────────────────── */
 .add-member-btn { border-color:var(--lodge-ash); color:var(--lodge-muted); font-size:12px; padding:5px 14px; }
 .add-member-btn:hover { border-color:var(--lodge-amber-dim); color:var(--lodge-cream); }
 .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:100; }
@@ -489,6 +512,8 @@ a.archival-image-link:hover { border-color:var(--lodge-amber-dim); cursor:pointe
 .modal-header { display:flex; align-items:center; justify-content:space-between; padding:16px 18px; border-bottom:1px solid var(--lodge-border); flex-shrink:0; }
 .modal-title { font-family:'IM Fell English',serif; font-size:14px; letter-spacing:2px; text-transform:uppercase; color:var(--lodge-amber); }
 .modal-body { padding:18px; display:flex; flex-direction:column; }
+
+/* ─── Stage & record panes (#184) ──────────────────────────────────────── */
 
 /* ── #184: the stage + the record ─────────────────────────────────────────────
    Two permanent, bounded panes stacked vertically — never one swapped for the
@@ -546,6 +571,8 @@ a.archival-image-link:hover { border-color:var(--lodge-amber-dim); cursor:pointe
   .stage-record.collapsed .record-pane { height:65vh; }
   .stage-record.stage-only .stage-pane { height:65vh; }
 }
+
+/* ─── Witness mode — room, stage playback & keyframes ──────────────────── */
 
 .witness-controls { display:flex; align-items:center; gap:12px; padding:10px 16px; border-bottom:1px solid var(--lodge-border); flex-shrink:0; }
 .witness-label { font-family:'IM Fell English',serif; font-size:12px; letter-spacing:2px; text-transform:uppercase; color:var(--lodge-ash); }
