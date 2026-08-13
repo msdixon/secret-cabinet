@@ -226,6 +226,7 @@ window.Witness = (function () {
 
   function clearRoom() {
     roomCardFadeTimers.forEach((_, memberId) => cancelCardFade(memberId));
+    clearRoomHolds();
     roomCards.clear();
     const layer = roomLayer();
     if (layer) layer.innerHTML = '';
@@ -309,6 +310,91 @@ window.Witness = (function () {
     const card = liveTypingMemberId && roomCards.get(liveTypingMemberId);
     const el = card?.querySelector('.typing-text');
     if (el) el.textContent = text;
+  }
+
+  // ── Room-mode live pacing (#279) ─────────────────────────────────────────
+  // Live delivery is deliberately unpaced overall -- see the comment above
+  // liveSpeech -- but that left a single member's card with no minimum time
+  // on screen: app.js's startStreamEntry opens a fresh typing placeholder in
+  // the very same synchronous call that just closed a beat, immediately
+  // overwriting the settled card a reader hadn't had time to read yet, and a
+  // burst of beats closing in one chunk could do the same beat-to-beat.
+  // scheduleCardFade above doesn't touch this -- it only governs how long a
+  // *settled* card lingers once nothing is updating it, not the instant,
+  // synchronous overwrite on arrival.
+  //
+  // Gate the two room mutations that can clobber a card mid-read -- a
+  // settled render and the typing-start that follows one -- behind a
+  // per-member hold, keyed to the same witnessReadingTime() replay already
+  // paces full playback on. This only wraps the live entry points below,
+  // never renderRoomCard/renderRoomTyping themselves, so replay (which
+  // already paces itself, one block at a time, via renderWitnessBlock's own
+  // returned delay) is untouched. liveTypingSet -- the typing text growing
+  // character by character within an already-open typing card -- is exempt:
+  // it isn't replacing anything a reader hasn't seen yet, just filling in
+  // what's already visibly "being typed."
+  //
+  // Only the latest deferred mutation per member is kept, not a full queue:
+  // a fresher settled card always supersedes a stale queued typing
+  // placeholder (there's no reason to flash a placeholder for content
+  // that's already fully known), and a second settled card arriving before
+  // the first was ever shown supersedes it too -- an intermediate beat can
+  // go unseen on the rare burst where several close in one chunk, same
+  // trade-off the record (which always has everything) already makes for
+  // stage mode's own scroll-and-miss-one case.
+  const roomHoldUntil = new Map(); // memberId -> epoch ms the card may next change
+  const roomHoldTimers = new Map(); // memberId -> pending flush timeout
+  const roomHoldPending = new Map(); // memberId -> deferred { type: 'card', block } | { type: 'typingStart', name, text }
+
+  function roomHoldActive(memberId) {
+    const until = roomHoldUntil.get(memberId);
+    return !!until && until > Date.now();
+  }
+
+  function setRoomHold(memberId, text) {
+    const ms = witnessReadingTime(text);
+    roomHoldUntil.set(memberId, Date.now() + ms);
+    clearTimeout(roomHoldTimers.get(memberId));
+    roomHoldTimers.set(
+      memberId,
+      setTimeout(() => flushRoomHold(memberId), ms)
+    );
+  }
+
+  function flushRoomHold(memberId) {
+    roomHoldTimers.delete(memberId);
+    roomHoldUntil.delete(memberId);
+    const pending = roomHoldPending.get(memberId);
+    roomHoldPending.delete(memberId);
+    if (!pending) return;
+    if (pending.type === 'card') {
+      renderWitnessBlock(pending.block);
+      setRoomHold(memberId, pending.block.text);
+    } else {
+      renderRoomTyping(pending.name, memberId);
+      if (pending.text) setRoomTypingText(pending.text);
+    }
+  }
+
+  function clearRoomHolds() {
+    roomHoldTimers.forEach(timer => clearTimeout(timer));
+    roomHoldTimers.clear();
+    roomHoldUntil.clear();
+    roomHoldPending.clear();
+  }
+
+  // A speech block reading as pure action lines (e.g. "*stands and paces*")
+  // renders into the room event strip, not the speaker's own card -- see
+  // renderWitnessBlock's speech branch below, which this mirrors so the live
+  // gating above can tell upfront whether a given block will actually touch
+  // a per-member card before deciding to hold it.
+  function isAllActionText(text) {
+    const nonEmptyLines = text
+      .trim()
+      .split('\n')
+      .map(l => l.trim())
+      .filter(Boolean);
+    return nonEmptyLines.length > 0 && nonEmptyLines.every(l => /^\*[^*]+\*$/.test(l));
   }
 
   // ── Stage chrome: hint text, exit button, collapse/reopen ──────────────────
@@ -417,7 +503,14 @@ window.Witness = (function () {
   function liveSpeech({ speaker, text, memberId, annotation }) {
     markStageActive();
     setHint('◉ Live — the room is speaking');
-    renderWitnessBlock({ type: 'speech', speaker, text, memberId: memberId || null, annotation: annotation || null });
+    const block = { type: 'speech', speaker, text, memberId: memberId || null, annotation: annotation || null };
+    const holdsACard = sceneAvailable && block.memberId && !isAllActionText(text);
+    if (holdsACard && roomHoldActive(block.memberId)) {
+      roomHoldPending.set(block.memberId, { type: 'card', block });
+      return;
+    }
+    renderWitnessBlock(block);
+    if (holdsACard) setRoomHold(block.memberId, text);
   }
 
   // Mirrors the record's "typing" placeholder (#115) so the active surface
@@ -434,6 +527,10 @@ window.Witness = (function () {
     setHint('◉ Live — the room is speaking');
     liveTypingMemberId = memberId || null;
     if (sceneAvailable) {
+      if (liveTypingMemberId && roomHoldActive(liveTypingMemberId)) {
+        roomHoldPending.set(liveTypingMemberId, { type: 'typingStart', name, text: '' });
+        return;
+      }
       renderRoomTyping(name, liveTypingMemberId);
       return;
     }
@@ -452,6 +549,11 @@ window.Witness = (function () {
   // hands that over here -- see startStreamEntry's append().
   function liveTypingSet(text) {
     if (sceneAvailable) {
+      const pending = liveTypingMemberId && roomHoldPending.get(liveTypingMemberId);
+      if (pending && pending.type === 'typingStart') {
+        pending.text = text;
+        return;
+      }
       setRoomTypingText(text);
       return;
     }
@@ -678,13 +780,12 @@ window.Witness = (function () {
     }
 
     if (block.type === 'speech') {
-      const nonEmptyLines = block.text
-        .trim()
-        .split('\n')
-        .map(l => l.trim())
-        .filter(Boolean);
-      const allAction = nonEmptyLines.length > 0 && nonEmptyLines.every(l => /^\*[^*]+\*$/.test(l));
-      if (allAction) {
+      if (isAllActionText(block.text)) {
+        const nonEmptyLines = block.text
+          .trim()
+          .split('\n')
+          .map(l => l.trim())
+          .filter(Boolean);
         const els = createActionLines(nonEmptyLines.map(l => l.slice(1, -1)));
         return { delay: witnessReadingTime(block.text), undo: () => els.forEach(el => el.remove()) };
       }

@@ -811,3 +811,135 @@ test('the room (#257): dialogue composited onto the scene, replacing the #202 to
     assert.equal(document.getElementById('room-events').innerHTML, '');
   });
 });
+
+test("room-mode live pacing (#279): a member's card holds long enough to read before the next mutation lands", async t => {
+  await t.test(
+    'a second beat from the same member is held, not shown, until the first has had its reading time',
+    t2 => {
+      t2.mock.timers.enable({ apis: ['setTimeout'] });
+      const { document, window, module: Witness } = boot(t2);
+      stubScene(window, { crowley: { x: 10, y: 10, visible: true } });
+      Witness.configure(makeDeps());
+      Witness.enableRoom();
+
+      Witness.liveSpeech({ speaker: 'Crowley', text: 'One.', memberId: 'crowley' });
+      let card = document.querySelector('#room-speech-layer .room-speech-card');
+      assert.match(card.querySelector('.speech-text').textContent, /One\./);
+
+      Witness.liveSpeech({ speaker: 'Crowley', text: 'Two.', memberId: 'crowley' });
+      card = document.querySelector('#room-speech-layer .room-speech-card');
+      assert.match(
+        card.querySelector('.speech-text').textContent,
+        /One\./,
+        'the second beat must not clobber the first before its reading time is up'
+      );
+      assert.equal(
+        document.querySelectorAll('#room-speech-layer .room-speech-card').length,
+        1,
+        'still one card, the second beat is held, not appended'
+      );
+
+      // WITNESS_MIN_PAUSE -- the reading-time floor for a beat this short.
+      t2.mock.timers.tick(1200);
+      card = document.querySelector('#room-speech-layer .room-speech-card');
+      assert.match(
+        card.querySelector('.speech-text').textContent,
+        /Two\./,
+        'once the hold elapses, the deferred beat replaces the first'
+      );
+    }
+  );
+
+  await t.test(
+    'a typing indicator opened right after a beat closes does not clobber the just-shown card mid-hold',
+    t2 => {
+      t2.mock.timers.enable({ apis: ['setTimeout'] });
+      const { document, window, module: Witness } = boot(t2);
+      stubScene(window, { crowley: { x: 10, y: 10, visible: true } });
+      Witness.configure(makeDeps());
+      Witness.enableRoom();
+
+      Witness.liveSpeech({ speaker: 'Crowley', text: 'One.', memberId: 'crowley' });
+      // app.js's startStreamEntry opens a fresh typing placeholder in the same
+      // synchronous call that just closed a beat -- reproduce that here.
+      Witness.liveTypingStart('Crowley', 'crowley');
+      let card = document.querySelector('#room-speech-layer .room-speech-card');
+      assert.equal(
+        card.classList.contains('room-card-typing'),
+        false,
+        'typing must not overwrite the settled card before its hold clears'
+      );
+      assert.match(card.querySelector('.speech-text').textContent, /One\./);
+
+      // Chunks keep streaming in while the hold is still up -- only the
+      // latest text queued behind the deferred typing-start should survive.
+      Witness.liveTypingSet('T');
+      Witness.liveTypingSet('Two');
+
+      t2.mock.timers.tick(1200);
+      card = document.querySelector('#room-speech-layer .room-speech-card');
+      assert.ok(
+        card.classList.contains('room-card-typing'),
+        'once the hold clears, the deferred typing indicator takes over'
+      );
+      assert.equal(
+        card.querySelector('.typing-text').textContent,
+        'Two',
+        'the latest typing text queued during the hold is applied once it flushes'
+      );
+    }
+  );
+
+  await t.test('a fresher settled beat supersedes a still-queued typing placeholder for the same member', t2 => {
+    t2.mock.timers.enable({ apis: ['setTimeout'] });
+    const { document, window, module: Witness } = boot(t2);
+    stubScene(window, { crowley: { x: 10, y: 10, visible: true } });
+    Witness.configure(makeDeps());
+    Witness.enableRoom();
+
+    Witness.liveSpeech({ speaker: 'Crowley', text: 'One.', memberId: 'crowley' });
+    Witness.liveTypingStart('Crowley', 'crowley'); // queued behind the hold
+    Witness.liveSpeech({ speaker: 'Crowley', text: 'Two.', memberId: 'crowley' }); // supersedes it
+
+    t2.mock.timers.tick(1200);
+    const card = document.querySelector('#room-speech-layer .room-speech-card');
+    assert.equal(
+      card.classList.contains('room-card-typing'),
+      false,
+      'the settled beat wins over the stale typing placeholder queued before it'
+    );
+    assert.match(card.querySelector('.speech-text').textContent, /Two\./);
+  });
+
+  await t.test('different members are never held back by each other', t2 => {
+    const { document, window, module: Witness } = boot(t2);
+    stubScene(window, {
+      crowley: { x: 10, y: 10, visible: true },
+      blavatsky: { x: 200, y: 10, visible: true },
+    });
+    Witness.configure(makeDeps());
+    Witness.enableRoom();
+
+    Witness.liveSpeech({ speaker: 'Crowley', text: 'One.', memberId: 'crowley' });
+    Witness.liveSpeech({ speaker: 'Blavatsky', text: 'Two.', memberId: 'blavatsky' });
+
+    const cards = [...document.querySelectorAll('#room-speech-layer .room-speech-card')];
+    assert.equal(cards.length, 2, "a hold on one member must not delay another member's own card");
+    assert.match(cards[0].querySelector('.speech-text').textContent, /One\./);
+    assert.match(cards[1].querySelector('.speech-text').textContent, /Two\./);
+  });
+
+  await t.test('stage mode (no scene) is unpaced -- it already has scrollback, unlike the room', t2 => {
+    const { document, module: Witness } = boot(t2);
+    Witness.configure(makeDeps());
+
+    Witness.liveSpeech({ speaker: 'Crowley', text: 'One.', memberId: 'crowley' });
+    Witness.liveSpeech({ speaker: 'Crowley', text: 'Two.', memberId: 'crowley' });
+
+    assert.equal(
+      document.querySelectorAll('#witness-stage .transcript-entry').length,
+      2,
+      'both beats append immediately in the stage fallback'
+    );
+  });
+});
