@@ -26,12 +26,17 @@ const MODULES = [
   // its own top-of-file comment. In the browser it behaves exactly like
   // the other modules below: one window.Beats, added the same way.
   { file: 'beats.js', global: 'Beats', api: ['splitIntoBeats'] },
-  { file: 'scene/scene.js', global: 'LodgeScene', api: ['init', 'updateSeats', 'setSpeaking'] },
+  {
+    file: 'scene/scene.js',
+    global: 'LodgeScene',
+    api: ['init', 'updateSeats', 'setSpeaking', 'getSeatScreenPosition'],
+  },
   {
     file: 'witness.js',
     global: 'Witness',
     api: [
       'configure',
+      'enableRoom',
       'liveReset',
       'resetLiveStage',
       'liveRoundHeader',

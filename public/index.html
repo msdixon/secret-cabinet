@@ -224,20 +224,25 @@
       <div class="stage-pane" id="stage-pane">
         <div class="witness-controls">
           <span class="witness-label">◎ The Stage</span>
-          <!-- #202: text presentation ⇄ room, two renderings of the same
-               conversation. Lives on the stage, not a sibling tab next to
-               the record -- see docs/archive/DESIGN-184-STAGE-DEFAULT.md's "Scene
-               placement" section for why. -->
-          <div class="stage-view-switch" id="stage-view-switch">
-            <button class="stage-view-btn active" id="stage-view-text-btn" onclick="window.Witness.setStageView('text')">Text</button>
-            <button class="stage-view-btn" id="stage-view-room-btn" onclick="window.Witness.setStageView('room')">Room</button>
-          </div>
           <span class="witness-hint" id="witness-hint"></span>
           <button class="witness-exit-btn" id="witness-exit-btn" onclick="window.Witness.exitClicked()" style="display:none;">✕ Exit</button>
         </div>
         <div class="witness-stage" id="witness-stage" onclick="window.Witness.advance()"></div>
-        <div class="witness-room" id="witness-room">
+        <!-- #257: the room composites dialogue directly onto the scene --
+             retires #202's wordless Text/Room toggle. witness-stage above
+             remains only as the fallback for when the 3D scene never
+             initializes (app.js's initSceneLayer never calls
+             Witness.enableRoom()); see witness.js's "The room (#257)"
+             section for the mechanism. room-speech-layer holds one DOM
+             speech card per seated member, positioned via
+             LodgeScene.getSeatScreenPosition's screen projection of their
+             portrait billboard; room-events holds round headers, lulls, and
+             unattributed action lines, which aren't anchored to any one
+             member's seat. -->
+        <div class="witness-room" id="witness-room" onclick="window.Witness.advance()">
           <canvas id="scene-canvas"></canvas>
+          <div class="room-speech-layer" id="room-speech-layer"></div>
+          <div class="room-events" id="room-events"></div>
         </div>
         <div class="witness-progress" id="witness-progress" style="display:none;"></div>
       </div>

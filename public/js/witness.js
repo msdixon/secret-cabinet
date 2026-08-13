@@ -36,6 +36,13 @@
 // live annotation during an active convene is deferred rather than
 // designed for, since a hidden pane isn't a workable annotation surface.
 // See docs/archive/DESIGN-184-STAGE-DEFAULT.md's Revision section.
+//
+// #257 retired #202's wordless Text/Room toggle: the stage described above
+// (#witness-stage's scrolling bubble column) is now the fallback for when
+// the 3D scene never initializes. When it does, "the room" (#257) below
+// takes over as the one stage there is, and it renders these same beats as
+// DOM cards composited over the WebGL canvas -- see that section's own
+// comment for the mechanism.
 window.Witness = (function () {
   let deps = null; // core helpers/data -- see configure() below
 
@@ -45,7 +52,6 @@ window.Witness = (function () {
   // own argument, in case a caller passes a fresher snapshot.
   function configure(injectedDeps) {
     deps = injectedDeps;
-    applyStageView();
   }
 
   // ── Shared speaker-side tracking ─────────────────────────────────────────────
@@ -69,30 +75,240 @@ window.Witness = (function () {
     return m?.glyph || '';
   }
 
-  // ── View switcher (#202): text presentation ⇄ room ──────────────────────────
-  // The stage container renders either the witness-stage bubbles or the 3D
-  // room (window.LodgeScene) -- two renderings of the same conversation,
-  // chosen independently of which convene is live and never shown together
-  // (same "one pane visible at a time" reasoning as collapseStage/reopenStage
-  // above, just for the stage's own two sub-views). Persisted like the app's
-  // other small UI prefs (sc-ulysses-group, sc-scene-disabled).
-  let stageView = localStorage.getItem('sc-stage-view') === 'room' ? 'room' : 'text';
+  // ── The room (#257) ──────────────────────────────────────────────────────
+  // #202 shipped a wordless Text/Room toggle -- a user choice between two
+  // renderings, one of them mute. #257 retires that choice: there is one
+  // stage now. Whenever the 3D scene actually initializes (app.js's
+  // initSceneLayer calls enableRoom() on success), the room becomes the
+  // stage and every live-mirrored or replayed beat composites into it as a
+  // DOM speech card anchored to the speaking member's seat -- Vector3.Project
+  // via window.LodgeScene.getSeatScreenPosition, a card positioned at that
+  // screen point, layered over the WebGL canvas. #witness-stage's bubble
+  // rendering survives only as the fallback for when the scene never
+  // initializes (no WebGL, ?noscene, sc-scene-disabled) -- sceneAvailable
+  // stays false and every render below falls through to it unchanged.
+  let sceneAvailable = false;
 
-  // Applies stageView to the DOM. Called from configure() (after the DOM
-  // this module touches definitely exists) rather than at module-load time --
-  // module-convention.test.js loads this file against an empty <body> and
-  // asserts nothing at load time reaches for it.
-  function applyStageView() {
-    document.getElementById('stage-pane')?.classList.toggle('view-room', stageView === 'room');
-    document.getElementById('stage-view-text-btn')?.classList.toggle('active', stageView === 'text');
-    document.getElementById('stage-view-room-btn')?.classList.toggle('active', stageView === 'room');
+  function enableRoom() {
+    sceneAvailable = true;
+    document.getElementById('stage-pane')?.classList.add('room-active');
   }
 
-  function setStageView(view) {
-    if (view !== 'text' && view !== 'room') return;
-    stageView = view;
-    localStorage.setItem('sc-stage-view', view);
-    applyStageView();
+  // Round headers, lulls, and unattributed action lines aren't anchored to
+  // any one member's seat -- they read into a small fixed strip at the top
+  // of the room instead. In stage mode this is just #witness-stage itself,
+  // same as before #257.
+  function eventContainer() {
+    return sceneAvailable ? document.getElementById('room-events') : document.getElementById('witness-stage');
+  }
+
+  function roomLayer() {
+    return document.getElementById('room-speech-layer');
+  }
+
+  // memberId -> card element currently shown, keyed so a member's typing
+  // placeholder and settled bubble are the same DOM node (swapped in place,
+  // not removed and recreated -- avoids a flicker between the two states).
+  const roomCards = new Map();
+  const roomCardFadeTimers = new Map();
+  let roomRepositionHandle = null;
+  let liveTypingMemberId = null;
+
+  // Settled cards linger long enough to read, then fade -- unlike the
+  // scrolling stage, the room has no history to scroll through, so a card
+  // that never left would just accumulate. Cancelled if the same member
+  // speaks (or starts typing) again first.
+  const ROOM_CARD_FADE_GRACE_MS = 1500;
+  const ROOM_CARD_FADE_TRANSITION_MS = 550;
+
+  function cancelCardFade(memberId) {
+    const timer = roomCardFadeTimers.get(memberId);
+    if (timer) {
+      clearTimeout(timer);
+      roomCardFadeTimers.delete(memberId);
+    }
+  }
+
+  function scheduleCardFade(memberId, text) {
+    cancelCardFade(memberId);
+    const delay = witnessReadingTime(text) + ROOM_CARD_FADE_GRACE_MS;
+    const timer = setTimeout(() => {
+      const card = roomCards.get(memberId);
+      if (!card) return;
+      card.classList.add('room-card-fading');
+      setTimeout(() => {
+        if (roomCards.get(memberId) === card) {
+          card.remove();
+          roomCards.delete(memberId);
+        }
+      }, ROOM_CARD_FADE_TRANSITION_MS);
+    }, delay);
+    roomCardFadeTimers.set(memberId, timer);
+  }
+
+  // #257's other named rough edge: nudge a card down when its horizontal
+  // band overlaps the previous one's, sorted left-to-right -- a simple
+  // stacking heuristic, not real collision resolution, but enough for the
+  // handful of seats that can plausibly be showing a card at once.
+  const CARD_COLLISION_WIDTH = 220;
+  const CARD_STACK_OFFSET = 92;
+  // A card grows upward from its seat point (CSS translateY(-100%), so it
+  // reads as "hovering above the portrait"), and portraits themselves sit in
+  // the upper half of the room's resting shot -- a longer turn can then grow
+  // tall enough to poke above the canvas into the toolbar above it. Not a
+  // real collision system, just a floor on how high the anchor point itself
+  // is allowed to sit, so the card has room to grow into.
+  const CARD_MIN_TOP = 150;
+
+  function repositionRoomCards() {
+    const placed = [];
+    roomCards.forEach((card, memberId) => {
+      const pos = window.LodgeScene?.getSeatScreenPosition?.(memberId);
+      if (!pos || !pos.visible) {
+        card.style.display = 'none';
+        return;
+      }
+      card.style.display = '';
+      placed.push({ card, x: pos.x, y: Math.max(pos.y, CARD_MIN_TOP) });
+    });
+    placed.sort((a, b) => a.x - b.x);
+    let prev = null;
+    placed.forEach(p => {
+      const y = prev && Math.abs(p.x - prev.x) < CARD_COLLISION_WIDTH ? prev.y + CARD_STACK_OFFSET : p.y;
+      p.card.style.left = `${p.x}px`;
+      p.card.style.top = `${y}px`;
+      prev = { x: p.x, y };
+    });
+    // CARD_MIN_TOP is a floor on the anchor point, not on the card's own
+    // rendered top edge -- a long turn can still grow tall enough to poke
+    // above the room. Measuring the actual laid-out box and nudging it back
+    // in catches that regardless of how tall the content turned out to be.
+    // jsdom (module-convention/witness.test.js) lays out nothing, so every
+    // rect here is zero-height and this is a no-op there -- CARD_MIN_TOP
+    // above is what those tests actually exercise.
+    const room = document.getElementById('witness-room');
+    const roomRect = room?.getBoundingClientRect();
+    if (roomRect && roomRect.height) {
+      placed.forEach(p => {
+        const cardRect = p.card.getBoundingClientRect();
+        const overflowTop = roomRect.top - cardRect.top;
+        if (overflowTop > 0) {
+          p.card.style.top = `${parseFloat(p.card.style.top) + overflowTop}px`;
+        }
+      });
+    }
+  }
+
+  // The camera keeps easing toward whoever's speaking (#232) even between a
+  // card's own content updates, so cards need to track it continuously, not
+  // just reposition once per beat. Runs only while at least one card is
+  // shown; each render call also positions immediately so a card never waits
+  // a frame to appear in the right place.
+  function roomRepositionTick() {
+    repositionRoomCards();
+    roomRepositionHandle =
+      roomCards.size && typeof requestAnimationFrame === 'function' ? requestAnimationFrame(roomRepositionTick) : null;
+  }
+
+  function touchRoomLoop() {
+    repositionRoomCards();
+    if (roomRepositionHandle == null && roomCards.size && typeof requestAnimationFrame === 'function') {
+      roomRepositionHandle = requestAnimationFrame(roomRepositionTick);
+    }
+  }
+
+  function stopRoomLoop() {
+    if (roomRepositionHandle != null && typeof cancelAnimationFrame === 'function') {
+      cancelAnimationFrame(roomRepositionHandle);
+    }
+    roomRepositionHandle = null;
+  }
+
+  function clearRoom() {
+    roomCardFadeTimers.forEach((_, memberId) => cancelCardFade(memberId));
+    roomCards.clear();
+    const layer = roomLayer();
+    if (layer) layer.innerHTML = '';
+    const events = document.getElementById('room-events');
+    if (events) events.innerHTML = '';
+    liveTypingMemberId = null;
+    stopRoomLoop();
+  }
+
+  // Gets or creates the persistent card for a member -- typing and settled
+  // states are the same element so swapping between them (renderRoomCard
+  // replacing a typing card's content) never flickers a remove/re-add.
+  function getOrCreateCard(memberId) {
+    let card = roomCards.get(memberId);
+    if (card) return { card, existed: true, prevHtml: card.innerHTML };
+    card = document.createElement('div');
+    card.className = 'room-speech-card';
+    roomLayer()?.appendChild(card);
+    roomCards.set(memberId, card);
+    return { card, existed: false, prevHtml: null };
+  }
+
+  function speechHtml({ speaker, text, memberId, annotation }) {
+    const nc = memberId ? `voice-${memberId}` : '';
+    const glyph = memberGlyph(memberId) ? `<span class="speaker-glyph">${memberGlyph(memberId)}</span>` : '';
+    const nameHtml = `<div class="speaker-name ${nc}">${glyph}${deps.escapeHTML(speaker)}</div>`;
+    let bodyHtml = `<div class="bubble-body"><div class="speech-text">${deps.renderActions(text)}</div>`;
+    if (annotation) bodyHtml += `<div class="witness-annotation">↳ ${deps.escapeHTML(annotation)}</div>`;
+    bodyHtml += '</div>';
+    return nameHtml + bodyHtml;
+  }
+
+  // Renders one settled speech beat into a member's card, anchored to their
+  // seat. A member with no seat to anchor to (interject's "a voice from
+  // elsewhere", memberId null) reads into the event strip instead, same
+  // markup, same as it would in stage mode. Returns { undo } so replay's
+  // go-back can reverse exactly this render.
+  function renderRoomCard(block) {
+    const { text, memberId } = block;
+    if (!memberId) {
+      const el = document.createElement('div');
+      el.className = 'transcript-entry room-event-entry';
+      el.innerHTML = speechHtml(block);
+      eventContainer()?.appendChild(el);
+      return { undo: () => el.remove() };
+    }
+    cancelCardFade(memberId);
+    const { card, existed, prevHtml } = getOrCreateCard(memberId);
+    card.classList.remove('room-card-typing');
+    card.innerHTML = speechHtml(block);
+    touchRoomLoop();
+    scheduleCardFade(memberId, text);
+    return {
+      undo: () => {
+        cancelCardFade(memberId);
+        if (existed) {
+          card.innerHTML = prevHtml;
+          touchRoomLoop();
+        } else {
+          card.remove();
+          roomCards.delete(memberId);
+        }
+      },
+    };
+  }
+
+  function renderRoomTyping(name, memberId) {
+    if (!memberId) return; // nothing to anchor a typing indicator to
+    cancelCardFade(memberId);
+    const { card } = getOrCreateCard(memberId);
+    card.classList.add('room-card-typing');
+    const nc = `voice-${memberId}`;
+    const glyph = memberGlyph(memberId) ? `<span class="speaker-glyph">${memberGlyph(memberId)}</span>` : '';
+    card.innerHTML =
+      `<div class="speaker-name ${nc}">${glyph}${deps.escapeHTML(name)}</div>` +
+      '<div class="bubble-body"><div class="speech-text typing-text transcript-stream-live"></div></div>';
+    touchRoomLoop();
+  }
+
+  function setRoomTypingText(text) {
+    const card = liveTypingMemberId && roomCards.get(liveTypingMemberId);
+    const el = card?.querySelector('.typing-text');
+    if (el) el.textContent = text;
   }
 
   // ── Stage chrome: hint text, exit button, collapse/reopen ──────────────────
@@ -119,6 +335,7 @@ window.Witness = (function () {
   function clearStage(reopen) {
     const stage = document.getElementById('witness-stage');
     if (stage) stage.innerHTML = '';
+    clearRoom();
     const prog = document.getElementById('witness-progress');
     if (prog) prog.style.display = 'none';
     const btn = document.getElementById('witness-exit-btn');
@@ -164,31 +381,27 @@ window.Witness = (function () {
     if (stage) stage.scrollTop = stage.scrollHeight;
   }
 
-  // ── Live mirroring (#184) ────────────────────────────────────────────────────
-  // Each call renders one already-settled beat into the stage via the same
-  // renderWitnessBlock() replay uses below -- ignoring its returned pacing
-  // delay, since live beats appear as fast as the room actually speaks, not
-  // on a reading-time schedule.
+  // ── Live mirroring (#184, #257) ──────────────────────────────────────────────
+  // Each call renders one already-settled beat wherever the active surface is
+  // (the room's cards/event strip, or #witness-stage as a fallback) via the
+  // same createHeaderEl/createLullEl/renderRoomCard helpers replay's
+  // renderWitnessBlock() uses below -- ignoring any returned pacing delay,
+  // since live beats appear as fast as the room actually speaks, not on a
+  // reading-time schedule.
   //
   // liveRoundHeader returns its element (unlike liveSpeech/liveTyping*)
   // because app.js's addRoundHeader() does the same for the record, and its
   // callers pair the two: on a failed round, they call both h.remove() (the
-  // record) and this return value's .remove() (the stage), so a round that
-  // never actually happened doesn't linger as a performed beat on replay.
+  // record) and this return value's .remove() (the stage/room), so a round
+  // that never actually happened doesn't linger as a performed beat.
   function liveRoundHeader(label) {
     markStageActive();
     setHint('◉ Live — the room is speaking');
-    const stage = document.getElementById('witness-stage');
-    const el = document.createElement('div');
-    el.className = 'witness-round-header';
-    el.innerHTML = `<div class="witness-rule"></div><span class="witness-round-label">${deps.escapeHTML(label)}</span><div class="witness-rule"></div>`;
-    stage.appendChild(el);
-    stage.scrollTop = stage.scrollHeight;
-    return el;
+    return createHeaderEl(label);
   }
 
   // #245's live counterpart to the replayed 'lull' block above — mirrors the
-  // record's divider onto the stage when a passage reaches its pause.
+  // record's divider onto the active surface when a passage reaches its pause.
   //
   // Returns its element, and app.js needs it for more than error recovery this
   // time: only one pane is ever visible (see the .stage-only/.collapsed note
@@ -198,13 +411,7 @@ window.Witness = (function () {
   function liveLull(note) {
     markStageActive();
     setHint('◉ Live — the room has paused');
-    const stage = document.getElementById('witness-stage');
-    const el = document.createElement('div');
-    el.className = 'transcript-lull';
-    el.innerHTML = `<div class="lull-rule"></div><span class="lull-note">${deps.escapeHTML(note)}</span><div class="lull-rule"></div>`;
-    stage.appendChild(el);
-    stage.scrollTop = stage.scrollHeight;
-    return el;
+    return createLullEl(note);
   }
 
   function liveSpeech({ speaker, text, memberId, annotation }) {
@@ -213,16 +420,23 @@ window.Witness = (function () {
     renderWitnessBlock({ type: 'speech', speaker, text, memberId: memberId || null, annotation: annotation || null });
   }
 
-  // Mirrors the record's "typing" placeholder (#115) so the stage keeps its
-  // theatrical, someone-is-speaking-right-now feel rather than going dark
-  // between beats. Growing raw text, not a real block -- swapped for the
-  // settled bubble by the next liveSpeech() call, same lifecycle as the
-  // record's own typing element in app.js's startStreamEntry().
+  // Mirrors the record's "typing" placeholder (#115) so the active surface
+  // keeps its theatrical, someone-is-speaking-right-now feel rather than
+  // going dark between beats. Growing raw text, not a real block -- swapped
+  // for the settled bubble by the next liveSpeech() call, same lifecycle as
+  // the record's own typing element in app.js's startStreamEntry(). In room
+  // mode this reuses (and is later overwritten by) the speaking member's own
+  // card, per renderRoomTyping/renderRoomCard's shared getOrCreateCard.
   let liveTypingEl = null;
 
-  function liveTypingStart(name) {
+  function liveTypingStart(name, memberId) {
     markStageActive();
     setHint('◉ Live — the room is speaking');
+    liveTypingMemberId = memberId || null;
+    if (sceneAvailable) {
+      renderRoomTyping(name, liveTypingMemberId);
+      return;
+    }
     const stage = document.getElementById('witness-stage');
     if (!stage) return;
     liveTypingEl = document.createElement('div');
@@ -237,6 +451,10 @@ window.Witness = (function () {
   // splitIntoBeats on every chunk rather than tracking a raw delta, and
   // hands that over here -- see startStreamEntry's append().
   function liveTypingSet(text) {
+    if (sceneAvailable) {
+      setRoomTypingText(text);
+      return;
+    }
     if (!liveTypingEl) return;
     liveTypingEl.querySelector('.typing-text').textContent = text;
     const stage = document.getElementById('witness-stage');
@@ -244,6 +462,11 @@ window.Witness = (function () {
   }
 
   function liveClearTyping() {
+    // Room mode: nothing to remove -- the next liveSpeech()/renderRoomCard
+    // overwrites the same card in place (see getOrCreateCard). Clearing the
+    // tracked member here would just make setRoomTypingText a no-op between
+    // clear and the settled render, so it's left for renderRoomCard to reset.
+    if (sceneAvailable) return;
     if (liveTypingEl) {
       liveTypingEl.remove();
       liveTypingEl = null;
@@ -271,13 +494,18 @@ window.Witness = (function () {
 
   // Go-back support (#90): parallel arrays over witnessIndex so we can
   // undo any rendered block without a full re-render.
-  //   witnessRenderedNodes[i]   — DOM nodes appended to the stage by block i
+  //   witnessUndos[i]           — the undo callback renderWitnessBlock returned
+  //                               for block i (#257: a room card mutated in
+  //                               place needs a content-restoring undo, not a
+  //                               node-removal one, so this stores whatever
+  //                               callback the render actually produced rather
+  //                               than assuming appended nodes).
   //   witnessSideSnapshots[i]   — { lastSpeakerId, currentSpeakerSide } captured
   //                               *before* block i was rendered, so restoring it
   //                               makes getSpeakerSide() behave identically on a
   //                               re-render of the same block.
   // Both are reset in start() and maintained in advance() / goBack().
-  let witnessRenderedNodes = [];
+  let witnessUndos = [];
   let witnessSideSnapshots = [];
   // End-of-session state: tracked separately so clicking/arrowing at the end
   // doesn't stack up multiple "The room falls silent." markers.
@@ -373,38 +601,80 @@ window.Witness = (function () {
     return Math.min(Math.max(ms, WITNESS_MIN_PAUSE), WITNESS_MAX_PAUSE);
   }
 
-  // Renders one block into the stage. Used by both replay's advance() (which
-  // uses the returned pacing delay) and live mirroring above (which ignores
-  // it). Always appends fresh elements -- never reads from or moves nodes
-  // belonging to the record.
-  function renderWitnessBlock(block) {
-    const stage = document.getElementById('witness-stage');
+  // Shared by liveRoundHeader/liveLull above and renderWitnessBlock's replay
+  // branches below, so both surfaces (room event strip or #witness-stage
+  // fallback) render headers/lulls identically whichever one is live.
+  function createHeaderEl(label) {
+    const el = document.createElement('div');
+    el.className = 'witness-round-header';
+    el.innerHTML = `<div class="witness-rule"></div><span class="witness-round-label">${deps.escapeHTML(label)}</span><div class="witness-rule"></div>`;
+    const c = eventContainer();
+    c?.appendChild(el);
+    if (!sceneAvailable && c) c.scrollTop = c.scrollHeight;
+    return el;
+  }
 
-    if (block.type === 'header') {
+  function createLullEl(note) {
+    const el = document.createElement('div');
+    el.className = 'transcript-lull';
+    el.innerHTML = `<div class="lull-rule"></div><span class="lull-note">${deps.escapeHTML(note)}</span><div class="lull-rule"></div>`;
+    const c = eventContainer();
+    c?.appendChild(el);
+    if (!sceneAvailable && c) c.scrollTop = c.scrollHeight;
+    return el;
+  }
+
+  // `lines` are already-stripped action text (asterisks removed). Returns
+  // every element created, since an all-action speech turn can produce more
+  // than one.
+  function createActionLines(lines) {
+    const c = eventContainer();
+    const els = lines.map(text => {
       const el = document.createElement('div');
-      el.className = 'witness-round-header';
-      el.innerHTML = `<div class="witness-rule"></div><span class="witness-round-label">${deps.escapeHTML(block.label)}</span><div class="witness-rule"></div>`;
-      stage.appendChild(el);
-      stage.scrollTop = stage.scrollHeight;
-      return WITNESS_PAUSE_AFTER_HEADER;
+      el.className = 'action-line';
+      el.textContent = text;
+      c?.appendChild(el);
+      return el;
+    });
+    if (!sceneAvailable && c) c.scrollTop = c.scrollHeight;
+    return els;
+  }
+
+  // Renders one settled speech beat wherever the active surface is: the
+  // room's per-member card (renderRoomCard) when the scene is available, or
+  // a #witness-stage bubble otherwise -- the pre-#257 rendering, unchanged.
+  function renderSpeechBeat(block) {
+    if (sceneAvailable) return renderRoomCard(block);
+    const side = getSpeakerSide(block.memberId || block.speaker);
+    const e = document.createElement('div');
+    e.className = `transcript-entry bubble-${side}`;
+    e.innerHTML = speechHtml(block);
+    const stage = document.getElementById('witness-stage');
+    stage.appendChild(e);
+    stage.scrollTop = stage.scrollHeight;
+    return { undo: () => e.remove() };
+  }
+
+  // Renders one block onto the active surface. Used by both replay's
+  // advance() (which uses the returned pacing delay) and live mirroring
+  // above (which ignores it). Returns { delay, undo } -- undo reverses
+  // exactly this call's effect, which goBack() uses to step replay backward
+  // without assuming every render appended a fresh, independently-removable
+  // node (a room card is mutated in place across renders, not recreated).
+  function renderWitnessBlock(block) {
+    if (block.type === 'header') {
+      const el = createHeaderEl(block.label);
+      return { delay: WITNESS_PAUSE_AFTER_HEADER, undo: () => el.remove() };
     }
 
     if (block.type === 'lull') {
-      const el = document.createElement('div');
-      el.className = 'transcript-lull';
-      el.innerHTML = `<div class="lull-rule"></div><span class="lull-note">${deps.escapeHTML(block.label)}</span><div class="lull-rule"></div>`;
-      stage.appendChild(el);
-      stage.scrollTop = stage.scrollHeight;
-      return WITNESS_PAUSE_AFTER_HEADER;
+      const el = createLullEl(block.label);
+      return { delay: WITNESS_PAUSE_AFTER_HEADER, undo: () => el.remove() };
     }
 
     if (block.type === 'action') {
-      const el = document.createElement('div');
-      el.className = 'action-line';
-      el.textContent = block.text;
-      stage.appendChild(el);
-      stage.scrollTop = stage.scrollHeight;
-      return witnessReadingTime(block.text);
+      const els = createActionLines([block.text]);
+      return { delay: witnessReadingTime(block.text), undo: () => els.forEach(el => el.remove()) };
     }
 
     if (block.type === 'speech') {
@@ -415,34 +685,14 @@ window.Witness = (function () {
         .filter(Boolean);
       const allAction = nonEmptyLines.length > 0 && nonEmptyLines.every(l => /^\*[^*]+\*$/.test(l));
       if (allAction) {
-        nonEmptyLines.forEach(l => {
-          const el = document.createElement('div');
-          el.className = 'action-line';
-          el.textContent = l.slice(1, -1);
-          stage.appendChild(el);
-        });
-        stage.scrollTop = stage.scrollHeight;
-        return witnessReadingTime(block.text);
+        const els = createActionLines(nonEmptyLines.map(l => l.slice(1, -1)));
+        return { delay: witnessReadingTime(block.text), undo: () => els.forEach(el => el.remove()) };
       }
-      const nc = block.memberId ? `voice-${block.memberId}` : '';
-      const glyph = memberGlyph(block.memberId)
-        ? `<span class="speaker-glyph">${memberGlyph(block.memberId)}</span>`
-        : '';
-      const side = getSpeakerSide(block.memberId || block.speaker);
-
-      const e = document.createElement('div');
-      e.className = `transcript-entry bubble-${side}`;
-      const nameHtml = `<div class="speaker-name ${nc}">${glyph}${deps.escapeHTML(block.speaker)}</div>`;
-      let bodyHtml = `<div class="bubble-body"><div class="speech-text">${deps.renderActions(block.text)}</div>`;
-      if (block.annotation) bodyHtml += `<div class="witness-annotation">↳ ${deps.escapeHTML(block.annotation)}</div>`;
-      bodyHtml += '</div>';
-      e.innerHTML = nameHtml + bodyHtml;
-      stage.appendChild(e);
-      stage.scrollTop = stage.scrollHeight;
-      return witnessReadingTime(block.text);
+      const { undo } = renderSpeechBeat(block);
+      return { delay: witnessReadingTime(block.text), undo };
     }
 
-    return WITNESS_MIN_PAUSE;
+    return { delay: WITNESS_MIN_PAUSE, undo: () => {} };
   }
 
   // Shared helper: update hint and progress bar to reflect the current state.
@@ -469,12 +719,13 @@ window.Witness = (function () {
     // At the end: add the closing marker exactly once, then stop.
     if (witnessIndex >= witnessBlocks.length) {
       if (!witnessEnded) {
-        const stage = document.getElementById('witness-stage');
-        witnessEndEl = document.createElement('div');
-        witnessEndEl.className = 'witness-end';
-        witnessEndEl.textContent = 'The room falls silent.';
-        stage.appendChild(witnessEndEl);
-        stage.scrollTop = stage.scrollHeight;
+        const el = document.createElement('div');
+        el.className = 'witness-end';
+        el.textContent = 'The room falls silent.';
+        const c = eventContainer();
+        c?.appendChild(el);
+        if (!sceneAvailable && c) c.scrollTop = c.scrollHeight;
+        witnessEndEl = el;
         witnessEnded = true;
       }
       _updateControls();
@@ -484,15 +735,8 @@ window.Witness = (function () {
     // Snapshot speaker-side state so goBack() can restore it for this block.
     witnessSideSnapshots[witnessIndex] = { lastSpeakerId, currentSpeakerSide };
 
-    // Render the block, collecting every newly appended child node.
-    const stage = document.getElementById('witness-stage');
-    const childCountBefore = stage.childElementCount;
-    const delay = renderWitnessBlock(witnessBlocks[witnessIndex]);
-    const newNodes = [];
-    for (let i = childCountBefore; i < stage.childElementCount; i++) {
-      newNodes.push(stage.children[i]);
-    }
-    witnessRenderedNodes[witnessIndex] = newNodes;
+    const { delay, undo } = renderWitnessBlock(witnessBlocks[witnessIndex]);
+    witnessUndos[witnessIndex] = undo;
 
     witnessIndex++;
     _updateControls();
@@ -501,9 +745,12 @@ window.Witness = (function () {
     witnessTimer = setTimeout(advance, delay);
   }
 
-  // Step back one block (#90). Removes the last rendered block's DOM nodes
-  // and restores the speaker-side state that was in effect before it rendered,
-  // so re-advancing reproduces the exact same output.
+  // Step back one block (#90). Reverses the last rendered block's effect via
+  // the undo it returned (a fresh node removal in stage mode; a room card's
+  // content reverting to its pre-block snapshot, or being removed outright if
+  // the block created it -- see renderRoomCard) and restores the speaker-side
+  // state that was in effect before it rendered, so re-advancing reproduces
+  // the exact same output.
   function goBack() {
     if (!witnessActive) return;
     clearTimeout(witnessTimer);
@@ -526,12 +773,8 @@ window.Witness = (function () {
 
     witnessIndex--;
 
-    // Remove the nodes this block appended.
-    const nodes = witnessRenderedNodes[witnessIndex] || [];
-    nodes.forEach(n => {
-      if (n.parentNode) n.parentNode.removeChild(n);
-    });
-    witnessRenderedNodes[witnessIndex] = [];
+    witnessUndos[witnessIndex]?.();
+    witnessUndos[witnessIndex] = null;
 
     // Restore speaker-side state to what it was before the block rendered.
     const snap = witnessSideSnapshots[witnessIndex];
@@ -540,8 +783,10 @@ window.Witness = (function () {
       currentSpeakerSide = snap.currentSpeakerSide;
     }
 
-    const stage = document.getElementById('witness-stage');
-    stage.scrollTop = stage.scrollHeight;
+    if (!sceneAvailable) {
+      const stage = document.getElementById('witness-stage');
+      stage.scrollTop = stage.scrollHeight;
+    }
     _updateControls();
 
     // Resume auto-advance from the stepped-back position after a short pause
@@ -604,13 +849,14 @@ window.Witness = (function () {
     // Reset side map and go-back state for a clean Witness run.
     lastSpeakerId = null;
     currentSpeakerSide = 'right';
-    witnessRenderedNodes = [];
+    witnessUndos = [];
     witnessSideSnapshots = [];
     witnessEnded = false;
     witnessEndEl = null;
 
     const stage = document.getElementById('witness-stage');
     stage.innerHTML = '';
+    clearRoom();
     hasStageContent = true;
     document.getElementById('witness-progress').style.display = '';
     document.getElementById('witness-exit-btn').style.display = '';
@@ -623,10 +869,15 @@ window.Witness = (function () {
     // Keyboard handler (arrow keys + space for go-back / advance, Esc to exit)
     document.addEventListener('keydown', witnessKeyHandler);
 
-    // Touch-swipe handler for mobile go-back (#90). passive:false on touchend
-    // so e.preventDefault() can suppress the synthetic click.
-    stage.addEventListener('touchstart', _onTouchStart, { passive: true });
-    stage.addEventListener('touchend', _onTouchEnd, { passive: false });
+    // Touch-swipe handler for mobile go-back (#90), bound to both surfaces --
+    // whichever one is actually visible, only one ever is (see #257's
+    // room-active note atop this file). passive:false on touchend so
+    // e.preventDefault() can suppress the synthetic click.
+    const room = document.getElementById('witness-room');
+    [stage, room].forEach(el => {
+      el?.addEventListener('touchstart', _onTouchStart, { passive: true });
+      el?.addEventListener('touchend', _onTouchEnd, { passive: false });
+    });
 
     advance();
   }
@@ -656,9 +907,13 @@ window.Witness = (function () {
     clearTimeout(witnessTimer);
     document.removeEventListener('keydown', witnessKeyHandler);
     const stage = document.getElementById('witness-stage');
-    stage.removeEventListener('touchstart', _onTouchStart);
-    stage.removeEventListener('touchend', _onTouchEnd);
+    const room = document.getElementById('witness-room');
+    [stage, room].forEach(el => {
+      el?.removeEventListener('touchstart', _onTouchStart);
+      el?.removeEventListener('touchend', _onTouchEnd);
+    });
     stage.innerHTML = '';
+    clearRoom();
     document.getElementById('witness-progress').style.display = 'none';
     document.getElementById('witness-exit-btn').style.display = 'none';
     hasStageContent = false;
@@ -667,7 +922,7 @@ window.Witness = (function () {
 
   return {
     configure,
-    setStageView,
+    enableRoom,
     liveReset,
     resetLiveStage,
     liveRoundHeader,
