@@ -34,12 +34,13 @@ window.Export = (function () {
   // Same AND-of-terms matching as the server's GET /api/library?q= (server.js),
   // reimplemented client-side so filtering doesn't round-trip while typing.
   function libraryEntryMatches(entry, terms) {
-    return terms.every(t =>
-      entry.title.toLowerCase().includes(t) ||
-      entry.source.toLowerCase().includes(t) ||
-      entry.date?.toLowerCase().includes(t) ||
-      entry.themes?.some(th => th.includes(t)) ||
-      entry.members?.some(m => m.includes(t))
+    return terms.every(
+      t =>
+        entry.title.toLowerCase().includes(t) ||
+        entry.source.toLowerCase().includes(t) ||
+        entry.date?.toLowerCase().includes(t) ||
+        entry.themes?.some(th => th.includes(t)) ||
+        entry.members?.some(m => m.includes(t))
     );
   }
 
@@ -53,10 +54,8 @@ window.Export = (function () {
     const term = (filterText || '').trim().toLowerCase();
     const terms = term ? term.split(/\s+/) : [];
 
-    const visible = libraryEntries.filter(entry =>
-      !terms.length ||
-      libraryEntryMatches(entry, terms) ||
-      `library:${entry.id}` === currentValue
+    const visible = libraryEntries.filter(
+      entry => !terms.length || libraryEntryMatches(entry, terms) || `library:${entry.id}` === currentValue
     );
 
     libraryOptgroup.innerHTML = '';
@@ -96,7 +95,9 @@ window.Export = (function () {
 
     try {
       const res = await fetch('/api/dayone/journals', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
       });
       const data = await res.json();
       const journals = data.journals || [];
@@ -121,38 +122,40 @@ window.Export = (function () {
       });
 
       // Load entries for each journal in parallel, fill the pre-created groups
-      await Promise.all(groups.map(async ({ journal, group }) => {
-        try {
-          const er = await fetch('/api/dayone/entries', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ journalId: journal.id, limit: 3 }),
-          });
-          const ed = await er.json();
-          const entries = ed.entries || [];
+      await Promise.all(
+        groups.map(async ({ journal, group }) => {
+          try {
+            const er = await fetch('/api/dayone/entries', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ journalId: journal.id, limit: 3 }),
+            });
+            const ed = await er.json();
+            const entries = ed.entries || [];
 
-          entries.forEach((entry, idx) => {
-            const key = `dayone:${journal.id}:${idx}`;
-            entryCache.set(key, { ...entry, journalId: journal.id, journalName: journal.name });
-            const opt = document.createElement('option');
-            opt.value = key;
-            opt.textContent = `${entry.date}  ${entry.preview}`;
-            group.appendChild(opt);
-          });
+            entries.forEach((entry, idx) => {
+              const key = `dayone:${journal.id}:${idx}`;
+              entryCache.set(key, { ...entry, journalId: journal.id, journalName: journal.name });
+              const opt = document.createElement('option');
+              opt.value = key;
+              opt.textContent = `${entry.date}  ${entry.preview}`;
+              group.appendChild(opt);
+            });
 
-          if (!entries.length) {
+            if (!entries.length) {
+              const opt = document.createElement('option');
+              opt.disabled = true;
+              opt.textContent = 'No entries found';
+              group.appendChild(opt);
+            }
+          } catch {
             const opt = document.createElement('option');
             opt.disabled = true;
-            opt.textContent = 'No entries found';
+            opt.textContent = 'Could not load entries';
             group.appendChild(opt);
           }
-        } catch {
-          const opt = document.createElement('option');
-          opt.disabled = true;
-          opt.textContent = 'Could not load entries';
-          group.appendChild(opt);
-        }
-      }));
+        })
+      );
 
       // If we had a saved journal preference, try to pre-select its first entry
       const savedJournalId = deps.getCore().currentJournal.id;
@@ -163,7 +166,6 @@ window.Export = (function () {
           handleSourceChange(); // load entry text into state
         }
       }
-
     } catch (e) {
       if (loadingGroup) loadingGroup.label = 'Could not connect to Day One';
     }
@@ -275,7 +277,12 @@ window.Export = (function () {
     if (text.length > FILE_TEXT_LIMIT) {
       text = text.slice(0, FILE_TEXT_LIMIT);
       // Trim to last complete sentence
-      const lastStop = Math.max(text.lastIndexOf('. '), text.lastIndexOf('.\n'), text.lastIndexOf('? '), text.lastIndexOf('! '));
+      const lastStop = Math.max(
+        text.lastIndexOf('. '),
+        text.lastIndexOf('.\n'),
+        text.lastIndexOf('? '),
+        text.lastIndexOf('! ')
+      );
       if (lastStop > FILE_TEXT_LIMIT * 0.7) text = text.slice(0, lastStop + 1);
       notice = ' (trimmed to first ~4,000 chars — paste a specific passage for longer texts)';
     }
@@ -356,7 +363,11 @@ window.Export = (function () {
   // between app.js and scripts/build-citation-manifest.js. Missing on
   // pre-#153 sessions — default to 'model-knowledge' there, since that was
   // the only method available at the time.
-  const CITATION_SOURCE_LABEL = { library: 'checked against curated text', web: 'checked via live lookup', 'model-knowledge': "Claude's own knowledge" };
+  const CITATION_SOURCE_LABEL = {
+    library: 'checked against curated text',
+    web: 'checked via live lookup',
+    'model-knowledge': "Claude's own knowledge",
+  };
 
   // Groups a session's citationFlags by cited work, same convention as
   // scripts/build-citation-manifest.js, so the per-session bibliography reads
@@ -371,17 +382,20 @@ window.Export = (function () {
       byWork.get(c.work).push(c);
     });
     const lines = [];
-    [...byWork.entries()].sort((a, b) => a[0].localeCompare(b[0])).forEach(([work, occurrences]) => {
-      lines.push(`### ${work}`, '');
-      occurrences.forEach(o => {
-        const groundedIn = o.libraryCitation || (o.webSourceUrl ? `[${o.webSourceTitle}](${o.webSourceUrl})` : o.webSourceTitle);
-        const grounding = groundedIn ? ` — grounded in: ${groundedIn}` : '';
-        const sourceLabel = CITATION_SOURCE_LABEL[o.source || 'model-knowledge'];
-        lines.push(`- **${o.verdict}** (${sourceLabel}) — ${(o.speaker || '').replace(/\s*—\s*$/, '').trim()}`);
-        lines.push(`  > "${o.quote}"`);
-        lines.push(`  ${o.note}${grounding}`, '');
+    [...byWork.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .forEach(([work, occurrences]) => {
+        lines.push(`### ${work}`, '');
+        occurrences.forEach(o => {
+          const groundedIn =
+            o.libraryCitation || (o.webSourceUrl ? `[${o.webSourceTitle}](${o.webSourceUrl})` : o.webSourceTitle);
+          const grounding = groundedIn ? ` — grounded in: ${groundedIn}` : '';
+          const sourceLabel = CITATION_SOURCE_LABEL[o.source || 'model-knowledge'];
+          lines.push(`- **${o.verdict}** (${sourceLabel}) — ${(o.speaker || '').replace(/\s*—\s*$/, '').trim()}`);
+          lines.push(`  > "${o.quote}"`);
+          lines.push(`  ${o.note}${grounding}`, '');
+        });
       });
-    });
     return lines.join('\n');
   }
 
@@ -396,7 +410,10 @@ window.Export = (function () {
       const session = await res.json();
 
       const { activeMembers, MEMBERS, currentEntry, sessionDate } = deps.getCore();
-      const names = [...activeMembers].map(id => MEMBERS.find(m => m.id === id)?.name).filter(Boolean).join(', ');
+      const names = [...activeMembers]
+        .map(id => MEMBERS.find(m => m.id === id)?.name)
+        .filter(Boolean)
+        .join(', ');
       const source = (currentEntry || '').trim();
       const sourceExcerpt = source.length > 300 ? source.slice(0, 300) + '…' : source;
 
@@ -469,7 +486,10 @@ window.Export = (function () {
   async function exportObsidian() {
     const statusEl = document.getElementById('export-status');
     const vaultPath = document.getElementById('obsidian-vault')?.value.trim();
-    if (!vaultPath) { statusEl.textContent = 'Enter your Obsidian vault path first.'; return; }
+    if (!vaultPath) {
+      statusEl.textContent = 'Enter your Obsidian vault path first.';
+      return;
+    }
     statusEl.textContent = 'Writing to Obsidian…';
     try {
       const { sessionDate, activeMembers, MEMBERS, currentEntry, currentSessionId } = deps.getCore();
@@ -514,7 +534,11 @@ window.Export = (function () {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      statusEl.textContent = groupId ? `Sent to Ulysses — ${group || 'identifier'} (by ID).` : group ? `Sent to Ulysses — ${group}.` : 'Sent to Ulysses.';
+      statusEl.textContent = groupId
+        ? `Sent to Ulysses — ${group || 'identifier'} (by ID).`
+        : group
+          ? `Sent to Ulysses — ${group}.`
+          : 'Sent to Ulysses.';
     } catch (err) {
       statusEl.textContent = err.message || 'Ulysses export failed.';
     }
@@ -531,7 +555,7 @@ window.Export = (function () {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `secret-cabinet-${currentSession?.date || new Date().toISOString().slice(0,10)}.md`;
+    a.download = `secret-cabinet-${currentSession?.date || new Date().toISOString().slice(0, 10)}.md`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -541,8 +565,13 @@ window.Export = (function () {
     try {
       const { isLocal } = await fetch('/api/config').then(r => r.json());
       if (!isLocal) {
-        ['export-ulysses-row', 'export-ulysses-config', 'export-ulysses-id-config', 'export-obsidian-row', 'export-obsidian-config']
-          .forEach(id => document.getElementById(id)?.style.setProperty('display', 'none'));
+        [
+          'export-ulysses-row',
+          'export-ulysses-config',
+          'export-ulysses-id-config',
+          'export-obsidian-row',
+          'export-obsidian-config',
+        ].forEach(id => document.getElementById(id)?.style.setProperty('display', 'none'));
         document.getElementById('export-md-row')?.style.setProperty('display', 'inline-flex');
       }
     } catch (_) {}
@@ -553,11 +582,20 @@ window.Export = (function () {
   // inline oninput handlers in index.html, so this is the read-back half only.
   function restoreSavedSettings() {
     const savedGroup = localStorage.getItem('sc-ulysses-group');
-    if (savedGroup) { const gi = document.getElementById('ulysses-group'); if (gi) gi.value = savedGroup; }
+    if (savedGroup) {
+      const gi = document.getElementById('ulysses-group');
+      if (gi) gi.value = savedGroup;
+    }
     const savedGroupId = localStorage.getItem('sc-ulysses-group-id');
-    if (savedGroupId) { const gid = document.getElementById('ulysses-group-id'); if (gid) gid.value = savedGroupId; }
+    if (savedGroupId) {
+      const gid = document.getElementById('ulysses-group-id');
+      if (gid) gid.value = savedGroupId;
+    }
     const savedVault = localStorage.getItem('sc-obsidian-vault');
-    if (savedVault) { const vi = document.getElementById('obsidian-vault'); if (vi) vi.value = savedVault; }
+    if (savedVault) {
+      const vi = document.getElementById('obsidian-vault');
+      if (vi) vi.value = savedVault;
+    }
   }
 
   return {

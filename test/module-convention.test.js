@@ -27,10 +27,41 @@ const MODULES = [
   // the other modules below: one window.Beats, added the same way.
   { file: 'beats.js', global: 'Beats', api: ['splitIntoBeats'] },
   { file: 'scene/scene.js', global: 'LodgeScene', api: ['init', 'updateSeats', 'setSpeaking'] },
-  { file: 'witness.js', global: 'Witness', api: ['configure', 'liveReset', 'resetLiveStage', 'liveRoundHeader', 'liveSpeech', 'collapseStage', 'reopenStage', 'exitClicked', 'advance', 'start'] },
+  {
+    file: 'witness.js',
+    global: 'Witness',
+    api: [
+      'configure',
+      'liveReset',
+      'resetLiveStage',
+      'liveRoundHeader',
+      'liveSpeech',
+      'collapseStage',
+      'reopenStage',
+      'exitClicked',
+      'advance',
+      'start',
+    ],
+  },
   { file: 'export.js', global: 'Export', api: ['configure', 'buildAnnotatedTranscript', 'exportMd'] },
   { file: 'sessions.js', global: 'Sessions', api: ['configure', 'restoreSession', 'collectSessionNotes'] },
-  { file: 'casting.js', global: 'Casting', api: ['configure', 'getRegulars', 'isRegular', 'toggleRegular', 'seatRegulars', 'noteHandCast', 'requestProposal', 'acceptProposal', 'dismissProposal', 'consumeMetrics', 'render'] },
+  {
+    file: 'casting.js',
+    global: 'Casting',
+    api: [
+      'configure',
+      'getRegulars',
+      'isRegular',
+      'toggleRegular',
+      'seatRegulars',
+      'noteHandCast',
+      'requestProposal',
+      'acceptProposal',
+      'dismissProposal',
+      'consumeMetrics',
+      'render',
+    ],
+  },
 ];
 
 for (const { file, global: globalName, api } of MODULES) {
@@ -64,7 +95,7 @@ for (const { file, global: globalName, api } of MODULES) {
       const html = fs.readFileSync(path.join(PUBLIC_DIR, 'index.html'), 'utf8');
       assert.ok(
         new RegExp(`<script src="js/${file}"`).test(html),
-        `public/index.html has no <script src="js/${file}"> tag`,
+        `public/index.html has no <script src="js/${file}"> tag`
       );
     });
   });

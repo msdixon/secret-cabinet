@@ -14,8 +14,12 @@ function fakeApp() {
   const routes = {};
   return {
     routes,
-    get(path, handler) { routes[`GET ${path}`] = handler; },
-    post(path, handler) { routes[`POST ${path}`] = handler; },
+    get(path, handler) {
+      routes[`GET ${path}`] = handler;
+    },
+    post(path, handler) {
+      routes[`POST ${path}`] = handler;
+    },
   };
 }
 
@@ -27,8 +31,14 @@ function fakeRes() {
   const res = {
     statusCode: null,
     body: null,
-    status(code) { this.statusCode = code; return this; },
-    json(body) { this.body = body; return this; },
+    status(code) {
+      this.statusCode = code;
+      return this;
+    },
+    json(body) {
+      this.body = body;
+      return this;
+    },
   };
   return res;
 }
@@ -144,10 +154,19 @@ test('POST /api/members', async t => {
   await t.test('a failed generation call is caught and returns 500 without writing anything', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'member-routes-test-'));
     const app = fakeApp();
-    registerMemberRoutes(app, makeDeps({
-      membersDir: dir,
-      client: { messages: { create: async () => { throw new Error('API down'); } } },
-    }));
+    registerMemberRoutes(
+      app,
+      makeDeps({
+        membersDir: dir,
+        client: {
+          messages: {
+            create: async () => {
+              throw new Error('API down');
+            },
+          },
+        },
+      })
+    );
     const res = fakeRes();
     await app.routes['POST /api/members'](fakeReq({ body: { name: 'Doomed Member', bio: 'bio' } }), res);
     assert.equal(res.statusCode, 500);

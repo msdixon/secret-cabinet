@@ -7,7 +7,12 @@ require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const Anthropic = require('@anthropic-ai/sdk');
-const { buildMemberSection, buildSpeakerSystemPrompt, buildSpeakerUserMessage, callSpeakerTurn } = require('../src/pipeline');
+const {
+  buildMemberSection,
+  buildSpeakerSystemPrompt,
+  buildSpeakerUserMessage,
+  callSpeakerTurn,
+} = require('../src/pipeline');
 
 const ROOT = path.join(__dirname, '..');
 const ROSTER = JSON.parse(fs.readFileSync(path.join(ROOT, 'prompts/members/roster.json'), 'utf8'));
@@ -50,8 +55,14 @@ async function runCase(label, { member, presentMembers, roundPrompt, roundSoFarT
 
   let streamed = '';
   const result = await callSpeakerTurn({
-    client, model: MODEL, system, conversationHistory, userMessage,
-    onChunk: chunk => { streamed += chunk; },
+    client,
+    model: MODEL,
+    system,
+    conversationHistory,
+    userMessage,
+    onChunk: chunk => {
+      streamed += chunk;
+    },
   });
 
   console.log('text:', result.text);
@@ -61,7 +72,9 @@ async function runCase(label, { member, presentMembers, roundPrompt, roundSoFarT
   const streamedMatchesFinal = streamed.trim() === result.text;
   const noSelfSignature = !new RegExp(`^${member.name}\\s*\\n`, 'i').test(result.text);
   const { allChars, oneChars } = compareSectionSize(presentMembers, member);
-  console.log(`character-section size: full cast ${allChars} chars vs. this speaker alone ${oneChars} chars (${Math.round((1 - oneChars / allChars) * 100)}% smaller)`);
+  console.log(
+    `character-section size: full cast ${allChars} chars vs. this speaker alone ${oneChars} chars (${Math.round((1 - oneChars / allChars) * 100)}% smaller)`
+  );
 
   console.log(streamedMatchesFinal ? '✅ streamed chunks match final text' : '❌ STREAMING MISMATCH');
   console.log(noSelfSignature ? '✅ model did not sign its own name' : '❌ MODEL SIGNED ITSELF');
@@ -82,24 +95,28 @@ async function main() {
   if (realSession) {
     const presentMembers = ROSTER.filter(m => realSession.members.includes(m.id));
     const member = presentMembers[0];
-    results.push(await runCase(`real session (${realSession.id})`, {
-      member,
-      presentMembers,
-      roundPrompt: 'The document recedes. The conversation follows what it raised.',
-      roundSoFarText: `${presentMembers[1]?.name || 'Someone'}\n*A log shifts in the grate.*\nThe thing about footnotes is that they are where the real argument hides.`,
-      conversationHistory: (realSession.conversationHistory || []).slice(-4),
-    }));
+    results.push(
+      await runCase(`real session (${realSession.id})`, {
+        member,
+        presentMembers,
+        roundPrompt: 'The document recedes. The conversation follows what it raised.',
+        roundSoFarText: `${presentMembers[1]?.name || 'Someone'}\n*A log shifts in the grate.*\nThe thing about footnotes is that they are where the real argument hides.`,
+        conversationHistory: (realSession.conversationHistory || []).slice(-4),
+      })
+    );
   } else {
     console.log('\n(no real sessions on disk — skipping real-session case)');
   }
 
   // Fresh round 1, no round-so-far yet — the opening-speaker case.
-  results.push(await runCase('opening speaker, no round-so-far', {
-    member: ROSTER.find(m => m.id === 'crowley'),
-    presentMembers: ROSTER.slice(0, 3),
-    roundPrompt: 'The room stirs. Write the first movement — initial reactions to whatever the material woke up.',
-    roundSoFarText: '',
-  }));
+  results.push(
+    await runCase('opening speaker, no round-so-far', {
+      member: ROSTER.find(m => m.id === 'crowley'),
+      presentMembers: ROSTER.slice(0, 3),
+      roundPrompt: 'The room stirs. Write the first movement — initial reactions to whatever the material woke up.',
+      roundSoFarText: '',
+    })
+  );
 
   console.log(`\n${results.filter(Boolean).length}/${results.length} cases passed.`);
   process.exit(results.every(Boolean) ? 0 : 1);

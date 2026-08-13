@@ -17,7 +17,12 @@ const { registerConveneRoutes } = require('../src/routes/convene.js');
 
 function fakeApp() {
   const routes = {};
-  return { routes, post(path, handler) { routes[`POST ${path}`] = handler; } };
+  return {
+    routes,
+    post(path, handler) {
+      routes[`POST ${path}`] = handler;
+    },
+  };
 }
 
 function fakeReq(body = {}) {
@@ -31,15 +36,22 @@ function fakeSSERes() {
     headWritten: false,
     chunks: [],
     ended: false,
-    writeHead() { this.headWritten = true; },
-    write(chunk) { this.chunks.push(chunk); },
-    end() { this.ended = true; },
+    writeHead() {
+      this.headWritten = true;
+    },
+    write(chunk) {
+      this.chunks.push(chunk);
+    },
+    end() {
+      this.ended = true;
+    },
   };
-  res.events = () => res.chunks
-    .join('')
-    .split('\n\n')
-    .filter(Boolean)
-    .map(line => JSON.parse(line.replace(/^data: /, '')));
+  res.events = () =>
+    res.chunks
+      .join('')
+      .split('\n\n')
+      .filter(Boolean)
+      .map(line => JSON.parse(line.replace(/^data: /, '')));
   return res;
 }
 
@@ -47,8 +59,14 @@ function fakeJSONRes() {
   const res = {
     statusCode: null,
     body: null,
-    status(code) { this.statusCode = code; return this; },
-    json(body) { this.body = body; return this; },
+    status(code) {
+      this.statusCode = code;
+      return this;
+    },
+    json(body) {
+      this.body = body;
+      return this;
+    },
   };
   return res;
 }
@@ -57,9 +75,18 @@ function makeDeps(overrides = {}) {
   const savedSessions = new Map();
   const savedResidue = [];
   return {
-    savedSessions, savedResidue,
-    client: {}, model: 'test-model', lodgeContext: 'context', roster: [{ id: 'crowley', name: 'Crowley' }, { id: 'jung', name: 'Carl Jung' }],
-    loadMemberFile: () => 'member text', loadVoiceExemplar: () => null, loadResidue: () => '',
+    savedSessions,
+    savedResidue,
+    client: {},
+    model: 'test-model',
+    lodgeContext: 'context',
+    roster: [
+      { id: 'crowley', name: 'Crowley' },
+      { id: 'jung', name: 'Carl Jung' },
+    ],
+    loadMemberFile: () => 'member text',
+    loadVoiceExemplar: () => null,
+    loadResidue: () => '',
     castingRoster: () => [{ id: 'crowley', name: 'Crowley', brief: 'brief' }],
     buildPassagePrompt: ({ entry, isFirst }) => `PROMPT(${isFirst}): ${entry}`,
     wordsSpentSoFar: () => 0,
@@ -74,9 +101,8 @@ function makeDeps(overrides = {}) {
     loadSession: id => savedSessions.get(id) || null,
     saveResidueUpdates: updates => savedResidue.push(updates),
     formatTranscriptText: text => text,
-    composeSegmentText: segment => (segment.endedBy
-      ? `\n${segment.text}\n\n— ${segment.label} —\n`
-      : `\n— ${segment.label} —\n\n${segment.text}\n`),
+    composeSegmentText: segment =>
+      segment.endedBy ? `\n${segment.text}\n\n— ${segment.label} —\n` : `\n— ${segment.label} —\n\n${segment.text}\n`,
     buildTranscriptHeader: (entry, members, date) => `HEADER(${date})\n${entry}\n`,
     isLocal: true,
     runRound: async ({ onSpeakerStart, onSpeakerEnd, onChunk, onMetric }) => {
@@ -86,9 +112,13 @@ function makeDeps(overrides = {}) {
       onSpeakerEnd?.('crowley', 'Crowley', 'hello world');
       onMetric?.({ phase: 'speaker', memberId: 'crowley' });
       return {
-        fullRoundText: 'Crowley —\nhello world', speakerOrder: ['crowley'],
-        disposition: { crowley: 'engaged' }, residueUpdates: { crowley: 'a note' },
-        beats: [{ memberId: 'crowley', text: 'hello world' }], endedBy: 'budget', lullNote: 'The room draws breath.',
+        fullRoundText: 'Crowley —\nhello world',
+        speakerOrder: ['crowley'],
+        disposition: { crowley: 'engaged' },
+        residueUpdates: { crowley: 'a note' },
+        beats: [{ memberId: 'crowley', text: 'hello world' }],
+        endedBy: 'budget',
+        lullNote: 'The room draws breath.',
       };
     },
     proposeCast: async () => ({ cast: ['crowley'], additions: ['crowley'], regulars: [], reasoning: 'fits the room' }),
@@ -100,8 +130,13 @@ test('registerConveneRoutes', async t => {
   await t.test('registers all five generation routes', () => {
     const app = fakeApp();
     registerConveneRoutes(app, makeDeps());
-    ['POST /api/convene', 'POST /api/cast', 'POST /api/round', 'POST /api/interject', 'POST /api/prototype/round']
-      .forEach(key => assert.equal(typeof app.routes[key], 'function', key));
+    [
+      'POST /api/convene',
+      'POST /api/cast',
+      'POST /api/round',
+      'POST /api/interject',
+      'POST /api/prototype/round',
+    ].forEach(key => assert.equal(typeof app.routes[key], 'function', key));
   });
 });
 
@@ -124,7 +159,10 @@ test('POST /api/convene', async t => {
     assert.equal(res.headWritten, true);
     assert.equal(res.ended, true);
     const events = res.events();
-    assert.deepEqual(events.find(e => e.speaking), { speaking: 'crowley' });
+    assert.deepEqual(
+      events.find(e => e.speaking),
+      { speaking: 'crowley' }
+    );
     assert.ok(events.find(e => e.speakerDone));
     const done = events.find(e => e.done);
     assert.equal(done.round, 1);
@@ -144,7 +182,14 @@ test('POST /api/convene', async t => {
 
   await t.test('a runRound failure streams an error event instead of throwing', async () => {
     const app = fakeApp();
-    registerConveneRoutes(app, makeDeps({ runRound: async () => { throw new Error('model unavailable'); } }));
+    registerConveneRoutes(
+      app,
+      makeDeps({
+        runRound: async () => {
+          throw new Error('model unavailable');
+        },
+      })
+    );
     const res = fakeSSERes();
     await app.routes['POST /api/convene'](fakeReq({ entry: 'A test entry', members: ['crowley'] }), res);
     const events = res.events();
@@ -157,10 +202,14 @@ test('POST /api/convene', async t => {
     const deps = makeDeps();
     registerConveneRoutes(app, deps);
     const res = fakeSSERes();
-    await app.routes['POST /api/convene'](fakeReq({
-      entry: 'A test entry', members: ['crowley'],
-      castMetrics: [{ phase: 'casting', usage: {} }, 'not-an-object', { noPhase: true }],
-    }), res);
+    await app.routes['POST /api/convene'](
+      fakeReq({
+        entry: 'A test entry',
+        members: ['crowley'],
+        castMetrics: [{ phase: 'casting', usage: {} }, 'not-an-object', { noPhase: true }],
+      }),
+      res
+    );
     const done = res.events().find(e => e.done);
     const saved = deps.savedSessions.get(done.sessionId);
     // Only the well-shaped entry survives the filter, plus the one runRound's onMetric added.
@@ -189,7 +238,14 @@ test('POST /api/cast', async t => {
 
   await t.test('a proposeCast failure is caught and returns 500', async () => {
     const app = fakeApp();
-    registerConveneRoutes(app, makeDeps({ proposeCast: async () => { throw new Error('casting broke'); } }));
+    registerConveneRoutes(
+      app,
+      makeDeps({
+        proposeCast: async () => {
+          throw new Error('casting broke');
+        },
+      })
+    );
     const res = fakeJSONRes();
     await app.routes['POST /api/cast'](fakeReq({ entry: 'A document' }), res);
     assert.equal(res.statusCode, 500);
@@ -210,10 +266,18 @@ test('POST /api/round', async t => {
     const deps = makeDeps();
     registerConveneRoutes(app, deps);
     deps.savedSessions.set('s1', {
-      id: 's1', entry: 'entry', members: ['crowley', 'jung'],
-      conversationHistory: [{ role: 'user', content: 'p0' }, { role: 'assistant', content: 'r0' }],
+      id: 's1',
+      entry: 'entry',
+      members: ['crowley', 'jung'],
+      conversationHistory: [
+        { role: 'user', content: 'p0' },
+        { role: 'assistant', content: 'r0' },
+      ],
       rounds: [{ label: 'First Movement', text: 'r0', historyLength: 2 }],
-      transcriptText: 'HEADER\n', generationMetrics: [], playerTurns: [], disposition: {},
+      transcriptText: 'HEADER\n',
+      generationMetrics: [],
+      playerTurns: [],
+      disposition: {},
     });
     const res = fakeSSERes();
     await app.routes['POST /api/round'](fakeReq({ sessionId: 's1' }), res);
@@ -247,9 +311,13 @@ test('POST /api/interject', async t => {
     const deps = makeDeps();
     registerConveneRoutes(app, deps);
     deps.savedSessions.set('s1', {
-      id: 's1', members: ['crowley', 'jung'],
-      conversationHistory: [], rounds: [], transcriptText: 'HEADER\n',
-      generationMetrics: [], disposition: {},
+      id: 's1',
+      members: ['crowley', 'jung'],
+      conversationHistory: [],
+      rounds: [],
+      transcriptText: 'HEADER\n',
+      generationMetrics: [],
+      disposition: {},
     });
     const res = fakeSSERes();
     await app.routes['POST /api/interject'](fakeReq({ sessionId: 's1', text: 'What of silence?' }), res);

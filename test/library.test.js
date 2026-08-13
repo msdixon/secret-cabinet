@@ -38,7 +38,7 @@ test('library.json — author field (#187)', async t => {
     assert.deepEqual(unknown, [], `authors not on the roster: ${unknown.join(', ')}`);
   });
 
-  await t.test('every author also appears in that entry\'s members list', () => {
+  await t.test("every author also appears in that entry's members list", () => {
     // members is the association list; author must be a member of it, or the
     // graph (#22/#84) and the exemplar path would disagree about who this
     // entry belongs to.
@@ -92,14 +92,20 @@ test('library.json — license field (#35)', async t => {
 });
 
 test('library.json — entry files (#187)', async t => {
-  await t.test('every entry\'s file exists and has a non-empty excerpt body', () => {
+  await t.test("every entry's file exists and has a non-empty excerpt body", () => {
     // The exemplar path reads the body after stripping frontmatter; an entry
     // whose file is frontmatter-only would silently inject nothing.
     const broken = [];
     for (const entry of library) {
       const filePath = path.join(LIBRARY_DIR, entry.file);
-      if (!fs.existsSync(filePath)) { broken.push(`${entry.id} (no file)`); continue; }
-      const body = fs.readFileSync(filePath, 'utf8').replace(/^---[\s\S]*?---\n/, '').trim();
+      if (!fs.existsSync(filePath)) {
+        broken.push(`${entry.id} (no file)`);
+        continue;
+      }
+      const body = fs
+        .readFileSync(filePath, 'utf8')
+        .replace(/^---[\s\S]*?---\n/, '')
+        .trim();
       if (!body) broken.push(`${entry.id} (empty body)`);
     }
     assert.deepEqual(broken, [], broken.join(', '));

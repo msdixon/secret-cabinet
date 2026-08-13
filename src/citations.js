@@ -30,10 +30,12 @@ For each numbered item, judge whether its "Transcript quote" is genuinely consis
 - "unverified": the excerpt contradicts it, or doesn't contain/support what's being attributed to it
 - "uncertain": the excerpt doesn't clearly settle it either way (e.g. adjacent material, but not this specific claim)`;
 
-  const itemsText = matched.map(({ c, index }) => {
-    const entry = libraryLookup[c.libraryMatch];
-    return `### Item ${index}\nWork cited: ${c.work}\nTranscript quote: "${c.quote}"\n\nExcerpt from "${entry.title}" (${entry.source}):\n${entry.text}`;
-  }).join('\n\n---\n\n');
+  const itemsText = matched
+    .map(({ c, index }) => {
+      const entry = libraryLookup[c.libraryMatch];
+      return `### Item ${index}\nWork cited: ${c.work}\nTranscript quote: "${c.quote}"\n\nExcerpt from "${entry.title}" (${entry.source}):\n${entry.text}`;
+    })
+    .join('\n\n---\n\n');
 
   const start = Date.now();
   const response = await client.messages.create({
@@ -41,28 +43,30 @@ For each numbered item, judge whether its "Transcript quote" is genuinely consis
     max_tokens: 2000,
     system,
     messages: [{ role: 'user', content: itemsText }],
-    tools: [{
-      name: 'report_grounded_verdicts',
-      description: 'Report a text-grounded verdict for each numbered item.',
-      input_schema: {
-        type: 'object',
-        properties: {
-          verdicts: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                index: { type: 'integer', description: 'The item number from the prompt.' },
-                verdict: { type: 'string', enum: ['verified', 'unverified', 'uncertain'] },
-                note: { type: 'string', description: 'One-sentence reasoning, referencing the excerpt directly.' },
+    tools: [
+      {
+        name: 'report_grounded_verdicts',
+        description: 'Report a text-grounded verdict for each numbered item.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            verdicts: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  index: { type: 'integer', description: 'The item number from the prompt.' },
+                  verdict: { type: 'string', enum: ['verified', 'unverified', 'uncertain'] },
+                  note: { type: 'string', description: 'One-sentence reasoning, referencing the excerpt directly.' },
+                },
+                required: ['index', 'verdict', 'note'],
               },
-              required: ['index', 'verdict', 'note'],
             },
           },
+          required: ['verdicts'],
         },
-        required: ['verdicts'],
       },
-    }],
+    ],
     tool_choice: { type: 'tool', name: 'report_grounded_verdicts' },
   });
   const latencyMs = Date.now() - start;
@@ -100,10 +104,18 @@ async function fetchWithTimeout(url, opts = {}) {
   }
 }
 
-const normalizeForWebMatch = s => (s || '').replace(/[*"'“”‘’]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+const normalizeForWebMatch = s =>
+  (s || '')
+    .replace(/[*"'“”‘’]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
 
 const STOPWORDS = new Set(['the', 'and', 'of', 'a', 'an', 'to', 'in', 'on', 'by', 'or', 'from', 'with', 'his', 'her']);
-const tokenizeForWebMatch = s => normalizeForWebMatch(s).split(/[^a-z0-9]+/).filter(Boolean);
+const tokenizeForWebMatch = s =>
+  normalizeForWebMatch(s)
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
 // A famous phrase can turn up verbatim inside a completely unrelated book
 // that merely quotes it (found in testing: a Dickens opening line matched a
 // stand-up comedy memoir that happened to quote it). Requiring at least one
@@ -184,14 +196,18 @@ async function tryWikipediaSummary(work) {
     const title = titles?.[0];
     if (!title) return { status: 'not-found' };
 
-    const summaryRes = await fetchWithTimeout(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title.replace(/ /g, '_'))}`);
+    const summaryRes = await fetchWithTimeout(
+      `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title.replace(/ /g, '_'))}`
+    );
     if (summaryRes.status === 404) return { status: 'not-found' };
     if (!summaryRes.ok) return { status: 'error', reason: `HTTP ${summaryRes.status}` };
     const data = await summaryRes.json();
     if (data.type === 'disambiguation') return { status: 'not-found' };
     return {
       status: 'existence-only',
-      webSourceUrl: data.content_urls?.desktop?.page || `https://en.wikipedia.org/wiki/${encodeURIComponent(title.replace(/ /g, '_'))}`,
+      webSourceUrl:
+        data.content_urls?.desktop?.page ||
+        `https://en.wikipedia.org/wiki/${encodeURIComponent(title.replace(/ /g, '_'))}`,
       webSourceTitle: data.title || title,
       note: `"${work}" exists per Wikipedia, but this specific quote/claim wasn't independently confirmed — uncertain (unconfirmed).`,
     };
@@ -241,10 +257,22 @@ async function escalateCitationToWeb(citation) {
   for (const tier of tiers) {
     const result = await tier();
     if (result.status === 'confirmed') {
-      return { verdict: 'verified', note: result.note, source: 'web', webSourceUrl: result.webSourceUrl, webSourceTitle: result.webSourceTitle };
+      return {
+        verdict: 'verified',
+        note: result.note,
+        source: 'web',
+        webSourceUrl: result.webSourceUrl,
+        webSourceTitle: result.webSourceTitle,
+      };
     }
     if (result.status === 'existence-only') {
-      return { verdict: 'uncertain', note: result.note, source: 'web', webSourceUrl: result.webSourceUrl, webSourceTitle: result.webSourceTitle };
+      return {
+        verdict: 'uncertain',
+        note: result.note,
+        source: 'web',
+        webSourceUrl: result.webSourceUrl,
+        webSourceTitle: result.webSourceTitle,
+      };
     }
     if (result.status === 'error') sawError = true;
   }

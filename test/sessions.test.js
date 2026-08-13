@@ -47,7 +47,11 @@ const SESSION = {
 // Records every deps call so a test can assert on the contract rather than on
 // app.js internals it has no business knowing.
 function makeDeps(document, calls) {
-  const record = name => (...args) => { calls.push([name, ...args]); };
+  const record =
+    name =>
+    (...args) => {
+      calls.push([name, ...args]);
+    };
   return {
     getCore: () => ({ MEMBERS }),
     setStatus: record('setStatus'),
@@ -119,9 +123,16 @@ const argFor = (calls, name) => calls.find(c => c[0] === name)?.[1];
 
 test('the sessions fixture matches the ids index.html actually ships', () => {
   assertIdsExistInIndexHtml([
-    'sessions-overlay', 'sessions-drawer', 'sessions-search', 'sessions-list',
-    'dossier-overlay', 'dossier-drawer', 'dossier-body', 'dossier-btn',
-    'transcript-empty', 'transcript-content',
+    'sessions-overlay',
+    'sessions-drawer',
+    'sessions-search',
+    'sessions-list',
+    'dossier-overlay',
+    'dossier-drawer',
+    'dossier-body',
+    'dossier-btn',
+    'transcript-empty',
+    'transcript-content',
   ]);
 });
 
@@ -167,11 +178,11 @@ test('restoreSession', async t => {
     assert.ok(order.includes('resetLiveStage'), 'the stage must be reset');
     assert.ok(
       order.indexOf('resetLiveStage') < order.indexOf('resetTranscriptCounters'),
-      'the stage resets before the counters reset',
+      'the stage resets before the counters reset'
     );
     assert.ok(
       order.indexOf('resetTranscriptCounters') < order.indexOf('parseAndRenderTranscript'),
-      'counters reset before anything re-renders',
+      'counters reset before anything re-renders'
     );
   });
 
@@ -180,11 +191,17 @@ test('restoreSession', async t => {
     await Sessions.restoreSession('sess-1');
 
     const headers = calls.filter(c => c[0] === 'addRoundHeader');
-    assert.deepEqual(headers.map(c => [c[1], c[2]]), [['Round I', 0], ['Round II', 1]]);
+    assert.deepEqual(
+      headers.map(c => [c[1], c[2]]),
+      [
+        ['Round I', 0],
+        ['Round II', 1],
+      ]
+    );
     assert.equal(calls.filter(c => c[0] === 'addBranchControl').length, 2);
     assert.deepEqual(
       calls.filter(c => c[0] === 'parseAndRenderTranscript').map(c => c[1]),
-      ['Crowley —\nOne.', 'Blavatsky —\nTwo.'],
+      ['Crowley —\nOne.', 'Blavatsky —\nTwo.']
     );
   });
 
@@ -207,7 +224,10 @@ test('restoreSession', async t => {
     assert.equal(calls.filter(c => c[0] === 'addRoundHeader').length, 0, 'no round headers survive');
     assert.deepEqual(
       calls.filter(c => c[0] === 'addLullDivider').map(c => [c[1], c[2]]),
-      [['The room draws breath.', 0], ['The fire settles.', 1]],
+      [
+        ['The room draws breath.', 0],
+        ['The fire settles.', 1],
+      ]
     );
     // The passage renders before the lull that ended it, not after.
     const order = calls.map(c => c[0]);
@@ -215,7 +235,7 @@ test('restoreSession', async t => {
     // Branch points moved to lulls but kept their index meaning (#33/#194).
     assert.deepEqual(
       calls.filter(c => c[0] === 'addBranchControl').map(c => c[2]),
-      [0, 1],
+      [0, 1]
     );
   });
 
@@ -268,17 +288,20 @@ test('restoreSession', async t => {
     await Sessions.restoreSession('sess-1');
 
     assert.equal(argFor(calls, 'setPlayerTurnsRevealed'), false);
-    assert.equal(
-      document.getElementById('transcript-panel').classList.contains('reveal-player-turns'),
-      false,
-    );
+    assert.equal(document.getElementById('transcript-panel').classList.contains('reveal-player-turns'), false);
   });
 
   await t.test('skips the citation and player-turn passes when the session has neither', async t2 => {
     const { calls, module: Sessions } = boot(t2, { fetchImpl: () => jsonOk(SESSION) });
     await Sessions.restoreSession('sess-1');
-    assert.equal(calls.some(c => c[0] === 'applyCitationFlags'), false);
-    assert.equal(calls.some(c => c[0] === 'applyPlayerTurnMarkers'), false);
+    assert.equal(
+      calls.some(c => c[0] === 'applyCitationFlags'),
+      false
+    );
+    assert.equal(
+      calls.some(c => c[0] === 'applyPlayerTurnMarkers'),
+      false
+    );
   });
 
   await t.test('applies citation flags and player-turn markers when present', async t2 => {
@@ -302,7 +325,11 @@ test('restoreSession', async t => {
 
     const statuses = calls.filter(c => c[0] === 'setStatus').map(c => c[1]);
     assert.equal(statuses.at(-1), 'Could not restore the meeting.');
-    assert.equal(calls.some(c => c[0] === 'showSessionControls'), false, 'no controls on a failed restore');
+    assert.equal(
+      calls.some(c => c[0] === 'showSessionControls'),
+      false,
+      'no controls on a failed restore'
+    );
   });
 });
 
@@ -436,15 +463,19 @@ test('dossier building', async t => {
   // crash the render on `d.name`.
   await t.test('drops an entry whose member no longer exists in the roster', async t2 => {
     const { document, module: Sessions } = boot(t2, {
-      fetchImpl: url => url.includes('crowley')
-        ? jsonOk({ id: 'crowley', name: 'Crowley' })
-        : Promise.resolve({ ok: false, json: () => Promise.resolve({ error: 'not found' }) }),
+      fetchImpl: url =>
+        url.includes('crowley')
+          ? jsonOk({ id: 'crowley', name: 'Crowley' })
+          : Promise.resolve({ ok: false, json: () => Promise.resolve({ error: 'not found' }) }),
     });
 
     await Sessions.buildDossier(['crowley', 'jack-parsons']);
 
     const entries = [...document.querySelectorAll('.dossier-entry')];
-    assert.deepEqual(entries.map(e => e.id), ['dossier-crowley']);
+    assert.deepEqual(
+      entries.map(e => e.id),
+      ['dossier-crowley']
+    );
   });
 
   await t.test('still degrades an entry on network failure', async t2 => {

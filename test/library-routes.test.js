@@ -14,7 +14,12 @@ const { registerLibraryRoutes } = require('../src/routes/library.js');
 
 function fakeApp() {
   const routes = {};
-  return { routes, get(path, handler) { routes[`GET ${path}`] = handler; } };
+  return {
+    routes,
+    get(path, handler) {
+      routes[`GET ${path}`] = handler;
+    },
+  };
 }
 
 function fakeReq({ params = {}, query = {} } = {}) {
@@ -25,15 +30,35 @@ function fakeRes() {
   const res = {
     statusCode: null,
     body: null,
-    status(code) { this.statusCode = code; return this; },
-    json(body) { this.body = body; return this; },
+    status(code) {
+      this.statusCode = code;
+      return this;
+    },
+    json(body) {
+      this.body = body;
+      return this;
+    },
   };
   return res;
 }
 
 const FIXTURE_ENTRIES = [
-  { id: 'crowley-liber-al', title: 'Liber AL', source: 'The Book of the Law', file: 'crowley-liber-al.md', members: ['crowley'], themes: ['thelema'] },
-  { id: 'jung-red-book', title: 'The Red Book', source: 'Liber Novus', file: 'jung-red-book.md', members: ['jung'], themes: ['individuation'] },
+  {
+    id: 'crowley-liber-al',
+    title: 'Liber AL',
+    source: 'The Book of the Law',
+    file: 'crowley-liber-al.md',
+    members: ['crowley'],
+    themes: ['thelema'],
+  },
+  {
+    id: 'jung-red-book',
+    title: 'The Red Book',
+    source: 'Liber Novus',
+    file: 'jung-red-book.md',
+    members: ['jung'],
+    themes: ['individuation'],
+  },
 ];
 
 function makeDeps({ entries = FIXTURE_ENTRIES, images = {}, fileText = null } = {}) {
@@ -78,7 +103,10 @@ test('GET /api/library', async t => {
     registerLibraryRoutes(app, makeDeps());
     const res = fakeRes();
     app.routes['GET /api/library'](fakeReq({ query: { member: 'jung' } }), res);
-    assert.deepEqual(res.body.map(e => e.id), ['jung-red-book']);
+    assert.deepEqual(
+      res.body.map(e => e.id),
+      ['jung-red-book']
+    );
   });
 
   await t.test('?q= matches title, source, themes, or members (case-insensitive)', () => {
@@ -86,13 +114,18 @@ test('GET /api/library', async t => {
     registerLibraryRoutes(app, makeDeps());
     const res = fakeRes();
     app.routes['GET /api/library'](fakeReq({ query: { q: 'RED book' } }), res);
-    assert.deepEqual(res.body.map(e => e.id), ['jung-red-book']);
+    assert.deepEqual(
+      res.body.map(e => e.id),
+      ['jung-red-book']
+    );
   });
 
   await t.test('a broken library index is caught, returns 500 rather than throwing', () => {
     const app = fakeApp();
     registerLibraryRoutes(app, {
-      loadLibraryIndex: () => { throw new Error('disk error'); },
+      loadLibraryIndex: () => {
+        throw new Error('disk error');
+      },
       loadArchiveImageIndex: () => ({}),
       parseLibraryFrontmatter: () => ({}),
       libraryDir: '/x',

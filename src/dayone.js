@@ -17,7 +17,7 @@ async function withDayOne(fn) {
 }
 
 async function listJournals() {
-  return withDayOne(async (client) => {
+  return withDayOne(async client => {
     const result = await client.callTool({ name: 'list_journals', arguments: {} });
     const text = result.content.find(c => c.type === 'text')?.text || '[]';
     return JSON.parse(text);
@@ -30,7 +30,7 @@ async function getLatestEntry(journalId) {
 }
 
 async function getRecentEntries(journalId, limit = 3) {
-  return withDayOne(async (client) => {
+  return withDayOne(async client => {
     // Fetch extra so filtering 'generated' still yields `limit` results
     const result = await client.callTool({
       name: 'get_entries',
@@ -38,14 +38,12 @@ async function getRecentEntries(journalId, limit = 3) {
     });
     const text = result.content.find(c => c.type === 'text')?.text || '[]';
     const entries = JSON.parse(text);
-    return entries
-      .filter(e => !(Array.isArray(e.tags) && e.tags.includes('generated')))
-      .slice(0, limit);
+    return entries.filter(e => !(Array.isArray(e.tags) && e.tags.includes('generated'))).slice(0, limit);
   });
 }
 
 async function createEntry(journalId, markdown, tags = []) {
-  return withDayOne(async (client) => {
+  return withDayOne(async client => {
     const result = await client.callTool({
       name: 'create_entry',
       arguments: {

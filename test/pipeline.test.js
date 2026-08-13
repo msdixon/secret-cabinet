@@ -82,8 +82,26 @@ test('lengthTendencyOf', async t => {
 test('isPoolExhausted', async t => {
   await t.test('is true only once every pool member has hit the 2-turn cap', () => {
     const pool = ['scholem', 'blavatsky'];
-    assert.equal(isPoolExhausted(pool, counts([['scholem', 2], ['blavatsky', 2]])), true);
-    assert.equal(isPoolExhausted(pool, counts([['scholem', 2], ['blavatsky', 1]])), false);
+    assert.equal(
+      isPoolExhausted(
+        pool,
+        counts([
+          ['scholem', 2],
+          ['blavatsky', 2],
+        ])
+      ),
+      true
+    );
+    assert.equal(
+      isPoolExhausted(
+        pool,
+        counts([
+          ['scholem', 2],
+          ['blavatsky', 1],
+        ])
+      ),
+      false
+    );
     assert.equal(isPoolExhausted(pool, counts([])), false);
   });
 
@@ -104,7 +122,10 @@ test('pickNextSpeaker', async t => {
   await t.test('returns null when every pool member is at the cap, so the caller re-consults the director', () => {
     const picked = pickNextSpeaker({
       pool: ['scholem', 'blavatsky'],
-      spokenCounts: counts([['scholem', 2], ['blavatsky', 2]]),
+      spokenCounts: counts([
+        ['scholem', 2],
+        ['blavatsky', 2],
+      ]),
       lastSpeakerId: 'blavatsky',
       remainingBudget: 500,
       rng: () => 0.5,
@@ -145,7 +166,7 @@ test('pickNextSpeaker', async t => {
       remainingBudget: 500,
     });
     // 0.45 / (0.45 + 1) — discounted, but far likelier than the back-to-back case
-    assert.ok(Math.abs(share - 0.310) < 0.01, `repeat-after-gap share was ${share}`);
+    assert.ok(Math.abs(share - 0.31) < 0.01, `repeat-after-gap share was ${share}`);
   });
 
   await t.test('expansive voices are favoured while there is budget to spend', () => {
@@ -270,7 +291,9 @@ test('buildSpeakerUserMessage', async t => {
 
   await t.test('tells the speaker they are cutting in, and leaves the choice open', () => {
     const message = buildSpeakerUserMessage({
-      roundPrompt: 'Discuss.', roundSoFarText: 'Crowley\nSome point.', member,
+      roundPrompt: 'Discuss.',
+      roundSoFarText: 'Crowley\nSome point.',
+      member,
       interruptingName: 'Aleister Crowley',
     });
     assert.match(message, /unfinished business with Aleister Crowley, who just spoke/);
@@ -296,10 +319,7 @@ test('countWords', async t => {
 
 test('stripInternalBlankLines', async t => {
   await t.test('collapses a blank line so a multi-paragraph turn does not fragment into unattributed bubbles', () => {
-    assert.equal(
-      stripInternalBlankLines('First beat.\n\nSecond beat.'),
-      'First beat.\nSecond beat.',
-    );
+    assert.equal(stripInternalBlankLines('First beat.\n\nSecond beat.'), 'First beat.\nSecond beat.');
   });
 
   await t.test('collapses a run of blank lines, or a whitespace-only line, to one break', () => {
@@ -342,19 +362,22 @@ test('splitIntoBeats', async t => {
   await t.test('a beat closes at the next line break once the threshold is crossed, not mid-line', () => {
     const line1 = `${words(30)}.`; // under threshold alone
     const line2 = `${words(15)}.`; // combined with line1: 45, crosses threshold
-    const line3 = `${words(5)}.`;  // starts the next beat
+    const line3 = `${words(5)}.`; // starts the next beat
     const beats = splitIntoBeats([line1, line2, line3].join('\n'));
     assert.deepEqual(beats, [`${line1}\n${line2}`, line3]);
   });
 
-  await t.test('a single line with no internal breaks that alone overruns the threshold falls back to sentence boundaries', () => {
-    const s1 = `${words(20)}.`;
-    const s2 = `${words(20)}.`;
-    const s3 = `${words(10)}.`;
-    const line = `${s1} ${s2} ${s3}`; // one line, 50 words, no \n at all
-    const beats = splitIntoBeats(line);
-    assert.deepEqual(beats, [`${s1} ${s2}`, s3]);
-  });
+  await t.test(
+    'a single line with no internal breaks that alone overruns the threshold falls back to sentence boundaries',
+    () => {
+      const s1 = `${words(20)}.`;
+      const s2 = `${words(20)}.`;
+      const s3 = `${words(10)}.`;
+      const line = `${s1} ${s2} ${s3}`; // one line, 50 words, no \n at all
+      const beats = splitIntoBeats(line);
+      assert.deepEqual(beats, [`${s1} ${s2}`, s3]);
+    }
+  );
 
   await t.test('a blank line is dropped, same treatment as stripInternalBlankLines', () => {
     assert.deepEqual(splitIntoBeats('First.\n\nSecond.'), ['First.\nSecond.']);
@@ -368,7 +391,7 @@ test('splitIntoBeats', async t => {
     const beats = splitIntoBeats(text);
     assert.deepEqual(
       beats.flatMap(b => b.split(/\s+/)),
-      text.trim().split(/\s+/),
+      text.trim().split(/\s+/)
     );
   });
 
@@ -425,7 +448,8 @@ test('buildDispositionSystemPrompt', async t => {
 
   await t.test('quotes the prior disposition back and asks for an update, not a repeat', () => {
     const prompt = buildDispositionSystemPrompt({
-      member, priorDisposition: { text: 'Unconvinced by Crowley\'s reading of Kabbalah.', waitingOnMemberId: null },
+      member,
+      priorDisposition: { text: "Unconvinced by Crowley's reading of Kabbalah.", waitingOnMemberId: null },
     });
     assert.match(prompt, /Unconvinced by Crowley's reading of Kabbalah\./);
     assert.match(prompt, /don't just repeat it back/);
@@ -441,9 +465,13 @@ test('buildDispositionSystemPrompt', async t => {
   // references, truncation cutting the naming clause), so the prior
   // target is surfaced by resolved name, not re-parsed from prose.
   await t.test('names the prior waiting-on target by resolved name when one was set', () => {
-    const presentMembers = [{ id: 'waite', name: 'A.E. Waite' }, { id: 'yeats', name: 'W.B. Yeats' }];
+    const presentMembers = [
+      { id: 'waite', name: 'A.E. Waite' },
+      { id: 'yeats', name: 'W.B. Yeats' },
+    ];
     const prompt = buildDispositionSystemPrompt({
-      member, presentMembers,
+      member,
+      presentMembers,
       priorDisposition: { text: 'Still turning over the Kabbalah point.', waitingOnMemberId: 'waite' },
     });
     assert.match(prompt, /You were privately waiting to answer or press A\.E\. Waite\./);
@@ -452,7 +480,8 @@ test('buildDispositionSystemPrompt', async t => {
   await t.test('says nothing extra when there was no prior target', () => {
     const presentMembers = [{ id: 'waite', name: 'A.E. Waite' }];
     const prompt = buildDispositionSystemPrompt({
-      member, presentMembers,
+      member,
+      presentMembers,
       priorDisposition: { text: 'Still turning over the Kabbalah point.', waitingOnMemberId: null },
     });
     assert.doesNotMatch(prompt, /privately waiting to answer or press/);
@@ -472,7 +501,9 @@ test('buildDispositionSystemPrompt', async t => {
 
   await t.test('quotes prior residue back and asks only for something genuinely new', () => {
     const prompt = buildDispositionSystemPrompt({
-      member, priorDisposition: null, priorResidue: 'Grew wary of Crowley\'s charm.',
+      member,
+      priorDisposition: null,
+      priorResidue: "Grew wary of Crowley's charm.",
     });
     assert.match(prompt, /Residue already carried from other evenings.*Grew wary of Crowley's charm\./s);
     assert.match(prompt, /most turns, it didn't/);
@@ -486,7 +517,7 @@ test('buildDispositionSystemPrompt', async t => {
 });
 
 test('buildDispositionUserMessage', async t => {
-  await t.test('includes the round context, the member\'s own turn, and their name', () => {
+  await t.test("includes the round context, the member's own turn, and their name", () => {
     const member = { id: 'yeats', name: 'W.B. Yeats' };
     const message = buildDispositionUserMessage({
       roundSoFarText: 'Crowley\nThe ritual is the point.',
@@ -515,62 +546,131 @@ function fakeDispositionClient(input) {
 }
 
 test('callDispositionUpdate', async t => {
-  await t.test('hard-truncates the reflection to DISPOSITION_MAX_CHARS regardless of what the model returns', async () => {
-    const overlong = 'x'.repeat(DISPOSITION_MAX_CHARS + 200);
-    const fakeClient = fakeDispositionClient({ reflection: overlong, waitingOnMemberId: 'none' });
-    const { text } = await callDispositionUpdate({ client: fakeClient, model: 'test-model', system: 'sys', userMessage: 'msg', presentIds: ['waite'] });
-    assert.equal(text.length, DISPOSITION_MAX_CHARS);
-  });
+  await t.test(
+    'hard-truncates the reflection to DISPOSITION_MAX_CHARS regardless of what the model returns',
+    async () => {
+      const overlong = 'x'.repeat(DISPOSITION_MAX_CHARS + 200);
+      const fakeClient = fakeDispositionClient({ reflection: overlong, waitingOnMemberId: 'none' });
+      const { text } = await callDispositionUpdate({
+        client: fakeClient,
+        model: 'test-model',
+        system: 'sys',
+        userMessage: 'msg',
+        presentIds: ['waite'],
+      });
+      assert.equal(text.length, DISPOSITION_MAX_CHARS);
+    }
+  );
 
   await t.test('trims whitespace and returns an empty string if the model returns nothing usable', async () => {
     const fakeClient = { messages: { create: async () => ({ content: [], usage: null }) } };
-    const { text } = await callDispositionUpdate({ client: fakeClient, model: 'test-model', system: 'sys', userMessage: 'msg' });
+    const { text } = await callDispositionUpdate({
+      client: fakeClient,
+      model: 'test-model',
+      system: 'sys',
+      userMessage: 'msg',
+    });
     assert.equal(text, '');
   });
 
   await t.test('resolves a valid, present waitingOnMemberId', async () => {
     const fakeClient = fakeDispositionClient({ reflection: 'Still turning this over.', waitingOnMemberId: 'waite' });
-    const { waitingOnMemberId } = await callDispositionUpdate({ client: fakeClient, model: 'test-model', system: 'sys', userMessage: 'msg', presentIds: ['waite', 'yeats'] });
+    const { waitingOnMemberId } = await callDispositionUpdate({
+      client: fakeClient,
+      model: 'test-model',
+      system: 'sys',
+      userMessage: 'msg',
+      presentIds: ['waite', 'yeats'],
+    });
     assert.equal(waitingOnMemberId, 'waite');
   });
 
   await t.test('treats the "none" sentinel as null', async () => {
     const fakeClient = fakeDispositionClient({ reflection: 'Nothing pending.', waitingOnMemberId: 'none' });
-    const { waitingOnMemberId } = await callDispositionUpdate({ client: fakeClient, model: 'test-model', system: 'sys', userMessage: 'msg', presentIds: ['waite'] });
+    const { waitingOnMemberId } = await callDispositionUpdate({
+      client: fakeClient,
+      model: 'test-model',
+      system: 'sys',
+      userMessage: 'msg',
+      presentIds: ['waite'],
+    });
     assert.equal(waitingOnMemberId, null);
   });
 
-  await t.test('ignores a target that is not in presentIds — a hallucinated or stale id must not silently pass through', async () => {
-    const fakeClient = fakeDispositionClient({ reflection: 'Still turning this over.', waitingOnMemberId: 'not-present-tonight' });
-    const { waitingOnMemberId } = await callDispositionUpdate({ client: fakeClient, model: 'test-model', system: 'sys', userMessage: 'msg', presentIds: ['waite'] });
-    assert.equal(waitingOnMemberId, null);
-  });
+  await t.test(
+    'ignores a target that is not in presentIds — a hallucinated or stale id must not silently pass through',
+    async () => {
+      const fakeClient = fakeDispositionClient({
+        reflection: 'Still turning this over.',
+        waitingOnMemberId: 'not-present-tonight',
+      });
+      const { waitingOnMemberId } = await callDispositionUpdate({
+        client: fakeClient,
+        model: 'test-model',
+        system: 'sys',
+        userMessage: 'msg',
+        presentIds: ['waite'],
+      });
+      assert.equal(waitingOnMemberId, null);
+    }
+  );
 
   await t.test('defaults to no target when the tool call is missing or malformed', async () => {
     const fakeClient = { messages: { create: async () => ({ content: [], usage: null }) } };
-    const { waitingOnMemberId } = await callDispositionUpdate({ client: fakeClient, model: 'test-model', system: 'sys', userMessage: 'msg', presentIds: ['waite'] });
+    const { waitingOnMemberId } = await callDispositionUpdate({
+      client: fakeClient,
+      model: 'test-model',
+      system: 'sys',
+      userMessage: 'msg',
+      presentIds: ['waite'],
+    });
     assert.equal(waitingOnMemberId, null);
   });
 
   // #166 — the optional residueNote field, piggybacked on this same call.
   await t.test('returns an empty residueNote when the model leaves the field out — the common case', async () => {
     const fakeClient = fakeDispositionClient({ reflection: 'Still turning this over.', waitingOnMemberId: 'none' });
-    const { residueNote } = await callDispositionUpdate({ client: fakeClient, model: 'test-model', system: 'sys', userMessage: 'msg', presentIds: ['waite'] });
+    const { residueNote } = await callDispositionUpdate({
+      client: fakeClient,
+      model: 'test-model',
+      system: 'sys',
+      userMessage: 'msg',
+      presentIds: ['waite'],
+    });
     assert.equal(residueNote, '');
   });
 
   await t.test('trims and returns a residueNote when the model writes one', async () => {
-    const fakeClient = fakeDispositionClient({ reflection: 'Still turning this over.', waitingOnMemberId: 'none', residueNote: '  Grew certain of it.  ' });
-    const { residueNote } = await callDispositionUpdate({ client: fakeClient, model: 'test-model', system: 'sys', userMessage: 'msg', presentIds: ['waite'] });
+    const fakeClient = fakeDispositionClient({
+      reflection: 'Still turning this over.',
+      waitingOnMemberId: 'none',
+      residueNote: '  Grew certain of it.  ',
+    });
+    const { residueNote } = await callDispositionUpdate({
+      client: fakeClient,
+      model: 'test-model',
+      system: 'sys',
+      userMessage: 'msg',
+      presentIds: ['waite'],
+    });
     assert.equal(residueNote, 'Grew certain of it.');
   });
 
-  await t.test('hard-truncates residueNote to RESIDUE_NOTE_MAX_CHARS regardless of what the model returns', async () => {
-    const overlong = 'x'.repeat(RESIDUE_NOTE_MAX_CHARS + 200);
-    const fakeClient = fakeDispositionClient({ reflection: 'ok', waitingOnMemberId: 'none', residueNote: overlong });
-    const { residueNote } = await callDispositionUpdate({ client: fakeClient, model: 'test-model', system: 'sys', userMessage: 'msg', presentIds: ['waite'] });
-    assert.equal(residueNote.length, RESIDUE_NOTE_MAX_CHARS);
-  });
+  await t.test(
+    'hard-truncates residueNote to RESIDUE_NOTE_MAX_CHARS regardless of what the model returns',
+    async () => {
+      const overlong = 'x'.repeat(RESIDUE_NOTE_MAX_CHARS + 200);
+      const fakeClient = fakeDispositionClient({ reflection: 'ok', waitingOnMemberId: 'none', residueNote: overlong });
+      const { residueNote } = await callDispositionUpdate({
+        client: fakeClient,
+        model: 'test-model',
+        system: 'sys',
+        userMessage: 'msg',
+        presentIds: ['waite'],
+      });
+      assert.equal(residueNote.length, RESIDUE_NOTE_MAX_CHARS);
+    }
+  );
 });
 
 test('buildDispositionToolSchema', async t => {
@@ -678,7 +778,10 @@ test('buildVoiceExemplarSection', async t => {
 
   await t.test('adds the translator caveat only when the entry is a translation', () => {
     assert.doesNotMatch(buildVoiceExemplarSection(exemplar), /translator's/);
-    assert.match(buildVoiceExemplarSection({ ...exemplar, translated: true }), /The English here is a translator's, not yours/);
+    assert.match(
+      buildVoiceExemplarSection({ ...exemplar, translated: true }),
+      /The English here is a translator's, not yours/
+    );
   });
 
   await t.test('trims an over-budget excerpt to the shared budget', () => {
@@ -755,7 +858,7 @@ test('buildResidueSection', async t => {
   });
 
   await t.test('carries the residue text', () => {
-    const section = buildResidueSection('Grew wary of Crowley\'s charm.');
+    const section = buildResidueSection("Grew wary of Crowley's charm.");
     assert.match(section, /Grew wary of Crowley's charm\./);
   });
 
@@ -798,9 +901,11 @@ test('buildSpeakerSystemPrompt — voice exemplar wiring', async t => {
     assert.match(prompt, /Energy is Eternal Delight\./);
   });
 
-  await t.test('the exemplar sits after the character file and before tonight\'s disposition', () => {
+  await t.test("the exemplar sits after the character file and before tonight's disposition", () => {
     const prompt = buildSpeakerSystemPrompt({
-      ...base, voiceExemplar: exemplar, disposition: { text: 'Irritated by Crowley.', waitingOnMemberId: null },
+      ...base,
+      voiceExemplar: exemplar,
+      disposition: { text: 'Irritated by Crowley.', waitingOnMemberId: null },
     });
     assert.ok(prompt.indexOf('HOW YOU SPEAK') < prompt.indexOf('HOW YOU ACTUALLY WRITE'));
     assert.ok(prompt.indexOf('HOW YOU ACTUALLY WRITE') < prompt.indexOf('YOUR PRIVATE STATE TONIGHT'));
@@ -816,24 +921,33 @@ test('buildSpeakerSystemPrompt — voice exemplar wiring', async t => {
   });
 
   await t.test('a member with residue gets the residue section', () => {
-    const prompt = buildSpeakerSystemPrompt({ ...base, residue: 'Grew wary of Crowley\'s charm.' });
+    const prompt = buildSpeakerSystemPrompt({ ...base, residue: "Grew wary of Crowley's charm." });
     assert.match(prompt, /WHAT LINGERS, THOUGH YOU COULDN'T SAY WHY/);
     assert.match(prompt, /Grew wary of Crowley's charm\./);
   });
 
-  await t.test('residue sits after the exemplar and before tonight\'s disposition — slower-moving evidence in between', () => {
-    const prompt = buildSpeakerSystemPrompt({
-      ...base, voiceExemplar: exemplar, residue: 'Grew wary of Crowley.',
-      disposition: { text: 'Irritated by Crowley.', waitingOnMemberId: null },
-    });
-    assert.ok(prompt.indexOf('HOW YOU ACTUALLY WRITE') < prompt.indexOf('WHAT LINGERS'));
-    assert.ok(prompt.indexOf('WHAT LINGERS') < prompt.indexOf('YOUR PRIVATE STATE TONIGHT'));
-  });
+  await t.test(
+    "residue sits after the exemplar and before tonight's disposition — slower-moving evidence in between",
+    () => {
+      const prompt = buildSpeakerSystemPrompt({
+        ...base,
+        voiceExemplar: exemplar,
+        residue: 'Grew wary of Crowley.',
+        disposition: { text: 'Irritated by Crowley.', waitingOnMemberId: null },
+      });
+      assert.ok(prompt.indexOf('HOW YOU ACTUALLY WRITE') < prompt.indexOf('WHAT LINGERS'));
+      assert.ok(prompt.indexOf('WHAT LINGERS') < prompt.indexOf('YOUR PRIVATE STATE TONIGHT'));
+    }
+  );
 });
 
 test('makeMetric — voiceExemplar attribution', async t => {
   await t.test('records the injected entry id on a speaker metric', () => {
-    const metric = makeMetric('speaker', { round: 0, memberId: 'william-blake', voiceExemplar: 'blake-voice-of-the-devil-1790' });
+    const metric = makeMetric('speaker', {
+      round: 0,
+      memberId: 'william-blake',
+      voiceExemplar: 'blake-voice-of-the-devil-1790',
+    });
     assert.equal(metric.voiceExemplar, 'blake-voice-of-the-devil-1790');
   });
 
@@ -876,7 +990,9 @@ test('makeMetric — residueNote attribution', async t => {
 // but which is indistinguishable from "this call was just smaller").
 test('makeMetric — cache_read_input_tokens attribution', async t => {
   await t.test('captures cache_read_input_tokens off usage when present', () => {
-    const metric = makeMetric('speaker', { usage: { input_tokens: 50, output_tokens: 10, cache_read_input_tokens: 3200 } });
+    const metric = makeMetric('speaker', {
+      usage: { input_tokens: 50, output_tokens: 10, cache_read_input_tokens: 3200 },
+    });
     assert.equal(metric.usage.cache_read_input_tokens, 3200);
   });
 
@@ -913,7 +1029,7 @@ function fakeCastingClient(reply) {
   return {
     asked,
     messages: {
-      create: async (req) => {
+      create: async req => {
         asked.push(req);
         const r = typeof reply === 'function' ? reply(asked.length) : reply;
         if (r instanceof Error) throw r;
@@ -943,8 +1059,12 @@ test('buildCastingPrompt', async t => {
 
   await t.test('hands the regulars over as fixed, not as options', () => {
     const { system } = buildCastingPrompt({
-      lodgeContext: LODGE, candidates, regulars,
-      documentText: 'a document about alchemy', minCount: 1, maxCount: 4,
+      lodgeContext: LODGE,
+      candidates,
+      regulars,
+      documentText: 'a document about alchemy',
+      minCount: 1,
+      maxCount: 4,
     });
     assert.match(system, /ALREADY COMING TONIGHT/);
     assert.match(system, /not yours to choose, and not yours to drop/);
@@ -956,8 +1076,12 @@ test('buildCastingPrompt', async t => {
 
   await t.test('says so plainly when nothing is pinned', () => {
     const { system } = buildCastingPrompt({
-      lodgeContext: LODGE, candidates: ROSTER, regulars: [],
-      documentText: 'a document', minCount: 4, maxCount: 6,
+      lodgeContext: LODGE,
+      candidates: ROSTER,
+      regulars: [],
+      documentText: 'a document',
+      minCount: 4,
+      maxCount: 6,
     });
     assert.match(system, /No one is fixed for tonight/);
     assert.equal(/ALREADY COMING TONIGHT/.test(system), false);
@@ -965,24 +1089,36 @@ test('buildCastingPrompt', async t => {
 
   await t.test('carries the member briefs — names alone are not enough to cast on', () => {
     const { system } = buildCastingPrompt({
-      lodgeContext: LODGE, candidates: ROSTER, regulars: [],
-      documentText: 'a document', minCount: 4, maxCount: 6,
+      lodgeContext: LODGE,
+      candidates: ROSTER,
+      regulars: [],
+      documentText: 'a document',
+      minCount: 4,
+      maxCount: 6,
     });
     assert.match(system, /Historian of Jewish mysticism/);
   });
 
   await t.test('truncates the document rather than paying for a whole book', () => {
     const { system } = buildCastingPrompt({
-      lodgeContext: LODGE, candidates: ROSTER, regulars: [],
-      documentText: 'z'.repeat(CASTING_DOCUMENT_LIMIT + 500), minCount: 4, maxCount: 6,
+      lodgeContext: LODGE,
+      candidates: ROSTER,
+      regulars: [],
+      documentText: 'z'.repeat(CASTING_DOCUMENT_LIMIT + 500),
+      minCount: 4,
+      maxCount: 6,
     });
     assert.equal(new RegExp(`z{${CASTING_DOCUMENT_LIMIT}}[^z]`).test(system + '|'), true);
   });
 
   await t.test('asks for friction, not coverage', () => {
     const { system } = buildCastingPrompt({
-      lodgeContext: LODGE, candidates: ROSTER, regulars: [],
-      documentText: 'a document', minCount: 4, maxCount: 6,
+      lodgeContext: LODGE,
+      candidates: ROSTER,
+      regulars: [],
+      documentText: 'a document',
+      minCount: 4,
+      maxCount: 6,
     });
     assert.match(system, /Cast for friction as much as for affinity/);
     assert.match(system, /Do not choose for coverage, seniority, or roster order/);
@@ -990,11 +1126,15 @@ test('buildCastingPrompt', async t => {
 });
 
 test('proposeCast', async t => {
-  await t.test('returns regulars first, then the model\'s additions in its own order', async () => {
+  await t.test("returns regulars first, then the model's additions in its own order", async () => {
     const client = fakeCastingClient({ speakers: ['scholem', 'jung'], reasoning: 'Both would dispute it.' });
     const result = await proposeCast({
-      client, model: 'test-model', lodgeContext: LODGE, roster: ROSTER,
-      regularIds: ['yeats', 'crowley'], documentText: 'a document about the Kabbalah',
+      client,
+      model: 'test-model',
+      lodgeContext: LODGE,
+      roster: ROSTER,
+      regularIds: ['yeats', 'crowley'],
+      documentText: 'a document about the Kabbalah',
     });
     assert.deepEqual(result.cast, ['crowley', 'yeats', 'scholem', 'jung']);
     assert.deepEqual(result.additions, ['scholem', 'jung']);
@@ -1006,9 +1146,14 @@ test('proposeCast', async t => {
   await t.test('asks only for the seats the regulars leave open', async () => {
     const client = fakeCastingClient({ speakers: ['jung'], reasoning: 'r' });
     await proposeCast({
-      client, model: 'test-model', lodgeContext: LODGE, roster: ROSTER,
-      regularIds: ['crowley', 'yeats', 'blavatsky'], documentText: 'a document',
-      targetMin: 4, targetMax: 5,
+      client,
+      model: 'test-model',
+      lodgeContext: LODGE,
+      roster: ROSTER,
+      regularIds: ['crowley', 'yeats', 'blavatsky'],
+      documentText: 'a document',
+      targetMin: 4,
+      targetMax: 5,
     });
     const speakers = client.asked[0].tools[0].input_schema.properties.speakers;
     assert.equal(speakers.maxItems, 2, '5 wanted, 3 already coming');
@@ -1019,9 +1164,14 @@ test('proposeCast', async t => {
   await t.test('spends no call at all when the regulars already fill the room', async () => {
     const client = fakeCastingClient({ speakers: ['jung'], reasoning: 'r' });
     const result = await proposeCast({
-      client, model: 'test-model', lodgeContext: LODGE, roster: ROSTER,
-      regularIds: ['crowley', 'yeats', 'blavatsky', 'jung'], documentText: 'a document',
-      targetMin: 3, targetMax: 4,
+      client,
+      model: 'test-model',
+      lodgeContext: LODGE,
+      roster: ROSTER,
+      regularIds: ['crowley', 'yeats', 'blavatsky', 'jung'],
+      documentText: 'a document',
+      targetMin: 3,
+      targetMax: 4,
     });
     assert.equal(client.asked.length, 0);
     assert.equal(result.source, 'regulars');
@@ -1033,21 +1183,33 @@ test('proposeCast', async t => {
   await t.test('never returns more than the target, however many regulars there are', async () => {
     const client = fakeCastingClient({ speakers: ['scholem'], reasoning: 'r' });
     const result = await proposeCast({
-      client, model: 'test-model', lodgeContext: LODGE, roster: ROSTER,
-      regularIds: ['crowley', 'yeats', 'blavatsky'], documentText: 'a document',
-      targetMin: 4, targetMax: 4,
+      client,
+      model: 'test-model',
+      lodgeContext: LODGE,
+      roster: ROSTER,
+      regularIds: ['crowley', 'yeats', 'blavatsky'],
+      documentText: 'a document',
+      targetMin: 4,
+      targetMax: 4,
     });
     assert.equal(result.cast.length, 4);
   });
 
   await t.test('retries once on an out-of-range answer, then keeps the valid one', async () => {
-    const client = fakeCastingClient(n => n === 1
-      ? { speakers: ['jung', 'scholem', 'crowley'], reasoning: 'too many, and one is a regular' }
-      : { speakers: ['jung'], reasoning: 'better' });
+    const client = fakeCastingClient(n =>
+      n === 1
+        ? { speakers: ['jung', 'scholem', 'crowley'], reasoning: 'too many, and one is a regular' }
+        : { speakers: ['jung'], reasoning: 'better' }
+    );
     const result = await proposeCast({
-      client, model: 'test-model', lodgeContext: LODGE, roster: ROSTER,
-      regularIds: ['crowley', 'yeats', 'blavatsky'], documentText: 'a document',
-      targetMin: 4, targetMax: 4,
+      client,
+      model: 'test-model',
+      lodgeContext: LODGE,
+      roster: ROSTER,
+      regularIds: ['crowley', 'yeats', 'blavatsky'],
+      documentText: 'a document',
+      targetMin: 4,
+      targetMax: 4,
     });
     assert.equal(client.asked.length, 2);
     assert.equal(result.source, 'director-retry');
@@ -1058,9 +1220,15 @@ test('proposeCast', async t => {
     const client = fakeCastingClient(new Error('the fire is low'));
     const metrics = [];
     const result = await proposeCast({
-      client, model: 'test-model', lodgeContext: LODGE, roster: ROSTER,
-      regularIds: ['crowley'], documentText: 'a document',
-      targetMin: 3, targetMax: 5, onMetric: m => metrics.push(m),
+      client,
+      model: 'test-model',
+      lodgeContext: LODGE,
+      roster: ROSTER,
+      regularIds: ['crowley'],
+      documentText: 'a document',
+      targetMin: 3,
+      targetMax: 5,
+      onMetric: m => metrics.push(m),
     });
     assert.equal(result.source, 'fallback');
     assert.ok(result.cast.includes('crowley'), 'the regular survives a failed call');
@@ -1072,9 +1240,14 @@ test('proposeCast', async t => {
   await t.test('ignores an unknown regular id instead of casting a ghost', async () => {
     const client = fakeCastingClient({ speakers: ['jung', 'scholem'], reasoning: 'r' });
     const result = await proposeCast({
-      client, model: 'test-model', lodgeContext: LODGE, roster: ROSTER,
-      regularIds: ['crowley', 'someone-deleted'], documentText: 'a document',
-      targetMin: 3, targetMax: 3,
+      client,
+      model: 'test-model',
+      lodgeContext: LODGE,
+      roster: ROSTER,
+      regularIds: ['crowley', 'someone-deleted'],
+      documentText: 'a document',
+      targetMin: 3,
+      targetMax: 3,
     });
     assert.deepEqual(result.regulars, ['crowley']);
     assert.equal(result.cast.includes('someone-deleted'), false);
@@ -1125,7 +1298,7 @@ test('withHistoryCacheControl', async t => {
     });
   });
 
-  await t.test('does not mutate the caller\'s array or its messages', () => {
+  await t.test("does not mutate the caller's array or its messages", () => {
     const history = [{ role: 'user', content: 'hello' }];
     const original = JSON.parse(JSON.stringify(history));
     withHistoryCacheControl(history);
@@ -1151,7 +1324,7 @@ function fakeToolCallClient(reply) {
   return {
     asked,
     messages: {
-      create: async (req) => {
+      create: async req => {
         asked.push(req);
         return { content: [{ type: 'tool_use', input: reply }], usage: { input_tokens: 100, output_tokens: 20 } };
       },
@@ -1163,10 +1336,15 @@ test('callDirector — cache_control wiring', async t => {
   await t.test('caches the lodge-context prefix of the system prompt', async () => {
     const client = fakeToolCallClient({ speakers: ['crowley'], reasoning: 'r' });
     await callDirector({
-      client, model: 'test-model',
+      client,
+      model: 'test-model',
       system: `${LODGE}\n\n---\n\nround instructions`,
-      conversationHistory: [], userMessage: 'go',
-      presentIds: ['crowley'], minCount: 1, maxCount: 1, lodgeContext: LODGE,
+      conversationHistory: [],
+      userMessage: 'go',
+      presentIds: ['crowley'],
+      minCount: 1,
+      maxCount: 1,
+      lodgeContext: LODGE,
     });
     assert.deepEqual(client.asked[0].system, [
       { type: 'text', text: LODGE, cache_control: { type: 'ephemeral' } },
@@ -1176,16 +1354,26 @@ test('callDirector — cache_control wiring', async t => {
 
   await t.test('caches the tail of a shared conversation history', async () => {
     const client = fakeToolCallClient({ speakers: ['crowley'], reasoning: 'r' });
-    const history = [{ role: 'user', content: 'prior round' }, { role: 'assistant', content: 'prior text' }];
+    const history = [
+      { role: 'user', content: 'prior round' },
+      { role: 'assistant', content: 'prior text' },
+    ];
     await callDirector({
-      client, model: 'test-model', system: LODGE, conversationHistory: history, userMessage: 'go',
-      presentIds: ['crowley'], minCount: 1, maxCount: 1, lodgeContext: LODGE,
+      client,
+      model: 'test-model',
+      system: LODGE,
+      conversationHistory: history,
+      userMessage: 'go',
+      presentIds: ['crowley'],
+      minCount: 1,
+      maxCount: 1,
+      lodgeContext: LODGE,
     });
     assert.deepEqual(client.asked[0].messages[1], {
       role: 'assistant',
       content: [{ type: 'text', text: 'prior text', cache_control: { type: 'ephemeral' } }],
     });
-    assert.deepEqual(history[1], { role: 'assistant', content: 'prior text' }, 'the caller\'s history is untouched');
+    assert.deepEqual(history[1], { role: 'assistant', content: 'prior text' }, "the caller's history is untouched");
   });
 });
 
@@ -1197,7 +1385,7 @@ function fakeStreamingClient({ text = 'a turn', usage = { input_tokens: 50, outp
   return {
     asked,
     messages: {
-      stream: (req) => {
+      stream: req => {
         asked.push(req);
         return {
           [Symbol.asyncIterator]: async function* () {
@@ -1214,9 +1402,12 @@ test('callSpeakerTurn — cache_control wiring', async t => {
   await t.test('caches the lodge-context prefix of the speaker system prompt', async () => {
     const client = fakeStreamingClient();
     await callSpeakerTurn({
-      client, model: 'test-model',
+      client,
+      model: 'test-model',
       system: `${LODGE}\n\n---\n\nmember-specific prompt`,
-      conversationHistory: [], userMessage: 'go', lodgeContext: LODGE,
+      conversationHistory: [],
+      userMessage: 'go',
+      lodgeContext: LODGE,
     });
     assert.deepEqual(client.asked[0].system, [
       { type: 'text', text: LODGE, cache_control: { type: 'ephemeral' } },
@@ -1226,9 +1417,17 @@ test('callSpeakerTurn — cache_control wiring', async t => {
 
   await t.test('caches the tail of the shared round history', async () => {
     const client = fakeStreamingClient();
-    const history = [{ role: 'user', content: 'prior round' }, { role: 'assistant', content: 'prior text' }];
+    const history = [
+      { role: 'user', content: 'prior round' },
+      { role: 'assistant', content: 'prior text' },
+    ];
     await callSpeakerTurn({
-      client, model: 'test-model', system: LODGE, conversationHistory: history, userMessage: 'go', lodgeContext: LODGE,
+      client,
+      model: 'test-model',
+      system: LODGE,
+      conversationHistory: history,
+      userMessage: 'go',
+      lodgeContext: LODGE,
     });
     assert.deepEqual(client.asked[0].messages[1], {
       role: 'assistant',
@@ -1290,7 +1489,7 @@ function fakePassageClient({ speakerText = 'A turn.', windingDownOnConsult = [fa
   return {
     asked,
     messages: {
-      create: async (req) => {
+      create: async req => {
         asked.push(req);
         const toolName = req.tools?.[0]?.name;
         if (toolName === 'select_speakers') {
@@ -1298,7 +1497,12 @@ function fakePassageClient({ speakerText = 'A turn.', windingDownOnConsult = [fa
           const windingDown = windingDownOnConsult[i];
           selectCalls++;
           return {
-            content: [{ type: 'tool_use', input: { speakers: ['crowley'], reasoning: 'r', windingDown, lullNote: windingDown ? lullNote : null } }],
+            content: [
+              {
+                type: 'tool_use',
+                input: { speakers: ['crowley'], reasoning: 'r', windingDown, lullNote: windingDown ? lullNote : null },
+              },
+            ],
             usage: { input_tokens: 10, output_tokens: 5 },
           };
         }
@@ -1319,62 +1523,113 @@ function fakePassageClient({ speakerText = 'A turn.', windingDownOnConsult = [fa
 }
 
 const SINGLE_MEMBER_ROSTER = [{ id: 'crowley', name: 'Crowley', file: 'crowley.md' }];
-const loadMemberFile = () => 'Crowley\'s character file.';
+const loadMemberFile = () => "Crowley's character file.";
 
 test('runRound — passage end-causes and beats (#244)', async t => {
-  await t.test('ends with endedBy "lull" and the director\'s own note when it judges the room winding down', async () => {
-    // Single-member pool exhausts deterministically after 2 beats
-    // (MAX_TURNS_PER_POOL_MEMBER), forcing exactly one re-consult — which
-    // this fake answers with windingDown: true.
-    const client = fakePassageClient({ windingDownOnConsult: [false, true], lullNote: 'The fire settles; Yeats refills his glass.' });
-    const result = await runRound({
-      client, model: 'test-model', lodgeContext: LODGE, ROSTER: SINGLE_MEMBER_ROSTER, loadMemberFile,
-      presentMemberIds: ['crowley'], artifact: null, notes: {},
-      roundPrompt: 'Opening prompt', conversationHistory: [],
-      speakerCount: 1, round: 0, disposition: {},
-    });
-    assert.equal(result.endedBy, 'lull');
-    assert.equal(result.lullNote, 'The fire settles; Yeats refills his glass.');
-    assert.equal(result.beats.length, 2);
-    assert.deepEqual(result.beats.map(b => b.memberId), ['crowley', 'crowley']);
-    assert.deepEqual(result.beats.map(b => b.text), ['A turn.', 'A turn.']);
-  });
+  await t.test(
+    'ends with endedBy "lull" and the director\'s own note when it judges the room winding down',
+    async () => {
+      // Single-member pool exhausts deterministically after 2 beats
+      // (MAX_TURNS_PER_POOL_MEMBER), forcing exactly one re-consult — which
+      // this fake answers with windingDown: true.
+      const client = fakePassageClient({
+        windingDownOnConsult: [false, true],
+        lullNote: 'The fire settles; Yeats refills his glass.',
+      });
+      const result = await runRound({
+        client,
+        model: 'test-model',
+        lodgeContext: LODGE,
+        ROSTER: SINGLE_MEMBER_ROSTER,
+        loadMemberFile,
+        presentMemberIds: ['crowley'],
+        artifact: null,
+        notes: {},
+        roundPrompt: 'Opening prompt',
+        conversationHistory: [],
+        speakerCount: 1,
+        round: 0,
+        disposition: {},
+      });
+      assert.equal(result.endedBy, 'lull');
+      assert.equal(result.lullNote, 'The fire settles; Yeats refills his glass.');
+      assert.equal(result.beats.length, 2);
+      assert.deepEqual(
+        result.beats.map(b => b.memberId),
+        ['crowley', 'crowley']
+      );
+      assert.deepEqual(
+        result.beats.map(b => b.text),
+        ['A turn.', 'A turn.']
+      );
+    }
+  );
 
   await t.test('falls back to a stock lull note when the director judges winding down but writes nothing', async () => {
     const client = fakePassageClient({ windingDownOnConsult: [false, true], lullNote: null });
     const result = await runRound({
-      client, model: 'test-model', lodgeContext: LODGE, ROSTER: SINGLE_MEMBER_ROSTER, loadMemberFile,
-      presentMemberIds: ['crowley'], artifact: null, notes: {},
-      roundPrompt: 'Opening prompt', conversationHistory: [],
-      speakerCount: 1, round: 0, disposition: {},
+      client,
+      model: 'test-model',
+      lodgeContext: LODGE,
+      ROSTER: SINGLE_MEMBER_ROSTER,
+      loadMemberFile,
+      presentMemberIds: ['crowley'],
+      artifact: null,
+      notes: {},
+      roundPrompt: 'Opening prompt',
+      conversationHistory: [],
+      speakerCount: 1,
+      round: 0,
+      disposition: {},
     });
     assert.equal(result.endedBy, 'lull');
     assert.ok(STOCK_LULL_NOTES.includes(result.lullNote));
   });
 
-  await t.test('defaults to endedBy "budget" (with a resolved stock lull note) when the director never judges a wind-down', async () => {
-    const client = fakePassageClient({ windingDownOnConsult: [false] });
-    const result = await runRound({
-      client, model: 'test-model', lodgeContext: LODGE, ROSTER: SINGLE_MEMBER_ROSTER, loadMemberFile,
-      presentMemberIds: ['crowley'], artifact: null, notes: {},
-      roundPrompt: 'Opening prompt', conversationHistory: [],
-      speakerCount: 1, round: 0, disposition: {},
-    });
-    // Short fixed speaker turns never spend BREATH_BUDGET_WORDS, so the
-    // MAX_TOTAL_BEATS safety net is what actually ends this passage —
-    // still 'budget', per runRound's single default for every non-lull exit.
-    assert.equal(result.endedBy, 'budget');
-    assert.ok(STOCK_LULL_NOTES.includes(result.lullNote));
-    assert.ok(result.beats.length > 0);
-  });
+  await t.test(
+    'defaults to endedBy "budget" (with a resolved stock lull note) when the director never judges a wind-down',
+    async () => {
+      const client = fakePassageClient({ windingDownOnConsult: [false] });
+      const result = await runRound({
+        client,
+        model: 'test-model',
+        lodgeContext: LODGE,
+        ROSTER: SINGLE_MEMBER_ROSTER,
+        loadMemberFile,
+        presentMemberIds: ['crowley'],
+        artifact: null,
+        notes: {},
+        roundPrompt: 'Opening prompt',
+        conversationHistory: [],
+        speakerCount: 1,
+        round: 0,
+        disposition: {},
+      });
+      // Short fixed speaker turns never spend BREATH_BUDGET_WORDS, so the
+      // MAX_TOTAL_BEATS safety net is what actually ends this passage —
+      // still 'budget', per runRound's single default for every non-lull exit.
+      assert.equal(result.endedBy, 'budget');
+      assert.ok(STOCK_LULL_NOTES.includes(result.lullNote));
+      assert.ok(result.beats.length > 0);
+    }
+  );
 
-  await t.test('includes the player\'s preceding turn as a beat with memberId null', async () => {
+  await t.test("includes the player's preceding turn as a beat with memberId null", async () => {
     const client = fakePassageClient({ windingDownOnConsult: [true] });
     const result = await runRound({
-      client, model: 'test-model', lodgeContext: LODGE, ROSTER: SINGLE_MEMBER_ROSTER, loadMemberFile,
-      presentMemberIds: ['crowley'], artifact: null, notes: {},
-      roundPrompt: 'Opening prompt', conversationHistory: [],
-      speakerCount: 1, round: 0, disposition: {},
+      client,
+      model: 'test-model',
+      lodgeContext: LODGE,
+      ROSTER: SINGLE_MEMBER_ROSTER,
+      loadMemberFile,
+      presentMemberIds: ['crowley'],
+      artifact: null,
+      notes: {},
+      roundPrompt: 'Opening prompt',
+      conversationHistory: [],
+      speakerCount: 1,
+      round: 0,
+      disposition: {},
       precedingTurn: { speakerName: 'A Visitor', text: 'I have a question.' },
     });
     assert.deepEqual(result.beats[0], { memberId: null, text: 'I have a question.' });
@@ -1387,21 +1642,34 @@ test('runRound — passage end-causes and beats (#244)', async t => {
     // withOneRetry makes 2 stream() calls for a beat that fails outright —
     // fail both of the first beat's attempts (calls 1-2), then let every
     // later call (the second beat's single attempt) succeed normally.
-    client.messages.stream = (req) => {
+    client.messages.stream = req => {
       streamCalls++;
       if (streamCalls <= 2) {
         return {
-          [Symbol.asyncIterator]: async function* () { throw new Error('network blip'); },
-          finalMessage: async () => { throw new Error('network blip'); },
+          [Symbol.asyncIterator]: async function* () {
+            throw new Error('network blip');
+          },
+          finalMessage: async () => {
+            throw new Error('network blip');
+          },
         };
       }
       return originalStream(req);
     };
     const result = await runRound({
-      client, model: 'test-model', lodgeContext: LODGE, ROSTER: SINGLE_MEMBER_ROSTER, loadMemberFile,
-      presentMemberIds: ['crowley'], artifact: null, notes: {},
-      roundPrompt: 'Opening prompt', conversationHistory: [],
-      speakerCount: 1, round: 0, disposition: {},
+      client,
+      model: 'test-model',
+      lodgeContext: LODGE,
+      ROSTER: SINGLE_MEMBER_ROSTER,
+      loadMemberFile,
+      presentMemberIds: ['crowley'],
+      artifact: null,
+      notes: {},
+      roundPrompt: 'Opening prompt',
+      conversationHistory: [],
+      speakerCount: 1,
+      round: 0,
+      disposition: {},
     });
     // Two beats were attempted (spokenCounts still credits the failed one,
     // triggering the re-consult that ends the passage via lull), but only

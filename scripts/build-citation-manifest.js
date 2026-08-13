@@ -20,7 +20,11 @@ const VERDICT_LABEL = { unverified: 'unverified', uncertain: 'uncertain', verifi
 // #153 part 3 — same convention as public/app.js's CITATION_SOURCE_LABEL.
 // Missing on pre-#153 sessions — default to 'model-knowledge' there, since
 // that was the only method available at the time.
-const SOURCE_LABEL = { library: 'checked against curated text', web: 'checked via live lookup', 'model-knowledge': "Claude's own knowledge" };
+const SOURCE_LABEL = {
+  library: 'checked against curated text',
+  web: 'checked via live lookup',
+  'model-knowledge': "Claude's own knowledge",
+};
 
 function normalizeWorkKey(work) {
   return work.replace(/[*"']/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
@@ -28,7 +32,8 @@ function normalizeWorkKey(work) {
 
 function loadSessions() {
   if (!fs.existsSync(SESSIONS_DIR)) return [];
-  return fs.readdirSync(SESSIONS_DIR)
+  return fs
+    .readdirSync(SESSIONS_DIR)
     .filter(f => f.endsWith('.json'))
     .map(f => {
       try {
@@ -69,22 +74,30 @@ function buildManifest(sessions) {
     worstSeverity: Math.max(...w.occurrences.map(o => VERDICT_SEVERITY[o.verdict] ?? 0)),
   }));
 
-  const needsReview = groups.filter(g => g.worstSeverity > 0).sort((a, b) =>
-    b.worstSeverity - a.worstSeverity || a.displayWork.localeCompare(b.displayWork));
-  const verified = groups.filter(g => g.worstSeverity === 0).sort((a, b) =>
-    a.displayWork.localeCompare(b.displayWork));
+  const needsReview = groups
+    .filter(g => g.worstSeverity > 0)
+    .sort((a, b) => b.worstSeverity - a.worstSeverity || a.displayWork.localeCompare(b.displayWork));
+  const verified = groups.filter(g => g.worstSeverity === 0).sort((a, b) => a.displayWork.localeCompare(b.displayWork));
 
   const totalCitations = groups.reduce((n, g) => n + g.occurrences.length, 0);
   const verdictCounts = { verified: 0, unverified: 0, uncertain: 0 };
   const sourceCounts = { library: 0, web: 0, 'model-knowledge': 0 };
-  groups.forEach(g => g.occurrences.forEach(o => { verdictCounts[o.verdict]++; sourceCounts[o.source]++; }));
+  groups.forEach(g =>
+    g.occurrences.forEach(o => {
+      verdictCounts[o.verdict]++;
+      sourceCounts[o.source]++;
+    })
+  );
 
   const renderGroup = g => {
     const lines = [`### ${g.displayWork}`, ''];
     g.occurrences.forEach(o => {
-      const groundedIn = o.libraryCitation || (o.webSourceUrl ? `[${o.webSourceTitle}](${o.webSourceUrl})` : o.webSourceTitle);
+      const groundedIn =
+        o.libraryCitation || (o.webSourceUrl ? `[${o.webSourceTitle}](${o.webSourceUrl})` : o.webSourceTitle);
       const grounding = groundedIn ? ` — grounded in: ${groundedIn}` : '';
-      lines.push(`- **${VERDICT_LABEL[o.verdict]}** (${SOURCE_LABEL[o.source]}) — ${o.speaker}, session \`${o.sessionId}\` (${o.date})`);
+      lines.push(
+        `- **${VERDICT_LABEL[o.verdict]}** (${SOURCE_LABEL[o.source]}) — ${o.speaker}, session \`${o.sessionId}\` (${o.date})`
+      );
       lines.push(`  > "${o.quote}"`);
       lines.push(`  ${o.note}${grounding}`);
       lines.push('');
@@ -106,7 +119,10 @@ function buildManifest(sessions) {
   ];
 
   if (sessions.length > verifiedSessions.length) {
-    lines.push(`_${sessions.length - verifiedSessions.length} session(s) haven't been run through Verify Citations yet and aren't reflected below._`, '');
+    lines.push(
+      `_${sessions.length - verifiedSessions.length} session(s) haven't been run through Verify Citations yet and aren't reflected below._`,
+      ''
+    );
   }
 
   if (needsReview.length) {
