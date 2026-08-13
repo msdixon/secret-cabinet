@@ -27,6 +27,11 @@ const MODULES = [
   // the other modules below: one window.Beats, added the same way.
   { file: 'beats.js', global: 'Beats', api: ['splitIntoBeats'] },
   {
+    file: 'speaker.js',
+    global: 'Speaker',
+    api: ['configure', 'normalizeSpeaker', 'buildAliasIndex', 'resolveMember', 'isKnownSpeakerHeader'],
+  },
+  {
     file: 'scene/scene.js',
     global: 'LodgeScene',
     api: ['init', 'updateSeats', 'setSpeaking', 'getSeatScreenPosition'],

@@ -580,75 +580,11 @@ async function saveAnnotation(textarea) {
 }
 
 // ── Speaker attribution ────────────────────────────────────────────────────
-// Members sign transcripts with a short form (surname, first name, or a
-// nickname) rather than their full roster name. Short forms are derived
-// automatically from each member's `name` in roster.json; a member's
-// `aliases` array (also in roster.json) covers nicknames that aren't
-// derivable from the name itself (e.g. "Pamela" for Coleman-Smith). This
-// keeps the roster the single source of truth — adding a Wave 2 guest to
-// roster.json is enough; nothing here needs hand-editing.
-//
-// If two members derive the same token (e.g. "Ibn" from both "Ibn Arabi"
-// and "Ibn Khaldun", or "Blake" from both Blakes), that token is ambiguous
-// and dropped from the index — lodge-context.md's FORMAT section instructs
-// members with colliding surnames to sign in full, which the exact
-// full-name match in resolveMember/isKnownSpeakerHeader still catches.
-const ALIAS_STOPWORDS = new Set(['of', 'the', 'van', 'der', 'de', 'la', 'lady', 'sir', 'dr', 'st']);
-
-function normalizeSpeaker(s) {
-  return s
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/['’]/g, '')
-    .toLowerCase()
-    .replace(/[\s-]+/g, ' ')
-    .trim();
-}
-
-function buildAliasIndex(members) {
-  const index = new Map(); // normalized alias -> member id, or null if ambiguous
-  const register = (key, id) => {
-    const k = normalizeSpeaker(key);
-    if (!k) return;
-    if (index.has(k) && index.get(k) !== id) index.set(k, null);
-    else if (!index.has(k)) index.set(k, id);
-  };
-  members.forEach(m => {
-    register(m.name, m.id);
-    m.name
-      .split(/[\s-]+/)
-      .filter(tok => tok.length > 2 && !ALIAS_STOPWORDS.has(tok.toLowerCase()))
-      .forEach(tok => register(tok, m.id));
-    (m.aliases || []).forEach(a => register(a, m.id));
-  });
-  return index;
-}
-
-// Resolves a signed speaker string (e.g. "Warburg", "Ibn 'Arabi") to its roster member.
-function resolveMember(speaker, members) {
-  const norm = normalizeSpeaker(speaker);
-  const candidates = [...buildAliasIndex(members).entries()]
-    .filter(([, id]) => id)
-    .sort((a, b) => b[0].length - a[0].length); // prefer the more specific (longer) alias
-  const hit = candidates.find(([alias]) => norm.includes(alias));
-  if (hit) return members.find(m => m.id === hit[1]);
-  // No alias hit — fall back to loose name-substring matching, but only when
-  // exactly one member matches. A speaker string that partially overlaps two
-  // members' names (e.g. bare "Blake") is ambiguous and stays unresolved
-  // rather than silently picking whichever member happens to be listed first.
-  const matches = members.filter(m => speaker.includes(m.name) || m.name.includes(speaker));
-  return matches.length === 1 ? matches[0] : undefined;
-}
-
-// True if a trimmed transcript line is a recognized speaker header (full name or alias).
-// Also recognizes the active session's player-as-member identity — needed
-// for custom (non-roster) identities, which have no alias-index entry.
-function isKnownSpeakerHeader(t, members) {
-  const norm = normalizeSpeaker(t.replace(/:$/, ''));
-  if (currentPlayerSpeakerName && norm === normalizeSpeaker(currentPlayerSpeakerName)) return true;
-  const index = buildAliasIndex(members);
-  return index.has(norm) && index.get(norm) != null;
-}
+// normalizeSpeaker/buildAliasIndex/resolveMember/isKnownSpeakerHeader moved to
+// public/js/speaker.js (#285) -- window.Speaker. Pure text matching with no
+// UI-feature seam of its own, unlike the #142 extractions; its one read of
+// core state (currentPlayerSpeakerName, for custom player identities) goes
+// through speakerDeps() below rather than a closure, same as everywhere else.
 
 // #219: deliberately not beat-split, unlike startStreamEntry's live path and
 // witness.js's stage replay. This is the record pane's parser -- used both
@@ -673,7 +609,7 @@ function parseAndRenderTranscript(response) {
   const flush = () => {
     if (speaker && textLines.length) {
       const text = textLines.join('\n').trim();
-      const m = resolveMember(speaker, MEMBERS);
+      const m = window.Speaker.resolveMember(speaker, MEMBERS);
       addSpeech(speaker, text, false, m?.id, null);
       // If the block was pure action, preserve speaker so the next speech
       // (without a repeated header) still gets attributed correctly.
@@ -706,7 +642,7 @@ function parseAndRenderTranscript(response) {
       transcriptText += `${t}\n\n`;
       return;
     }
-    const isKnownName = isKnownSpeakerHeader(t, MEMBERS);
+    const isKnownName = window.Speaker.isKnownSpeakerHeader(t, MEMBERS);
     const looksLikeName = !t.includes(' ') && t.endsWith(':') && t.length < 30;
     if (isKnownName || looksLikeName) {
       flush();
@@ -1463,8 +1399,8 @@ function restoreSessionIfDifferent(id) {
 function witnessDeps() {
   return {
     members: MEMBERS,
-    resolveMember,
-    isKnownSpeakerHeader,
+    resolveMember: window.Speaker.resolveMember,
+    isKnownSpeakerHeader: window.Speaker.isKnownSpeakerHeader,
     escapeHTML,
     renderActions,
     restoreSession: restoreSessionIfDifferent,
@@ -1730,8 +1666,8 @@ function sessionsDeps() {
     },
     resetLiveStage: () => window.Witness.resetLiveStage(),
     escapeHTML,
-    resolveMember,
-    isKnownSpeakerHeader,
+    resolveMember: window.Speaker.resolveMember,
+    isKnownSpeakerHeader: window.Speaker.isKnownSpeakerHeader,
     renderActions,
     setStatus,
     restorePlayAsControlDisplay,
@@ -1746,6 +1682,14 @@ function sessionsDeps() {
     showSessionControls,
   };
 }
+
+// window.Speaker (#285) is pure text matching with one read of core state —
+// the active player-as-member identity, for recognizing custom (non-roster)
+// speaker headers. See speaker.js's own isKnownSpeakerHeader comment.
+function speakerDeps() {
+  return { getPlayerSpeakerName: () => currentPlayerSpeakerName };
+}
+window.Speaker.configure(speakerDeps());
 window.Sessions.configure(sessionsDeps());
 window.Witness.configure(witnessDeps());
 
