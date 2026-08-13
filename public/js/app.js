@@ -772,7 +772,7 @@ function startStreamEntry() {
     typingEl.innerHTML = `<div class="speaker-name">${escapeHTML(speakerName)}</div><div class="typing-text transcript-stream-live"></div>`;
     c.appendChild(typingEl);
     recordFollow();
-    window.Witness.liveTypingStart(speakerName);
+    window.Witness.liveTypingStart(speakerName, speakerMemberId || null);
   }
 
   return {
@@ -1443,26 +1443,20 @@ async function submitNewMember() {
 // ── Scene (3D) ──────────────────────────────────────────────────────────────
 // Phase 0 (#26): pure atmosphere, no member sync yet — see public/scene/scene.js.
 
-// #202: the room lives in the stage's view switcher now, not a standalone
-// panel -- so "scene unavailable" means removing the switcher entirely (a
-// switcher with only one option is clutter) and falling back to text,
-// rather than hiding an empty canvas.
-function hideRoomOption() {
-  document.getElementById('stage-view-switch')?.remove();
-  window.Witness?.setStageView('text');
-}
-
+// #257: the room is the stage now, whenever it can be -- no more switcher to
+// fall back from (that was #202, retired). "Scene unavailable" simply means
+// never calling enableRoom(), which leaves witness.js's #witness-stage
+// bubble rendering as the only thing that ever draws.
 function initSceneLayer() {
   try {
-    if (new URLSearchParams(location.search).get('noscene')) return hideRoomOption();
-    if (localStorage.getItem('sc-scene-disabled')) return hideRoomOption();
-    if (typeof BABYLON === 'undefined' || !window.LodgeScene) return hideRoomOption();
+    if (new URLSearchParams(location.search).get('noscene')) return;
+    if (localStorage.getItem('sc-scene-disabled')) return;
+    if (typeof BABYLON === 'undefined' || !window.LodgeScene) return;
     const canvas = document.getElementById('scene-canvas');
-    if (!canvas) return hideRoomOption();
-    if (!LodgeScene.init(canvas)) hideRoomOption();
+    if (!canvas) return;
+    if (LodgeScene.init(canvas)) window.Witness?.enableRoom();
   } catch (e) {
     console.error('[scene] failed to initialize, continuing without it', e);
-    hideRoomOption();
   }
 }
 

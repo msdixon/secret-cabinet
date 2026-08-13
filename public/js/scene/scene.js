@@ -240,6 +240,37 @@ window.LodgeScene = (function () {
     frameCamera(currentSpeakingId);
   }
 
+  // #257: projects a seated member's portrait to a screen-space point so
+  // witness.js can anchor a DOM speech card to it -- the standard
+  // "world-space UI" pattern for layering DOM over a WebGL canvas. Returns
+  // null when the member isn't seated at all (no scene, or not in
+  // seatMeshes); returns { x, y, visible: false } when they're seated but the
+  // camera's current framing (#232) puts them behind the camera or outside
+  // the canvas bounds -- witness.js hides the card rather than pin it
+  // off-canvas, one of #257's two named rough edges.
+  //
+  // Uses the canvas's CSS pixel rect (getBoundingClientRect), not the
+  // engine's render-target resolution (getRenderWidth/Height) -- those
+  // differ under devicePixelRatio scaling, and the DOM card layer positions
+  // in CSS pixels, not hardware pixels.
+  function getSeatScreenPosition(memberId) {
+    if (!sceneRef || !cameraRef) return null;
+    const seat = seatMeshes.find(s => s.memberId === memberId);
+    if (!seat) return null;
+    const canvas = sceneRef.getEngine().getRenderingCanvas();
+    const rect = canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;
+    const viewport = cameraRef.viewport.toGlobal(rect.width, rect.height);
+    const worldPos = seat.avatar.position.add(new BABYLON.Vector3(0, AVATAR_HEIGHT / 2, 0));
+    const projected = BABYLON.Vector3.Project(
+      worldPos, BABYLON.Matrix.Identity(), sceneRef.getTransformMatrix(), viewport
+    );
+    const visible = projected.z > 0 && projected.z < 1 &&
+      projected.x >= 0 && projected.x <= rect.width &&
+      projected.y >= 0 && projected.y <= rect.height;
+    return { x: projected.x, y: projected.y, visible };
+  }
+
   function init(canvas) {
     try {
       const engine = new BABYLON.Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true });
@@ -304,5 +335,5 @@ window.LodgeScene = (function () {
     }
   }
 
-  return { init, updateSeats, setSpeaking };
+  return { init, updateSeats, setSpeaking, getSeatScreenPosition };
 })();

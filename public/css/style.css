@@ -549,32 +549,64 @@ a.archival-image-link:hover { border-color:var(--lodge-amber-dim); cursor:pointe
 
 .witness-controls { display:flex; align-items:center; gap:12px; padding:10px 16px; border-bottom:1px solid var(--lodge-border); flex-shrink:0; }
 .witness-label { font-family:'IM Fell English',serif; font-size:12px; letter-spacing:2px; text-transform:uppercase; color:var(--lodge-ash); }
-/* #202: stage view switcher — text presentation ⇄ room. Two renderings of
-   the same conversation, chosen independently of which convene is live;
-   mutual exclusivity between .witness-stage and .witness-room is driven by
-   .stage-pane's view-room class, toggled in witness.js's setStageView(). */
-.stage-view-switch { display:flex; border:1px solid var(--lodge-border); border-radius:2px; overflow:hidden; flex-shrink:0; }
-.stage-view-btn { background:transparent; border:none; color:var(--lodge-ash); font-family:'IM Fell English',serif; font-size:11px; padding:3px 10px; cursor:pointer; letter-spacing:1px; }
-.stage-view-btn + .stage-view-btn { border-left:1px solid var(--lodge-border); }
-.stage-view-btn:hover { color:var(--lodge-muted); }
-.stage-view-btn.active { background:rgba(200,146,42,0.14); color:var(--lodge-amber); }
 .witness-hint { font-family:'IM Fell English',serif; font-size:12px; color:var(--lodge-border); font-style:italic; flex:1; text-align:center; }
 .witness-exit-btn { background:transparent; border:1px solid var(--lodge-border); color:var(--lodge-ash); font-family:'IM Fell English',serif; font-size:11px; padding:3px 10px; border-radius:2px; cursor:pointer; letter-spacing:1px; }
 .witness-exit-btn:hover { border-color:var(--lodge-ash); color:var(--lodge-muted); }
 .witness-progress { height:2px; background:var(--lodge-amber); width:0%; transition:width 0.4s ease; flex-shrink:0; }
 .witness-stage { flex:1 1 auto; min-height:0; overflow-y:auto; padding:24px 32px 20px; cursor:pointer; display:flex; flex-direction:column; gap:0; scroll-behavior:smooth; }
-/* The room (#202): same slot as .witness-stage, mutually exclusive with it.
-   Wordless for now -- dialogue rendered into the room is #28's scope, not
-   this switcher's. */
-.witness-room { display:none; flex:1 1 auto; min-height:0; background:var(--lodge-bg); }
+/* The room (#257): same slot as .witness-stage, mutually exclusive with it --
+   whichever is active is the only stage there is (the old #202 Text/Room
+   toggle is retired). .room-active is added once, by witness.js's
+   enableRoom(), the moment the 3D scene actually initializes (app.js's
+   initSceneLayer); .witness-stage's bubble rendering is what's left showing
+   when it never does. */
+.witness-room { display:none; position:relative; flex:1 1 auto; min-height:0; background:var(--lodge-bg); cursor:pointer; }
 .witness-room canvas { width:100%; height:100%; display:block; outline:none; }
-.stage-pane.view-room .witness-stage { display:none; }
-.stage-pane.view-room .witness-room { display:flex; }
+.stage-pane.room-active .witness-stage { display:none; }
+.stage-pane.room-active .witness-room { display:flex; }
+
+/* Dialogue composited into the room (#257): a DOM speech card per seated
+   member, positioned in witness.js's repositionRoomCards() from
+   LodgeScene.getSeatScreenPosition's screen-space projection of their
+   portrait billboard (Vector3.Project layered over the WebGL canvas -- the
+   standard "world-space UI" pattern). room-speech-layer covers the canvas
+   exactly and stays click-through (pointer-events:none) except where a card
+   actually is, so clicking the room still advances replay. */
+.room-speech-layer { position:absolute; inset:0; pointer-events:none; }
+.room-speech-card {
+  position:absolute; transform:translate(-50%, -100%); margin-top:-14px;
+  max-width:240px; background:rgba(14,11,8,0.92); border:1px solid var(--lodge-border);
+  border-radius:3px; padding:10px 12px; pointer-events:auto;
+  transition:opacity 0.5s ease; opacity:1;
+}
+.room-speech-card.room-card-fading { opacity:0; }
+.room-speech-card .speaker-name { font-size:13px; margin-bottom:3px; }
+.room-speech-card .speech-text { font-family:'Crimson Pro',serif; font-size:14px; line-height:1.6; color:var(--lodge-cream); }
+.room-speech-card.room-card-typing .speech-text::after { content:'▍'; opacity:0.6; animation:witnessCursorBlink 1s step-end infinite; }
+.room-speech-card .witness-annotation { font-size:12px; }
+
+/* Round headers, lulls, and unattributed action lines aren't anchored to any
+   one member's seat -- they read into a small fixed strip at the top of the
+   room instead of a card. Not scrollable (unlike the stage): a bounded
+   strip that clips older entries is a deliberate rough edge (#257), not a
+   history the room is meant to hold. */
+.room-events { position:absolute; top:12px; left:50%; transform:translateX(-50%); max-height:130px; overflow:hidden; display:flex; flex-direction:column; align-items:center; gap:6px; pointer-events:none; }
+.room-events > * { pointer-events:auto; }
+.room-events .witness-round-header,
+.room-events .transcript-lull { width:300px; }
+.room-events .action-line { color:var(--lodge-muted); font-style:italic; font-size:13px; }
 .witness-stage .transcript-entry { max-width:70%; }
 .witness-stage .speaker-name { font-size:22px; }
 .witness-stage .speech-text { font-size:17px; }
 .witness-stage .action-line { opacity:0; animation:witnessfade-dim 0.5s ease forwards; }
 @keyframes witnessfade-dim { from{opacity:0;transform:translateY(8px)} to{opacity:0.8;transform:translateY(0)} }
+/* #257: pre-existing gap found while verifying the room's event strip --
+   .witness-round-header/.transcript-lull below reference this animation but
+   it was never defined, so both (and any buttons appended into a live lull,
+   e.g. Continue/Let it end) rendered stuck at opacity:0 in the text stage
+   too, not just here. Fixing the keyframe rather than the (correct)
+   animation references. */
+@keyframes witnessfade { from{opacity:0} to{opacity:1} }
 .witness-stage .transcript-entry { opacity:0; animation:witnessslide 0.5s ease forwards; }
 .witness-round-header { display:flex; align-items:center; gap:12px; opacity:0; animation:witnessfade 0.6s ease forwards; }
 .witness-rule { flex:1; height:1px; background:var(--lodge-border); }

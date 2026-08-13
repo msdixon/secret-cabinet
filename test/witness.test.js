@@ -30,20 +30,19 @@ const WITNESS_IDS = [
   'stage-record', 'stage-pane', 'witness-hint', 'witness-exit-btn',
   'witness-stage', 'witness-progress', 'stage-collapsed-bar',
   'transcript-panel', 'transcript-content', 'record-scroll',
-  'stage-view-switch', 'stage-view-text-btn', 'stage-view-room-btn',
+  'witness-room', 'room-speech-layer', 'room-events',
 ];
 
 const FIXTURE = `
   <div id="stage-record">
     <div id="stage-pane">
       <div id="witness-hint"></div>
-      <div id="stage-view-switch">
-        <button id="stage-view-text-btn" class="active"></button>
-        <button id="stage-view-room-btn"></button>
-      </div>
       <button id="witness-exit-btn" style="display:none"></button>
       <div id="witness-stage"></div>
-      <div id="witness-room"></div>
+      <div id="witness-room">
+        <div id="room-speech-layer"></div>
+        <div id="room-events"></div>
+      </div>
       <div id="witness-progress" style="display:none"></div>
     </div>
     <button id="stage-collapsed-bar"></button>
@@ -54,6 +53,14 @@ const FIXTURE = `
     </div>
   </div>
 `;
+
+// #257: stubs window.LodgeScene.getSeatScreenPosition, the only surface the
+// room's card positioning reads. `positions` maps memberId -> { x, y,
+// visible } (see scene.js's own getSeatScreenPosition for the real shape);
+// an omitted memberId resolves to null, same as a member who isn't seated.
+function stubScene(window, positions = {}) {
+  window.LodgeScene = { getSeatScreenPosition: memberId => positions[memberId] || null };
+}
 
 const MEMBERS = [
   { id: 'crowley', name: 'Crowley', glyph: '☿' },
@@ -514,56 +521,178 @@ test('collapse/reopen: exitClicked dispatches to whichever mode is active, never
   });
 });
 
-test('stage view switcher (#202): text presentation ⇄ room, on the stage container', async t => {
-  await t.test('defaults to text with no stored preference, once configure() applies it', t2 => {
+test('the room (#257): dialogue composited onto the scene, replacing the #202 toggle', async t => {
+  await t.test('before enableRoom(), everything still renders into the text stage — the unmodified pre-#257 fallback', t2 => {
     const { document, module: Witness } = boot(t2);
     Witness.configure(makeDeps());
-    assert.equal(document.getElementById('stage-pane').classList.contains('view-room'), false);
-    assert.ok(document.getElementById('stage-view-text-btn').classList.contains('active'));
-    assert.equal(document.getElementById('stage-view-room-btn').classList.contains('active'), false);
+    Witness.liveSpeech({ speaker: 'Crowley', text: 'A line.', memberId: 'crowley' });
+
+    assert.equal(document.getElementById('stage-pane').classList.contains('room-active'), false);
+    assert.ok(document.querySelector('#witness-stage .transcript-entry'));
+    assert.equal(document.querySelectorAll('#room-speech-layer .room-speech-card').length, 0);
   });
 
-  await t.test('setStageView("room") switches the stage pane and button state, not the record', t2 => {
-    const { document, module: Witness } = boot(t2);
-    Witness.setStageView('room');
+  await t.test('enableRoom() marks the stage pane active and routes live speech into a member-anchored card, not the text stage', t2 => {
+    const { document, window, module: Witness } = boot(t2);
+    stubScene(window, { crowley: { x: 120, y: 200, visible: true } });
+    Witness.configure(makeDeps());
+    Witness.enableRoom();
 
-    assert.ok(document.getElementById('stage-pane').classList.contains('view-room'));
-    assert.ok(document.getElementById('stage-view-room-btn').classList.contains('active'));
-    assert.equal(document.getElementById('stage-view-text-btn').classList.contains('active'), false);
-    assert.equal(document.getElementById('stage-record').classList.contains('view-room'), false, 'view-room belongs to the stage pane, not the stage/record assembly');
+    assert.ok(document.getElementById('stage-pane').classList.contains('room-active'));
+
+    Witness.liveSpeech({ speaker: 'Crowley', text: 'The book is not the point.', memberId: 'crowley' });
+
+    assert.equal(document.getElementById('witness-stage').innerHTML, '', 'room mode should not also write into the text stage');
+    const card = document.querySelector('#room-speech-layer .room-speech-card');
+    assert.ok(card, 'a card should appear in the room layer');
+    assert.match(card.querySelector('.speaker-name').textContent, /Crowley/);
+    assert.match(card.querySelector('.speech-text').textContent, /not the point/);
+    assert.equal(card.style.left, '120px');
+    assert.equal(card.style.top, '200px');
   });
 
-  await t.test('setStageView("text") switches back', t2 => {
-    const { document, module: Witness } = boot(t2);
-    Witness.setStageView('room');
-    Witness.setStageView('text');
+  await t.test('a card projected near the top of the room is floored, not left to grow off the top edge', t2 => {
+    // Cards grow upward from their anchor (translateY(-100%)) and portraits
+    // sit in the upper half of the resting shot -- verified live: a
+    // realistic multi-sentence beat anchored near the actual projected y
+    // rendered its top lines under the toolbar above the canvas. Manual
+    // browser check confirmed the floor below fixes it.
+    const { document, window, module: Witness } = boot(t2);
+    stubScene(window, { crowley: { x: 100, y: 20, visible: true } });
+    Witness.configure(makeDeps());
+    Witness.enableRoom();
 
-    assert.equal(document.getElementById('stage-pane').classList.contains('view-room'), false);
-    assert.ok(document.getElementById('stage-view-text-btn').classList.contains('active'));
-    assert.equal(document.getElementById('stage-view-room-btn').classList.contains('active'), false);
+    Witness.liveSpeech({ speaker: 'Crowley', text: 'Near the top.', memberId: 'crowley' });
+
+    const card = document.querySelector('#room-speech-layer .room-speech-card');
+    assert.equal(parseInt(card.style.top, 10) >= 150, true, 'a card anchored high on screen should be floored, not left at its raw projected y');
   });
 
-  await t.test('ignores an unrecognized view rather than clearing the current one', t2 => {
-    const { document, module: Witness } = boot(t2);
-    Witness.setStageView('room');
-    Witness.setStageView('bogus');
+  await t.test("a card hides rather than render off-canvas when the member's seat isn't currently visible", t2 => {
+    const { document, window, module: Witness } = boot(t2);
+    stubScene(window, { crowley: { x: 50, y: 50, visible: false } });
+    Witness.configure(makeDeps());
+    Witness.enableRoom();
 
-    assert.ok(document.getElementById('stage-pane').classList.contains('view-room'), 'an invalid call should be a no-op, not fall back to text');
+    Witness.liveSpeech({ speaker: 'Crowley', text: 'Unseen.', memberId: 'crowley' });
+
+    const card = document.querySelector('#room-speech-layer .room-speech-card');
+    assert.equal(card.style.display, 'none');
   });
 
-  await t.test('persists the choice to localStorage and a fresh module load honors it once configure() runs', t2 => {
-    const { window, module: Witness } = boot(t2);
-    Witness.setStageView('room');
-    assert.equal(window.localStorage.getItem('sc-stage-view'), 'room');
+  await t.test('a speaker with no seat to anchor to (e.g. an interjection) reads into the room event strip, not a card', t2 => {
+    const { document, window, module: Witness } = boot(t2);
+    stubScene(window, {});
+    Witness.configure(makeDeps());
+    Witness.enableRoom();
 
-    // A fresh module load (simulating a page reload) reads the persisted
-    // choice at load time, same as the real page -- so localStorage must be
-    // seeded before eval, not after, to actually exercise that read.
-    const reloaded = loadPublicModule('witness.js', FIXTURE, w => w.localStorage.setItem('sc-stage-view', 'room'));
-    t2.after(reloaded.cleanup);
-    reloaded.module.configure(makeDeps());
+    Witness.liveSpeech({ speaker: '— a voice from elsewhere —', text: 'A knock.', memberId: null });
 
-    assert.ok(reloaded.document.getElementById('stage-pane').classList.contains('view-room'));
-    assert.ok(reloaded.document.getElementById('stage-view-room-btn').classList.contains('active'));
+    assert.equal(document.querySelectorAll('#room-speech-layer .room-speech-card').length, 0);
+    const entry = document.querySelector('#room-events .room-event-entry');
+    assert.ok(entry);
+    assert.match(entry.textContent, /A knock\./);
+  });
+
+  await t.test('liveTypingStart/Set grow the same card liveSpeech later settles, never a second element', t2 => {
+    const { document, window, module: Witness } = boot(t2);
+    stubScene(window, { crowley: { x: 10, y: 10, visible: true } });
+    Witness.configure(makeDeps());
+    Witness.enableRoom();
+
+    Witness.liveTypingStart('Crowley', 'crowley');
+    let card = document.querySelector('#room-speech-layer .room-speech-card');
+    assert.ok(card, 'typing should open a card');
+    assert.ok(card.classList.contains('room-card-typing'));
+
+    Witness.liveTypingSet('The book');
+    Witness.liveTypingSet('The book is not the point.');
+    assert.equal(card.querySelector('.typing-text').textContent, 'The book is not the point.');
+
+    Witness.liveClearTyping();
+    Witness.liveSpeech({ speaker: 'Crowley', text: 'The book is not the point.', memberId: 'crowley' });
+
+    assert.equal(document.querySelectorAll('#room-speech-layer .room-speech-card').length, 1, 'typing and settled states share one card, not two');
+    card = document.querySelector('#room-speech-layer .room-speech-card');
+    assert.equal(card.classList.contains('room-card-typing'), false);
+    assert.match(card.querySelector('.speech-text').textContent, /not the point/);
+  });
+
+  await t.test('two seats close together on screen get stacked instead of overlapping', t2 => {
+    const { document, window, module: Witness } = boot(t2);
+    stubScene(window, {
+      crowley: { x: 100, y: 50, visible: true },
+      blavatsky: { x: 110, y: 50, visible: true },
+    });
+    Witness.configure(makeDeps());
+    Witness.enableRoom();
+
+    Witness.liveSpeech({ speaker: 'Crowley', text: 'One.', memberId: 'crowley' });
+    Witness.liveSpeech({ speaker: 'Blavatsky', text: 'Two.', memberId: 'blavatsky' });
+
+    const tops = [...document.querySelectorAll('#room-speech-layer .room-speech-card')]
+      .map(c => parseInt(c.style.top, 10));
+    assert.equal(tops.length, 2);
+    assert.notEqual(tops[0], tops[1], 'seats projected close together in x should not land at the same y');
+  });
+
+  await t.test('round headers read into the room event strip, and liveLull still returns a real, appendable element for the Continue/Let it end controls', t2 => {
+    const { document, window, module: Witness } = boot(t2);
+    stubScene(window, {});
+    Witness.configure(makeDeps());
+    Witness.enableRoom();
+
+    Witness.liveRoundHeader('First Movement');
+    assert.equal(document.querySelectorAll('#room-events .witness-round-header').length, 1);
+    assert.equal(document.querySelectorAll('#witness-stage .witness-round-header').length, 0);
+
+    // app.js's awaitLull() appends a live lull's Continue/Let it end buttons
+    // directly into whatever liveLull() returns -- it has to be a real node,
+    // not a stand-in, wherever it's actually visible.
+    const lullEl = Witness.liveLull('The room draws breath.');
+    assert.ok(document.querySelectorAll('#room-events .transcript-lull').length, 1);
+    const btn = document.createElement('button');
+    lullEl.appendChild(btn);
+    assert.equal(lullEl.querySelector('button'), btn);
+  });
+
+  await t.test('replay composites into the room exactly like live mirroring, and go-back restores a card to its prior turn rather than deleting it', async t2 => {
+    const { document, window, module: Witness } = boot(t2);
+    stubScene(window, { crowley: { x: 10, y: 10, visible: true } });
+    Witness.enableRoom();
+    await Witness.start({
+      rounds: [{ label: 'Round I', text: 'Crowley:\nFirst thing.\n\nCrowley:\nSecond thing.' }],
+    }, makeDeps());
+    // start() already rendered block 0 (the header) via its own advance().
+
+    Witness.advance(); // "First thing."
+    let card = document.querySelector('#room-speech-layer .room-speech-card');
+    assert.match(card.querySelector('.speech-text').textContent, /First thing/);
+    assert.equal(document.querySelectorAll('#room-speech-layer .room-speech-card').length, 1);
+
+    Witness.advance(); // "Second thing." -- same card, overwritten in place
+    card = document.querySelector('#room-speech-layer .room-speech-card');
+    assert.match(card.querySelector('.speech-text').textContent, /Second thing/);
+    assert.equal(document.querySelectorAll('#room-speech-layer .room-speech-card').length, 1, 'still one card, not a second');
+
+    // goBack() isn't part of the public API -- driven the same way the
+    // left-arrow key does in the real page.
+    window.document.dispatchEvent(new window.KeyboardEvent('keydown', { code: 'ArrowLeft' }));
+    card = document.querySelector('#room-speech-layer .room-speech-card');
+    assert.match(card.querySelector('.speech-text').textContent, /First thing/, 'going back should restore the card to its prior content, not delete it');
+  });
+
+  await t.test('exit clears the room the same way it clears the text stage', async t2 => {
+    const { document, window, module: Witness } = boot(t2);
+    stubScene(window, { crowley: { x: 10, y: 10, visible: true } });
+    Witness.enableRoom();
+    await Witness.start({ rounds: [{ label: 'Round I', text: 'Crowley:\nA line.' }] }, makeDeps());
+    Witness.advance();
+    assert.ok(document.querySelector('#room-speech-layer .room-speech-card'));
+
+    window.document.dispatchEvent(new window.KeyboardEvent('keydown', { code: 'Escape' }));
+
+    assert.equal(document.getElementById('room-speech-layer').innerHTML, '');
+    assert.equal(document.getElementById('room-events').innerHTML, '');
   });
 });

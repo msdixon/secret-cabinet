@@ -26,8 +26,8 @@ const MODULES = [
   // its own top-of-file comment. In the browser it behaves exactly like
   // the other modules below: one window.Beats, added the same way.
   { file: 'beats.js', global: 'Beats', api: ['splitIntoBeats'] },
-  { file: 'scene/scene.js', global: 'LodgeScene', api: ['init', 'updateSeats', 'setSpeaking'] },
-  { file: 'witness.js', global: 'Witness', api: ['configure', 'liveReset', 'resetLiveStage', 'liveRoundHeader', 'liveSpeech', 'collapseStage', 'reopenStage', 'exitClicked', 'advance', 'start'] },
+  { file: 'scene/scene.js', global: 'LodgeScene', api: ['init', 'updateSeats', 'setSpeaking', 'getSeatScreenPosition'] },
+  { file: 'witness.js', global: 'Witness', api: ['configure', 'enableRoom', 'liveReset', 'resetLiveStage', 'liveRoundHeader', 'liveSpeech', 'collapseStage', 'reopenStage', 'exitClicked', 'advance', 'start'] },
   { file: 'export.js', global: 'Export', api: ['configure', 'buildAnnotatedTranscript', 'exportMd'] },
   { file: 'sessions.js', global: 'Sessions', api: ['configure', 'restoreSession', 'collectSessionNotes'] },
   { file: 'casting.js', global: 'Casting', api: ['configure', 'getRegulars', 'isRegular', 'toggleRegular', 'seatRegulars', 'noteHandCast', 'requestProposal', 'acceptProposal', 'dismissProposal', 'consumeMetrics', 'render'] },
