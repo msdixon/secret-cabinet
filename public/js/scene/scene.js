@@ -47,9 +47,15 @@ window.LodgeScene = (function () {
   const portraitTextures = {}; // memberId -> BABYLON.Texture, cached across seat reassignment
 
   function buildTableAndSeats(scene) {
-    const table = BABYLON.MeshBuilder.CreateCylinder('table', {
-      diameter: TABLE_RADIUS * 2, height: 0.4, tessellation: 24,
-    }, scene);
+    const table = BABYLON.MeshBuilder.CreateCylinder(
+      'table',
+      {
+        diameter: TABLE_RADIUS * 2,
+        height: 0.4,
+        tessellation: 24,
+      },
+      scene
+    );
     table.position.y = 0.2;
     const tableMat = new BABYLON.StandardMaterial('tableMat', scene);
     tableMat.diffuseColor = BABYLON.Color3.FromHexString(LODGE_BORDER);
@@ -62,9 +68,15 @@ window.LodgeScene = (function () {
       const x = Math.cos(angle) * SEAT_RING_RADIUS;
       const z = Math.sin(angle) * SEAT_RING_RADIUS;
 
-      const seat = BABYLON.MeshBuilder.CreateCylinder(`seat-${i}`, {
-        diameter: 0.6, height: 0.6, tessellation: 12,
-      }, scene);
+      const seat = BABYLON.MeshBuilder.CreateCylinder(
+        `seat-${i}`,
+        {
+          diameter: 0.6,
+          height: 0.6,
+          tessellation: 12,
+        },
+        scene
+      );
       seat.position.x = x;
       seat.position.z = z;
       seat.position.y = 0.3;
@@ -77,9 +89,14 @@ window.LodgeScene = (function () {
       // Portrait billboard, hidden until a member occupies this seat.
       // BILLBOARDMODE_Y (not full billboarding) keeps the card upright as
       // it turns to face the camera, rather than tilting with elevation.
-      const avatar = BABYLON.MeshBuilder.CreatePlane(`avatar-${i}`, {
-        width: AVATAR_WIDTH, height: AVATAR_HEIGHT,
-      }, scene);
+      const avatar = BABYLON.MeshBuilder.CreatePlane(
+        `avatar-${i}`,
+        {
+          width: AVATAR_WIDTH,
+          height: AVATAR_HEIGHT,
+        },
+        scene
+      );
       avatar.position.x = x;
       avatar.position.z = z;
       avatar.position.y = AVATAR_Y;
@@ -128,8 +145,12 @@ window.LodgeScene = (function () {
   function getPortraitTexture(scene, memberId) {
     if (!portraitTextures[memberId]) {
       const tex = new BABYLON.Texture(
-        `/portraits/${memberId}.png`, scene, false, false,
-        BABYLON.Texture.TRILINEAR_SAMPLINGMODE, null,
+        `/portraits/${memberId}.png`,
+        scene,
+        false,
+        false,
+        BABYLON.Texture.TRILINEAR_SAMPLINGMODE,
+        null,
         () => {
           console.warn(`[scene] no portrait for ${memberId} yet`);
           const seat = seatMeshes.find(s => s.memberId === memberId);
@@ -177,9 +198,14 @@ window.LodgeScene = (function () {
     if (!sceneRef) return;
     sceneRef.stopAnimation(camera, `camera-${property}`);
     BABYLON.Animation.CreateAndStartAnimation(
-      `camera-${property}`, camera, property, CAMERA_FPS,
+      `camera-${property}`,
+      camera,
+      property,
+      CAMERA_FPS,
       Math.round((CAMERA_FRAME_MS / 1000) * CAMERA_FPS),
-      camera[property], toValue, BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT,
+      camera[property],
+      toValue,
+      BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT,
       getCameraEasing()
     );
   }
@@ -193,7 +219,8 @@ window.LodgeScene = (function () {
   function frameCamera(memberId) {
     if (!cameraRef) return;
     const seat = memberId && seatMeshes.find(s => s.memberId === memberId);
-    const targetAlpha = seat ? cameraRef.alpha + shortestAngleDelta(cameraRef.alpha, seat.angle)
+    const targetAlpha = seat
+      ? cameraRef.alpha + shortestAngleDelta(cameraRef.alpha, seat.angle)
       : cameraRef.alpha + shortestAngleDelta(cameraRef.alpha, CAMERA_DEFAULT_ALPHA);
     const targetRadius = seat ? CAMERA_SPEAKER_RADIUS : CAMERA_DEFAULT_RADIUS;
     animateCameraProp(cameraRef, 'alpha', targetAlpha);
@@ -263,11 +290,18 @@ window.LodgeScene = (function () {
     const viewport = cameraRef.viewport.toGlobal(rect.width, rect.height);
     const worldPos = seat.avatar.position.add(new BABYLON.Vector3(0, AVATAR_HEIGHT / 2, 0));
     const projected = BABYLON.Vector3.Project(
-      worldPos, BABYLON.Matrix.Identity(), sceneRef.getTransformMatrix(), viewport
+      worldPos,
+      BABYLON.Matrix.Identity(),
+      sceneRef.getTransformMatrix(),
+      viewport
     );
-    const visible = projected.z > 0 && projected.z < 1 &&
-      projected.x >= 0 && projected.x <= rect.width &&
-      projected.y >= 0 && projected.y <= rect.height;
+    const visible =
+      projected.z > 0 &&
+      projected.z < 1 &&
+      projected.x >= 0 &&
+      projected.x <= rect.width &&
+      projected.y >= 0 &&
+      projected.y <= rect.height;
     return { x: projected.x, y: projected.y, visible };
   }
 
@@ -282,8 +316,12 @@ window.LodgeScene = (function () {
       scene.fogDensity = 0.035;
 
       const camera = new BABYLON.ArcRotateCamera(
-        'camera', CAMERA_DEFAULT_ALPHA, Math.PI / 2.5, CAMERA_DEFAULT_RADIUS,
-        new BABYLON.Vector3(0, 1, 0), scene
+        'camera',
+        CAMERA_DEFAULT_ALPHA,
+        Math.PI / 2.5,
+        CAMERA_DEFAULT_RADIUS,
+        new BABYLON.Vector3(0, 1, 0),
+        scene
       );
       // Deliberately no attachControl — not interactive this phase.
       cameraRef = camera;

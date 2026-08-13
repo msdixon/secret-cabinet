@@ -55,13 +55,17 @@ window.Sessions = (function () {
   async function reconveneOnSession(id) {
     try {
       const data = await fetch(`/api/sessions/${id}/transcript`).then(r => r.json());
-      if (data.error) { alert('Could not load transcript.'); return; }
+      if (data.error) {
+        alert('Could not load transcript.');
+        return;
+      }
 
       // Truncate to file import limit to avoid context overflow
       const FILE_TEXT_LIMIT = 4000;
-      const truncated = data.transcript.length > FILE_TEXT_LIMIT
-        ? data.transcript.slice(0, FILE_TEXT_LIMIT) + '\n\n[transcript truncated]'
-        : data.transcript;
+      const truncated =
+        data.transcript.length > FILE_TEXT_LIMIT
+          ? data.transcript.slice(0, FILE_TEXT_LIMIT) + '\n\n[transcript truncated]'
+          : data.transcript;
 
       // Set as current document source
       deps.setCurrentEntry(truncated);
@@ -125,7 +129,9 @@ window.Sessions = (function () {
       // outside the current batch just renders flat with its branch badge --
       // no extra fetch to go find an off-screen parent.
       const byId = {};
-      sessions.forEach(s => { byId[s.id] = s; });
+      sessions.forEach(s => {
+        byId[s.id] = s;
+      });
       const childrenOf = {};
       sessions.forEach(s => {
         if (s.parentId && byId[s.parentId]) {
@@ -138,9 +144,12 @@ window.Sessions = (function () {
         const el = document.createElement('div');
         el.className = 'session-item';
         if (depth > 0) el.style.marginLeft = `${depth * 20}px`;
-        const tagsHtml = (s.tags || []).map(t =>
-          `<span class="session-tag" onclick="window.Sessions.filterByTag('${deps.escapeHTML(t)}')">${deps.escapeHTML(t)}<span class="tag-remove" onclick="event.stopPropagation();window.Sessions.removeTagById('${s.id}','${deps.escapeHTML(t)}',this)">×</span></span>`
-        ).join('');
+        const tagsHtml = (s.tags || [])
+          .map(
+            t =>
+              `<span class="session-tag" onclick="window.Sessions.filterByTag('${deps.escapeHTML(t)}')">${deps.escapeHTML(t)}<span class="tag-remove" onclick="event.stopPropagation();window.Sessions.removeTagById('${s.id}','${deps.escapeHTML(t)}',this)">×</span></span>`
+          )
+          .join('');
         const threadBadge = s.threadId
           ? `<span class="session-thread-badge" onclick="window.Sessions.filterByThread('${deps.escapeHTML(s.threadId)}','${deps.escapeHTML(s.threadName || '')}')" title="View thread: ${deps.escapeHTML(s.threadName || '')}">⬡ ${deps.escapeHTML(s.threadName || s.threadId)}</span>`
           : '';
@@ -165,7 +174,7 @@ window.Sessions = (function () {
             <button class="session-load-btn" onclick="window.Sessions.restoreSession('${s.id}')">Load this meeting</button>
             <button class="session-witness-btn" onclick="startWitnessFromSession('${s.id}')" title="Watch this meeting play back">◎ Watch</button>
             <button class="session-reconvene-btn" onclick="window.Sessions.reconveneOnSession('${s.id}')" title="Use this transcript as the document for a new session">↩ Reconvene</button>
-            <button class="session-thread-btn" onclick="window.Sessions.assignThreadUI('${s.id}', '${deps.escapeHTML(s.threadId||'')}', '${deps.escapeHTML(s.threadName||'')}', this)">⬡ Thread</button>
+            <button class="session-thread-btn" onclick="window.Sessions.assignThreadUI('${s.id}', '${deps.escapeHTML(s.threadId || '')}', '${deps.escapeHTML(s.threadName || '')}', this)">⬡ Thread</button>
             <button class="session-compare-btn" id="compare-btn-${s.id}" onclick="window.Sessions.toggleCompareSelect('${s.id}', this)">⊕ Compare</button>
             <button class="session-metrics-btn" onclick="window.Metrics.toggle('${s.id}')" title="Tokens, cost, and the director's casting rationale for this session">⚙ Metrics</button>
             <button class="session-publish-btn${s.published ? ' is-published' : ''}" onclick="window.Sessions.togglePublish('${s.id}', ${!!s.published}, this)" title="${s.published ? 'Unpublish from the public reading room' : 'Publish to the public reading room'}">${s.published ? '★ Unpublish' : '☆ Publish'}</button>
@@ -195,9 +204,14 @@ window.Sessions = (function () {
     const item = btn.closest('.session-item');
     // Toggle off if already open
     const existing = item.querySelector('.thread-picker');
-    if (existing) { existing.remove(); return; }
+    if (existing) {
+      existing.remove();
+      return;
+    }
 
-    const threadsRes = await fetch('/api/threads').then(r => r.json()).catch(() => []);
+    const threadsRes = await fetch('/api/threads')
+      .then(r => r.json())
+      .catch(() => []);
 
     const picker = document.createElement('div');
     picker.className = 'thread-picker';
@@ -205,9 +219,12 @@ window.Sessions = (function () {
     const others = threadsRes.filter(t => t.id !== currentThreadId);
     const optionsHtml = others.length
       ? `<div class="thread-pick-label">Add to existing thread</div>` +
-        others.map(t =>
-          `<button class="thread-pick-btn" onclick="window.Sessions.setThread('${sessionId}','${deps.escapeHTML(t.id)}','${deps.escapeHTML(t.name)}',this)">${deps.escapeHTML(t.name)}</button>`
-        ).join('')
+        others
+          .map(
+            t =>
+              `<button class="thread-pick-btn" onclick="window.Sessions.setThread('${sessionId}','${deps.escapeHTML(t.id)}','${deps.escapeHTML(t.name)}',this)">${deps.escapeHTML(t.name)}</button>`
+          )
+          .join('')
       : '';
     const clearHtml = currentThreadId
       ? `<button class="thread-pick-btn thread-pick-clear" onclick="window.Sessions.setThread('${sessionId}','','',this)">Remove from thread</button>`
@@ -239,9 +256,7 @@ window.Sessions = (function () {
   }
 
   async function setThread(sessionId, threadId, threadName, el) {
-    const body = (threadId || threadName)
-      ? { threadId: threadId || threadName, threadName: threadName || threadId }
-      : {};
+    const body = threadId || threadName ? { threadId: threadId || threadName, threadName: threadName || threadId } : {};
     await fetch(`/api/sessions/${sessionId}/thread`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -274,7 +289,11 @@ window.Sessions = (function () {
     const commit = async () => {
       if (committed) return;
       committed = true;
-      const val = inp.value.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/(^-|-$)/g, '');
+      const val = inp.value
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9-]/g, '-')
+        .replace(/(^-|-$)/g, '');
       inp.remove();
       if (!val) return;
       const existing = [...row.querySelectorAll('.session-tag')].map(el => el.textContent);
@@ -282,7 +301,13 @@ window.Sessions = (function () {
       const newTags = [...existing, val];
       await saveTags(sessionId, newTags, row, btn);
     };
-    inp.addEventListener('keydown', e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') { committed = true; inp.remove(); } });
+    inp.addEventListener('keydown', e => {
+      if (e.key === 'Enter') commit();
+      if (e.key === 'Escape') {
+        committed = true;
+        inp.remove();
+      }
+    });
     inp.addEventListener('blur', commit);
   }
 
@@ -302,7 +327,10 @@ window.Sessions = (function () {
     const x = document.createElement('span');
     x.className = 'tag-remove';
     x.textContent = '×';
-    x.onclick = (e) => { e.stopPropagation(); removeTagById(sessionId, tag, x); };
+    x.onclick = e => {
+      e.stopPropagation();
+      removeTagById(sessionId, tag, x);
+    };
     chip.appendChild(x);
     chip.onclick = () => filterByTag(tag);
     return chip;
@@ -317,7 +345,9 @@ window.Sessions = (function () {
       });
       row.querySelectorAll('.session-tag').forEach(c => c.remove());
       tags.forEach(t => row.insertBefore(makeTagChip(sessionId, t, addBtn), addBtn));
-    } catch (e) { /* silent */ }
+    } catch (e) {
+      /* silent */
+    }
   }
 
   async function restoreSession(id) {
@@ -352,9 +382,12 @@ window.Sessions = (function () {
       const playerMode = session.playerMode || 'none';
       const playerMemberId = session.playerMemberId || null;
       const playerName = session.playerName || null;
-      const currentPlayerSpeakerName = playerMode === 'member'
-        ? MEMBERS.find(m => m.id === playerMemberId)?.name || null
-        : playerMode === 'custom' ? playerName : null;
+      const currentPlayerSpeakerName =
+        playerMode === 'member'
+          ? MEMBERS.find(m => m.id === playerMemberId)?.name || null
+          : playerMode === 'custom'
+            ? playerName
+            : null;
       deps.setPlayerMode(playerMode);
       deps.setPlayerMemberId(playerMemberId);
       deps.setPlayerName(playerName);
@@ -366,12 +399,19 @@ window.Sessions = (function () {
       deps.restorePlayAsControlDisplay();
 
       // Rebuild transcriptText from scratch with current formatting
-      const names = (session.members || []).map(id => MEMBERS.find(m => m.id === id)?.name).filter(Boolean).join(', ');
-      deps.setTranscriptText(`THE SECRET-CABIN-ET\nMeeting Notes — ${session.date}\nAssembled: ${names}\n\nSource material:\n${session.entry || ''}\n`);
+      const names = (session.members || [])
+        .map(id => MEMBERS.find(m => m.id === id)?.name)
+        .filter(Boolean)
+        .join(', ');
+      deps.setTranscriptText(
+        `THE SECRET-CABIN-ET\nMeeting Notes — ${session.date}\nAssembled: ${names}\n\nSource material:\n${session.entry || ''}\n`
+      );
 
       // Build annotation lookup by entryId for restoration
       const annotationMap = {};
-      (session.annotations || []).forEach(a => { annotationMap[a.entryId] = a.note; });
+      (session.annotations || []).forEach(a => {
+        annotationMap[a.entryId] = a.note;
+      });
 
       // Re-render segments from stored data.
       //
@@ -494,7 +534,8 @@ window.Sessions = (function () {
       const remaining = document.getElementById('sessions-list').querySelectorAll('.session-item').length;
       document.getElementById('sessions-count').textContent = remaining || '';
       if (!remaining) {
-        document.getElementById('sessions-list').innerHTML = '<div class="sessions-empty">No past meetings found.</div>';
+        document.getElementById('sessions-list').innerHTML =
+          '<div class="sessions-empty">No past meetings found.</div>';
       }
     } catch (e) {
       alert('The meeting could not be removed.');
@@ -533,15 +574,19 @@ window.Sessions = (function () {
       return;
     }
     bar.style.display = 'flex';
-    bar.innerHTML = compareSelected.size === 1
-      ? '<span class="compare-bar-hint">Select one more to compare</span><button class="compare-bar-cancel" onclick="window.Sessions.clearCompareSelection()">✕</button>'
-      : `<button class="lodge-btn compare-bar-go" onclick="window.Sessions.openCompareView()">Compare these two</button><button class="compare-bar-cancel" onclick="window.Sessions.clearCompareSelection()">✕</button>`;
+    bar.innerHTML =
+      compareSelected.size === 1
+        ? '<span class="compare-bar-hint">Select one more to compare</span><button class="compare-bar-cancel" onclick="window.Sessions.clearCompareSelection()">✕</button>'
+        : `<button class="lodge-btn compare-bar-go" onclick="window.Sessions.openCompareView()">Compare these two</button><button class="compare-bar-cancel" onclick="window.Sessions.clearCompareSelection()">✕</button>`;
   }
 
   function clearCompareSelection() {
     compareSelected.forEach(id => {
       const btn = document.getElementById(`compare-btn-${id}`);
-      if (btn) { btn.classList.remove('active'); btn.textContent = '⊕ Compare'; }
+      if (btn) {
+        btn.classList.remove('active');
+        btn.textContent = '⊕ Compare';
+      }
     });
     compareSelected.clear();
     updateCompareBar();
@@ -578,8 +623,7 @@ window.Sessions = (function () {
   function renderComparePanel(containerId, session) {
     const { MEMBERS } = deps.getCore();
     const panel = document.getElementById(containerId);
-    const memberNames = (session.members || [])
-      .map(id => MEMBERS.find(m => m.id === id)?.name || id).join(' · ');
+    const memberNames = (session.members || []).map(id => MEMBERS.find(m => m.id === id)?.name || id).join(' · ');
     panel.innerHTML = `
       <div class="compare-panel-header">
         <div class="compare-panel-date">${session.date}</div>
@@ -614,12 +658,16 @@ window.Sessions = (function () {
     let localLastId = null;
     let localCurrentSide = 'right';
     const localSide = id => {
-      if (id !== localLastId) { localCurrentSide = localCurrentSide === 'left' ? 'right' : 'left'; localLastId = id; }
+      if (id !== localLastId) {
+        localCurrentSide = localCurrentSide === 'left' ? 'right' : 'left';
+        localLastId = id;
+      }
       return localCurrentSide;
     };
 
     const lines = text.split('\n');
-    let speaker = null, textLines = [];
+    let speaker = null,
+      textLines = [];
 
     const flush = () => {
       if (!speaker || !textLines.length) return;
@@ -630,12 +678,16 @@ window.Sessions = (function () {
       e.className = `transcript-entry bubble-${side}`;
       e.innerHTML = `<div class="speaker-name ${nc}">${deps.escapeHTML(speaker)}</div><div class="bubble-body"><div class="speech-text">${deps.renderActions(textLines.join('\n').trim())}</div></div>`;
       container.appendChild(e);
-      speaker = null; textLines = [];
+      speaker = null;
+      textLines = [];
     };
 
     lines.forEach(line => {
       const t = line.trim();
-      if (!t) { flush(); return; }
+      if (!t) {
+        flush();
+        return;
+      }
       if (t === '---' || t === '—' || t === '--') return;
       const isAction = /^\*[^*\n]+\*$/.test(t);
       if (isAction && !speaker) {
@@ -647,8 +699,11 @@ window.Sessions = (function () {
       }
       const isKnownName = deps.isKnownSpeakerHeader(t, MEMBERS);
       const looksLikeName = !t.includes(' ') && t.length < 30 && /^[A-Z]/.test(t) && !t.includes('*');
-      if (isKnownName || looksLikeName) { flush(); speaker = t.replace(/:$/, ''); textLines = []; }
-      else if (speaker) textLines.push(t);
+      if (isKnownName || looksLikeName) {
+        flush();
+        speaker = t.replace(/:$/, '');
+        textLines = [];
+      } else if (speaker) textLines.push(t);
     });
     flush();
   }
@@ -674,11 +729,13 @@ window.Sessions = (function () {
       if (ta.value.trim()) sessionNotes[ta.dataset.memberId] = ta.value;
     });
 
-    const entries = await Promise.all(memberIds.map(id =>
-      fetch(`/api/members/${id}/dossier`)
-        .then(r => r.ok ? r.json() : null)
-        .catch(() => null)
-    ));
+    const entries = await Promise.all(
+      memberIds.map(id =>
+        fetch(`/api/members/${id}/dossier`)
+          .then(r => (r.ok ? r.json() : null))
+          .catch(() => null)
+      )
+    );
 
     body.innerHTML = '';
     entries.filter(Boolean).forEach(d => {
@@ -691,11 +748,19 @@ window.Sessions = (function () {
           <img class="dossier-portrait" src="/portraits/${d.id}.png" alt="" loading="lazy" onerror="this.remove()">
           <div class="dossier-name">${deps.escapeHTML(d.name)}</div>
         </div>
-        ${d.bio ? `<div class="dossier-section-label">Who they are</div>
-        <div class="dossier-text">${deps.escapeHTML(d.bio)}</div>` : ''}
-        ${d.voice ? `<button class="dossier-toggle" onclick="this.nextElementSibling.classList.toggle('open');this.textContent=this.nextElementSibling.classList.contains('open')?'▲ Voice':'▼ Voice'">▼ Voice</button>
+        ${
+          d.bio
+            ? `<div class="dossier-section-label">Who they are</div>
+        <div class="dossier-text">${deps.escapeHTML(d.bio)}</div>`
+            : ''
+        }
+        ${
+          d.voice
+            ? `<button class="dossier-toggle" onclick="this.nextElementSibling.classList.toggle('open');this.textContent=this.nextElementSibling.classList.contains('open')?'▲ Voice':'▼ Voice'">▼ Voice</button>
         <div class="dossier-voice"><div class="dossier-section-label">How they speak</div>
-        <div class="dossier-text">${deps.escapeHTML(d.voice)}</div></div>` : ''}
+        <div class="dossier-text">${deps.escapeHTML(d.voice)}</div></div>`
+            : ''
+        }
         <div class="dossier-section-label" style="margin-top:10px;">Session note</div>
         <textarea class="dossier-note arc-textarea" data-member-id="${d.id}" rows="2"
           placeholder="Context for this session only — not saved to the character file."

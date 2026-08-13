@@ -21,10 +21,14 @@
 // is handed to the director programmatically (minCount/maxCount), not
 // threaded through instruction prose anymore.
 const ARC_NOTES = {
-  opening: 'The room stirs. Initial reactions to whatever the material woke up — not every member need engage with the document directly; some may respond to the room\'s reaction to it before responding to it themselves. There is no author to address.',
-  crosstalk: 'The document recedes. The conversation follows what it raised. Members are now talking to each other about the actual question that has surfaced — disagreements crystallize, alliances form, citations come out, someone is irritated, someone is more interested than they wanted to be. References to the document are welcome but not required; the room is no longer obliged to it. Receipts may be deployed. Actions in asterisks.',
-  embers: 'The conversation has gone where it has gone. It may have left the document entirely. The room may be arriving somewhere, or it may not. Someone may say the thing that persists as an ember. Someone may push back hard at a point that has been allowed to stand too long. Someone may simply observe the fire.',
-  extended: 'A thread unresolved, a silence wanting breaking, a late arrival to the argument, a member who passed earlier returning with something they have just thought of.',
+  opening:
+    "The room stirs. Initial reactions to whatever the material woke up — not every member need engage with the document directly; some may respond to the room's reaction to it before responding to it themselves. There is no author to address.",
+  crosstalk:
+    'The document recedes. The conversation follows what it raised. Members are now talking to each other about the actual question that has surfaced — disagreements crystallize, alliances form, citations come out, someone is irritated, someone is more interested than they wanted to be. References to the document are welcome but not required; the room is no longer obliged to it. Receipts may be deployed. Actions in asterisks.',
+  embers:
+    'The conversation has gone where it has gone. It may have left the document entirely. The room may be arriving somewhere, or it may not. Someone may say the thing that persists as an ember. Someone may push back hard at a point that has been allowed to stand too long. Someone may simply observe the fire.',
+  extended:
+    'A thread unresolved, a silence wanting breaking, a late arrival to the argument, a member who passed earlier returning with something they have just thought of.',
 };
 
 // Multiples of the breath budget (pipeline.js's BREATH_BUDGET_WORDS) at
@@ -60,7 +64,16 @@ const INTERJECT_SPEAKER_COUNT = 3; // today's prose only ever suggested "2-3", n
 // note entirely for the whole meeting — same override semantics the old
 // per-round `instructions[index]` had, just collapsed from an array to one
 // free-text field (#194 touchpoint 2).
-function buildPassagePrompt({ entry, meetingNote, isFirst = false, artifact = null, isTranscriptSource = false, roster = [], wordsSpent = 0, breathBudget }) {
+function buildPassagePrompt({
+  entry,
+  meetingNote,
+  isFirst = false,
+  artifact = null,
+  isTranscriptSource = false,
+  roster = [],
+  wordsSpent = 0,
+  breathBudget,
+}) {
   const instr = meetingNote?.trim() || arcNoteForProgress({ wordsSpent, breathBudget });
   if (isFirst) {
     const artifactMember = artifact?.memberId ? roster.find(m => m.id === artifact.memberId) : null;
@@ -83,7 +96,11 @@ function deriveMeetingNote(session) {
   if (session?.meetingNote?.trim()) return session.meetingNote.trim();
   const legacy = session?.roundInstructions;
   if (Array.isArray(legacy) && legacy.length) {
-    const joined = legacy.filter(Boolean).map(s => s.trim()).filter(Boolean).join(' ');
+    const joined = legacy
+      .filter(Boolean)
+      .map(s => s.trim())
+      .filter(Boolean)
+      .join(' ');
     return joined || null;
   }
   return null;
@@ -99,9 +116,7 @@ function deriveMeetingNote(session) {
 // standing in for a roster seat.
 
 function playerDirectorPool(memberIds, playerMode, playerMemberId) {
-  return (playerMode === 'member' && playerMemberId)
-    ? memberIds.filter(id => id !== playerMemberId)
-    : memberIds;
+  return playerMode === 'member' && playerMemberId ? memberIds.filter(id => id !== playerMemberId) : memberIds;
 }
 
 function resolvePlayerName(playerMode, playerMemberId, playerName, roster = []) {

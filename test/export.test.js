@@ -72,20 +72,22 @@ function boot(t, { core = makeCore(), bodyHtml = FIXTURE } = {}) {
 // produces — buildAnnotatedTranscript reads these back out of the DOM.
 function addEntry(document, { speaker, text, note = null, playerTurn = false }) {
   const el = document.createElement('div');
-  el.className = 'transcript-entry'
-    + (note !== null ? ' annotated' : '')
-    + (playerTurn ? ' player-turn' : '');
+  el.className = 'transcript-entry' + (note !== null ? ' annotated' : '') + (playerTurn ? ' player-turn' : '');
   el.dataset.speaker = speaker;
-  el.innerHTML = `<div class="speech-text">${text}</div>`
-    + (note !== null ? `<textarea class="annotation-input">${note}</textarea>` : '');
+  el.innerHTML =
+    `<div class="speech-text">${text}</div>` +
+    (note !== null ? `<textarea class="annotation-input">${note}</textarea>` : '');
   document.getElementById('transcript-content').appendChild(el);
   return el;
 }
 
 test('the export fixture matches the ids index.html actually ships', () => {
   assertIdsExistInIndexHtml([
-    'export-scholarly-btn', 'export-journal-name',
-    'ulysses-group', 'ulysses-group-id', 'obsidian-vault',
+    'export-scholarly-btn',
+    'export-journal-name',
+    'ulysses-group',
+    'ulysses-group-id',
+    'obsidian-vault',
   ]);
 });
 
@@ -116,7 +118,12 @@ test('buildAnnotatedTranscript', async t => {
 
   await t.test('emits both markers for a speech that is annotated and player-played', t2 => {
     const { document, module: Export } = boot(t2);
-    addEntry(document, { speaker: 'Crowley', text: 'The book is not the point.', note: 'my own gloss', playerTurn: true });
+    addEntry(document, {
+      speaker: 'Crowley',
+      text: 'The book is not the point.',
+      note: 'my own gloss',
+      playerTurn: true,
+    });
 
     const out = Export.buildAnnotatedTranscript();
     assert.match(out, /↳ my own gloss/);

@@ -32,11 +32,11 @@ let pendingRetry = null;
 let lastInterjectText = '';
 
 // ── Player-as-member ─────────────────────────────────────────────────────────
-let playerMode = 'none';             // 'none' | 'member' | 'custom' — snapshotted at convene() start
+let playerMode = 'none'; // 'none' | 'member' | 'custom' — snapshotted at convene() start
 let playerMemberId = null;
 let playerName = null;
 let currentPlayerSpeakerName = null; // resolved display name; drives parser recognition of custom identities
-let sessionPlayerTurns = [];         // [{round, speakerName, text}] — `round` is the segment index (#245)
+let sessionPlayerTurns = []; // [{round, speakerName, text}] — `round` is the segment index (#245)
 let playerTurnsRevealed = false;
 
 // ── Render member tokens ──────────────────────────────────────────────────────
@@ -53,7 +53,8 @@ function renderMembers() {
   // alphabet.
   const filter = (document.getElementById('member-filter')?.value || '').trim().toLowerCase();
   const roster = [...MEMBERS].sort((a, b) => {
-    const ra = window.Casting.isRegular(a.id), rb = window.Casting.isRegular(b.id);
+    const ra = window.Casting.isRegular(a.id),
+      rb = window.Casting.isRegular(b.id);
     if (ra !== rb) return ra ? -1 : 1;
     return a.name.localeCompare(b.name);
   });
@@ -70,10 +71,11 @@ function renderMembers() {
     // Roster names are user-authored (+ Invite to the Lodge), and the pin puts
     // one inside two attributes — escape rather than trust it there.
     const safeName = escapeHTML(m.name);
-    el.innerHTML = `<img class="member-portrait" src="/portraits/${m.id}.png" alt="" loading="lazy" onerror="portraitFallback(this,'dot')"><span class="member-name">${m.name}</span>`
-      + `<button type="button" class="member-pin${isRegular ? ' pinned' : ''}" aria-pressed="${isRegular}"`
-      + ` title="${isRegular ? `${safeName} is a regular — always drawn to the room. Click to release.` : `Keep ${safeName} as a regular — always drawn to the room.`}"`
-      + ` aria-label="${isRegular ? 'Release' : 'Keep'} ${safeName} as a regular">✦</button>`;
+    el.innerHTML =
+      `<img class="member-portrait" src="/portraits/${m.id}.png" alt="" loading="lazy" onerror="portraitFallback(this,'dot')"><span class="member-name">${m.name}</span>` +
+      `<button type="button" class="member-pin${isRegular ? ' pinned' : ''}" aria-pressed="${isRegular}"` +
+      ` title="${isRegular ? `${safeName} is a regular — always drawn to the room. Click to release.` : `Keep ${safeName} as a regular — always drawn to the room.`}"` +
+      ` aria-label="${isRegular ? 'Release' : 'Keep'} ${safeName} as a regular">✦</button>`;
     el.onclick = () => {
       if (isActive) activeMembers.delete(m.id);
       else activeMembers.add(m.id);
@@ -82,7 +84,7 @@ function renderMembers() {
     };
     // The pin sits inside the token but answers a different question — who is
     // always here, not who is here tonight — so it must not also toggle presence.
-    el.querySelector('.member-pin').onclick = (e) => {
+    el.querySelector('.member-pin').onclick = e => {
       e.stopPropagation();
       window.Casting.toggleRegular(m.id);
     };
@@ -90,7 +92,7 @@ function renderMembers() {
   });
 
   const emptyHint = document.getElementById('members-empty-hint');
-  emptyHint.style.display = (filter && visibleCount === 0) ? 'block' : 'none';
+  emptyHint.style.display = filter && visibleCount === 0 ? 'block' : 'none';
   if (filter) document.getElementById('members-empty-hint-term').textContent = filter;
 
   updateMemberCount();
@@ -123,7 +125,9 @@ function populatePlayAsMemberSelect() {
   const current = sel.value;
   const active = [...activeMembers];
   sel.innerHTML = '<option value="">— select a present member —</option>';
-  active.map(id => MEMBERS.find(m => m.id === id)).filter(Boolean)
+  active
+    .map(id => MEMBERS.find(m => m.id === id))
+    .filter(Boolean)
     .sort((a, b) => a.name.localeCompare(b.name))
     .forEach(m => {
       const opt = document.createElement('option');
@@ -131,11 +135,17 @@ function populatePlayAsMemberSelect() {
       opt.textContent = m.name;
       sel.appendChild(opt);
     });
-  if (current && active.includes(current)) { sel.value = current; return; }
+  if (current && active.includes(current)) {
+    sel.value = current;
+    return;
+  }
   // The previously "played" member is no longer present — reset defensively
   // rather than silently keeping a stale selection.
   const modeSel = document.getElementById('play-as-mode-select');
-  if (modeSel?.value === 'member') { modeSel.value = 'none'; handlePlayAsModeChange(); }
+  if (modeSel?.value === 'member') {
+    modeSel.value = 'none';
+    handlePlayAsModeChange();
+  }
 }
 
 function handlePlayAsModeChange() {
@@ -202,7 +212,10 @@ function awaitPlayerTurn(roundLabel) {
       cleanup();
       resolve(text ? { text } : null);
     };
-    passBtn.onclick = () => { cleanup(); resolve(null); };
+    passBtn.onclick = () => {
+      cleanup();
+      resolve(null);
+    };
   });
 }
 
@@ -212,16 +225,17 @@ function updateMemberCount() {
   if (!badge) return;
   badge.textContent = `${n} present`;
   badge.className = 'member-count-badge' + (n >= 8 ? ' over' : n >= 6 ? ' warn' : '');
-  badge.title = n >= 6
-    ? `${n} members active — larger casts reduce individual voice distinction and increase generation time. 4–6 recommended.`
-    : '';
+  badge.title =
+    n >= 6
+      ? `${n} members active — larger casts reduce individual voice distinction and increase generation time. 4–6 recommended.`
+      : '';
 }
 
 // ── Ember animation ───────────────────────────────────────────────────────────
 
 function setEmber(active) {
   document.getElementById('ember-bar').className = 'ember-bar' + (active ? ' active' : '');
-  ['s1','s2','s3','s4','s5'].forEach(id => {
+  ['s1', 's2', 's3', 's4', 's5'].forEach(id => {
     document.getElementById(id).className = 'spark' + (active ? ' active' : '');
   });
 }
@@ -312,7 +326,7 @@ function awaitLull(els) {
       return { actions, cont, end };
     });
     recordFollow();
-    const choose = (choice) => {
+    const choose = choice => {
       abandonLull = null;
       rows.forEach(r => r.actions.remove());
       resolve(choice);
@@ -348,7 +362,12 @@ function addBranchControl(headerEl, roundIndex) {
 
 async function branchFromRound(roundIndex) {
   if (!currentSessionId) return;
-  if (!confirm('Branch from this lull? A new meeting is created sharing everything up to here, and you continue from there — the original stays untouched.')) return;
+  if (
+    !confirm(
+      'Branch from this lull? A new meeting is created sharing everything up to here, and you continue from there — the original stays untouched.'
+    )
+  )
+    return;
   setStatus('Branching...', true);
   try {
     const res = await fetch(`/api/sessions/${currentSessionId}/branch`, {
@@ -368,11 +387,12 @@ async function branchFromRound(roundIndex) {
 
 // Escape HTML to avoid injecting from model output, then transform asterisk-actions.
 function escapeHTML(s) {
-  return s.replace(/&/g, '&amp;')
-          .replace(/</g, '&lt;')
-          .replace(/>/g, '&gt;')
-          .replace(/"/g, '&quot;')
-          .replace(/'/g, '&#39;');
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 // Swaps a broken <img class="...-portrait"> for its pre-portrait placeholder
@@ -437,7 +457,9 @@ function getSpeakerSide(speakerId) {
 // source of truth both the scroll listener and every append call site read.
 let recordAttached = true;
 
-function recordScrollEl() { return document.getElementById('record-scroll'); }
+function recordScrollEl() {
+  return document.getElementById('record-scroll');
+}
 
 function initRecordScroll() {
   const el = recordScrollEl();
@@ -445,8 +467,13 @@ function initRecordScroll() {
   if (!el || !pill) return;
   el.addEventListener('scroll', () => {
     const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
-    if (atBottom && !recordAttached) { recordAttached = true; pill.classList.remove('visible'); }
-    else if (!atBottom && recordAttached) { recordAttached = false; pill.classList.add('visible'); }
+    if (atBottom && !recordAttached) {
+      recordAttached = true;
+      pill.classList.remove('visible');
+    } else if (!atBottom && recordAttached) {
+      recordAttached = false;
+      pill.classList.add('visible');
+    }
   });
   pill.addEventListener('click', jumpToLive);
 }
@@ -471,7 +498,11 @@ function addSpeech(speaker, text, isObserver, memberId, existingAnnotation) {
   const c = document.getElementById('transcript-content');
   // If every non-empty line is wrapped in *...*, render as centered action line(s) with
   // no bubble and no speaker-side update. Handles both single and multi-line action blocks.
-  const nonEmptyLines = text.trim().split('\n').map(l => l.trim()).filter(Boolean);
+  const nonEmptyLines = text
+    .trim()
+    .split('\n')
+    .map(l => l.trim())
+    .filter(Boolean);
   const allAction = nonEmptyLines.length > 0 && nonEmptyLines.every(l => /^\*[^*]+\*$/.test(l));
   if (allAction) {
     nonEmptyLines.forEach(l => {
@@ -533,11 +564,13 @@ async function saveAnnotation(textarea) {
   entry.classList.toggle('annotated', !!note);
   if (!currentSessionId) return;
   // Collect all annotations across all entries
-  const all = [...document.querySelectorAll('.transcript-entry')].map(e => ({
-    entryId: e.dataset.entryId,
-    speaker: e.dataset.speaker,
-    note: e.querySelector('.annotation-input')?.value.trim() || '',
-  })).filter(a => a.note);
+  const all = [...document.querySelectorAll('.transcript-entry')]
+    .map(e => ({
+      entryId: e.dataset.entryId,
+      speaker: e.dataset.speaker,
+      note: e.querySelector('.annotation-input')?.value.trim() || '',
+    }))
+    .filter(a => a.note);
   await fetch(`/api/sessions/${currentSessionId}/annotations`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
@@ -563,8 +596,13 @@ async function saveAnnotation(textarea) {
 const ALIAS_STOPWORDS = new Set(['of', 'the', 'van', 'der', 'de', 'la', 'lady', 'sir', 'dr', 'st']);
 
 function normalizeSpeaker(s) {
-  return s.normalize('NFD').replace(/[̀-ͯ]/g, '')
-    .replace(/['’]/g, '').toLowerCase().replace(/[\s-]+/g, ' ').trim();
+  return s
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/['’]/g, '')
+    .toLowerCase()
+    .replace(/[\s-]+/g, ' ')
+    .trim();
 }
 
 function buildAliasIndex(members) {
@@ -577,7 +615,8 @@ function buildAliasIndex(members) {
   };
   members.forEach(m => {
     register(m.name, m.id);
-    m.name.split(/[\s-]+/)
+    m.name
+      .split(/[\s-]+/)
       .filter(tok => tok.length > 2 && !ALIAS_STOPWORDS.has(tok.toLowerCase()))
       .forEach(tok => register(tok, m.id));
     (m.aliases || []).forEach(a => register(a, m.id));
@@ -628,7 +667,8 @@ function isKnownSpeakerHeader(t, members) {
 function parseAndRenderTranscript(response) {
   const c0 = document.getElementById('transcript-content');
   const lines = response.split('\n');
-  let speaker = null, textLines = [];
+  let speaker = null,
+    textLines = [];
 
   const flush = () => {
     if (speaker && textLines.length) {
@@ -637,7 +677,10 @@ function parseAndRenderTranscript(response) {
       addSpeech(speaker, text, false, m?.id, null);
       // If the block was pure action, preserve speaker so the next speech
       // (without a repeated header) still gets attributed correctly.
-      const nonEmpty = text.split('\n').map(l => l.trim()).filter(Boolean);
+      const nonEmpty = text
+        .split('\n')
+        .map(l => l.trim())
+        .filter(Boolean);
       const wasPureAction = nonEmpty.length > 0 && nonEmpty.every(l => /^\*[^*]+\*$/.test(l));
       if (!wasPureAction) speaker = null;
       textLines = [];
@@ -646,7 +689,10 @@ function parseAndRenderTranscript(response) {
 
   lines.forEach(line => {
     const t = line.trim();
-    if (!t) { flush(); return; }
+    if (!t) {
+      flush();
+      return;
+    }
     // Skip model-generated dividers and bare em-dashes
     if (t === '---' || t === '—' || t === '--') return;
     // Unattributed action line between speakers — render directly, no speaker needed
@@ -710,10 +756,16 @@ async function streamPost(url, body, onChunk, onSpeaking, onSpeakerDone) {
         if (!raw.startsWith('data: ')) continue;
         const data = JSON.parse(raw.slice(6));
         if (data.error) throw new Error(data.error);
-        if (data.done) { donePayload = data; }
-        else if (data.text) { onChunk(data.text); }
-        else if (data.speaking) { window.LodgeScene?.setSpeaking(data.speaking); onSpeaking?.(data.speaking); }
-        else if (data.speakerDone) { onSpeakerDone?.(data.speakerDone); }
+        if (data.done) {
+          donePayload = data;
+        } else if (data.text) {
+          onChunk(data.text);
+        } else if (data.speaking) {
+          window.LodgeScene?.setSpeaking(data.speaking);
+          onSpeaking?.(data.speaking);
+        } else if (data.speakerDone) {
+          onSpeakerDone?.(data.speakerDone);
+        }
       }
     }
   } finally {
@@ -762,7 +814,10 @@ function startStreamEntry() {
   let speakerMemberId = null;
 
   function removeTyping() {
-    if (typingEl) { typingEl.remove(); typingEl = null; }
+    if (typingEl) {
+      typingEl.remove();
+      typingEl = null;
+    }
     window.Witness.liveClearTyping();
   }
 
@@ -857,8 +912,14 @@ async function retryFromError() {
 
 async function convene() {
   const entry = window.Export.getEntry();
-  if (!entry) { setStatus('The room requires a document.', false); return; }
-  if (activeMembers.size < 2) { setStatus('At least two must be present.', false); return; }
+  if (!entry) {
+    setStatus('The room requires a document.', false);
+    return;
+  }
+  if (activeMembers.size < 2) {
+    setStatus('At least two must be present.', false);
+    return;
+  }
 
   releasePendingLull();
   document.getElementById('transcript-empty').style.display = 'none';
@@ -868,7 +929,8 @@ async function convene() {
   recordAttached = true;
   document.getElementById('record-live-pill')?.classList.remove('visible');
 
-  lastSpeakerId = null; currentSpeakerSide = 'right';
+  lastSpeakerId = null;
+  currentSpeakerSide = 'right';
   document.getElementById('convene-btn').disabled = true;
   document.getElementById('after-panel').className = 'after-panel';
   document.getElementById('interject-form').style.display = 'none';
@@ -888,23 +950,29 @@ async function convene() {
   // Snapshot "Play as" state — a mid-session change to the (now-hidden) controls
   // should never affect an in-flight session.
   playerMode = document.getElementById('play-as-mode-select')?.value || 'none';
-  playerMemberId = playerMode === 'member' ? (document.getElementById('play-as-member-select')?.value || null) : null;
-  playerName = playerMode === 'custom' ? (document.getElementById('play-as-custom-name')?.value.trim() || null) : null;
-  currentPlayerSpeakerName = playerMode === 'member'
-    ? MEMBERS.find(m => m.id === playerMemberId)?.name || null
-    : playerMode === 'custom' ? playerName : null;
+  playerMemberId = playerMode === 'member' ? document.getElementById('play-as-member-select')?.value || null : null;
+  playerName = playerMode === 'custom' ? document.getElementById('play-as-custom-name')?.value.trim() || null : null;
+  currentPlayerSpeakerName =
+    playerMode === 'member'
+      ? MEMBERS.find(m => m.id === playerMemberId)?.name || null
+      : playerMode === 'custom'
+        ? playerName
+        : null;
   sessionPlayerTurns = [];
   playerTurnsRevealed = false;
   document.getElementById('transcript-panel')?.classList.remove('reveal-player-turns');
 
   const members = [...activeMembers];
-  const memberNames = members.map(id => MEMBERS.find(m => m.id === id)?.name).filter(Boolean).join(', ');
+  const memberNames = members
+    .map(id => MEMBERS.find(m => m.id === id)?.name)
+    .filter(Boolean)
+    .join(', ');
   const entryForHeader = window.Export.getEntry();
   transcriptText = `THE SECRET-CABIN-ET\nMeeting Notes — ${sessionDate}\nAssembled: ${memberNames}\n\nSource material:\n${entryForHeader}\n`;
 
   const artifactText = document.getElementById('artifact-text')?.value.trim();
   const artifactMemberId = document.getElementById('artifact-member')?.value;
-  const artifact = (artifactText && artifactMemberId) ? { text: artifactText, memberId: artifactMemberId } : null;
+  const artifact = artifactText && artifactMemberId ? { text: artifactText, memberId: artifactMemberId } : null;
   const notes = window.Sessions.collectSessionNotes();
 
   try {
@@ -916,7 +984,24 @@ async function convene() {
     const s1 = startStreamEntry();
     let d1;
     try {
-      d1 = await streamPost('/api/convene', { entry, members, artifact, notes, sourceSessionId: currentSourceSessionId || undefined, playerMode, playerMemberId, playerName, playerTurn: playerTurn1 || undefined, castMetrics: window.Casting.consumeMetrics() }, chunk => s1.append(chunk), s1.onSpeaking, s1.onSpeakerDone);
+      d1 = await streamPost(
+        '/api/convene',
+        {
+          entry,
+          members,
+          artifact,
+          notes,
+          sourceSessionId: currentSourceSessionId || undefined,
+          playerMode,
+          playerMemberId,
+          playerName,
+          playerTurn: playerTurn1 || undefined,
+          castMetrics: window.Casting.consumeMetrics(),
+        },
+        chunk => s1.append(chunk),
+        s1.onSpeaking,
+        s1.onSpeakerDone
+      );
       s1.finalize(d1.text);
       currentSessionId = d1.sessionId;
       segmentCount = 1;
@@ -926,10 +1011,12 @@ async function convene() {
         applyPlayerTurnMarkers(sessionPlayerTurns);
       }
     } catch (err) {
-      s1.abort(); transcriptText = txtBefore1;
-      const msg = err.message && !err.message.startsWith('Server error')
-        ? err.message
-        : 'The room could not begin. The fire may be low.';
+      s1.abort();
+      transcriptText = txtBefore1;
+      const msg =
+        err.message && !err.message.startsWith('Server error')
+          ? err.message
+          : 'The room could not begin. The fire may be low.';
       setError(msg, convene);
       return;
     }
@@ -952,7 +1039,10 @@ async function runLullLoop(lullNote) {
     setStatus(note, false);
     const choice = await awaitLull([lull, stageLull]);
     if (choice === 'abandoned') return;
-    if (choice === 'end') { await closeMeeting(); return; }
+    if (choice === 'end') {
+      await closeMeeting();
+      return;
+    }
     const next = await runPassage(note);
     if (next === null) return; // the error is on screen with its own retry
     note = next;
@@ -970,7 +1060,13 @@ async function runPassage(lullNote) {
   setRenderSegment(idx);
   const s = startStreamEntry();
   try {
-    const d = await streamPost('/api/round', { sessionId: currentSessionId, playerTurn: playerTurn || undefined }, chunk => s.append(chunk), s.onSpeaking, s.onSpeakerDone);
+    const d = await streamPost(
+      '/api/round',
+      { sessionId: currentSessionId, playerTurn: playerTurn || undefined },
+      chunk => s.append(chunk),
+      s.onSpeaking,
+      s.onSpeakerDone
+    );
     s.finalize(d.text);
     segmentCount = idx + 1;
     if (playerTurn) {
@@ -979,7 +1075,8 @@ async function runPassage(lullNote) {
     }
     return d.label;
   } catch (err) {
-    s.abort(); transcriptText = txtBefore;
+    s.abort();
+    transcriptText = txtBefore;
     showSessionControls();
     setError('The room could not go on.', () => resumeMeeting(lullNote));
     return null;
@@ -1017,7 +1114,8 @@ async function closeMeeting() {
 function showSessionControls() {
   document.getElementById('after-panel').className = 'after-panel visible';
   document.getElementById('verify-citations-btn').className = 'lodge-btn visible';
-  document.getElementById('reveal-player-turns-btn').className = 'lodge-btn' + (sessionPlayerTurns.length ? ' visible' : '');
+  document.getElementById('reveal-player-turns-btn').className =
+    'lodge-btn' + (sessionPlayerTurns.length ? ' visible' : '');
   window.Export.updateScholarlyExportButton();
 }
 
@@ -1033,7 +1131,11 @@ const CITATION_VERDICT_SEVERITY = { unverified: 2, uncertain: 1, verified: 0 };
 // on. Missing on pre-#153 sessions (citationFlags saved before this field
 // existed) — default to 'model-knowledge' there, since that was the only
 // method available at the time, not 'library' (which would overstate it).
-const CITATION_SOURCE_LABEL = { library: 'checked against curated text', web: 'checked via live lookup', 'model-knowledge': "Claude's own knowledge" };
+const CITATION_SOURCE_LABEL = {
+  library: 'checked against curated text',
+  web: 'checked via live lookup',
+  'model-knowledge': "Claude's own knowledge",
+};
 
 function applyCitationFlags(citations) {
   // Strip markdown emphasis asterisks (renderActions() strips them from the
@@ -1059,14 +1161,17 @@ function applyCitationFlags(citations) {
   });
   byEntry.forEach((flags, entry) => {
     const worst = flags.reduce((a, b) =>
-      CITATION_VERDICT_SEVERITY[b.verdict] > CITATION_VERDICT_SEVERITY[a.verdict] ? b : a);
+      CITATION_VERDICT_SEVERITY[b.verdict] > CITATION_VERDICT_SEVERITY[a.verdict] ? b : a
+    );
     entry.classList.add('flagged-citation', `citation-${worst.verdict}`);
     const speechEl = entry.querySelector('.speech-text');
-    speechEl.title = flags.map(f => {
-      const sourceLabel = CITATION_SOURCE_LABEL[f.source || 'model-knowledge'];
-      const groundedIn = f.libraryCitation || f.webSourceTitle;
-      return `[${sourceLabel}] ${f.note}` + (groundedIn ? `\nGrounded in: ${groundedIn}` : '');
-    }).join('\n\n');
+    speechEl.title = flags
+      .map(f => {
+        const sourceLabel = CITATION_SOURCE_LABEL[f.source || 'model-knowledge'];
+        const groundedIn = f.libraryCitation || f.webSourceTitle;
+        return `[${sourceLabel}] ${f.note}` + (groundedIn ? `\nGrounded in: ${groundedIn}` : '');
+      })
+      .join('\n\n');
     // #30 — archival image synced to whichever cited work has one, alongside the speech block.
     const withImage = flags.find(f => f.libraryImage);
     if (withImage) attachArchivalImage(entry, withImage);
@@ -1081,7 +1186,9 @@ function attachArchivalImage(entry, flag) {
   const body = entry.querySelector('.bubble-body');
   if (!body || body.querySelector('.archival-image')) return;
   const caption = escapeHTML(flag.libraryCitation || flag.work || 'Archival source');
-  const href = flag.librarySourceUrl ? ` href="${escapeHTML(flag.librarySourceUrl)}" target="_blank" rel="noopener"` : '';
+  const href = flag.librarySourceUrl
+    ? ` href="${escapeHTML(flag.librarySourceUrl)}" target="_blank" rel="noopener"`
+    : '';
   const tag = flag.librarySourceUrl ? 'a' : 'span';
   const fig = document.createElement('div');
   fig.className = 'archival-image';
@@ -1125,8 +1232,9 @@ function applyPlayerTurnMarkers(playerTurns) {
 function togglePlayerTurnReveal() {
   playerTurnsRevealed = !playerTurnsRevealed;
   document.getElementById('transcript-panel').classList.toggle('reveal-player-turns', playerTurnsRevealed);
-  document.getElementById('reveal-player-turns-btn').textContent =
-    playerTurnsRevealed ? 'Hide Player Turns ◆' : 'Reveal Player Turns ◆';
+  document.getElementById('reveal-player-turns-btn').textContent = playerTurnsRevealed
+    ? 'Hide Player Turns ◆'
+    : 'Reveal Player Turns ◆';
 }
 
 // ── Stir the room again ──────────────────────────────────────────────────────
@@ -1150,7 +1258,13 @@ async function stirRoom() {
   const s = startStreamEntry();
 
   try {
-    const d = await streamPost('/api/round', { sessionId: currentSessionId }, chunk => s.append(chunk), s.onSpeaking, s.onSpeakerDone);
+    const d = await streamPost(
+      '/api/round',
+      { sessionId: currentSessionId },
+      chunk => s.append(chunk),
+      s.onSpeaking,
+      s.onSpeakerDone
+    );
     s.finalize(d.text);
     segmentCount = idx + 1;
     addLullDivider(d.label, idx);
@@ -1158,7 +1272,8 @@ async function stirRoom() {
     await closeMeeting();
     setStatus('The embers hold a while longer.', false);
   } catch (err) {
-    s.abort(); transcriptText = txtBefore;
+    s.abort();
+    transcriptText = txtBefore;
     setError('The room could not be stirred.', stirRoom);
   } finally {
     btn.disabled = false;
@@ -1194,7 +1309,13 @@ async function interject() {
 async function sendInterject(text) {
   const s = startStreamEntry();
   try {
-    const d = await streamPost('/api/interject', { sessionId: currentSessionId, text }, chunk => s.append(chunk), s.onSpeaking, s.onSpeakerDone);
+    const d = await streamPost(
+      '/api/interject',
+      { sessionId: currentSessionId, text },
+      chunk => s.append(chunk),
+      s.onSpeaking,
+      s.onSpeakerDone
+    );
     s.finalize(d.text);
     lastInterjectText = '';
     setStatus('The presence withdraws. The room continues.', false);
@@ -1214,9 +1335,8 @@ function reconveneOnCurrentSession() {
   if (!currentSessionId || !transcriptText) return;
   const FILE_TEXT_LIMIT = 4000;
   const full = window.Export.buildAnnotatedTranscript();
-  const truncated = full.length > FILE_TEXT_LIMIT
-    ? full.slice(0, FILE_TEXT_LIMIT) + '\n\n[transcript truncated]'
-    : full;
+  const truncated =
+    full.length > FILE_TEXT_LIMIT ? full.slice(0, FILE_TEXT_LIMIT) + '\n\n[transcript truncated]' : full;
 
   currentEntry = truncated;
   currentSourceSessionId = currentSessionId;
@@ -1274,8 +1394,11 @@ function toggleAfterMenu(menuId) {
 // A click anywhere outside a menu-wrap closes whatever's open; a click on an
 // item inside a menu (an export, "One More Turn", etc.) closes it too, since
 // every item here is a one-shot action rather than a toggle worth leaving open.
-document.addEventListener('click', (e) => {
-  if (e.target.closest('.lodge-menu')) { closeAllAfterMenus(); return; }
+document.addEventListener('click', e => {
+  if (e.target.closest('.lodge-menu')) {
+    closeAllAfterMenus();
+    return;
+  }
   if (!e.target.closest('.menu-wrap')) closeAllAfterMenus();
 });
 
@@ -1405,8 +1528,14 @@ async function submitNewMember() {
   const statusEl = document.getElementById('add-member-status');
   const btn = document.getElementById('add-member-submit-btn');
 
-  if (!name) { statusEl.textContent = 'A name is required.'; return; }
-  if (!bio) { statusEl.textContent = 'A biography is required.'; return; }
+  if (!name) {
+    statusEl.textContent = 'A name is required.';
+    return;
+  }
+  if (!bio) {
+    statusEl.textContent = 'A biography is required.';
+    return;
+  }
 
   btn.disabled = true;
   statusEl.style.color = 'var(--lodge-amber)';
@@ -1425,8 +1554,15 @@ async function submitNewMember() {
     renderMembers();
 
     // Clear form
-    ['new-member-name','new-member-bio','new-member-voice','new-member-cognitive','new-member-relationships']
-      .forEach(id => { document.getElementById(id).value = ''; });
+    [
+      'new-member-name',
+      'new-member-bio',
+      'new-member-voice',
+      'new-member-cognitive',
+      'new-member-relationships',
+    ].forEach(id => {
+      document.getElementById(id).value = '';
+    });
 
     statusEl.style.color = 'var(--lodge-muted)';
     statusEl.textContent = `${data.member.name} has joined the lodge.`;
@@ -1493,15 +1629,24 @@ function initCastingTriggers() {
 function exportDeps() {
   return {
     getCore: () => ({
-      currentEntry, currentJournal, currentSessionId, sessionDate,
-      transcriptText, activeMembers, MEMBERS,
+      currentEntry,
+      currentJournal,
+      currentSessionId,
+      sessionDate,
+      transcriptText,
+      activeMembers,
+      MEMBERS,
     }),
-    setCurrentEntry: (text) => { currentEntry = text; },
-    setCurrentJournal: (journal) => {
+    setCurrentEntry: text => {
+      currentEntry = text;
+    },
+    setCurrentJournal: journal => {
       currentJournal = journal;
       localStorage.setItem('sc-journal', JSON.stringify(currentJournal));
     },
-    setCurrentSourceSessionId: (id) => { currentSourceSessionId = id; },
+    setCurrentSourceSessionId: id => {
+      currentSourceSessionId = id;
+    },
     setStatus,
     // #185 — the non-paste document paths (Day One, library, file import) land
     // asynchronously inside export.js, so there is no DOM event app.js could
@@ -1521,35 +1666,84 @@ window.Export.configure(exportDeps());
 function sessionsDeps() {
   return {
     getCore: () => ({
-      MEMBERS, activeMembers, currentSessionId, currentEntry, currentSourceSessionId,
-      transcriptText, sessionDate, segmentCount,
-      playerMode, playerMemberId, playerName, currentPlayerSpeakerName,
-      sessionPlayerTurns, playerTurnsRevealed,
+      MEMBERS,
+      activeMembers,
+      currentSessionId,
+      currentEntry,
+      currentSourceSessionId,
+      transcriptText,
+      sessionDate,
+      segmentCount,
+      playerMode,
+      playerMemberId,
+      playerName,
+      currentPlayerSpeakerName,
+      sessionPlayerTurns,
+      playerTurnsRevealed,
     }),
-    setCurrentSessionId: (id) => { currentSessionId = id; },
-    setSessionDate: (d) => { sessionDate = d; },
-    setCurrentEntry: (text) => { currentEntry = text; },
-    setCurrentSourceSessionId: (id) => { currentSourceSessionId = id; },
-    setSegmentCount: (n) => { segmentCount = n; },
-    setPlayerMode: (m) => { playerMode = m; },
-    setPlayerMemberId: (id) => { playerMemberId = id; },
-    setPlayerName: (n) => { playerName = n; },
-    setCurrentPlayerSpeakerName: (n) => { currentPlayerSpeakerName = n; },
-    setSessionPlayerTurns: (turns) => { sessionPlayerTurns = turns; },
-    setPlayerTurnsRevealed: (v) => { playerTurnsRevealed = v; },
-    setTranscriptText: (t) => { transcriptText = t; },
-    setActiveMembers: (set) => { activeMembers = set; },
+    setCurrentSessionId: id => {
+      currentSessionId = id;
+    },
+    setSessionDate: d => {
+      sessionDate = d;
+    },
+    setCurrentEntry: text => {
+      currentEntry = text;
+    },
+    setCurrentSourceSessionId: id => {
+      currentSourceSessionId = id;
+    },
+    setSegmentCount: n => {
+      segmentCount = n;
+    },
+    setPlayerMode: m => {
+      playerMode = m;
+    },
+    setPlayerMemberId: id => {
+      playerMemberId = id;
+    },
+    setPlayerName: n => {
+      playerName = n;
+    },
+    setCurrentPlayerSpeakerName: n => {
+      currentPlayerSpeakerName = n;
+    },
+    setSessionPlayerTurns: turns => {
+      sessionPlayerTurns = turns;
+    },
+    setPlayerTurnsRevealed: v => {
+      playerTurnsRevealed = v;
+    },
+    setTranscriptText: t => {
+      transcriptText = t;
+    },
+    setActiveMembers: set => {
+      activeMembers = set;
+    },
     resetTranscriptCounters: () => {
       releasePendingLull();
-      _entryCounter = 0; lastSpeakerId = null; currentSpeakerSide = 'right';
+      _entryCounter = 0;
+      lastSpeakerId = null;
+      currentSpeakerSide = 'right';
       recordAttached = true;
       document.getElementById('record-live-pill')?.classList.remove('visible');
     },
     resetLiveStage: () => window.Witness.resetLiveStage(),
-    escapeHTML, resolveMember, isKnownSpeakerHeader, renderActions,
-    setStatus, restorePlayAsControlDisplay,
-    addRoundHeader, addLullDivider, setRenderSegment, addBranchControl, parseAndRenderTranscript,
-    renderMembers, applyCitationFlags, applyPlayerTurnMarkers, showSessionControls,
+    escapeHTML,
+    resolveMember,
+    isKnownSpeakerHeader,
+    renderActions,
+    setStatus,
+    restorePlayAsControlDisplay,
+    addRoundHeader,
+    addLullDivider,
+    setRenderSegment,
+    addBranchControl,
+    parseAndRenderTranscript,
+    renderMembers,
+    applyCitationFlags,
+    applyPlayerTurnMarkers,
+    showSessionControls,
   };
 }
 window.Sessions.configure(sessionsDeps());

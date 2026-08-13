@@ -18,8 +18,7 @@ function extractPdfText(buffer) {
     const parser = new PDFParser(null, true); // true = raw text mode
     parser.on('pdfParser_dataError', err => reject(err.parserError));
     parser.on('pdfParser_dataReady', () => {
-      const text = parser.getRawTextContent()
-        .replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+      const text = parser.getRawTextContent().replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
       resolve(text);
     });
     parser.parseBuffer(buffer);
@@ -28,38 +27,41 @@ function extractPdfText(buffer) {
 
 function registerUploadRoutes(app) {
   // POST /api/upload — extract text from .txt, .md, or .pdf file
-  app.post('/api/upload', (req, res, next) => {
-    upload.single('file')(req, res, err => {
-      if (err) {
-        const msg = err.code === 'LIMIT_FILE_SIZE'
-          ? 'File too large — maximum 25 MB'
-          : err.message || 'Upload failed';
-        return res.status(400).json({ error: msg });
-      }
-      next();
-    });
-  }, async (req, res) => {
-    if (!req.file) return res.status(400).json({ error: 'No file provided' });
-    const { originalname, mimetype, buffer } = req.file;
-    const ext = path.extname(originalname).toLowerCase();
+  app.post(
+    '/api/upload',
+    (req, res, next) => {
+      upload.single('file')(req, res, err => {
+        if (err) {
+          const msg =
+            err.code === 'LIMIT_FILE_SIZE' ? 'File too large — maximum 25 MB' : err.message || 'Upload failed';
+          return res.status(400).json({ error: msg });
+        }
+        next();
+      });
+    },
+    async (req, res) => {
+      if (!req.file) return res.status(400).json({ error: 'No file provided' });
+      const { originalname, mimetype, buffer } = req.file;
+      const ext = path.extname(originalname).toLowerCase();
 
-    try {
-      let text = '';
-      if (ext === '.pdf' || mimetype === 'application/pdf') {
-        text = await extractPdfText(buffer);
-      } else {
-        // .txt and .md — read as UTF-8
-        text = buffer.toString('utf8');
+      try {
+        let text = '';
+        if (ext === '.pdf' || mimetype === 'application/pdf') {
+          text = await extractPdfText(buffer);
+        } else {
+          // .txt and .md — read as UTF-8
+          text = buffer.toString('utf8');
+        }
+        // Normalise whitespace
+        text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+        if (!text) return res.status(422).json({ error: 'No readable text found in file' });
+        res.json({ text, filename: originalname });
+      } catch (err) {
+        console.error('Upload error:', err);
+        res.status(500).json({ error: 'Could not extract text from file' });
       }
-      // Normalise whitespace
-      text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
-      if (!text) return res.status(422).json({ error: 'No readable text found in file' });
-      res.json({ text, filename: originalname });
-    } catch (err) {
-      console.error('Upload error:', err);
-      res.status(500).json({ error: 'Could not extract text from file' });
     }
-  });
+  );
 }
 
 module.exports = { registerUploadRoutes, extractPdfText };

@@ -22,7 +22,10 @@ const ROOT = path.join(__dirname, '..');
   let dir = __dirname;
   while (true) {
     const candidate = path.join(dir, '.env');
-    if (fs.existsSync(candidate)) { require('dotenv').config({ path: candidate }); return; }
+    if (fs.existsSync(candidate)) {
+      require('dotenv').config({ path: candidate });
+      return;
+    }
     const parent = path.dirname(dir);
     if (parent === dir) break;
     dir = parent;
@@ -46,37 +49,42 @@ For each numbered item, judge whether its "Transcript quote" is genuinely consis
 - "unverified": the excerpt contradicts it, or doesn't contain/support what's being attributed to it
 - "uncertain": the excerpt doesn't clearly settle it either way (e.g. adjacent material, but not this specific claim)`;
 
-  const itemsText = items.map((item, index) =>
-    `### Item ${index}\nWork cited: ${item.work}\nTranscript quote: "${item.quote}"\n\nExcerpt from "${item.entry.title}" (${item.entry.source}):\n${item.entry.text}`
-  ).join('\n\n---\n\n');
+  const itemsText = items
+    .map(
+      (item, index) =>
+        `### Item ${index}\nWork cited: ${item.work}\nTranscript quote: "${item.quote}"\n\nExcerpt from "${item.entry.title}" (${item.entry.source}):\n${item.entry.text}`
+    )
+    .join('\n\n---\n\n');
 
   const response = await client.messages.create({
     model: 'claude-sonnet-4-6',
     max_tokens: 2000,
     system,
     messages: [{ role: 'user', content: itemsText }],
-    tools: [{
-      name: 'report_grounded_verdicts',
-      description: 'Report a text-grounded verdict for each numbered item.',
-      input_schema: {
-        type: 'object',
-        properties: {
-          verdicts: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                index: { type: 'integer', description: 'The item number from the prompt.' },
-                verdict: { type: 'string', enum: ['verified', 'unverified', 'uncertain'] },
-                note: { type: 'string', description: 'One-sentence reasoning, referencing the excerpt directly.' },
+    tools: [
+      {
+        name: 'report_grounded_verdicts',
+        description: 'Report a text-grounded verdict for each numbered item.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            verdicts: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  index: { type: 'integer', description: 'The item number from the prompt.' },
+                  verdict: { type: 'string', enum: ['verified', 'unverified', 'uncertain'] },
+                  note: { type: 'string', description: 'One-sentence reasoning, referencing the excerpt directly.' },
+                },
+                required: ['index', 'verdict', 'note'],
               },
-              required: ['index', 'verdict', 'note'],
             },
           },
+          required: ['verdicts'],
         },
-        required: ['verdicts'],
       },
-    }],
+    ],
     tool_choice: { type: 'tool', name: 'report_grounded_verdicts' },
   });
 
@@ -91,14 +99,16 @@ async function main() {
     {
       label: 'accurate — should verify',
       work: 'Fusus al-Hikam',
-      quote: 'the imagination is not nonexistent, even though it has no real external existence, and the mystic who knows this does not need to abolish forms to reach unity',
+      quote:
+        'the imagination is not nonexistent, even though it has no real external existence, and the mystic who knows this does not need to abolish forms to reach unity',
       entry: arabi,
       expect: 'verified',
     },
     {
       label: 'misattributed — contradicts the excerpt, should NOT verify',
       work: 'Fusus al-Hikam',
-      quote: 'as I wrote in the Fusus, the imagination must be abolished entirely before the mystic can reach divine unity with God',
+      quote:
+        'as I wrote in the Fusus, the imagination must be abolished entirely before the mystic can reach divine unity with God',
       entry: arabi,
       expect: 'unverified or uncertain',
     },

@@ -23,9 +23,17 @@ async function fetchWithTimeout(url, opts = {}) {
   }
 }
 
-const normalizeForWebMatch = s => (s || '').replace(/[*"'“”‘’]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+const normalizeForWebMatch = s =>
+  (s || '')
+    .replace(/[*"'“”‘’]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
 const STOPWORDS = new Set(['the', 'and', 'of', 'a', 'an', 'to', 'in', 'on', 'by', 'or', 'from', 'with', 'his', 'her']);
-const tokenizeForWebMatch = s => normalizeForWebMatch(s).split(/[^a-z0-9]+/).filter(Boolean);
+const tokenizeForWebMatch = s =>
+  normalizeForWebMatch(s)
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
 
 function worksOverlap(work, doc) {
   const haystackWords = new Set(tokenizeForWebMatch(`${doc.title || ''} ${doc.creator || ''}`));
@@ -91,14 +99,18 @@ async function tryWikipediaSummary(work) {
     const title = titles?.[0];
     if (!title) return { status: 'not-found' };
 
-    const summaryRes = await fetchWithTimeout(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title.replace(/ /g, '_'))}`);
+    const summaryRes = await fetchWithTimeout(
+      `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title.replace(/ /g, '_'))}`
+    );
     if (summaryRes.status === 404) return { status: 'not-found' };
     if (!summaryRes.ok) return { status: 'error', reason: `HTTP ${summaryRes.status}` };
     const data = await summaryRes.json();
     if (data.type === 'disambiguation') return { status: 'not-found' };
     return {
       status: 'existence-only',
-      webSourceUrl: data.content_urls?.desktop?.page || `https://en.wikipedia.org/wiki/${encodeURIComponent(title.replace(/ /g, '_'))}`,
+      webSourceUrl:
+        data.content_urls?.desktop?.page ||
+        `https://en.wikipedia.org/wiki/${encodeURIComponent(title.replace(/ /g, '_'))}`,
       webSourceTitle: data.title || title,
       note: `"${work}" exists per Wikipedia, but this specific quote/claim wasn't independently confirmed — uncertain (unconfirmed).`,
     };
@@ -137,10 +149,22 @@ async function escalateCitationToWeb(citation) {
   for (const tier of tiers) {
     const result = await tier();
     if (result.status === 'confirmed') {
-      return { verdict: 'verified', note: result.note, source: 'web', webSourceUrl: result.webSourceUrl, webSourceTitle: result.webSourceTitle };
+      return {
+        verdict: 'verified',
+        note: result.note,
+        source: 'web',
+        webSourceUrl: result.webSourceUrl,
+        webSourceTitle: result.webSourceTitle,
+      };
     }
     if (result.status === 'existence-only') {
-      return { verdict: 'uncertain', note: result.note, source: 'web', webSourceUrl: result.webSourceUrl, webSourceTitle: result.webSourceTitle };
+      return {
+        verdict: 'uncertain',
+        note: result.note,
+        source: 'web',
+        webSourceUrl: result.webSourceUrl,
+        webSourceTitle: result.webSourceTitle,
+      };
     }
     if (result.status === 'error') sawError = true;
   }
@@ -164,7 +188,8 @@ async function main() {
       check: r => r && r.source === 'web',
     },
     {
-      label: 'famous phrase misattributed to an unrelated invented work — must NOT confirm just because the phrase exists somewhere',
+      label:
+        'famous phrase misattributed to an unrelated invented work — must NOT confirm just because the phrase exists somewhere',
       work: 'Some Unrelated Nonexistent Treatise on Bee Farming',
       quote: 'it was the best of times, it was the worst of times',
       note: 'orig note',
@@ -178,7 +203,8 @@ async function main() {
       check: r => r && r.source === 'web' && r.verdict === 'uncertain',
     },
     {
-      label: 'wholly fabricated work and quote — clean miss (falls back to model verdict) or graceful error-degrade, never falsely verified',
+      label:
+        'wholly fabricated work and quote — clean miss (falls back to model verdict) or graceful error-degrade, never falsely verified',
       work: 'Xyzzptlk Fnord Grimoire of Nonexistence',
       quote: 'this quote does not exist anywhere at all zzz999',
       note: 'orig note',
@@ -192,7 +218,9 @@ async function main() {
     const pass = c.check(result);
     allPass = allPass && pass;
     console.log(`[${pass ? 'PASS' : 'FAIL'}] ${c.label}`);
-    console.log(`  result: ${result ? JSON.stringify({ verdict: result.verdict, source: result.source, webSourceTitle: result.webSourceTitle }) : 'null (clean miss)'}\n`);
+    console.log(
+      `  result: ${result ? JSON.stringify({ verdict: result.verdict, source: result.source, webSourceTitle: result.webSourceTitle }) : 'null (clean miss)'}\n`
+    );
   }
 
   console.log(allPass ? 'All cases behaved as expected.' : 'Some cases did not behave as expected — see above.');

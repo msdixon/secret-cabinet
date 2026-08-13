@@ -87,9 +87,13 @@ test('loadVoiceExemplar', async t => {
     const dir = makeFixtureDir();
     t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
     const libraryFile = path.join(dir, 'library.json');
-    fs.writeFileSync(libraryFile, JSON.stringify([
-      { id: 'e1', title: 'T1', source: 'S1', date: '1911', translated: false, file: 'e1.md', author: 'crowley' },
-    ]), 'utf8');
+    fs.writeFileSync(
+      libraryFile,
+      JSON.stringify([
+        { id: 'e1', title: 'T1', source: 'S1', date: '1911', translated: false, file: 'e1.md', author: 'crowley' },
+      ]),
+      'utf8'
+    );
     writeEntry(dir, 'e1.md', { body: 'The actual prose.' });
 
     const exemplar = lib.loadVoiceExemplar(dir, libraryFile, 'crowley');
@@ -110,9 +114,7 @@ test('loadVoiceExemplar', async t => {
     const dir = makeFixtureDir();
     t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
     const libraryFile = path.join(dir, 'library.json');
-    fs.writeFileSync(libraryFile, JSON.stringify([
-      { id: 'e1', file: 'e1.md', author: 'jung' },
-    ]), 'utf8');
+    fs.writeFileSync(libraryFile, JSON.stringify([{ id: 'e1', file: 'e1.md', author: 'jung' }]), 'utf8');
     writeEntry(dir, 'e1.md');
     assert.equal(lib.loadVoiceExemplar(dir, libraryFile, 'crowley'), null);
   });
@@ -121,10 +123,14 @@ test('loadVoiceExemplar', async t => {
     const dir = makeFixtureDir();
     t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
     const libraryFile = path.join(dir, 'library.json');
-    fs.writeFileSync(libraryFile, JSON.stringify([
-      { id: 'first', file: 'first.md', author: 'crowley' },
-      { id: 'second', file: 'second.md', author: 'crowley' },
-    ]), 'utf8');
+    fs.writeFileSync(
+      libraryFile,
+      JSON.stringify([
+        { id: 'first', file: 'first.md', author: 'crowley' },
+        { id: 'second', file: 'second.md', author: 'crowley' },
+      ]),
+      'utf8'
+    );
     writeEntry(dir, 'first.md', { body: 'First text.' });
     writeEntry(dir, 'second.md', { body: 'Second text.' });
     const exemplar = lib.loadVoiceExemplar(dir, libraryFile, 'crowley');
@@ -137,14 +143,16 @@ test('loadLibraryCitationLookup', async t => {
     const dir = makeFixtureDir();
     t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
     const libraryFile = path.join(dir, 'library.json');
-    fs.writeFileSync(libraryFile, JSON.stringify([
-      { id: 'e1', title: 'T1', source: 'S1', file: 'e1.md' },
-    ]), 'utf8');
+    fs.writeFileSync(libraryFile, JSON.stringify([{ id: 'e1', title: 'T1', source: 'S1', file: 'e1.md' }]), 'utf8');
     writeEntry(dir, 'e1.md', { frontmatter: 'citation: "C1"\nsource_url: "https://x"\n', body: 'Excerpt.' });
 
     const lookup = lib.loadLibraryCitationLookup(dir, libraryFile);
     assert.deepEqual(lookup.e1, {
-      title: 'T1', source: 'S1', citation: 'C1', source_url: 'https://x', text: 'Excerpt.',
+      title: 'T1',
+      source: 'S1',
+      citation: 'C1',
+      source_url: 'https://x',
+      text: 'Excerpt.',
     });
   });
 

@@ -99,12 +99,12 @@ window.Witness = (function () {
   // of the room instead. In stage mode this is just #witness-stage itself,
   // same as before #257.
   function eventContainer() {
-    return sceneAvailable
-      ? document.getElementById('room-events')
-      : document.getElementById('witness-stage');
+    return sceneAvailable ? document.getElementById('room-events') : document.getElementById('witness-stage');
   }
 
-  function roomLayer() { return document.getElementById('room-speech-layer'); }
+  function roomLayer() {
+    return document.getElementById('room-speech-layer');
+  }
 
   // memberId -> card element currently shown, keyed so a member's typing
   // placeholder and settled bubble are the same DOM node (swapped in place,
@@ -123,7 +123,10 @@ window.Witness = (function () {
 
   function cancelCardFade(memberId) {
     const timer = roomCardFadeTimers.get(memberId);
-    if (timer) { clearTimeout(timer); roomCardFadeTimers.delete(memberId); }
+    if (timer) {
+      clearTimeout(timer);
+      roomCardFadeTimers.delete(memberId);
+    }
   }
 
   function scheduleCardFade(memberId, text) {
@@ -134,7 +137,10 @@ window.Witness = (function () {
       if (!card) return;
       card.classList.add('room-card-fading');
       setTimeout(() => {
-        if (roomCards.get(memberId) === card) { card.remove(); roomCards.delete(memberId); }
+        if (roomCards.get(memberId) === card) {
+          card.remove();
+          roomCards.delete(memberId);
+        }
       }, ROOM_CARD_FADE_TRANSITION_MS);
     }, delay);
     roomCardFadeTimers.set(memberId, timer);
@@ -158,7 +164,10 @@ window.Witness = (function () {
     const placed = [];
     roomCards.forEach((card, memberId) => {
       const pos = window.LodgeScene?.getSeatScreenPosition?.(memberId);
-      if (!pos || !pos.visible) { card.style.display = 'none'; return; }
+      if (!pos || !pos.visible) {
+        card.style.display = 'none';
+        return;
+      }
       card.style.display = '';
       placed.push({ card, x: pos.x, y: Math.max(pos.y, CARD_MIN_TOP) });
     });
@@ -197,9 +206,8 @@ window.Witness = (function () {
   // a frame to appear in the right place.
   function roomRepositionTick() {
     repositionRoomCards();
-    roomRepositionHandle = roomCards.size && typeof requestAnimationFrame === 'function'
-      ? requestAnimationFrame(roomRepositionTick)
-      : null;
+    roomRepositionHandle =
+      roomCards.size && typeof requestAnimationFrame === 'function' ? requestAnimationFrame(roomRepositionTick) : null;
   }
 
   function touchRoomLoop() {
@@ -256,7 +264,7 @@ window.Witness = (function () {
   // markup, same as it would in stage mode. Returns { undo } so replay's
   // go-back can reverse exactly this render.
   function renderRoomCard(block) {
-    const { speaker, text, memberId } = block;
+    const { text, memberId } = block;
     if (!memberId) {
       const el = document.createElement('div');
       el.className = 'transcript-entry room-event-entry';
@@ -273,8 +281,13 @@ window.Witness = (function () {
     return {
       undo: () => {
         cancelCardFade(memberId);
-        if (existed) { card.innerHTML = prevHtml; touchRoomLoop(); }
-        else { card.remove(); roomCards.delete(memberId); }
+        if (existed) {
+          card.innerHTML = prevHtml;
+          touchRoomLoop();
+        } else {
+          card.remove();
+          roomCards.delete(memberId);
+        }
       },
     };
   }
@@ -286,7 +299,8 @@ window.Witness = (function () {
     card.classList.add('room-card-typing');
     const nc = `voice-${memberId}`;
     const glyph = memberGlyph(memberId) ? `<span class="speaker-glyph">${memberGlyph(memberId)}</span>` : '';
-    card.innerHTML = `<div class="speaker-name ${nc}">${glyph}${deps.escapeHTML(name)}</div>` +
+    card.innerHTML =
+      `<div class="speaker-name ${nc}">${glyph}${deps.escapeHTML(name)}</div>` +
       '<div class="bubble-body"><div class="speech-text typing-text transcript-stream-live"></div></div>';
     touchRoomLoop();
   }
@@ -333,8 +347,12 @@ window.Witness = (function () {
     if (reopen) reopenStage();
   }
 
-  function liveReset() { clearStage(true); }
-  function resetLiveStage() { clearStage(false); }
+  function liveReset() {
+    clearStage(true);
+  }
+  function resetLiveStage() {
+    clearStage(false);
+  }
 
   // Enters "the record" view: stage hidden, record showing full height.
   // Called on Exit (live or replay) and automatically once the user lets a
@@ -415,7 +433,10 @@ window.Witness = (function () {
     markStageActive();
     setHint('◉ Live — the room is speaking');
     liveTypingMemberId = memberId || null;
-    if (sceneAvailable) { renderRoomTyping(name, liveTypingMemberId); return; }
+    if (sceneAvailable) {
+      renderRoomTyping(name, liveTypingMemberId);
+      return;
+    }
     const stage = document.getElementById('witness-stage');
     if (!stage) return;
     liveTypingEl = document.createElement('div');
@@ -430,7 +451,10 @@ window.Witness = (function () {
   // splitIntoBeats on every chunk rather than tracking a raw delta, and
   // hands that over here -- see startStreamEntry's append().
   function liveTypingSet(text) {
-    if (sceneAvailable) { setRoomTypingText(text); return; }
+    if (sceneAvailable) {
+      setRoomTypingText(text);
+      return;
+    }
     if (!liveTypingEl) return;
     liveTypingEl.querySelector('.typing-text').textContent = text;
     const stage = document.getElementById('witness-stage');
@@ -443,7 +467,10 @@ window.Witness = (function () {
     // tracked member here would just make setRoomTypingText a no-op between
     // clear and the settled render, so it's left for renderRoomCard to reset.
     if (sceneAvailable) return;
-    if (liveTypingEl) { liveTypingEl.remove(); liveTypingEl = null; }
+    if (liveTypingEl) {
+      liveTypingEl.remove();
+      liveTypingEl = null;
+    }
   }
 
   // The shared panel's Exit button serves both live and replay -- dispatch to
@@ -458,12 +485,12 @@ window.Witness = (function () {
   }
 
   // ── Replay mode ────────────────────────────────────────────────────────────
-  let witnessBlocks = [];      // parsed sequence of blocks to play
-  let witnessIndex = 0;        // current block position (next block to render)
-  let witnessTimer = null;     // auto-advance timer
+  let witnessBlocks = []; // parsed sequence of blocks to play
+  let witnessIndex = 0; // current block position (next block to render)
+  let witnessTimer = null; // auto-advance timer
   let witnessActive = false;
   let witnessSourceSessionId = null; // session being witnessed (for restore on exit)
-  let onExitRestore = null;     // app.js's restoreSession, captured from deps at start()
+  let onExitRestore = null; // app.js's restoreSession, captured from deps at start()
 
   // Go-back support (#90): parallel arrays over witnessIndex so we can
   // undo any rendered block without a full re-render.
@@ -488,10 +515,10 @@ window.Witness = (function () {
   let _touchStartX = null;
   let _touchStartY = null;
 
-  const WITNESS_WPM = 180;     // reading speed for auto-advance pacing
-  const WITNESS_PAUSE_AFTER_HEADER = 1800;   // ms pause after round headers
-  const WITNESS_MIN_PAUSE = 1200;            // minimum ms between blocks
-  const WITNESS_MAX_PAUSE = 12000;           // cap on auto-advance delay
+  const WITNESS_WPM = 180; // reading speed for auto-advance pacing
+  const WITNESS_PAUSE_AFTER_HEADER = 1800; // ms pause after round headers
+  const WITNESS_MIN_PAUSE = 1200; // minimum ms between blocks
+  const WITNESS_MAX_PAUSE = 12000; // cap on auto-advance delay
 
   /**
    * Parse a session's rounds + annotations into a flat sequence of playback blocks.
@@ -512,7 +539,8 @@ window.Witness = (function () {
       if (!endsInLull) blocks.push({ type: 'header', label: round.label });
 
       const lines = (round.text || '').split('\n');
-      let speaker = null, textLines = [];
+      let speaker = null,
+        textLines = [];
 
       const flush = (keepSpeaker = false) => {
         if (!speaker || !textLines.length) return;
@@ -541,7 +569,10 @@ window.Witness = (function () {
 
       lines.forEach(line => {
         const t = line.trim();
-        if (!t) { flush(true); return; } // keepSpeaker=true: blank line is paragraph break, not speaker change
+        if (!t) {
+          flush(true);
+          return;
+        } // keepSpeaker=true: blank line is paragraph break, not speaker change
         if (t === '---' || t === '—' || t === '--') return;
         const isActionLine = /^\*[^*\n]+\*$/.test(t);
         if (isActionLine && !speaker) {
@@ -551,8 +582,11 @@ window.Witness = (function () {
         }
         const isKnownName = deps.isKnownSpeakerHeader(t, deps.members);
         const looksLikeName = !t.includes(' ') && t.endsWith(':') && t.length < 30;
-        if (isKnownName || looksLikeName) { flush(); speaker = t.replace(/:$/, ''); textLines = []; }
-        else if (speaker) textLines.push(t);
+        if (isKnownName || looksLikeName) {
+          flush();
+          speaker = t.replace(/:$/, '');
+          textLines = [];
+        } else if (speaker) textLines.push(t);
       });
       flush();
       if (endsInLull) blocks.push({ type: 'lull', label: round.label });
@@ -644,7 +678,11 @@ window.Witness = (function () {
     }
 
     if (block.type === 'speech') {
-      const nonEmptyLines = block.text.trim().split('\n').map(l => l.trim()).filter(Boolean);
+      const nonEmptyLines = block.text
+        .trim()
+        .split('\n')
+        .map(l => l.trim())
+        .filter(Boolean);
       const allAction = nonEmptyLines.length > 0 && nonEmptyLines.every(l => /^\*[^*]+\*$/.test(l));
       if (allAction) {
         const els = createActionLines(nonEmptyLines.map(l => l.slice(1, -1)));
@@ -669,8 +707,7 @@ window.Witness = (function () {
       if (prog) prog.style.width = '0%';
     } else {
       const pct = (witnessIndex / witnessBlocks.length) * 100;
-      if (hint) hint.textContent =
-        `${witnessIndex} / ${witnessBlocks.length} — ← back · space or click`;
+      if (hint) hint.textContent = `${witnessIndex} / ${witnessBlocks.length} — ← back · space or click`;
       if (prog) prog.style.width = `${pct}%`;
     }
   }
@@ -721,7 +758,10 @@ window.Witness = (function () {
     // Remove the end-of-session marker and its flag first, so the state
     // machine is in sync with the DOM regardless of whether we go further back.
     if (witnessEnded) {
-      if (witnessEndEl) { witnessEndEl.remove(); witnessEndEl = null; }
+      if (witnessEndEl) {
+        witnessEndEl.remove();
+        witnessEndEl = null;
+      }
       witnessEnded = false;
     }
 
@@ -738,7 +778,10 @@ window.Witness = (function () {
 
     // Restore speaker-side state to what it was before the block rendered.
     const snap = witnessSideSnapshots[witnessIndex];
-    if (snap) { lastSpeakerId = snap.lastSpeakerId; currentSpeakerSide = snap.currentSpeakerSide; }
+    if (snap) {
+      lastSpeakerId = snap.lastSpeakerId;
+      currentSpeakerSide = snap.currentSpeakerSide;
+    }
 
     if (!sceneAvailable) {
       const stage = document.getElementById('witness-stage');
@@ -770,7 +813,8 @@ window.Witness = (function () {
     if (Math.abs(dx) < 40 || Math.abs(dx) <= Math.abs(dy) * 1.5) return;
     // Suppress the synthetic click that would otherwise fire advance() via onclick.
     e.preventDefault();
-    if (dx < 0) advance(); else goBack();
+    if (dx < 0) advance();
+    else goBack();
   }
 
   // Begins replay of a fully-resolved session. `session` is { rounds,
@@ -803,7 +847,8 @@ window.Witness = (function () {
     witnessActive = true;
 
     // Reset side map and go-back state for a clean Witness run.
-    lastSpeakerId = null; currentSpeakerSide = 'right';
+    lastSpeakerId = null;
+    currentSpeakerSide = 'right';
     witnessUndos = [];
     witnessSideSnapshots = [];
     witnessEnded = false;

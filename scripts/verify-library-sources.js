@@ -67,7 +67,10 @@ async function verifyOne(source_url) {
 }
 
 async function main() {
-  const files = fs.readdirSync(LIBRARY_DIR).filter(f => f.endsWith('.md')).sort();
+  const files = fs
+    .readdirSync(LIBRARY_DIR)
+    .filter(f => f.endsWith('.md'))
+    .sort();
   const results = [];
 
   for (const file of files) {

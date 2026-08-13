@@ -16,7 +16,7 @@ function makeFixtureDir() {
 }
 
 test('makeSessionId', async t => {
-  await t.test('embeds today\'s date, a slug of the entry, and a stable hash of the entry text', () => {
+  await t.test("embeds today's date, a slug of the entry, and a stable hash of the entry text", () => {
     const id = store.makeSessionId('The Rite of Spring, considered anew');
     assert.match(id, /^\d{4}-\d{2}-\d{2}-the-rite-of-spring-considered-anew-[0-9a-f]{6}$/);
   });
@@ -47,11 +47,14 @@ test('makeBranchId', async t => {
     assert.match(id, /^\d{4}-\d{2}-\d{2}-the-source-document-branch-[0-9a-f]{6}$/);
   });
 
-  await t.test('produces different ids across calls even for the same parent/round (mixes in wall-clock/random)', () => {
-    const a = store.makeBranchId(parent, 1);
-    const b = store.makeBranchId(parent, 1);
-    assert.notEqual(a, b);
-  });
+  await t.test(
+    'produces different ids across calls even for the same parent/round (mixes in wall-clock/random)',
+    () => {
+      const a = store.makeBranchId(parent, 1);
+      const b = store.makeBranchId(parent, 1);
+      assert.notEqual(a, b);
+    }
+  );
 });
 
 test('saveSession / loadSession', async t => {

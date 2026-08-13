@@ -18,13 +18,22 @@ function jsonResponse(status, body) {
 function withFetch(t, impl) {
   const original = global.fetch;
   global.fetch = impl;
-  t.after(() => { global.fetch = original; });
+  t.after(() => {
+    global.fetch = original;
+  });
 }
 
 test('groundAgainstLibraryText', async t => {
   await t.test('returns an empty map without calling the client when nothing matched', async () => {
     let called = false;
-    const fakeClient = { messages: { create: async () => { called = true; return { content: [] }; } } };
+    const fakeClient = {
+      messages: {
+        create: async () => {
+          called = true;
+          return { content: [] };
+        },
+      },
+    };
     const result = await c.groundAgainstLibraryText(fakeClient, 'test-model', [{ libraryMatch: null }], {});
     assert.equal(called, false);
     assert.equal(result.size, 0);
@@ -32,10 +41,17 @@ test('groundAgainstLibraryText', async t => {
 
   await t.test('skips a libraryMatch whose lookup entry has no text', async () => {
     let called = false;
-    const fakeClient = { messages: { create: async () => { called = true; return { content: [] }; } } };
-    const result = await c.groundAgainstLibraryText(
-      fakeClient, 'test-model', [{ libraryMatch: 'e1' }], { e1: { title: 'T', source: 'S' } },
-    );
+    const fakeClient = {
+      messages: {
+        create: async () => {
+          called = true;
+          return { content: [] };
+        },
+      },
+    };
+    const result = await c.groundAgainstLibraryText(fakeClient, 'test-model', [{ libraryMatch: 'e1' }], {
+      e1: { title: 'T', source: 'S' },
+    });
     assert.equal(called, false);
     assert.equal(result.size, 0);
   });
@@ -44,10 +60,12 @@ test('groundAgainstLibraryText', async t => {
     const fakeClient = {
       messages: {
         create: async () => ({
-          content: [{
-            type: 'tool_use',
-            input: { verdicts: [{ index: 0, verdict: 'verified', note: 'Matches the excerpt.' }] },
-          }],
+          content: [
+            {
+              type: 'tool_use',
+              input: { verdicts: [{ index: 0, verdict: 'verified', note: 'Matches the excerpt.' }] },
+            },
+          ],
         }),
       },
     };
@@ -118,18 +136,22 @@ test('tryArchiveOrgFullText', async t => {
   });
 
   await t.test('returns confirmed when a returned doc overlaps the cited work', async () => {
-    withFetch(t, async () => jsonResponse(200, {
-      response: { docs: [{ identifier: 'id1', title: 'Some Work Full Text', creator: 'Author' }] },
-    }));
+    withFetch(t, async () =>
+      jsonResponse(200, {
+        response: { docs: [{ identifier: 'id1', title: 'Some Work Full Text', creator: 'Author' }] },
+      })
+    );
     const result = await c.tryArchiveOrgFullText('Some Work', 'a quoted phrase');
     assert.equal(result.status, 'confirmed');
     assert.equal(result.webSourceUrl, 'https://archive.org/details/id1');
   });
 
   await t.test('returns not-found when no returned doc overlaps the work', async () => {
-    withFetch(t, async () => jsonResponse(200, {
-      response: { docs: [{ identifier: 'id1', title: 'Completely Unrelated', creator: 'Someone Else' }] },
-    }));
+    withFetch(t, async () =>
+      jsonResponse(200, {
+        response: { docs: [{ identifier: 'id1', title: 'Completely Unrelated', creator: 'Someone Else' }] },
+      })
+    );
     const result = await c.tryArchiveOrgFullText('Some Work', 'a quoted phrase');
     assert.equal(result.status, 'not-found');
   });
@@ -141,7 +163,9 @@ test('tryArchiveOrgFullText', async t => {
   });
 
   await t.test('returns error when fetch itself throws', async () => {
-    withFetch(t, async () => { throw new Error('network down'); });
+    withFetch(t, async () => {
+      throw new Error('network down');
+    });
     const result = await c.tryArchiveOrgFullText('Some Work', 'a quoted phrase');
     assert.equal(result.status, 'error');
     assert.equal(result.reason, 'network down');
@@ -154,7 +178,9 @@ test('tryWikisource', async t => {
     withFetch(t, async () => {
       call++;
       if (call === 1) return jsonResponse(200, { query: { search: [{ title: 'Some Page' }] } });
-      return jsonResponse(200, { query: { pages: { 1: { extract: 'a rather long extract containing the exact quoted phrase in full' } } } });
+      return jsonResponse(200, {
+        query: { pages: { 1: { extract: 'a rather long extract containing the exact quoted phrase in full' } } },
+      });
     });
     const result = await c.tryWikisource('Some Work', 'the exact quoted phrase');
     assert.equal(result.status, 'confirmed');
@@ -185,7 +211,11 @@ test('tryWikipediaSummary', async t => {
     withFetch(t, async () => {
       call++;
       if (call === 1) return jsonResponse(200, ['', ['Some Work']]);
-      return jsonResponse(200, { type: 'standard', title: 'Some Work', content_urls: { desktop: { page: 'https://en.wikipedia.org/wiki/Some_Work' } } });
+      return jsonResponse(200, {
+        type: 'standard',
+        title: 'Some Work',
+        content_urls: { desktop: { page: 'https://en.wikipedia.org/wiki/Some_Work' } },
+      });
     });
     const result = await c.tryWikipediaSummary('Some Work');
     assert.equal(result.status, 'existence-only');
@@ -226,9 +256,11 @@ test('tryWikidata', async t => {
 
 test('escalateCitationToWeb', async t => {
   await t.test('returns a verified verdict when tier 1 (archive.org) confirms', async () => {
-    withFetch(t, async () => jsonResponse(200, {
-      response: { docs: [{ identifier: 'id1', title: 'Cited Work', creator: 'Author' }] },
-    }));
+    withFetch(t, async () =>
+      jsonResponse(200, {
+        response: { docs: [{ identifier: 'id1', title: 'Cited Work', creator: 'Author' }] },
+      })
+    );
     const result = await c.escalateCitationToWeb({ work: 'Cited Work', quote: 'a phrase' });
     assert.equal(result.verdict, 'verified');
     assert.equal(result.source, 'web');
@@ -237,7 +269,8 @@ test('escalateCitationToWeb', async t => {
   await t.test('falls through to a later tier when an earlier one misses', async () => {
     withFetch(t, async url => {
       if (url.includes('archive.org')) return jsonResponse(200, { response: { docs: [] } });
-      if (url.includes('wikisource.org') && url.includes('list=search')) return jsonResponse(200, { query: { search: [] } });
+      if (url.includes('wikisource.org') && url.includes('list=search'))
+        return jsonResponse(200, { query: { search: [] } });
       if (url.includes('wikipedia.org') && url.includes('opensearch')) return jsonResponse(200, ['', []]);
       if (url.includes('wikidata.org')) return jsonResponse(200, { search: [{ id: 'Q9', label: 'Cited Work' }] });
       return jsonResponse(404, {});
@@ -248,7 +281,9 @@ test('escalateCitationToWeb', async t => {
   });
 
   await t.test('degrades to uncertain/model-knowledge when every tier errors', async () => {
-    withFetch(t, async () => { throw new Error('offline'); });
+    withFetch(t, async () => {
+      throw new Error('offline');
+    });
     const result = await c.escalateCitationToWeb({ work: 'Cited Work', quote: 'a phrase', note: 'original note' });
     assert.equal(result.verdict, 'uncertain');
     assert.equal(result.source, 'model-knowledge');
@@ -258,7 +293,8 @@ test('escalateCitationToWeb', async t => {
   await t.test('returns null (no override) on a clean miss across every tier', async () => {
     withFetch(t, async url => {
       if (url.includes('archive.org')) return jsonResponse(200, { response: { docs: [] } });
-      if (url.includes('wikisource.org') && url.includes('list=search')) return jsonResponse(200, { query: { search: [] } });
+      if (url.includes('wikisource.org') && url.includes('list=search'))
+        return jsonResponse(200, { query: { search: [] } });
       if (url.includes('wikipedia.org') && url.includes('opensearch')) return jsonResponse(200, ['', []]);
       if (url.includes('wikidata.org')) return jsonResponse(200, { search: [] });
       return jsonResponse(404, {});
@@ -270,9 +306,11 @@ test('escalateCitationToWeb', async t => {
 
 test('escalateCitationsToWeb', async t => {
   await t.test('only escalates citations with no libraryMatch, keyed by original index', async () => {
-    withFetch(t, async () => jsonResponse(200, {
-      response: { docs: [{ identifier: 'id1', title: 'Cited Work', creator: 'Author' }] },
-    }));
+    withFetch(t, async () =>
+      jsonResponse(200, {
+        response: { docs: [{ identifier: 'id1', title: 'Cited Work', creator: 'Author' }] },
+      })
+    );
     const citationsList = [
       { work: 'Has A Match', libraryMatch: 'e1' },
       { work: 'Cited Work', libraryMatch: null, quote: 'a phrase' },
@@ -284,8 +322,15 @@ test('escalateCitationsToWeb', async t => {
 
   await t.test('caps escalations at MAX_WEB_ESCALATIONS', async () => {
     let fetchCalls = 0;
-    withFetch(t, async () => { fetchCalls++; return jsonResponse(200, { response: { docs: [] } }); });
-    const citationsList = Array.from({ length: c.MAX_WEB_ESCALATIONS + 5 }, (_, i) => ({ work: `Work ${i}`, libraryMatch: null, quote: 'x' }));
+    withFetch(t, async () => {
+      fetchCalls++;
+      return jsonResponse(200, { response: { docs: [] } });
+    });
+    const citationsList = Array.from({ length: c.MAX_WEB_ESCALATIONS + 5 }, (_, i) => ({
+      work: `Work ${i}`,
+      libraryMatch: null,
+      quote: 'x',
+    }));
     await c.escalateCitationsToWeb(citationsList);
     // Each escalated citation makes at least one fetch (tier 1) before
     // falling through — bound the count by how many citations were let in.

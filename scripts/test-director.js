@@ -31,9 +31,15 @@ async function runCase(label, { presentMembers, minCount, maxCount, conversation
   console.log(`\n--- ${label} (present=${presentMembers.length}, pool=${minCount}-${maxCount}) ---`);
   const metrics = [];
   const result = await selectSpeakers({
-    client, model: MODEL, lodgeContext, presentMembers,
+    client,
+    model: MODEL,
+    lodgeContext,
+    presentMembers,
     instruction: 'The room stirs. Write the first movement — initial reactions to whatever the material woke up.',
-    conversationHistory, minCount, maxCount, round: 0,
+    conversationHistory,
+    minCount,
+    maxCount,
+    round: 0,
     onMetric: m => metrics.push(m),
   });
 
@@ -56,33 +62,39 @@ async function main() {
   const results = [];
 
   // Small cast — pool covers the whole present set, trivial correctness check.
-  results.push(await runCase('small cast (2 present)', {
-    presentMembers: ROSTER.slice(0, 2),
-    minCount: 2,
-    maxCount: 2,
-  }));
+  results.push(
+    await runCase('small cast (2 present)', {
+      presentMembers: ROSTER.slice(0, 2),
+      minCount: 2,
+      maxCount: 2,
+    })
+  );
 
   // Medium cast, using a real session's actual members + conversation history.
   const realSession = loadRealSession();
   if (realSession) {
     const presentMembers = ROSTER.filter(m => realSession.members.includes(m.id));
     const minCount = Math.min(3, presentMembers.length);
-    results.push(await runCase(`real session cast (${realSession.id})`, {
-      presentMembers,
-      minCount,
-      maxCount: Math.min(presentMembers.length, minCount + 2),
-      conversationHistory: (realSession.conversationHistory || []).slice(-6),
-    }));
+    results.push(
+      await runCase(`real session cast (${realSession.id})`, {
+        presentMembers,
+        minCount,
+        maxCount: Math.min(presentMembers.length, minCount + 2),
+        conversationHistory: (realSession.conversationHistory || []).slice(-6),
+      })
+    );
   } else {
     console.log('\n(no real sessions on disk — skipping real-session case)');
   }
 
   // Large cast — full roster.
-  results.push(await runCase('large cast (full roster)', {
-    presentMembers: ROSTER,
-    minCount: 5,
-    maxCount: 7,
-  }));
+  results.push(
+    await runCase('large cast (full roster)', {
+      presentMembers: ROSTER,
+      minCount: 5,
+      maxCount: 7,
+    })
+  );
 
   // Retry + fallback path, stubbed client (no real API call) — the director
   // "response" is always an invalid tool_use, so this proves selectSpeakers
@@ -100,17 +112,25 @@ async function main() {
   const fallbackPresent = ROSTER.slice(0, 4);
   const fallbackMetrics = [];
   const fallbackResult = await selectSpeakers({
-    client: stubClient, model: MODEL, lodgeContext, presentMembers: fallbackPresent,
-    instruction: 'test', conversationHistory: [], minCount: 3, maxCount: 3, round: 0,
+    client: stubClient,
+    model: MODEL,
+    lodgeContext,
+    presentMembers: fallbackPresent,
+    instruction: 'test',
+    conversationHistory: [],
+    minCount: 3,
+    maxCount: 3,
+    round: 0,
     onMetric: m => fallbackMetrics.push(m),
   });
   console.log('speakers:', fallbackResult.speakers);
   console.log('source:', fallbackResult.source);
   console.log('metrics:', JSON.stringify(fallbackMetrics, null, 2));
   const expectedFallback = fallbackPresent.slice(0, 3).map(m => m.id);
-  const fallbackOk = fallbackResult.source === 'fallback'
-    && JSON.stringify(fallbackResult.speakers) === JSON.stringify(expectedFallback)
-    && fallbackMetrics.length === 3; // 2 attempts + 1 metric for the fallback event itself
+  const fallbackOk =
+    fallbackResult.source === 'fallback' &&
+    JSON.stringify(fallbackResult.speakers) === JSON.stringify(expectedFallback) &&
+    fallbackMetrics.length === 3; // 2 attempts + 1 metric for the fallback event itself
   console.log(fallbackOk ? '✅ fallback triggered correctly' : '❌ FALLBACK PATH BROKEN');
   results.push(fallbackOk);
 

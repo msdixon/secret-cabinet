@@ -22,12 +22,11 @@ const { splitIntoBeats, BEAT_WORD_THRESHOLD } = require('../public/js/beats.js')
 function buildMemberSection(member, artifact, notes, loadMemberFile) {
   const text = loadMemberFile(member.file);
   if (!text) return '';
-  const artifactNote = (artifact?.memberId === member.id && artifact.text?.trim())
-    ? `\n\n---\n\n## PRIVATE — BEFORE THE MEETING BEGAN\n\nBefore the others arrived, you were shown the following. No one else in the room has seen it. You may reference it, produce it at the right moment, withhold it entirely, or let it colour what you say without naming it. The choice is yours.\n\n${artifact.text.trim()}`
-    : '';
-  const sessionNote = notes[member.id]?.trim()
-    ? `\n\n---\n\n## SESSION NOTE\n\n${notes[member.id].trim()}`
-    : '';
+  const artifactNote =
+    artifact?.memberId === member.id && artifact.text?.trim()
+      ? `\n\n---\n\n## PRIVATE — BEFORE THE MEETING BEGAN\n\nBefore the others arrived, you were shown the following. No one else in the room has seen it. You may reference it, produce it at the right moment, withhold it entirely, or let it colour what you say without naming it. The choice is yours.\n\n${artifact.text.trim()}`
+      : '';
+  const sessionNote = notes[member.id]?.trim() ? `\n\n---\n\n## SESSION NOTE\n\n${notes[member.id].trim()}` : '';
   return `---\n${text}${artifactNote}${sessionNote}`;
 }
 
@@ -38,20 +37,37 @@ function buildMemberSection(member, artifact, notes, loadMemberFile) {
 // retries, skips, and fallbacks) produces one of these, persisted alongside
 // the session so it's reviewable after the fact, not just an ephemeral
 // console line.
-function makeMetric(phase, { round, memberId, attempts, usage, latencyMs, skipped, error, reasoning, voiceExemplar, waitingOnMemberId, residueNote } = {}) {
+function makeMetric(
+  phase,
+  {
+    round,
+    memberId,
+    attempts,
+    usage,
+    latencyMs,
+    skipped,
+    error,
+    reasoning,
+    voiceExemplar,
+    waitingOnMemberId,
+    residueNote,
+  } = {}
+) {
   return {
     phase, // 'director' | 'speaker' | 'casting' | 'disposition' | 'citation-extraction' | 'citation-grounding'
     round: round ?? null,
     memberId: memberId || null,
     attempts: attempts ?? 1,
-    usage: usage ? {
-      input_tokens: usage.input_tokens,
-      output_tokens: usage.output_tokens,
-      // #190: proof the cache breakpoints are actually paying off — a
-      // non-zero read here on a repeat director/speaker call is the signal
-      // to look for, not just a lower input_tokens count.
-      cache_read_input_tokens: usage.cache_read_input_tokens ?? null,
-    } : null,
+    usage: usage
+      ? {
+          input_tokens: usage.input_tokens,
+          output_tokens: usage.output_tokens,
+          // #190: proof the cache breakpoints are actually paying off — a
+          // non-zero read here on a repeat director/speaker call is the signal
+          // to look for, not just a lower input_tokens count.
+          cache_read_input_tokens: usage.cache_read_input_tokens ?? null,
+        }
+      : null,
     latencyMs: latencyMs ?? null,
     skipped: !!skipped,
     error: error || null,
@@ -114,9 +130,10 @@ function withHistoryCacheControl(conversationHistory) {
   const lastIndex = conversationHistory.length - 1;
   return conversationHistory.map((message, i) => {
     if (i !== lastIndex) return message;
-    const content = typeof message.content === 'string'
-      ? [{ type: 'text', text: message.content, cache_control: { type: 'ephemeral' } }]
-      : message.content;
+    const content =
+      typeof message.content === 'string'
+        ? [{ type: 'text', text: message.content, cache_control: { type: 'ephemeral' } }]
+        : message.content;
     return { ...message, content };
   });
 }
@@ -176,11 +193,13 @@ function buildDirectorToolSchema(presentIds, minCount, maxCount) {
         // does, today).
         windingDown: {
           type: 'boolean',
-          description: 'Whether the room itself — the whole evening, not just this pool — is winding down: energy ebbing, threads settling, no one straining to speak. Usually false.',
+          description:
+            'Whether the room itself — the whole evening, not just this pool — is winding down: energy ebbing, threads settling, no one straining to speak. Usually false.',
         },
         lullNote: {
           type: 'string',
-          description: 'Optional. If windingDown is true, one diegetic line marking the pause, in the room\'s register — an image or a small action, not a summary. E.g. "The fire settles; Yeats refills his glass." Leave out if nothing concrete comes to mind, or if windingDown is false.',
+          description:
+            'Optional. If windingDown is true, one diegetic line marking the pause, in the room\'s register — an image or a small action, not a summary. E.g. "The fire settles; Yeats refills his glass." Leave out if nothing concrete comes to mind, or if windingDown is false.',
         },
       },
       required: ['speakers', 'reasoning', 'windingDown'],
@@ -213,7 +232,7 @@ Choose between ${minCount} and ${maxCount} of the present members as this round'
 
 Separately — and this is a judgment about the whole evening, not just this pool — say whether the room is winding down: energy ebbing, threads settling, no one straining to speak. This is usually false; most consults, the room still has more in it. If it is genuinely true, you may also write one diegetic line marking the pause — an image or a small action in the room's register, not a summary of what just happened.`;
 
-  const userMessage = 'Choose this round\'s candidate pool.';
+  const userMessage = "Choose this round's candidate pool.";
 
   return { system, userMessage };
 }
@@ -221,7 +240,18 @@ Separately — and this is a judgment about the whole evening, not just this poo
 // `tool` defaults to the per-round director's own schema; the pre-convene
 // casting call (#185) passes its own so the two questions stay legible in
 // the transcript of what was actually asked.
-async function callDirector({ client, model, system, conversationHistory, userMessage, presentIds, minCount, maxCount, tool, lodgeContext }) {
+async function callDirector({
+  client,
+  model,
+  system,
+  conversationHistory,
+  userMessage,
+  presentIds,
+  minCount,
+  maxCount,
+  tool,
+  lodgeContext,
+}) {
   const schema = tool || buildDirectorToolSchema(presentIds, minCount, maxCount);
   const start = Date.now();
   const messages = [...withHistoryCacheControl(conversationHistory), { role: 'user', content: userMessage }];
@@ -239,15 +269,24 @@ async function callDirector({ client, model, system, conversationHistory, userMe
   // different question, see buildCastingToolSchema) — undefined there
   // degrades to false/null below, which proposeCast simply never reads.
   const { speakers, reasoning, windingDown, lullNote } = block?.input || {};
-  return { speakers, reasoning, windingDown: !!windingDown, lullNote: lullNote || null, usage: response.usage, latencyMs };
+  return {
+    speakers,
+    reasoning,
+    windingDown: !!windingDown,
+    lullNote: lullNote || null,
+    usage: response.usage,
+    latencyMs,
+  };
 }
 
 function isValidSelection(speakers, presentIds, minCount, maxCount) {
-  return Array.isArray(speakers)
-    && speakers.length >= minCount
-    && speakers.length <= maxCount
-    && new Set(speakers).size === speakers.length
-    && speakers.every(id => presentIds.includes(id));
+  return (
+    Array.isArray(speakers) &&
+    speakers.length >= minCount &&
+    speakers.length <= maxCount &&
+    new Set(speakers).size === speakers.length &&
+    speakers.every(id => presentIds.includes(id))
+  );
 }
 
 // Retry-once + deterministic-fallback loop, shared by the per-round director
@@ -257,21 +296,41 @@ function isValidSelection(speakers, presentIds, minCount, maxCount) {
 // handling: one corrective retry, then a deterministic fallback, so no caller
 // is ever left without a usable answer because a model call went sideways.
 async function runDirectorSelection({
-  client, model, system, userMessage, conversationHistory = [],
-  candidateIds, minCount, maxCount, tool,
-  phase = 'director', round = null, onMetric,
-  invalidNote, fallbackIds, fallbackNote, lodgeContext,
+  client,
+  model,
+  system,
+  userMessage,
+  conversationHistory = [],
+  candidateIds,
+  minCount,
+  maxCount,
+  tool,
+  phase = 'director',
+  round = null,
+  onMetric,
+  invalidNote,
+  fallbackIds,
+  fallbackNote,
+  lodgeContext,
 }) {
-  const correction = invalidNote
-    || ` Your previous selection was invalid — it must be between ${minCount} and ${maxCount} present member ids, no duplicates, drawn only from: ${candidateIds.join(', ')}. Choose again.`;
+  const correction =
+    invalidNote ||
+    ` Your previous selection was invalid — it must be between ${minCount} and ${maxCount} present member ids, no duplicates, drawn only from: ${candidateIds.join(', ')}. Choose again.`;
 
   let lastReasoning = null;
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
       const { speakers, reasoning, windingDown, lullNote, usage, latencyMs } = await callDirector({
-        client, model, system, conversationHistory,
+        client,
+        model,
+        system,
+        conversationHistory,
         userMessage: userMessage + (attempt === 2 ? correction : ''),
-        presentIds: candidateIds, minCount, maxCount, tool, lodgeContext,
+        presentIds: candidateIds,
+        minCount,
+        maxCount,
+        tool,
+        lodgeContext,
       });
       lastReasoning = reasoning || lastReasoning;
       onMetric?.(makeMetric(phase, { round, attempts: attempt, usage, latencyMs, reasoning }));
@@ -291,15 +350,43 @@ async function runDirectorSelection({
 
 // presentMembers must already be in roster order — the fallback pick
 // (first `maxCount` present members) relies on that ordering.
-async function selectSpeakers({ client, model, lodgeContext, presentMembers, instruction, conversationHistory, minCount, maxCount, round, onMetric, roundSoFar }) {
+async function selectSpeakers({
+  client,
+  model,
+  lodgeContext,
+  presentMembers,
+  instruction,
+  conversationHistory,
+  minCount,
+  maxCount,
+  round,
+  onMetric,
+  roundSoFar,
+}) {
   const presentIds = presentMembers.map(m => m.id);
-  const { system, userMessage } = buildDirectorPrompt({ lodgeContext, presentMembers, instruction, minCount, maxCount, roundSoFar });
+  const { system, userMessage } = buildDirectorPrompt({
+    lodgeContext,
+    presentMembers,
+    instruction,
+    minCount,
+    maxCount,
+    roundSoFar,
+  });
 
   return runDirectorSelection({
-    client, model, system, userMessage, conversationHistory,
-    candidateIds: presentIds, minCount, maxCount,
+    client,
+    model,
+    system,
+    userMessage,
+    conversationHistory,
+    candidateIds: presentIds,
+    minCount,
+    maxCount,
     tool: buildDirectorToolSchema(presentIds, minCount, maxCount),
-    phase: 'director', round, onMetric, lodgeContext,
+    phase: 'director',
+    round,
+    onMetric,
+    lodgeContext,
     // Deterministic fallback: first `maxCount` present members, in roster order.
     fallbackIds: presentMembers.slice(0, maxCount).map(m => m.id),
     fallbackNote: 'director failed twice — used deterministic fallback',
@@ -348,7 +435,8 @@ function buildCastingToolSchema(candidateIds, minCount, maxCount) {
           // Unlike the per-round director's rationale, this one is shown —
           // it is the proposal's whole case for itself.
           type: 'string',
-          description: 'One or two sentences, in the register of the lodge, on what in this document draws these people. Shown to the user beside the proposed cast.',
+          description:
+            'One or two sentences, in the register of the lodge, on what in this document draws these people. Shown to the user beside the proposed cast.',
         },
       },
       required: ['speakers', 'reasoning'],
@@ -357,9 +445,7 @@ function buildCastingToolSchema(candidateIds, minCount, maxCount) {
 }
 
 function buildCastingPrompt({ lodgeContext, candidates, regulars, documentText, minCount, maxCount }) {
-  const candidateLines = candidates
-    .map(m => `- ${m.id} — ${m.name}${m.brief ? `: ${m.brief}` : ''}`)
-    .join('\n');
+  const candidateLines = candidates.map(m => `- ${m.id} — ${m.name}${m.brief ? `: ${m.brief}` : ''}`).join('\n');
 
   const regularsBlock = regulars.length
     ? `ALREADY COMING TONIGHT — the user's regulars. They are always drawn to this room. They are not yours to choose, and not yours to drop:\n${regulars.map(m => `- ${m.name}`).join('\n')}`
@@ -399,8 +485,15 @@ Choose between ${minCount} and ${maxCount} further members, ordered by how stron
 // only for casting judgment. Must be in roster order — the deterministic
 // fallback relies on it, exactly as selectSpeakers' does.
 async function proposeCast({
-  client, model, lodgeContext, roster, regularIds = [], documentText,
-  targetMin = CASTING_TARGET_MIN, targetMax = CASTING_TARGET_MAX, onMetric,
+  client,
+  model,
+  lodgeContext,
+  roster,
+  regularIds = [],
+  documentText,
+  targetMin = CASTING_TARGET_MIN,
+  targetMax = CASTING_TARGET_MAX,
+  onMetric,
 }) {
   const rosterIds = roster.map(m => m.id);
   const regulars = roster.filter(m => regularIds.includes(m.id));
@@ -424,14 +517,26 @@ async function proposeCast({
 
   const candidateIds = candidates.map(m => m.id);
   const { system, userMessage } = buildCastingPrompt({
-    lodgeContext, candidates, regulars, documentText, minCount, maxCount,
+    lodgeContext,
+    candidates,
+    regulars,
+    documentText,
+    minCount,
+    maxCount,
   });
 
   const { speakers, reasoning, source } = await runDirectorSelection({
-    client, model, system, userMessage,
-    candidateIds, minCount, maxCount,
+    client,
+    model,
+    system,
+    userMessage,
+    candidateIds,
+    minCount,
+    maxCount,
     tool: buildCastingToolSchema(candidateIds, minCount, maxCount),
-    phase: 'casting', onMetric, lodgeContext,
+    phase: 'casting',
+    onMetric,
+    lodgeContext,
     invalidNote: ` Your previous selection was invalid — it must be between ${minCount} and ${maxCount} member ids, no duplicates, drawn only from: ${candidateIds.join(', ')}. Choose again.`,
     // Deterministic fallback: the first `minCount` candidates in roster order.
     // Roster order is roughly the order the lodge was founded in, which is a
@@ -570,7 +675,10 @@ function trimToWordBudget(text, maxWords) {
   const trimmed = (text || '').trim();
   if (!trimmed || countWords(trimmed) <= maxWords) return trimmed;
 
-  const paragraphs = trimmed.split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
+  const paragraphs = trimmed
+    .split(/\n\s*\n/)
+    .map(p => p.trim())
+    .filter(Boolean);
   const kept = [];
   let used = 0;
   for (const paragraph of paragraphs) {
@@ -620,7 +728,7 @@ function buildVoiceExemplarSection(exemplar) {
   // theirs. Naming that keeps the model from adopting Rosenthal's or Peers's
   // vocabulary as Ibn Khaldun's or Teresa's own.
   const translationNote = exemplar.translated
-    ? ' The English here is a translator\'s, not yours: take the cadence, the shape of the argument, and the habits of attention as your own — not the particular vocabulary.'
+    ? " The English here is a translator's, not yours: take the cadence, the shape of the argument, and the habits of attention as your own — not the particular vocabulary."
     : '';
 
   return `\n\n---\n\n## HOW YOU ACTUALLY WRITE — A PAGE IN YOUR OWN HAND
@@ -670,7 +778,10 @@ function mergeResidue(priorText, note) {
   const trimmedNote = (note || '').trim().slice(0, RESIDUE_NOTE_MAX_CHARS);
   if (!trimmedNote) return (priorText || '').trim();
 
-  const priorFragments = (priorText || '').split(RESIDUE_SEPARATOR).map(f => f.trim()).filter(Boolean);
+  const priorFragments = (priorText || '')
+    .split(RESIDUE_SEPARATOR)
+    .map(f => f.trim())
+    .filter(Boolean);
   const fragments = [...priorFragments, trimmedNote];
 
   const kept = [];
@@ -706,7 +817,16 @@ This is not memory. You have no meetings to recall, and if pressed, you would ho
 // Only this member's own character file goes in — no other present members'
 // files. That's the whole point: each speaker gets the model's full
 // attention instead of a fraction of it split across the whole cast.
-function buildSpeakerSystemPrompt({ lodgeContext, member, artifact, notes, loadMemberFile, disposition, voiceExemplar, residue }) {
+function buildSpeakerSystemPrompt({
+  lodgeContext,
+  member,
+  artifact,
+  notes,
+  loadMemberFile,
+  disposition,
+  voiceExemplar,
+  residue,
+}) {
   const memberSection = buildMemberSection(member, artifact, notes, loadMemberFile);
   // #187: sits directly after the character file, since it's evidence for
   // the same thing that file describes — and before the disposition, which
@@ -782,14 +902,21 @@ const CROWDED_WORDS_PER_VOICE = 220;
 // INTERRUPT_INTENT_WEIGHT, #203) — told to the speaker as an option, not an
 // instruction, since a real interruption is sometimes let go rather than
 // taken.
-function buildSpeakerUserMessage({ roundPrompt, roundSoFarText, member, remainingBudgetWords, unheardCount, interruptingName }) {
-  const soFar = roundSoFarText?.trim()
-    ? `\n\n--- THE ROUND SO FAR ---\n${roundSoFarText.trim()}\n`
-    : '';
+function buildSpeakerUserMessage({
+  roundPrompt,
+  roundSoFarText,
+  member,
+  remainingBudgetWords,
+  unheardCount,
+  interruptingName,
+}) {
+  const soFar = roundSoFarText?.trim() ? `\n\n--- THE ROUND SO FAR ---\n${roundSoFarText.trim()}\n` : '';
   let budgetHint = '';
   if (typeof remainingBudgetWords === 'number') {
-    const crowded = typeof unheardCount === 'number' && unheardCount > 0
-      && remainingBudgetWords / (unheardCount + 1) < CROWDED_WORDS_PER_VOICE;
+    const crowded =
+      typeof unheardCount === 'number' &&
+      unheardCount > 0 &&
+      remainingBudgetWords / (unheardCount + 1) < CROWDED_WORDS_PER_VOICE;
     budgetHint = crowded
       ? `\n\n(Roughly ${remainingBudgetWords} words of room left in the round, and ${unheardCount} other${unheardCount === 1 ? '' : 's'} who haven't spoken yet still waiting on it. If everyone's going to fit, this is a moment where a line lands harder than a paragraph — but read the room; don't cut yourself off if something genuinely needs the space.)`
       : `\n\n(The round has roughly ${remainingBudgetWords} words of room left before it should start wrapping up — a felt sense of how much space remains, not a hard limit. A short reaction is as valid a turn as a long one.)`;
@@ -871,7 +998,8 @@ const DISPOSITION_MAX_TOKENS = 280; // reflection prose plus the tool-call JSON 
 function buildDispositionToolSchema(presentIds) {
   return {
     name: 'update_disposition',
-    description: 'Record this member\'s private interior state after speaking, including whether they have unspent business with anyone present.',
+    description:
+      "Record this member's private interior state after speaking, including whether they have unspent business with anyone present.",
     input_schema: {
       type: 'object',
       properties: {
@@ -882,7 +1010,8 @@ function buildDispositionToolSchema(presentIds) {
         waitingOnMemberId: {
           type: 'string',
           enum: [...presentIds, 'none'],
-          description: 'The one present member (by id) this member has unspent business with and would want to answer or press if that person speaks again — or "none" if that is not true right now. Most turns are "none"; only name someone when it is real.',
+          description:
+            'The one present member (by id) this member has unspent business with and would want to answer or press if that person speaks again — or "none" if that is not true right now. Most turns are "none"; only name someone when it is real.',
         },
         // #166: cross-session residue, piggybacked on this same call rather
         // than a second one — see the "Cross-session residue" section below
@@ -952,9 +1081,10 @@ async function callDispositionUpdate({ client, model, system, userMessage, prese
   const block = response.content.find(b => b.type === 'tool_use');
   const { reflection, waitingOnMemberId, residueNote } = block?.input || {};
   const text = (reflection || '').trim().slice(0, DISPOSITION_MAX_CHARS);
-  const target = waitingOnMemberId && waitingOnMemberId !== 'none' && presentIds.includes(waitingOnMemberId)
-    ? waitingOnMemberId
-    : null;
+  const target =
+    waitingOnMemberId && waitingOnMemberId !== 'none' && presentIds.includes(waitingOnMemberId)
+      ? waitingOnMemberId
+      : null;
   // #166: '' rather than undefined when absent, so callers can treat "no
   // residue this beat" uniformly without an extra undefined check.
   const residue = (residueNote || '').trim().slice(0, RESIDUE_NOTE_MAX_CHARS);
@@ -1045,11 +1175,29 @@ function resolveLullNote(directorNote, rng = Math.random, previousLullNote = nul
 // is a cosmetic, self-correcting glitch during live viewing only, not a
 // data-integrity issue. Not solving for it now; revisit if it's ever
 // actually visible in practice.
-async function runRound({ client, model, lodgeContext, ROSTER, loadMemberFile,
-  presentMemberIds, artifact, notes, roundPrompt, conversationHistory,
-  speakerCount, round, onChunk, onMetric, onSpeakerStart, onSpeakerEnd, precedingTurn,
-  disposition, loadVoiceExemplar, loadResidue, previousLullNote }) {
-
+async function runRound({
+  client,
+  model,
+  lodgeContext,
+  ROSTER,
+  loadMemberFile,
+  presentMemberIds,
+  artifact,
+  notes,
+  roundPrompt,
+  conversationHistory,
+  speakerCount,
+  round,
+  onChunk,
+  onMetric,
+  onSpeakerStart,
+  onSpeakerEnd,
+  precedingTurn,
+  disposition,
+  loadVoiceExemplar,
+  loadResidue,
+  previousLullNote,
+}) {
   const presentMembers = ROSTER.filter(m => presentMemberIds.includes(m.id));
   const effectiveCount = Math.min(speakerCount, presentMembers.length);
   // #188: mutated in place through the round so a member picked twice in
@@ -1128,8 +1276,16 @@ async function runRound({ client, model, lodgeContext, ROSTER, loadMemberFile,
 
   const initialPoolTarget = Math.min(presentMembers.length, effectiveCount + POOL_SLACK);
   const { speakers: initialPool } = await selectSpeakers({
-    client, model, lodgeContext, presentMembers, instruction: roundPrompt, conversationHistory,
-    minCount: effectiveCount, maxCount: initialPoolTarget, round, onMetric,
+    client,
+    model,
+    lodgeContext,
+    presentMembers,
+    instruction: roundPrompt,
+    conversationHistory,
+    minCount: effectiveCount,
+    maxCount: initialPoolTarget,
+    round,
+    onMetric,
   });
 
   let pool = initialPool;
@@ -1155,9 +1311,22 @@ async function runRound({ client, model, lodgeContext, ROSTER, loadMemberFile,
       // assumption), rather than re-asking for the round's original count.
       const nextCount = Math.max(1, Math.min(presentMembers.length, Math.ceil(remainingBudget / 150)));
       const nextPoolTarget = Math.min(presentMembers.length, nextCount + POOL_SLACK);
-      const { speakers: freshPool, windingDown, lullNote } = await selectSpeakers({
-        client, model, lodgeContext, presentMembers, instruction: roundPrompt, conversationHistory,
-        minCount: nextCount, maxCount: nextPoolTarget, round, onMetric, roundSoFar,
+      const {
+        speakers: freshPool,
+        windingDown,
+        lullNote,
+      } = await selectSpeakers({
+        client,
+        model,
+        lodgeContext,
+        presentMembers,
+        instruction: roundPrompt,
+        conversationHistory,
+        minCount: nextCount,
+        maxCount: nextPoolTarget,
+        round,
+        onMetric,
+        roundSoFar,
       });
       // #244: the exhaustion signal. The director judging the room itself
       // winding down ends the passage right here, before drawing from the
@@ -1174,7 +1343,13 @@ async function runRound({ client, model, lodgeContext, ROSTER, loadMemberFile,
       if (!pool.length) break;
     }
 
-    const memberId = pickNextSpeaker({ pool, spokenCounts, lastSpeakerId, remainingBudget, disposition: currentDisposition });
+    const memberId = pickNextSpeaker({
+      pool,
+      spokenCounts,
+      lastSpeakerId,
+      remainingBudget,
+      disposition: currentDisposition,
+    });
     if (!memberId) break; // no viable candidate even after a fresh consult — end the round here
 
     const member = presentMembers.find(m => m.id === memberId);
@@ -1185,22 +1360,49 @@ async function runRound({ client, model, lodgeContext, ROSTER, loadMemberFile,
     // business, regardless of whether INTERRUPT_INTENT_WEIGHT is what
     // actually swung the roll. The framing is true either way: they did
     // want to answer that person, and that person did just speak.
-    const interruptedMember = (lastSpeakerId && currentDisposition[memberId]?.waitingOnMemberId === lastSpeakerId)
-      ? presentMembers.find(m => m.id === lastSpeakerId)
-      : null;
+    const interruptedMember =
+      lastSpeakerId && currentDisposition[memberId]?.waitingOnMemberId === lastSpeakerId
+        ? presentMembers.find(m => m.id === lastSpeakerId)
+        : null;
 
     const unheardCount = pool.filter(id => id !== memberId && !(spokenCounts.get(id) > 0)).length;
     const voiceExemplar = exemplarFor(memberId);
     const residue = residueFor(memberId);
-    const system = buildSpeakerSystemPrompt({ lodgeContext, member, artifact, notes, loadMemberFile, disposition: currentDisposition[memberId], voiceExemplar, residue });
-    const userMessage = buildSpeakerUserMessage({ roundPrompt, roundSoFarText: roundSoFar, member, remainingBudgetWords: remainingBudget, unheardCount, interruptingName: interruptedMember?.name || null });
+    const system = buildSpeakerSystemPrompt({
+      lodgeContext,
+      member,
+      artifact,
+      notes,
+      loadMemberFile,
+      disposition: currentDisposition[memberId],
+      voiceExemplar,
+      residue,
+    });
+    const userMessage = buildSpeakerUserMessage({
+      roundPrompt,
+      roundSoFarText: roundSoFar,
+      member,
+      remainingBudgetWords: remainingBudget,
+      unheardCount,
+      interruptingName: interruptedMember?.name || null,
+    });
 
     onChunk?.(`${member.name}\n`);
     onSpeakerStart?.(memberId);
     try {
       const { result, attempts } = await withOneRetry(() =>
-        callSpeakerTurn({ client, model, system, conversationHistory, userMessage, onChunk, lodgeContext }));
-      onMetric?.(makeMetric('speaker', { round, memberId, attempts, usage: result.usage, latencyMs: result.latencyMs, voiceExemplar: voiceExemplar?.id }));
+        callSpeakerTurn({ client, model, system, conversationHistory, userMessage, onChunk, lodgeContext })
+      );
+      onMetric?.(
+        makeMetric('speaker', {
+          round,
+          memberId,
+          attempts,
+          usage: result.usage,
+          latencyMs: result.latencyMs,
+          voiceExemplar: voiceExemplar?.id,
+        })
+      );
 
       const contextBeforeTurn = roundSoFar;
       const settledText = stripInternalBlankLines(result.text);
@@ -1216,14 +1418,30 @@ async function runRound({ client, model, lodgeContext, ROSTER, loadMemberFile,
       // that already succeeded and was already streamed to the client.
       try {
         const priorResidueText = residueFor(memberId);
-        const dispositionSystem = buildDispositionSystemPrompt({ member, priorDisposition: currentDisposition[memberId], presentMembers, priorResidue: priorResidueText });
+        const dispositionSystem = buildDispositionSystemPrompt({
+          member,
+          priorDisposition: currentDisposition[memberId],
+          presentMembers,
+          priorResidue: priorResidueText,
+        });
         const dispositionUserMessage = buildDispositionUserMessage({
           roundSoFarText: contextBeforeTurn || 'Nothing yet — you are the first to speak this round.',
-          turnText: settledText, member,
+          turnText: settledText,
+          member,
         });
         const dispositionPresentIds = presentMembers.filter(m => m.id !== memberId).map(m => m.id);
-        const { text: updatedDisposition, waitingOnMemberId, residueNote, usage: dUsage, latencyMs: dLatencyMs } = await callDispositionUpdate({
-          client, model, system: dispositionSystem, userMessage: dispositionUserMessage, presentIds: dispositionPresentIds,
+        const {
+          text: updatedDisposition,
+          waitingOnMemberId,
+          residueNote,
+          usage: dUsage,
+          latencyMs: dLatencyMs,
+        } = await callDispositionUpdate({
+          client,
+          model,
+          system: dispositionSystem,
+          userMessage: dispositionUserMessage,
+          presentIds: dispositionPresentIds,
         });
         if (updatedDisposition) currentDisposition[memberId] = { text: updatedDisposition, waitingOnMemberId };
         // #166: only when the beat actually earned a fragment — most beats
@@ -1233,13 +1451,31 @@ async function runRound({ client, model, lodgeContext, ROSTER, loadMemberFile,
           residueCache.set(memberId, mergedResidue);
           residueUpdates[memberId] = mergedResidue;
         }
-        onMetric?.(makeMetric('disposition', { round, memberId, usage: dUsage, latencyMs: dLatencyMs, waitingOnMemberId, residueNote: residueNote || null }));
+        onMetric?.(
+          makeMetric('disposition', {
+            round,
+            memberId,
+            usage: dUsage,
+            latencyMs: dLatencyMs,
+            waitingOnMemberId,
+            residueNote: residueNote || null,
+          })
+        );
       } catch (err) {
         onMetric?.(makeMetric('disposition', { round, memberId, skipped: true, error: err.message }));
         // Best-effort — the member simply carries their prior disposition forward.
       }
     } catch (err) {
-      onMetric?.(makeMetric('speaker', { round, memberId, attempts: err.attempts || 1, skipped: true, error: err.message, voiceExemplar: voiceExemplar?.id }));
+      onMetric?.(
+        makeMetric('speaker', {
+          round,
+          memberId,
+          attempts: err.attempts || 1,
+          skipped: true,
+          error: err.message,
+          voiceExemplar: voiceExemplar?.id,
+        })
+      );
       // Skip this speaker, keep the round going with fewer voices.
     }
 
@@ -1262,7 +1498,15 @@ async function runRound({ client, model, lodgeContext, ROSTER, loadMemberFile,
   // an authored moment).
   const lullNote = resolveLullNote(directorLullNote, undefined, previousLullNote);
 
-  return { fullRoundText: roundSoFar, speakerOrder, disposition: currentDisposition, residueUpdates, beats: beatsList, endedBy, lullNote };
+  return {
+    fullRoundText: roundSoFar,
+    speakerOrder,
+    disposition: currentDisposition,
+    residueUpdates,
+    beats: beatsList,
+    endedBy,
+    lullNote,
+  };
 }
 
 module.exports = {

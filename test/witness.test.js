@@ -27,10 +27,19 @@ const { splitIntoBeats } = require('../public/js/beats.js');
 // The elements witness.js reaches for by id. Kept in one place so the drift
 // guard below and the fixture can't disagree with each other.
 const WITNESS_IDS = [
-  'stage-record', 'stage-pane', 'witness-hint', 'witness-exit-btn',
-  'witness-stage', 'witness-progress', 'stage-collapsed-bar',
-  'transcript-panel', 'transcript-content', 'record-scroll',
-  'witness-room', 'room-speech-layer', 'room-events',
+  'stage-record',
+  'stage-pane',
+  'witness-hint',
+  'witness-exit-btn',
+  'witness-stage',
+  'witness-progress',
+  'stage-collapsed-bar',
+  'transcript-panel',
+  'transcript-content',
+  'record-scroll',
+  'witness-room',
+  'room-speech-layer',
+  'room-events',
 ];
 
 const FIXTURE = `
@@ -112,10 +121,15 @@ test('the Witness fixture matches the ids index.html actually ships', () => {
 test('replay: parsing a stored session into playback blocks', async t => {
   await t.test('renders a round header, then a speech bubble per speaker', async t2 => {
     const { document, module: Witness } = boot(t2);
-    await Witness.start({
-      id: 's1',
-      rounds: [{ label: 'Round I', text: 'Crowley:\nThe book is not the point.\n\nBlavatsky:\nIt is exactly the point.' }],
-    }, makeDeps());
+    await Witness.start(
+      {
+        id: 's1',
+        rounds: [
+          { label: 'Round I', text: 'Crowley:\nThe book is not the point.\n\nBlavatsky:\nIt is exactly the point.' },
+        ],
+      },
+      makeDeps()
+    );
     playToEnd(Witness, document);
 
     const stage = document.getElementById('witness-stage');
@@ -134,10 +148,13 @@ test('replay: parsing a stored session into playback blocks', async t => {
   // after the passage, where the room actually drew breath.
   await t.test('plays a post-#244 segment label as a lull after its passage', async t2 => {
     const { document, module: Witness } = boot(t2);
-    await Witness.start({
-      id: 's1',
-      rounds: [{ label: 'The room draws breath.', text: 'Crowley:\nOne.', endedBy: 'lull' }],
-    }, makeDeps());
+    await Witness.start(
+      {
+        id: 's1',
+        rounds: [{ label: 'The room draws breath.', text: 'Crowley:\nOne.', endedBy: 'lull' }],
+      },
+      makeDeps()
+    );
     playToEnd(Witness, document);
 
     const stage = document.getElementById('witness-stage');
@@ -148,7 +165,7 @@ test('replay: parsing a stored session into playback blocks', async t => {
     const order = [...stage.children];
     assert.ok(
       order.indexOf(stage.querySelector('.transcript-entry')) < order.indexOf(stage.querySelector('.transcript-lull')),
-      'the passage plays before the lull that ended it',
+      'the passage plays before the lull that ended it'
     );
   });
 
@@ -163,9 +180,12 @@ test('replay: parsing a stored session into playback blocks', async t => {
     // more content still to come, forcing a real split rather than just
     // ending exactly at the crossing point.
     const longTurn = `${sentence1} ${sentence2} ${sentence3}`;
-    await Witness.start({
-      rounds: [{ label: 'Round I', text: `Crowley:\n${longTurn}` }],
-    }, makeDeps());
+    await Witness.start(
+      {
+        rounds: [{ label: 'Round I', text: `Crowley:\n${longTurn}` }],
+      },
+      makeDeps()
+    );
     playToEnd(Witness, document);
 
     const entries = [...document.querySelectorAll('#witness-stage .transcript-entry')];
@@ -174,7 +194,10 @@ test('replay: parsing a stored session into playback blocks', async t => {
 
     // Every beat stays on the same side -- only an actual speaker change flips it.
     const sides = entries.map(e => [...e.classList].find(c => c.startsWith('bubble-')));
-    assert.ok(sides.every(s => s === sides[0]), 'beats of the same turn should not alternate sides');
+    assert.ok(
+      sides.every(s => s === sides[0]),
+      'beats of the same turn should not alternate sides'
+    );
 
     // No words lost, duplicated, or reordered across the split.
     const combinedText = entries.map(e => e.querySelector('.speech-text').textContent).join(' ');
@@ -186,9 +209,12 @@ test('replay: parsing a stored session into playback blocks', async t => {
     // (keepSpeaker=true in flush) — the same distinction pipeline.js's
     // stripInternalBlankLines defends on the way in.
     const { document, module: Witness } = boot(t2);
-    await Witness.start({
-      rounds: [{ label: 'Round I', text: 'Crowley:\nFirst paragraph.\n\nSecond paragraph.' }],
-    }, makeDeps());
+    await Witness.start(
+      {
+        rounds: [{ label: 'Round I', text: 'Crowley:\nFirst paragraph.\n\nSecond paragraph.' }],
+      },
+      makeDeps()
+    );
     playToEnd(Witness, document);
 
     const entries = [...document.querySelectorAll('#witness-stage .transcript-entry')];
@@ -200,9 +226,12 @@ test('replay: parsing a stored session into playback blocks', async t => {
 
   await t.test('renders an unattributed action line as an action, not a speech bubble', async t2 => {
     const { document, module: Witness } = boot(t2);
-    await Witness.start({
-      rounds: [{ label: 'Round I', text: '*The fire gutters.*\n\nCrowley:\nAs I was saying.' }],
-    }, makeDeps());
+    await Witness.start(
+      {
+        rounds: [{ label: 'Round I', text: '*The fire gutters.*\n\nCrowley:\nAs I was saying.' }],
+      },
+      makeDeps()
+    );
     playToEnd(Witness, document);
 
     const stage = document.getElementById('witness-stage');
@@ -214,9 +243,12 @@ test('replay: parsing a stored session into playback blocks', async t => {
 
   await t.test('a speech consisting only of actions renders as action lines', async t2 => {
     const { document, module: Witness } = boot(t2);
-    await Witness.start({
-      rounds: [{ label: 'Round I', text: 'Crowley:\n*He says nothing at all.*' }],
-    }, makeDeps());
+    await Witness.start(
+      {
+        rounds: [{ label: 'Round I', text: 'Crowley:\n*He says nothing at all.*' }],
+      },
+      makeDeps()
+    );
     playToEnd(Witness, document);
 
     const stage = document.getElementById('witness-stage');
@@ -226,9 +258,12 @@ test('replay: parsing a stored session into playback blocks', async t => {
 
   await t.test('drops divider lines rather than attributing them to anyone', async t2 => {
     const { document, module: Witness } = boot(t2);
-    await Witness.start({
-      rounds: [{ label: 'Round I', text: 'Crowley:\nA line.\n---\n—\n--' }],
-    }, makeDeps());
+    await Witness.start(
+      {
+        rounds: [{ label: 'Round I', text: 'Crowley:\nA line.\n---\n—\n--' }],
+      },
+      makeDeps()
+    );
     playToEnd(Witness, document);
 
     const text = document.querySelector('#witness-stage .speech-text').textContent;
@@ -237,10 +272,13 @@ test('replay: parsing a stored session into playback blocks', async t => {
 
   await t.test('attaches a stored annotation to its speaker’s bubble', async t2 => {
     const { document, module: Witness } = boot(t2);
-    await Witness.start({
-      rounds: [{ label: 'Round I', text: 'Crowley:\nA claim about Dee.' }],
-      annotations: { e1: { speaker: 'Crowley', note: 'Cross-check against the Sloane MSS.' } },
-    }, makeDeps());
+    await Witness.start(
+      {
+        rounds: [{ label: 'Round I', text: 'Crowley:\nA claim about Dee.' }],
+        annotations: { e1: { speaker: 'Crowley', note: 'Cross-check against the Sloane MSS.' } },
+      },
+      makeDeps()
+    );
     playToEnd(Witness, document);
 
     const note = document.querySelector('#witness-stage .witness-annotation');
@@ -250,16 +288,22 @@ test('replay: parsing a stored session into playback blocks', async t => {
 
   await t.test('alternates bubble sides as the speaker changes, and holds the side when it does not', async t2 => {
     const { document, module: Witness } = boot(t2);
-    await Witness.start({
-      rounds: [{
-        label: 'Round I',
-        text: 'Crowley:\nOne.\n\nBlavatsky:\nTwo.\n\nBlavatsky:\nStill me.',
-      }],
-    }, makeDeps());
+    await Witness.start(
+      {
+        rounds: [
+          {
+            label: 'Round I',
+            text: 'Crowley:\nOne.\n\nBlavatsky:\nTwo.\n\nBlavatsky:\nStill me.',
+          },
+        ],
+      },
+      makeDeps()
+    );
     playToEnd(Witness, document);
 
-    const sides = [...document.querySelectorAll('#witness-stage .transcript-entry')]
-      .map(e => (e.classList.contains('bubble-left') ? 'left' : 'right'));
+    const sides = [...document.querySelectorAll('#witness-stage .transcript-entry')].map(e =>
+      e.classList.contains('bubble-left') ? 'left' : 'right'
+    );
     assert.equal(sides.length, 3);
     assert.notEqual(sides[0], sides[1], 'a new speaker should switch sides');
     assert.equal(sides[1], sides[2], 'the same speaker twice should stay put');
@@ -268,9 +312,17 @@ test('replay: parsing a stored session into playback blocks', async t => {
   await t.test('uses the glyph the deps bag supplied, and escapes speaker names through it', async t2 => {
     const escaped = [];
     const { document, module: Witness } = boot(t2);
-    await Witness.start({
-      rounds: [{ label: 'Round I', text: 'Crowley:\nA line.' }],
-    }, makeDeps({ escapeHTML: s => { escaped.push(s); return String(s); } }));
+    await Witness.start(
+      {
+        rounds: [{ label: 'Round I', text: 'Crowley:\nA line.' }],
+      },
+      makeDeps({
+        escapeHTML: s => {
+          escaped.push(s);
+          return String(s);
+        },
+      })
+    );
     playToEnd(Witness, document);
 
     assert.equal(document.querySelector('#witness-stage .speaker-glyph').textContent, '☿');
@@ -289,9 +341,12 @@ test('replay: parsing a stored session into playback blocks', async t => {
 test('replay: advancing and progress', async t => {
   await t.test('reports position and reaches a terminal state at the end', async t2 => {
     const { document, module: Witness } = boot(t2);
-    await Witness.start({
-      rounds: [{ label: 'Round I', text: 'Crowley:\nOne.\n\nBlavatsky:\nTwo.' }],
-    }, makeDeps());
+    await Witness.start(
+      {
+        rounds: [{ label: 'Round I', text: 'Crowley:\nOne.\n\nBlavatsky:\nTwo.' }],
+      },
+      makeDeps()
+    );
 
     // start() renders block 1 of 3 (header, speech, speech).
     assert.match(document.getElementById('witness-hint').textContent, /^1 \/ 3/);
@@ -321,7 +376,11 @@ test('replay: start syncs the record, exit stops playback and collapses the stag
     const { module: Witness } = boot(t2);
     await Witness.start(
       { id: 'sess-42', rounds: [{ label: 'Round I', text: 'Crowley:\nA line.' }] },
-      makeDeps({ restoreSession: async id => { order.push(`restore:${id}`); } }),
+      makeDeps({
+        restoreSession: async id => {
+          order.push(`restore:${id}`);
+        },
+      })
     );
     order.push('rendered');
     assert.deepEqual(order, ['restore:sess-42', 'rendered']);
@@ -332,29 +391,36 @@ test('replay: start syncs the record, exit stops playback and collapses the stag
     const { module: Witness } = boot(t2);
     await Witness.start(
       { rounds: [{ label: 'Round I', text: 'Crowley:\nA line.' }] },
-      makeDeps({ restoreSession: () => { called = true; } }),
+      makeDeps({
+        restoreSession: () => {
+          called = true;
+        },
+      })
     );
     assert.equal(called, false);
   });
 
-  await t.test('exit stops playback, clears the stage, and collapses it — restoreSession is not called again', async t2 => {
-    const restored = [];
-    const { document, window, module: Witness } = boot(t2);
-    await Witness.start(
-      { id: 'sess-42', rounds: [{ label: 'Round I', text: 'Crowley:\nA line.' }] },
-      makeDeps({ restoreSession: id => restored.push(id) }),
-    );
-    assert.deepEqual(restored, ['sess-42']);
+  await t.test(
+    'exit stops playback, clears the stage, and collapses it — restoreSession is not called again',
+    async t2 => {
+      const restored = [];
+      const { document, window, module: Witness } = boot(t2);
+      await Witness.start(
+        { id: 'sess-42', rounds: [{ label: 'Round I', text: 'Crowley:\nA line.' }] },
+        makeDeps({ restoreSession: id => restored.push(id) })
+      );
+      assert.deepEqual(restored, ['sess-42']);
 
-    window.document.dispatchEvent(new window.KeyboardEvent('keydown', { code: 'Escape' }));
+      window.document.dispatchEvent(new window.KeyboardEvent('keydown', { code: 'Escape' }));
 
-    assert.deepEqual(restored, ['sess-42'], 'exit must not call restoreSession a second time');
-    assert.equal(document.getElementById('witness-stage').innerHTML, '');
-    assert.equal(document.getElementById('witness-exit-btn').style.display, 'none');
-    const classes = document.getElementById('stage-record').classList;
-    assert.ok(classes.contains('collapsed'), 'exit collapses the stage');
-    assert.equal(classes.contains('stage-only'), false, 'exiting must leave stage-only behind, not carry both');
-  });
+      assert.deepEqual(restored, ['sess-42'], 'exit must not call restoreSession a second time');
+      assert.equal(document.getElementById('witness-stage').innerHTML, '');
+      assert.equal(document.getElementById('witness-exit-btn').style.display, 'none');
+      const classes = document.getElementById('stage-record').classList;
+      assert.ok(classes.contains('collapsed'), 'exit collapses the stage');
+      assert.equal(classes.contains('stage-only'), false, 'exiting must leave stage-only behind, not carry both');
+    }
+  );
 
   await t.test('a fresh replay reopens a collapsed stage', async t2 => {
     const { document, module: Witness } = boot(t2);
@@ -384,7 +450,11 @@ test('live mirroring (#184): the stage renders its own copy, independent of the 
     assert.match(entry.querySelector('.speaker-name').textContent, /Crowley/);
     assert.match(entry.querySelector('.speech-text').textContent, /not the point/);
 
-    assert.equal(document.getElementById('transcript-content').children.length, 0, 'the record is app.js\'s to fill, not witness.js\'s');
+    assert.equal(
+      document.getElementById('transcript-content').children.length,
+      0,
+      "the record is app.js's to fill, not witness.js's"
+    );
   });
 
   await t.test('stage entries carry no entryId/dataset.speaker — annotation stays exclusively in the record', t2 => {
@@ -397,42 +467,48 @@ test('live mirroring (#184): the stage renders its own copy, independent of the 
     assert.equal(entry.dataset.speaker, undefined);
   });
 
-  await t.test('liveRoundHeader shows the exit button and a live hint, and returns a removable element for error recovery', t2 => {
-    const { document, module: Witness } = boot(t2);
-    Witness.configure(makeDeps());
+  await t.test(
+    'liveRoundHeader shows the exit button and a live hint, and returns a removable element for error recovery',
+    t2 => {
+      const { document, module: Witness } = boot(t2);
+      Witness.configure(makeDeps());
 
-    const header = Witness.liveRoundHeader('First Movement');
-    assert.equal(document.getElementById('witness-exit-btn').style.display, '');
-    assert.match(document.getElementById('witness-hint').textContent, /Live/);
+      const header = Witness.liveRoundHeader('First Movement');
+      assert.equal(document.getElementById('witness-exit-btn').style.display, '');
+      assert.match(document.getElementById('witness-hint').textContent, /Live/);
 
-    // Mirrors app.js's error-recovery path: a failed round removes both the
-    // record's header (h.remove()) and the stage's mirror (this return value).
-    header.remove();
-    assert.equal(document.querySelectorAll('#witness-stage .witness-round-header').length, 0);
-  });
+      // Mirrors app.js's error-recovery path: a failed round removes both the
+      // record's header (h.remove()) and the stage's mirror (this return value).
+      header.remove();
+      assert.equal(document.querySelectorAll('#witness-stage .witness-round-header').length, 0);
+    }
+  );
 
-  await t.test('liveTypingStart/Set/liveClearTyping manage a growing placeholder, swapped by the next liveSpeech', t2 => {
-    const { document, module: Witness } = boot(t2);
-    Witness.configure(makeDeps());
+  await t.test(
+    'liveTypingStart/Set/liveClearTyping manage a growing placeholder, swapped by the next liveSpeech',
+    t2 => {
+      const { document, module: Witness } = boot(t2);
+      Witness.configure(makeDeps());
 
-    Witness.liveTypingStart('Crowley');
-    let typing = document.querySelector('#witness-stage .transcript-typing');
-    assert.ok(typing, 'a typing placeholder should appear');
-    assert.match(typing.querySelector('.speaker-name').textContent, /Crowley/);
+      Witness.liveTypingStart('Crowley');
+      let typing = document.querySelector('#witness-stage .transcript-typing');
+      assert.ok(typing, 'a typing placeholder should appear');
+      assert.match(typing.querySelector('.speaker-name').textContent, /Crowley/);
 
-    // #219: liveTypingSet replaces the whole open-beat text each call
-    // (app.js recomputes it from the growing buffer via splitIntoBeats)
-    // rather than appending a raw delta.
-    Witness.liveTypingSet('The book');
-    Witness.liveTypingSet('The book is not the point.');
-    assert.equal(document.querySelector('#witness-stage .typing-text').textContent, 'The book is not the point.');
+      // #219: liveTypingSet replaces the whole open-beat text each call
+      // (app.js recomputes it from the growing buffer via splitIntoBeats)
+      // rather than appending a raw delta.
+      Witness.liveTypingSet('The book');
+      Witness.liveTypingSet('The book is not the point.');
+      assert.equal(document.querySelector('#witness-stage .typing-text').textContent, 'The book is not the point.');
 
-    Witness.liveClearTyping();
-    assert.equal(document.querySelectorAll('#witness-stage .transcript-typing').length, 0);
+      Witness.liveClearTyping();
+      assert.equal(document.querySelectorAll('#witness-stage .transcript-typing').length, 0);
 
-    Witness.liveSpeech({ speaker: 'Crowley', text: 'The book is not the point.', memberId: 'crowley' });
-    assert.equal(document.querySelectorAll('#witness-stage .transcript-entry').length, 1);
-  });
+      Witness.liveSpeech({ speaker: 'Crowley', text: 'The book is not the point.', memberId: 'crowley' });
+      assert.equal(document.querySelectorAll('#witness-stage .transcript-entry').length, 1);
+    }
+  );
 
   await t.test('liveReset clears the stage and reopens it; resetLiveStage clears without forcing it open', t2 => {
     const { document, module: Witness } = boot(t2);
@@ -505,7 +581,7 @@ test('collapse/reopen: exitClicked dispatches to whichever mode is active, never
     assert.equal(classes.contains('collapsed'), false);
   });
 
-  await t.test('collapseStage catches up the record\'s scroll position, which was inert while hidden', t2 => {
+  await t.test("collapseStage catches up the record's scroll position, which was inert while hidden", t2 => {
     const { document, module: Witness } = boot(t2);
     Witness.configure(makeDeps());
     const recordScroll = document.getElementById('record-scroll');
@@ -522,34 +598,44 @@ test('collapse/reopen: exitClicked dispatches to whichever mode is active, never
 });
 
 test('the room (#257): dialogue composited onto the scene, replacing the #202 toggle', async t => {
-  await t.test('before enableRoom(), everything still renders into the text stage — the unmodified pre-#257 fallback', t2 => {
-    const { document, module: Witness } = boot(t2);
-    Witness.configure(makeDeps());
-    Witness.liveSpeech({ speaker: 'Crowley', text: 'A line.', memberId: 'crowley' });
+  await t.test(
+    'before enableRoom(), everything still renders into the text stage — the unmodified pre-#257 fallback',
+    t2 => {
+      const { document, module: Witness } = boot(t2);
+      Witness.configure(makeDeps());
+      Witness.liveSpeech({ speaker: 'Crowley', text: 'A line.', memberId: 'crowley' });
 
-    assert.equal(document.getElementById('stage-pane').classList.contains('room-active'), false);
-    assert.ok(document.querySelector('#witness-stage .transcript-entry'));
-    assert.equal(document.querySelectorAll('#room-speech-layer .room-speech-card').length, 0);
-  });
+      assert.equal(document.getElementById('stage-pane').classList.contains('room-active'), false);
+      assert.ok(document.querySelector('#witness-stage .transcript-entry'));
+      assert.equal(document.querySelectorAll('#room-speech-layer .room-speech-card').length, 0);
+    }
+  );
 
-  await t.test('enableRoom() marks the stage pane active and routes live speech into a member-anchored card, not the text stage', t2 => {
-    const { document, window, module: Witness } = boot(t2);
-    stubScene(window, { crowley: { x: 120, y: 200, visible: true } });
-    Witness.configure(makeDeps());
-    Witness.enableRoom();
+  await t.test(
+    'enableRoom() marks the stage pane active and routes live speech into a member-anchored card, not the text stage',
+    t2 => {
+      const { document, window, module: Witness } = boot(t2);
+      stubScene(window, { crowley: { x: 120, y: 200, visible: true } });
+      Witness.configure(makeDeps());
+      Witness.enableRoom();
 
-    assert.ok(document.getElementById('stage-pane').classList.contains('room-active'));
+      assert.ok(document.getElementById('stage-pane').classList.contains('room-active'));
 
-    Witness.liveSpeech({ speaker: 'Crowley', text: 'The book is not the point.', memberId: 'crowley' });
+      Witness.liveSpeech({ speaker: 'Crowley', text: 'The book is not the point.', memberId: 'crowley' });
 
-    assert.equal(document.getElementById('witness-stage').innerHTML, '', 'room mode should not also write into the text stage');
-    const card = document.querySelector('#room-speech-layer .room-speech-card');
-    assert.ok(card, 'a card should appear in the room layer');
-    assert.match(card.querySelector('.speaker-name').textContent, /Crowley/);
-    assert.match(card.querySelector('.speech-text').textContent, /not the point/);
-    assert.equal(card.style.left, '120px');
-    assert.equal(card.style.top, '200px');
-  });
+      assert.equal(
+        document.getElementById('witness-stage').innerHTML,
+        '',
+        'room mode should not also write into the text stage'
+      );
+      const card = document.querySelector('#room-speech-layer .room-speech-card');
+      assert.ok(card, 'a card should appear in the room layer');
+      assert.match(card.querySelector('.speaker-name').textContent, /Crowley/);
+      assert.match(card.querySelector('.speech-text').textContent, /not the point/);
+      assert.equal(card.style.left, '120px');
+      assert.equal(card.style.top, '200px');
+    }
+  );
 
   await t.test('a card projected near the top of the room is floored, not left to grow off the top edge', t2 => {
     // Cards grow upward from their anchor (translateY(-100%)) and portraits
@@ -565,7 +651,11 @@ test('the room (#257): dialogue composited onto the scene, replacing the #202 to
     Witness.liveSpeech({ speaker: 'Crowley', text: 'Near the top.', memberId: 'crowley' });
 
     const card = document.querySelector('#room-speech-layer .room-speech-card');
-    assert.equal(parseInt(card.style.top, 10) >= 150, true, 'a card anchored high on screen should be floored, not left at its raw projected y');
+    assert.equal(
+      parseInt(card.style.top, 10) >= 150,
+      true,
+      'a card anchored high on screen should be floored, not left at its raw projected y'
+    );
   });
 
   await t.test("a card hides rather than render off-canvas when the member's seat isn't currently visible", t2 => {
@@ -580,19 +670,22 @@ test('the room (#257): dialogue composited onto the scene, replacing the #202 to
     assert.equal(card.style.display, 'none');
   });
 
-  await t.test('a speaker with no seat to anchor to (e.g. an interjection) reads into the room event strip, not a card', t2 => {
-    const { document, window, module: Witness } = boot(t2);
-    stubScene(window, {});
-    Witness.configure(makeDeps());
-    Witness.enableRoom();
+  await t.test(
+    'a speaker with no seat to anchor to (e.g. an interjection) reads into the room event strip, not a card',
+    t2 => {
+      const { document, window, module: Witness } = boot(t2);
+      stubScene(window, {});
+      Witness.configure(makeDeps());
+      Witness.enableRoom();
 
-    Witness.liveSpeech({ speaker: '— a voice from elsewhere —', text: 'A knock.', memberId: null });
+      Witness.liveSpeech({ speaker: '— a voice from elsewhere —', text: 'A knock.', memberId: null });
 
-    assert.equal(document.querySelectorAll('#room-speech-layer .room-speech-card').length, 0);
-    const entry = document.querySelector('#room-events .room-event-entry');
-    assert.ok(entry);
-    assert.match(entry.textContent, /A knock\./);
-  });
+      assert.equal(document.querySelectorAll('#room-speech-layer .room-speech-card').length, 0);
+      const entry = document.querySelector('#room-events .room-event-entry');
+      assert.ok(entry);
+      assert.match(entry.textContent, /A knock\./);
+    }
+  );
 
   await t.test('liveTypingStart/Set grow the same card liveSpeech later settles, never a second element', t2 => {
     const { document, window, module: Witness } = boot(t2);
@@ -612,7 +705,11 @@ test('the room (#257): dialogue composited onto the scene, replacing the #202 to
     Witness.liveClearTyping();
     Witness.liveSpeech({ speaker: 'Crowley', text: 'The book is not the point.', memberId: 'crowley' });
 
-    assert.equal(document.querySelectorAll('#room-speech-layer .room-speech-card').length, 1, 'typing and settled states share one card, not two');
+    assert.equal(
+      document.querySelectorAll('#room-speech-layer .room-speech-card').length,
+      1,
+      'typing and settled states share one card, not two'
+    );
     card = document.querySelector('#room-speech-layer .room-speech-card');
     assert.equal(card.classList.contains('room-card-typing'), false);
     assert.match(card.querySelector('.speech-text').textContent, /not the point/);
@@ -630,57 +727,75 @@ test('the room (#257): dialogue composited onto the scene, replacing the #202 to
     Witness.liveSpeech({ speaker: 'Crowley', text: 'One.', memberId: 'crowley' });
     Witness.liveSpeech({ speaker: 'Blavatsky', text: 'Two.', memberId: 'blavatsky' });
 
-    const tops = [...document.querySelectorAll('#room-speech-layer .room-speech-card')]
-      .map(c => parseInt(c.style.top, 10));
+    const tops = [...document.querySelectorAll('#room-speech-layer .room-speech-card')].map(c =>
+      parseInt(c.style.top, 10)
+    );
     assert.equal(tops.length, 2);
     assert.notEqual(tops[0], tops[1], 'seats projected close together in x should not land at the same y');
   });
 
-  await t.test('round headers read into the room event strip, and liveLull still returns a real, appendable element for the Continue/Let it end controls', t2 => {
-    const { document, window, module: Witness } = boot(t2);
-    stubScene(window, {});
-    Witness.configure(makeDeps());
-    Witness.enableRoom();
+  await t.test(
+    'round headers read into the room event strip, and liveLull still returns a real, appendable element for the Continue/Let it end controls',
+    t2 => {
+      const { document, window, module: Witness } = boot(t2);
+      stubScene(window, {});
+      Witness.configure(makeDeps());
+      Witness.enableRoom();
 
-    Witness.liveRoundHeader('First Movement');
-    assert.equal(document.querySelectorAll('#room-events .witness-round-header').length, 1);
-    assert.equal(document.querySelectorAll('#witness-stage .witness-round-header').length, 0);
+      Witness.liveRoundHeader('First Movement');
+      assert.equal(document.querySelectorAll('#room-events .witness-round-header').length, 1);
+      assert.equal(document.querySelectorAll('#witness-stage .witness-round-header').length, 0);
 
-    // app.js's awaitLull() appends a live lull's Continue/Let it end buttons
-    // directly into whatever liveLull() returns -- it has to be a real node,
-    // not a stand-in, wherever it's actually visible.
-    const lullEl = Witness.liveLull('The room draws breath.');
-    assert.ok(document.querySelectorAll('#room-events .transcript-lull').length, 1);
-    const btn = document.createElement('button');
-    lullEl.appendChild(btn);
-    assert.equal(lullEl.querySelector('button'), btn);
-  });
+      // app.js's awaitLull() appends a live lull's Continue/Let it end buttons
+      // directly into whatever liveLull() returns -- it has to be a real node,
+      // not a stand-in, wherever it's actually visible.
+      const lullEl = Witness.liveLull('The room draws breath.');
+      assert.ok(document.querySelectorAll('#room-events .transcript-lull').length, 1);
+      const btn = document.createElement('button');
+      lullEl.appendChild(btn);
+      assert.equal(lullEl.querySelector('button'), btn);
+    }
+  );
 
-  await t.test('replay composites into the room exactly like live mirroring, and go-back restores a card to its prior turn rather than deleting it', async t2 => {
-    const { document, window, module: Witness } = boot(t2);
-    stubScene(window, { crowley: { x: 10, y: 10, visible: true } });
-    Witness.enableRoom();
-    await Witness.start({
-      rounds: [{ label: 'Round I', text: 'Crowley:\nFirst thing.\n\nCrowley:\nSecond thing.' }],
-    }, makeDeps());
-    // start() already rendered block 0 (the header) via its own advance().
+  await t.test(
+    'replay composites into the room exactly like live mirroring, and go-back restores a card to its prior turn rather than deleting it',
+    async t2 => {
+      const { document, window, module: Witness } = boot(t2);
+      stubScene(window, { crowley: { x: 10, y: 10, visible: true } });
+      Witness.enableRoom();
+      await Witness.start(
+        {
+          rounds: [{ label: 'Round I', text: 'Crowley:\nFirst thing.\n\nCrowley:\nSecond thing.' }],
+        },
+        makeDeps()
+      );
+      // start() already rendered block 0 (the header) via its own advance().
 
-    Witness.advance(); // "First thing."
-    let card = document.querySelector('#room-speech-layer .room-speech-card');
-    assert.match(card.querySelector('.speech-text').textContent, /First thing/);
-    assert.equal(document.querySelectorAll('#room-speech-layer .room-speech-card').length, 1);
+      Witness.advance(); // "First thing."
+      let card = document.querySelector('#room-speech-layer .room-speech-card');
+      assert.match(card.querySelector('.speech-text').textContent, /First thing/);
+      assert.equal(document.querySelectorAll('#room-speech-layer .room-speech-card').length, 1);
 
-    Witness.advance(); // "Second thing." -- same card, overwritten in place
-    card = document.querySelector('#room-speech-layer .room-speech-card');
-    assert.match(card.querySelector('.speech-text').textContent, /Second thing/);
-    assert.equal(document.querySelectorAll('#room-speech-layer .room-speech-card').length, 1, 'still one card, not a second');
+      Witness.advance(); // "Second thing." -- same card, overwritten in place
+      card = document.querySelector('#room-speech-layer .room-speech-card');
+      assert.match(card.querySelector('.speech-text').textContent, /Second thing/);
+      assert.equal(
+        document.querySelectorAll('#room-speech-layer .room-speech-card').length,
+        1,
+        'still one card, not a second'
+      );
 
-    // goBack() isn't part of the public API -- driven the same way the
-    // left-arrow key does in the real page.
-    window.document.dispatchEvent(new window.KeyboardEvent('keydown', { code: 'ArrowLeft' }));
-    card = document.querySelector('#room-speech-layer .room-speech-card');
-    assert.match(card.querySelector('.speech-text').textContent, /First thing/, 'going back should restore the card to its prior content, not delete it');
-  });
+      // goBack() isn't part of the public API -- driven the same way the
+      // left-arrow key does in the real page.
+      window.document.dispatchEvent(new window.KeyboardEvent('keydown', { code: 'ArrowLeft' }));
+      card = document.querySelector('#room-speech-layer .room-speech-card');
+      assert.match(
+        card.querySelector('.speech-text').textContent,
+        /First thing/,
+        'going back should restore the card to its prior content, not delete it'
+      );
+    }
+  );
 
   await t.test('exit clears the room the same way it clears the text stage', async t2 => {
     const { document, window, module: Witness } = boot(t2);
