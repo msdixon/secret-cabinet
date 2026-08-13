@@ -65,6 +65,7 @@ which is the seam that exists to be tested. Splitting it further is
 | --- | --- |
 | `pipeline.test.js` | `pipeline.js`'s pure scheduling functions — `pickNextSpeaker`, `isPoolExhausted`, `isValidSelection`, `stripInternalBlankLines`, `countWords`, `lengthTendencyOf` |
 | `module-convention.test.js` | The #142 convention itself: one `window.X` per file, documented API present, loads standalone, is actually in `index.html` |
+| `speaker.test.js` | `speaker.js` — `normalizeSpeaker`/`resolveMember`/`isKnownSpeakerHeader` matching, including the player-as-member identity read through `deps.getPlayerSpeakerName()` |
 | `witness.test.js` | `witness.js` — replay block parsing, playback, live/reading panel swap, exit → `restoreSession` handback |
 | `export.test.js` | `export.js` — `buildAnnotatedTranscript` and the `deps.getCore()` seam |
 | `sessions.test.js` | `sessions.js` — `restoreSession`'s full hydration contract, comparative mode, session notes, dossier |
