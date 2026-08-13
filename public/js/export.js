@@ -103,67 +103,66 @@ window.Export = (function () {
       const journals = data.journals || [];
       if (!journals.length) {
         if (loadingGroup) loadingGroup.label = 'No Day One journals found';
-        return;
-      }
+      } else {
+        // Float PreSeedings to top
+        const isPreferred = j => /preseedings|secret.cabin/i.test(j.name);
+        const sorted = [...journals].sort((a, b) => isPreferred(b) - isPreferred(a));
 
-      // Float PreSeedings to top
-      const isPreferred = j => /preseedings|secret.cabin/i.test(j.name);
-      const sorted = [...journals].sort((a, b) => isPreferred(b) - isPreferred(a));
+        // Remove the placeholder loading group
+        if (loadingGroup) loadingGroup.remove();
 
-      // Remove the placeholder loading group
-      if (loadingGroup) loadingGroup.remove();
+        // Pre-create groups in sorted order so the DOM order is guaranteed
+        const groups = sorted.map(journal => {
+          const group = document.createElement('optgroup');
+          group.label = journal.name;
+          sel.appendChild(group);
+          return { journal, group };
+        });
 
-      // Pre-create groups in sorted order so the DOM order is guaranteed
-      const groups = sorted.map(journal => {
-        const group = document.createElement('optgroup');
-        group.label = journal.name;
-        sel.appendChild(group);
-        return { journal, group };
-      });
+        // Load entries for each journal in parallel, fill the pre-created groups
+        await Promise.all(
+          groups.map(async ({ journal, group }) => {
+            try {
+              const er = await fetch('/api/dayone/entries', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ journalId: journal.id, limit: 3 }),
+              });
+              const ed = await er.json();
+              const entries = ed.entries || [];
 
-      // Load entries for each journal in parallel, fill the pre-created groups
-      await Promise.all(
-        groups.map(async ({ journal, group }) => {
-          try {
-            const er = await fetch('/api/dayone/entries', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ journalId: journal.id, limit: 3 }),
-            });
-            const ed = await er.json();
-            const entries = ed.entries || [];
+              entries.forEach((entry, idx) => {
+                const key = `dayone:${journal.id}:${idx}`;
+                entryCache.set(key, { ...entry, journalId: journal.id, journalName: journal.name });
+                const opt = document.createElement('option');
+                opt.value = key;
+                opt.textContent = `${entry.date}  ${entry.preview}`;
+                group.appendChild(opt);
+              });
 
-            entries.forEach((entry, idx) => {
-              const key = `dayone:${journal.id}:${idx}`;
-              entryCache.set(key, { ...entry, journalId: journal.id, journalName: journal.name });
-              const opt = document.createElement('option');
-              opt.value = key;
-              opt.textContent = `${entry.date}  ${entry.preview}`;
-              group.appendChild(opt);
-            });
-
-            if (!entries.length) {
+              if (!entries.length) {
+                const opt = document.createElement('option');
+                opt.disabled = true;
+                opt.textContent = 'No entries found';
+                group.appendChild(opt);
+              }
+            } catch {
               const opt = document.createElement('option');
               opt.disabled = true;
-              opt.textContent = 'No entries found';
+              opt.textContent = 'Could not load entries';
               group.appendChild(opt);
             }
-          } catch {
-            const opt = document.createElement('option');
-            opt.disabled = true;
-            opt.textContent = 'Could not load entries';
-            group.appendChild(opt);
-          }
-        })
-      );
+          })
+        );
 
-      // If we had a saved journal preference, try to pre-select its first entry
-      const savedJournalId = deps.getCore().currentJournal.id;
-      if (savedJournalId) {
-        const key = `dayone:${savedJournalId}:0`;
-        if (entryCache.has(key)) {
-          sel.value = key;
-          handleSourceChange(); // load entry text into state
+        // If we had a saved journal preference, try to pre-select its first entry
+        const savedJournalId = deps.getCore().currentJournal.id;
+        if (savedJournalId) {
+          const key = `dayone:${savedJournalId}:0`;
+          if (entryCache.has(key)) {
+            sel.value = key;
+            handleSourceChange(); // load entry text into state
+          }
         }
       }
     } catch (e) {
