@@ -600,9 +600,23 @@ a.archival-image-link:hover { border-color:var(--lodge-amber-dim); cursor:pointe
    exactly and stays click-through (pointer-events:none) except where a card
    actually is, so clicking the room still advances replay. */
 .room-speech-layer { position:absolute; inset:0; pointer-events:none; }
+/* #291: a longer beat (especially with an italic action note attached) can
+   grow taller than the room itself -- the card grows upward from its seat
+   anchor (translateY(-100%) below) with no cap, and repositionRoomCards'
+   top-overflow correction only nudges its position, it doesn't bound its
+   height. Past a point the card simply exceeds .stage-record's overflow:hidden
+   box and its earliest lines are clipped off-screen with no way to read them.
+   max-height + overflow-y:auto turns that into an internal scroll instead of
+   silent clipping; the 100% basis resolves against room-speech-layer's own
+   height (inset:0 over witness-room, which has a definite height from its
+   fixed-height flex ancestor .stage-pane), so this scales with the room
+   itself rather than a hardcoded pixel guess. Width bumped from 240px per
+   the issue's other question (#291) -- wider wrapping means fewer lines for
+   the same beat, so most turns never need to hit the scroll cap at all. */
 .room-speech-card {
   position:absolute; transform:translate(-50%, -100%); margin-top:-14px;
-  max-width:240px; background:rgba(14,11,8,0.92); border:1px solid var(--lodge-border);
+  max-width:300px; max-height:min(320px, calc(100% - 40px)); overflow-y:auto; overscroll-behavior:contain;
+  background:rgba(14,11,8,0.92); border:1px solid var(--lodge-border);
   border-radius:3px; padding:10px 12px; pointer-events:auto;
   transition:opacity 0.5s ease; opacity:1;
 }
