@@ -150,7 +150,7 @@ window.Witness = (function () {
   // band overlaps the previous one's, sorted left-to-right -- a simple
   // stacking heuristic, not real collision resolution, but enough for the
   // handful of seats that can plausibly be showing a card at once.
-  const CARD_COLLISION_WIDTH = 220;
+  const CARD_COLLISION_WIDTH = 280; // #291: tracks .room-speech-card's max-width (style.css)
   const CARD_STACK_OFFSET = 92;
   // A card grows upward from its seat point (CSS translateY(-100%), so it
   // reads as "hovering above the portrait"), and portraits themselves sit in
@@ -277,6 +277,9 @@ window.Witness = (function () {
     const { card, existed, prevHtml } = getOrCreateCard(memberId);
     card.classList.remove('room-card-typing');
     card.innerHTML = speechHtml(block);
+    // #291: a settled beat is the full text -- start a reader at its top,
+    // not wherever the typing scroll (below) last left the card sitting.
+    card.scrollTop = 0;
     touchRoomLoop();
     scheduleCardFade(memberId, text);
     return {
@@ -310,6 +313,12 @@ window.Witness = (function () {
     const card = liveTypingMemberId && roomCards.get(liveTypingMemberId);
     const el = card?.querySelector('.typing-text');
     if (el) el.textContent = text;
+    // #291: the card now caps its own height and scrolls internally rather
+    // than growing without bound, so a beat that outgrows it needs to be
+    // kept scrolled to the tail as it's typed -- the stage's plain-text
+    // fallback already does the equivalent (liveTypingSet's stage.scrollTop
+    // = stage.scrollHeight below).
+    if (card) card.scrollTop = card.scrollHeight;
   }
 
   // ── Room-mode live pacing (#279) ─────────────────────────────────────────
