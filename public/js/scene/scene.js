@@ -41,10 +41,112 @@ window.LodgeScene = (function () {
   const CAMERA_FRAME_MS = 900;
   const CAMERA_FPS = 60;
 
+  // #294: enclosing wall. Radius is deliberately CAMERA_DEFAULT_RADIUS + a
+  // margin, not some fixed "room size" -- with beta fixed and no
+  // attachControl, the camera's horizontal distance from center never
+  // exceeds CAMERA_DEFAULT_RADIUS (frameCamera() only ever eases alpha/
+  // radius between the default and CAMERA_SPEAKER_RADIUS, both smaller).
+  // Keeping the wall outside that bound means the camera is always inside
+  // the room looking toward the table, so the wall can never land between
+  // camera and subject regardless of which seat's angle it swings to --
+  // no per-angle occlusion checking needed. WALL_HEIGHT is independent of
+  // that and just needs to clear the camera's own elevation (~4.7 at most,
+  // see CAMERA_DEFAULT_RADIUS/beta) to read as a room rather than a fence.
+  const WALL_RADIUS = CAMERA_DEFAULT_RADIUS + 1;
+  const WALL_HEIGHT = 6;
+  const FLOOR_SIZE = WALL_RADIUS * 2 + 2; // past the wall footprint, no bare-void gap at the seam
+  const SCONCE_RADIUS = WALL_RADIUS - 1.5;
+  const SCONCE_HEIGHT = 2.4;
+  const SCONCE_COUNT = 3;
+
   let sceneRef = null;
   let cameraRef = null;
   let seatMeshes = [];
   const portraitTextures = {}; // memberId -> BABYLON.Texture, cached across seat reassignment
+
+  // #294: walls + ceiling + a few sconces -- the bounded first art pass
+  // named in the issue (walls, ambient lighting, enclosure). Deliberately
+  // not attempted here: wall trim/molding, furnishings (bookshelves,
+  // framed portraits on the walls), or dynamic shadow casting -- all left
+  // for a later, separately-scoped pass per the issue's own "not decided"
+  // list.
+  function buildWalls(scene) {
+    // Open cylindrical tube (no caps -- floor/ceiling cover top and bottom
+    // separately). backFaceCulling off because the camera sits *inside*
+    // this radius (see WALL_RADIUS above) and would otherwise be looking
+    // at the mesh's outward-facing back side.
+    const wall = BABYLON.MeshBuilder.CreateCylinder(
+      'wall',
+      {
+        diameter: WALL_RADIUS * 2,
+        height: WALL_HEIGHT,
+        tessellation: 32,
+        cap: BABYLON.Mesh.NO_CAP,
+      },
+      scene
+    );
+    wall.position.y = WALL_HEIGHT / 2;
+    const wallMat = new BABYLON.StandardMaterial('wallMat', scene);
+    wallMat.diffuseColor = BABYLON.Color3.FromHexString(LODGE_BORDER);
+    // A small fixed emissive baseline so the wall reads as a dim paneled
+    // surface even where no point light reaches it (see the hearth/sconce
+    // `range` comment below for why that matters) -- without this the far
+    // side of the room is literally indistinguishable from clearColor.
+    wallMat.emissiveColor = new BABYLON.Color3(0.05, 0.035, 0.02);
+    wallMat.specularColor = new BABYLON.Color3(0, 0, 0);
+    // The cylinder's side normals point outward (away from center) by
+    // construction; the camera sits inside this radius, so it's always
+    // looking at the back face. backFaceCulling off alone renders that
+    // face but lights it using the un-flipped outward normal, which reads
+    // as facing away from every light in the room -- solid black.
+    // twoSidedLighting makes Babylon flip the normal per-face to match
+    // whichever side is actually being viewed.
+    wallMat.backFaceCulling = false;
+    wallMat.twoSidedLighting = true;
+    wall.material = wallMat;
+
+    // Flat disc closing the top -- same backface/normal situation as the
+    // wall (viewed from below, its default front face points up and away
+    // from the camera).
+    const ceiling = BABYLON.MeshBuilder.CreateDisc('ceiling', { radius: WALL_RADIUS, tessellation: 32 }, scene);
+    ceiling.rotation.x = Math.PI / 2;
+    ceiling.position.y = WALL_HEIGHT;
+    const ceilingMat = new BABYLON.StandardMaterial('ceilingMat', scene);
+    ceilingMat.diffuseColor = BABYLON.Color3.FromHexString(LODGE_BG);
+    ceilingMat.emissiveColor = new BABYLON.Color3(0.02, 0.015, 0.01);
+    ceilingMat.specularColor = new BABYLON.Color3(0, 0, 0);
+    ceilingMat.backFaceCulling = false;
+    ceilingMat.twoSidedLighting = true;
+    ceiling.material = ceilingMat;
+
+    // A handful of warm point-light sconces around the wall, breaking up
+    // the single-hearth flatness -- lower intensity than the hearth (32)
+    // since these are ambient fill, not the room's one named light source.
+    // Angles start offset from the hearth's own so they don't double up.
+    for (let i = 0; i < SCONCE_COUNT; i++) {
+      const angle = (i / SCONCE_COUNT) * Math.PI * 2 + Math.PI / SCONCE_COUNT;
+      const pos = new BABYLON.Vector3(Math.cos(angle) * SCONCE_RADIUS, SCONCE_HEIGHT, Math.sin(angle) * SCONCE_RADIUS);
+      const sconce = new BABYLON.PointLight(`sconce-${i}`, pos, scene);
+      sconce.diffuse = BABYLON.Color3.FromHexString(LODGE_AMBER);
+      sconce.specular = BABYLON.Color3.FromHexString(LODGE_GOLD);
+      sconce.intensity = 1.5;
+      // Babylon point lights only fall off with distance once `range` is
+      // set -- left unset, a light applies its full intensity regardless
+      // of distance, which is fine in an open scene with nothing far away
+      // to expose, but blows the new enclosing wall out to solid white at
+      // any intensity worth calling a light (verified live: intensity 6
+      // with no range turned the whole wall near-white). Six units keeps
+      // the glow local to the sconce itself rather than washing the wall.
+      sconce.range = 6;
+
+      const marker = BABYLON.MeshBuilder.CreateSphere(`sconce-marker-${i}`, { diameter: 0.2 }, scene);
+      marker.position = pos;
+      const markerMat = new BABYLON.StandardMaterial(`sconceMarkerMat-${i}`, scene);
+      markerMat.emissiveColor = BABYLON.Color3.FromHexString(LODGE_GOLD);
+      markerMat.disableLighting = true;
+      marker.material = markerMat;
+    }
+  }
 
   function buildTableAndSeats(scene) {
     const table = BABYLON.MeshBuilder.CreateCylinder(
@@ -338,7 +440,18 @@ window.LodgeScene = (function () {
       const hearth = new BABYLON.PointLight('hearth', hearthPos, scene);
       hearth.diffuse = BABYLON.Color3.FromHexString(LODGE_FIRE);
       hearth.specular = BABYLON.Color3.FromHexString(LODGE_AMBER);
-      hearth.intensity = 18;
+      // #294: same unbounded-range problem as the sconces (see that
+      // comment) -- with no range set, this light's original intensity
+      // (18) applied at full, undimmed strength regardless of distance,
+      // which the enclosing wall now catches and washes out to solid
+      // white. Setting a range switches on real inverse-square falloff,
+      // which also dims everything already lit by this light, including
+      // the table/seats -- intensity raised from 18 to 32 to bring the
+      // table back to close to its pre-wall brightness (verified via
+      // pixel readback: table center pixel ~228,109,21 now vs. ~228,125,24
+      // before, wall stays a dim ~17,13,8 instead of blown out).
+      hearth.intensity = 32;
+      hearth.range = 11;
 
       // Small emissive core so the hearth reads as a visible light source,
       // not just a lighting contribution on the floor.
@@ -349,12 +462,13 @@ window.LodgeScene = (function () {
       emberMat.disableLighting = true;
       ember.material = emberMat;
 
-      const floor = BABYLON.MeshBuilder.CreateGround('floor', { width: 14, height: 14 }, scene);
+      const floor = BABYLON.MeshBuilder.CreateGround('floor', { width: FLOOR_SIZE, height: FLOOR_SIZE }, scene);
       const floorMat = new BABYLON.StandardMaterial('floorMat', scene);
       floorMat.diffuseColor = BABYLON.Color3.FromHexString(LODGE_BORDER);
       floorMat.specularColor = new BABYLON.Color3(0, 0, 0);
       floor.material = floorMat;
 
+      buildWalls(scene);
       buildTableAndSeats(scene);
       sceneRef = scene;
 
