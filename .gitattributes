@@ -1,0 +1,9 @@
+# STATUS.md moved to a fragment-based workflow (docs/status/fragments/) specifically to
+# avoid concurrent-edit merge conflicts at its insertion point — see STATUS.md's own header.
+# merge=union is a stopgap safety net for the transition period and any edge case that still
+# touches STATUS.md directly (e.g. a manual backfill, or an archive rewrite landing alongside
+# a fragment-assembly run): on conflict, git keeps both sides' lines rather than blocking on a
+# conflict marker. It's not a substitute for the fragment convention — a union merge can still
+# reorder or duplicate lines in ways a human should glance at, so don't rely on it for routine
+# entries once fragments are the norm.
+STATUS.md merge=union
