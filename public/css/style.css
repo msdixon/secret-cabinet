@@ -44,6 +44,7 @@
 .dorian-frame {
   width: 140px; height: 170px; margin: 16px auto 8px; position: relative; cursor: pointer;
   border-radius: 3px;
+  box-shadow: 0 0 12px rgba(200,146,42,0.16);
   animation: frameGlow 6s ease-in-out infinite;
   transition: box-shadow 0.3s ease;
 }
@@ -55,18 +56,27 @@
 .dorian-frame svg { width: 100%; height: 100%; display: block; }
 /* #295 — ambient "self-adjusting" life for the portrait: a slow varnish
    sheen sweeps the canvas and the decay cracks breathe, both understated
-   enough to read as atmosphere rather than a distraction at 140x170. */
-.frame-sheen { mix-blend-mode: screen; animation: sheenSweep 13s ease-in-out infinite; }
+   enough to read as atmosphere rather than a distraction at 140x170. Each
+   element's resting (pre-animation) value below is what prefers-reduced-motion
+   falls back to — see the masthead-motion media query at the end of this
+   section — so disabling the loop still leaves a sane static frame, not a
+   half-applied effect. */
+.frame-sheen { mix-blend-mode: screen; opacity: 0; animation: sheenSweep 13s ease-in-out infinite; }
 @keyframes sheenSweep {
   0%, 78% { transform: translateX(-70px); opacity: 0; }
   86% { opacity: 0.55; }
   94%, 100% { transform: translateX(70px); opacity: 0; }
 }
-.decay-crack-1 { animation: crackFlicker1 7s ease-in-out infinite; }
-.decay-crack-2 { animation: crackFlicker2 8.5s ease-in-out 1.6s infinite; }
+.decay-crack-1 { opacity: 0.4; animation: crackFlicker1 7s ease-in-out infinite; }
+.decay-crack-2 { opacity: 0.28; animation: crackFlicker2 8.5s ease-in-out 1.6s infinite; }
 @keyframes crackFlicker1 { 0%, 100% { opacity: 0.4; } 50% { opacity: 0.62; } }
 @keyframes crackFlicker2 { 0%, 100% { opacity: 0.28; } 50% { opacity: 0.46; } }
 .corner-stud { transform-box: fill-box; transform-origin: center; transform: rotate(45deg); }
+/* Principle 4 (Accessibility) is unconditional per docs/PRINCIPLES.md, not
+   gated on audience size — honor it for the masthead motion added here. */
+@media (prefers-reduced-motion: reduce) {
+  .dorian-frame, .frame-sheen, .decay-crack-1, .decay-crack-2 { animation: none; }
+}
 .lodge-title-block { text-align: center; padding: 0 20px 4px; }
 .lodge-title { font-family: 'UnifrakturMaguntia', serif; font-size: 28px; color: var(--lodge-amber); letter-spacing: 2px; line-height: 1.2; text-shadow: 0 0 20px rgba(200,146,42,0.3); }
 .lodge-subtitle { font-family: 'IM Fell English', serif; font-style: italic; font-size: 12px; color: var(--lodge-muted); letter-spacing: 3px; text-transform: uppercase; margin-top: 4px; }
