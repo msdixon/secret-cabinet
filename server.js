@@ -137,7 +137,7 @@ app.use(auth.createRequireAuth(PASSPHRASE));
 // #84 — member page + knowledge-graph visualization, a clean URL for the
 // meta-level research view (not tucked in a drawer, per the issue).
 app.get('/lodge', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'lodge.html'));
+  res.sendFile('lodge.html', { root: path.join(__dirname, 'public') });
 });
 
 app.use(express.static(path.join(__dirname, 'public')));
