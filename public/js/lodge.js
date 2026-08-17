@@ -173,9 +173,22 @@ function buildGraphData() {
   graphNodeById = new Map(graphNodes.map(n => [n.id, n]));
 
   // Degree (for radius scaling) + grouped undirected links.
+  //
+  // #296 — library-origin 'associated-with' edges (member→theme) are a flat
+  // shortcut graph.js also emits "for easier querying" alongside the
+  // appears-in (member→text) and touches (text→theme) edges that already
+  // connect the same two nodes two hops apart through the text. On the
+  // current roster they were 265 of 464 total edges (57%) and drew no
+  // information the two-hop path didn't already show — just visual mass.
+  // Dropped here, from the *visual* graph only; RAW_GRAPH (and this edge
+  // type) still feeds renderMemberDetail's theme-chip list below, and
+  // session-origin 'associated-with' edges are kept since session nodes
+  // are filtered out of the visual graph entirely and have no equivalent
+  // two-hop path to fall back on.
   const linkMap = new Map();
   RAW_GRAPH.edges.forEach(e => {
     if (!graphNodeById.has(e.source) || !graphNodeById.has(e.target)) return; // touches a session node
+    if (e.type === 'associated-with' && e.origin === 'library') return;
     const [a, b] = [e.source, e.target].sort();
     const key = `${a}|${b}`;
     if (!linkMap.has(key)) linkMap.set(key, { a, b, weight: 0, parts: [] });
@@ -503,19 +516,40 @@ function renderGraph() {
   // back out to the real container here, at the only step that draws pixels.
   const scale = simToRenderScale();
 
+  // #296 — states in words what the dim/highlight split shows in color,
+  // since the color-only version was reported ambiguous even after the
+  // node-focus/connected tiers above. Covers hover and click alike, since
+  // both set focusId the same way.
+  const captionEl = document.getElementById('graph-focus-caption');
+  const focusNode = focusId ? graphNodeById.get(focusId) : null;
+  if (focusNode) {
+    const count = highlight.size - 1;
+    captionEl.innerHTML = `Showing <strong>${escapeHTML(focusNode.label)}</strong>'s connections${count ? ` (${count})` : ''}`;
+    captionEl.style.display = 'block';
+  } else {
+    captionEl.style.display = 'none';
+  }
+
   linksLayer.innerHTML = '';
   graphLinks.forEach(l => {
     const a = graphNodeById.get(l.a),
       b = graphNodeById.get(l.b);
     if (!a || !b || !nodeVisible(a) || !nodeVisible(b)) return;
     const dim = highlight && !(highlight.has(l.a) && highlight.has(l.b));
+    // #296 — a link straight to the focus node reads as thicker/brighter
+    // than one merely between two of its neighbors, so the highlight set
+    // doesn't read as one undifferentiated blob once it survives dimming.
+    const focusTouch = focusId && !dim && (l.a === focusId || l.b === focusId);
     const dominant = dominantOrigin(l.parts);
     const line = document.createElementNS(SVG_NS, 'line');
     line.setAttribute('x1', a.x * scale.x);
     line.setAttribute('y1', a.y * scale.y);
     line.setAttribute('x2', b.x * scale.x);
     line.setAttribute('y2', b.y * scale.y);
-    line.setAttribute('class', `graph-edge graph-edge-${dominant}${dim ? ' dim' : ''}`);
+    line.setAttribute(
+      'class',
+      `graph-edge graph-edge-${dominant}${dim ? ' dim' : ''}${focusTouch ? ' focus-touch' : ''}`
+    );
     line.setAttribute('stroke-width', Math.min(6, 1 + l.weight * 0.5));
     line.addEventListener('mouseenter', ev => showEdgeTooltip(ev, l));
     line.addEventListener('mousemove', positionTooltip);
@@ -530,10 +564,17 @@ function renderGraph() {
     if (!nodeVisible(n)) return;
     anyVisible = true;
     const dim = highlight && !highlight.has(n.id);
+    // #296 — three tiers, not two: the focus node itself (.node-focus — the
+    // strong pop, whether it got there by click or just a hover) reads
+    // distinctly from a merely-connected neighbor (.connected — a lighter
+    // ring, no size/fill change), which previously shared the exact same
+    // "not dimmed" treatment and were hard to tell apart at a glance.
+    const isFocus = n.id === focusId;
+    const isConnected = !isFocus && highlight && highlight.has(n.id);
     const g = document.createElementNS(SVG_NS, 'g');
     g.setAttribute(
       'class',
-      `graph-node graph-node-${n.type}${n.id === selectedId ? ' selected' : ''}${dim ? ' dim' : ''}`
+      `graph-node graph-node-${n.type}${n.id === selectedId ? ' selected' : ''}${isFocus ? ' node-focus' : ''}${isConnected ? ' connected' : ''}${dim ? ' dim' : ''}`
     );
     g.setAttribute('transform', `translate(${n.x * scale.x},${n.y * scale.y})`);
     g.setAttribute('tabindex', '0');

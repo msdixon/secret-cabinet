@@ -21,10 +21,18 @@
   <div class="lodge-page-graph-wrap">
     <div class="graph-toolbar">
       <input type="text" id="graph-search" class="lodge-select graph-search-input" placeholder="Search members, texts, themes…" autocomplete="off" />
-      <div class="graph-type-toggles">
-        <label class="graph-type-toggle" data-type="member"><input type="checkbox" checked data-node-type="member"> ● Members</label>
-        <label class="graph-type-toggle" data-type="text"><input type="checkbox" checked data-node-type="text"> ◆ Texts</label>
-        <label class="graph-type-toggle" data-type="theme"><input type="checkbox" checked data-node-type="theme"> ▲ Themes</label>
+      <div class="graph-legend">
+        <div class="graph-type-toggles">
+          <label class="graph-type-toggle" data-type="member"><input type="checkbox" checked data-node-type="member"><span class="graph-legend-glyph graph-legend-glyph-member">●</span>Members</label>
+          <label class="graph-type-toggle" data-type="text"><input type="checkbox" checked data-node-type="text"><span class="graph-legend-glyph graph-legend-glyph-text">◆</span>Texts</label>
+          <label class="graph-type-toggle" data-type="theme"><input type="checkbox" checked data-node-type="theme"><span class="graph-legend-glyph graph-legend-glyph-theme">▲</span>Themes</label>
+        </div>
+        <div class="graph-legend-divider" aria-hidden="true"></div>
+        <div class="graph-edge-legend">
+          <span class="graph-edge-legend-item"><span class="graph-edge-legend-swatch graph-edge-legend-historical"></span><span class="graph-edge-legend-label">Historical</span></span>
+          <span class="graph-edge-legend-item"><span class="graph-edge-legend-swatch graph-edge-legend-session"></span><span class="graph-edge-legend-label">Session</span></span>
+          <span class="graph-edge-legend-item"><span class="graph-edge-legend-swatch graph-edge-legend-library"></span><span class="graph-edge-legend-label">Library</span></span>
+        </div>
       </div>
       <button class="lodge-btn graph-reset-btn" id="graph-reset-btn" title="Re-center and reheat the layout">Reheat ⟲</button>
     </div>
@@ -32,6 +40,7 @@
       <svg id="graph-svg" preserveAspectRatio="xMidYMid meet"></svg>
       <div class="graph-empty-hint" id="graph-empty-hint" style="display:none;">The graph is quiet — no matching nodes.</div>
       <div class="graph-tooltip" id="graph-tooltip" style="display:none;"></div>
+      <div class="graph-focus-caption" id="graph-focus-caption" style="display:none;"></div>
       <div class="graph-zoom-hint">Scroll or pinch to zoom · drag to pan</div>
     </div>
   </div>
