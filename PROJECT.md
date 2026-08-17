@@ -57,7 +57,7 @@ Current Todo-status backlog (no ranking implied — pick next tranche with Rache
 - [#35](https://github.com/msdixon/secret-cabinet/issues/35) archival ingestion pipeline, 35a track (hand-curated growth continues; 35b bulk tooling deferred)
 - [#141](https://github.com/msdixon/secret-cabinet/issues/141) evaluation harness (unscoped — what "conversation quality" means is the decision, not the code)
 - [#195](https://github.com/msdixon/secret-cabinet/issues/195) amnesia spike — rungs (b)/(c), deliberately deferred (see "Other open decisions" above); Todo on the board but not being actively picked up
-- [#295](https://github.com/msdixon/secret-cabinet/issues/295) 2D header art pass (mantel/portrait art) — unscoped
+- [#294](https://github.com/msdixon/secret-cabinet/issues/294) 3D room art pass (walls, atmosphere, enclosure) — unscoped
 
 The full workflow/priority tracker — including Backlog-status items, bugs, and parked spikes — is the [GitHub Project board](https://github.com/msdixon/secret-cabinet/projects/2) ("Secret-Cabin-et Roadmap", project #2). This doc names the shape of the plan; the board is where status actually lives.
 
