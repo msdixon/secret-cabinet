@@ -10,6 +10,6 @@ Every PR that changes something worth logging in [STATUS.md](../../../STATUS.md)
 
 ## What happens next
 
-Fragments sit here, tracked in git, until someone runs `node scripts/assemble-status.js` (see that script's header for when/how — it also runs on a weekly schedule via `.github/workflows/assemble-status.yml`). That run turns every pending fragment into one dated entry at the top of `STATUS.md`, newest-first as always, and deletes the fragment files it consumed. Multiple fragments landing in the same run all get that run's date and are ordered by issue/PR number, highest first.
+Fragments sit here, tracked in git, until someone runs `node scripts/assemble-status.js` (see that script's header for when/how — it also runs weekly as a step in the `secret-cabinet-project-doc-checkin` scheduled task, which opens a PR when it finds pending fragments to fold in). That run turns every pending fragment into one dated entry at the top of `STATUS.md`, newest-first as always, and deletes the fragment files it consumed. Multiple fragments landing in the same run all get that run's date and are ordered by issue/PR number, highest first.
 
 This file itself (and this directory) stays even when no fragments are pending, so the directory is always tracked.

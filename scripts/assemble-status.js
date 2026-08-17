@@ -9,9 +9,9 @@
 //
 // Run manually any time:
 //   node scripts/assemble-status.js
-// Also runs weekly via .github/workflows/assemble-status.yml, which opens a
-// PR only when there were pending fragments to assemble. Safe to run with
-// zero fragments pending — it's a no-op.
+// Also runs weekly as a step in the "secret-cabinet-project-doc-checkin"
+// scheduled task, which opens a PR only when there were pending fragments to
+// assemble. Safe to run with zero fragments pending — it's a no-op.
 //
 // All fragments assembled in one run share that run's date (there's no
 // per-PR merge date recorded anywhere to assemble from instead) and are
