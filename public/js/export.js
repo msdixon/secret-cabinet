@@ -543,18 +543,14 @@ window.Export = (function () {
     }
   }
 
-  // NB: references currentTranscript/currentSession, which are not core
-  // globals anywhere in this app (a pre-existing bug carried over verbatim
-  // from app.js -- this button has always thrown when clicked). Not fixed
-  // here; out of scope for a mechanical extraction. Flagged separately.
   function exportMd() {
-    if (!currentTranscript) return;
+    if (!deps.getCore().transcriptText) return;
     const text = buildAnnotatedTranscript();
     const blob = new Blob([text], { type: 'text/markdown' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `secret-cabinet-${currentSession?.date || new Date().toISOString().slice(0, 10)}.md`;
+    a.download = `secret-cabinet-${deps.getCore().sessionDate}.md`;
     a.click();
     URL.revokeObjectURL(url);
   }
