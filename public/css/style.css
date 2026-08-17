@@ -734,9 +734,29 @@ a.archival-image-link:hover { border-color:var(--lodge-amber-dim); cursor:pointe
 .lodge-page-graph-wrap { padding:16px 24px 0; }
 .graph-toolbar { display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin-bottom:10px; }
 .graph-search-input { max-width:280px; flex:none; }
+/* #296 — one legend, not two: node shapes (the type-filter checkboxes) and
+   edge-origin colors used to live in unrelated places (toolbar vs. a
+   floating box over the canvas) with no visual signal they were both keys
+   to the same graph. Grouped into a single row with a divider between the
+   two kinds of key. */
+.graph-legend { display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+.graph-legend-divider { width:1px; align-self:stretch; min-height:18px; background:var(--lodge-border); }
 .graph-type-toggles { display:flex; gap:14px; flex-wrap:wrap; }
 .graph-type-toggle { font-family:'Crimson Pro',serif; font-size:14px; color:var(--lodge-muted); display:flex; align-items:center; gap:6px; cursor:pointer; user-select:none; padding:4px 2px; }
 .graph-type-toggle input { accent-color:var(--lodge-amber); width:16px; height:16px; }
+/* #296 — glyphs colored to match each type's actual on-canvas fill (was a
+   flat --lodge-muted for all three), so the checkbox you're reading is
+   visibly the same color as the shape it filters, not just a generic bullet. */
+.graph-legend-glyph { font-size:15px; line-height:1; }
+.graph-legend-glyph-member { color:var(--lodge-graph-member-fill); }
+.graph-legend-glyph-text { color:var(--lodge-graph-text-fill); }
+.graph-legend-glyph-theme { color:var(--lodge-graph-theme-fill); }
+.graph-edge-legend { display:flex; gap:10px; font-family:'Crimson Pro',serif; font-size:14px; color:var(--lodge-muted); flex-wrap:wrap; }
+.graph-edge-legend-item { display:flex; align-items:center; gap:5px; white-space:nowrap; }
+.graph-edge-legend-swatch { display:inline-block; width:14px; height:2px; }
+.graph-edge-legend-historical { background:var(--lodge-fire); }
+.graph-edge-legend-session { background:var(--lodge-muted); }
+.graph-edge-legend-library { background:var(--lodge-graph-edge-library); }
 .graph-reset-btn { margin-left:auto; }
 
 .graph-svg-container { position:relative; width:100%; height:640px; background:var(--lodge-panel); border:1px solid var(--lodge-border); border-radius:2px; overflow:hidden; touch-action:none; }
@@ -745,27 +765,60 @@ a.archival-image-link:hover { border-color:var(--lodge-amber-dim); cursor:pointe
 .graph-zoom-hint { position:absolute; left:8px; bottom:8px; z-index:4; font-family:'IM Fell English',serif; font-style:italic; font-size:11px; color:var(--lodge-muted); background:rgba(23,18,13,0.8); padding:3px 8px; border-radius:2px; pointer-events:none; }
 .graph-empty-hint { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-family:'IM Fell English',serif; font-style:italic; color:var(--lodge-muted); pointer-events:none; }
 .graph-tooltip { position:absolute; z-index:5; background:var(--lodge-panel); border:1px solid var(--lodge-amber-dim); color:var(--lodge-cream); font-family:'Crimson Pro',serif; font-size:12px; line-height:1.5; padding:6px 10px; border-radius:2px; max-width:280px; pointer-events:none; box-shadow:0 4px 12px rgba(0,0,0,0.4); }
+/* #296 — states what the dim/highlight split is showing in words, not just
+   color, since "which node is the center and what's it connected to" was
+   reported ambiguous even with the highlight in place. */
+.graph-focus-caption { position:absolute; left:8px; top:8px; z-index:4; font-family:'Crimson Pro',serif; font-size:13px; color:var(--lodge-cream); background:rgba(23,18,13,0.85); border:1px solid var(--lodge-amber-dim); padding:4px 10px; border-radius:2px; pointer-events:none; }
+.graph-focus-caption strong { color:var(--lodge-gold); }
 
-.graph-edge { stroke:var(--lodge-graph-edge-library); opacity:0.7; transition:opacity 0.15s; }
-.graph-edge-historical { stroke:var(--lodge-fire); opacity:0.85; }
-.graph-edge-session { stroke:var(--lodge-muted); opacity:0.8; }
-.graph-edge-library { stroke:var(--lodge-graph-edge-library); opacity:0.85; }
+/* #296 — baseline opacity lowered (was 0.7/0.8/0.85 across the board) so the
+   default view reads as a soft mesh instead of a solid haze once you're past
+   a couple hundred edges; historical edges (rare — hand-curated, 15 on the
+   current roster) stay the most prominent since they're the highest-signal
+   relationships, library edges (the bulk — mostly text↔theme "touches") stay
+   the quietest since they're structural. Hover/select dimming (.dim) is
+   unchanged. */
+.graph-edge { stroke:var(--lodge-graph-edge-library); opacity:0.5; transition:opacity 0.15s; }
+.graph-edge-historical { stroke:var(--lodge-fire); opacity:0.9; }
+.graph-edge-session { stroke:var(--lodge-muted); opacity:0.6; }
+.graph-edge-library { stroke:var(--lodge-graph-edge-library); opacity:0.45; }
 .graph-edge.dim { opacity:0.06; }
+/* #296 — an edge directly touching the focus node (not just a link between
+   two of its neighbors) reads as thicker/brighter than the rest of the
+   un-dimmed highlight set, so "what's connected to the thing I picked"
+   doesn't require comparing it against everything else that merely survived
+   dimming. */
+.graph-edge.focus-touch { opacity:1; stroke-width:2.5px !important; }
 
 .graph-node { cursor:pointer; }
 .graph-node:focus-visible .graph-node-shape,
 .lodge-roster-card:focus-visible,
 .lodge-chip:focus-visible,
 .lodge-text-item:focus-visible { outline:2px solid var(--lodge-amber); outline-offset:2px; }
-.graph-node-shape { fill:var(--lodge-surface); stroke-width:1.5; transition:fill 0.15s, stroke 0.15s; }
+.graph-node-shape { fill:var(--lodge-surface); stroke-width:1.5; transition:fill 0.15s, stroke 0.15s, transform 0.15s; transform-box:fill-box; transform-origin:center; }
 .graph-node-member .graph-node-shape { fill:var(--lodge-graph-member-fill); stroke:var(--lodge-amber); }
 .graph-node-text .graph-node-shape { fill:var(--lodge-graph-text-fill); stroke:var(--lodge-parchment); }
 .graph-node-theme .graph-node-shape { fill:var(--lodge-graph-theme-fill); stroke:#9a86c0; }
-.graph-node.selected .graph-node-shape { fill:var(--lodge-amber); stroke:var(--lodge-gold); filter:drop-shadow(0 0 6px rgba(200,146,42,0.7)); }
-.graph-node.dim { opacity:0.18; }
+/* #296 — three-tier hierarchy replacing a two-tier one (focus vs.
+   everything-not-dimmed, which put a directly-connected neighbor and an
+   unrelated node three hops away in the same visual bucket). .connected
+   (a neighbor of the current focus) gets a brighter ring, no fill/size
+   change. .node-focus (the focus itself — set on click OR hover, see
+   lodge.js) gets both a size increase and a fill/stroke swap to colors
+   that don't otherwise appear on the canvas (parchment/gold), since the
+   previous amber-on-orange selected state was too close to the ordinary
+   member fill to read as "this one" at a glance; .selected (click-only,
+   independent of hover) keeps that same treatment so a clicked node still
+   pops after the cursor moves away. */
+.graph-node.connected .graph-node-shape { stroke:var(--lodge-parchment); stroke-width:2.5px; }
+.graph-node.node-focus .graph-node-shape,
+.graph-node.selected .graph-node-shape { fill:var(--lodge-gold); stroke:var(--lodge-parchment); stroke-width:2.5px; filter:drop-shadow(0 0 8px rgba(232,184,75,0.9)); transform:scale(1.35); }
+.graph-node.dim { opacity:0.15; }
 .graph-node-label { font-family:'Crimson Pro',serif; font-size:13px; fill:var(--lodge-muted); pointer-events:none; user-select:none; }
 .graph-node-member .graph-node-label { font-size:14px; fill:var(--lodge-cream); font-weight:600; }
-.graph-node.selected .graph-node-label { fill:var(--lodge-gold); }
+.graph-node.connected .graph-node-label { fill:var(--lodge-parchment); font-weight:600; }
+.graph-node.node-focus .graph-node-label,
+.graph-node.selected .graph-node-label { fill:var(--lodge-gold); font-weight:700; }
 
 .lodge-page-body { flex:1; display:flex; gap:0; min-height:0; padding:16px 24px 24px; gap:20px; }
 .lodge-page-roster { width:280px; flex-shrink:0; background:var(--lodge-surface); border:1px solid var(--lodge-border); border-radius:2px; padding:14px; display:flex; flex-direction:column; gap:10px; max-height:calc(100vh - 260px); }
@@ -832,10 +885,19 @@ a.archival-image-link:hover { border-color:var(--lodge-amber-dim); cursor:pointe
   .lodge-page-graph-wrap { padding:12px 12px 0; }
   .graph-toolbar { gap:10px; }
   .graph-search-input { max-width:none; flex:1 1 100%; order:1; }
-  .graph-type-toggles { order:2; gap:16px; }
+  .graph-legend { order:2; gap:10px 16px; }
+  .graph-type-toggles { gap:16px; }
   .graph-reset-btn { order:3; margin-left:0; }
 
   .graph-svg-container { height:min(78vh, 620px); min-height:420px; }
+
+  /* #296 — same crowded-narrow-width reasoning as the rest of this query;
+     the merged legend's labels don't fit in one row below ~400px, and a
+     vertical divider mid-wrap reads as a stray mark rather than a
+     separator, so both drop and the edge key falls back to color-only. */
+  .graph-legend-divider { display:none; }
+  .graph-edge-legend-label { display:none; }
+  .graph-edge-legend { gap:8px; }
 
   .lodge-page-body { padding:12px 12px 16px; }
 }
