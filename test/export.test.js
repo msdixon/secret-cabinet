@@ -203,6 +203,43 @@ test('updateExportJournalLabel', async t => {
   });
 });
 
+test('exportMd', async t => {
+  // Regression test for #298: exportMd() referenced currentTranscript/
+  // currentSession, globals that don't exist in this module -- leftover
+  // names from before the #142 extraction, carried over verbatim and never
+  // caught because nothing exercised this path. It must read through the
+  // deps bag like every other export function here.
+  await t.test('downloads via the deps bag instead of throwing on undefined globals', t2 => {
+    const { window, document, module: Export } = boot(t2);
+    window.URL.createObjectURL = () => 'blob:fake';
+    window.URL.revokeObjectURL = () => {};
+    let downloadedAs = null;
+    const origCreateElement = document.createElement.bind(document);
+    document.createElement = tag => {
+      const el = origCreateElement(tag);
+      if (tag === 'a') el.click = () => (downloadedAs = el.download);
+      return el;
+    };
+
+    assert.doesNotThrow(() => Export.exportMd());
+    assert.equal(downloadedAs, 'secret-cabinet-1926-11-02.md');
+  });
+
+  await t.test('does nothing when there is no transcript yet', t2 => {
+    const { window, document, module: Export } = boot(t2, { core: makeCore({ transcriptText: '' }) });
+    window.URL.createObjectURL = () => 'blob:fake';
+    let created = false;
+    const origCreateElement = document.createElement.bind(document);
+    document.createElement = tag => {
+      if (tag === 'a') created = true;
+      return origCreateElement(tag);
+    };
+
+    Export.exportMd();
+    assert.equal(created, false);
+  });
+});
+
 test('restoreSavedSettings', async t => {
   await t.test('reads the Ulysses and Obsidian fields back out of localStorage', t2 => {
     const { window, document, module: Export } = boot(t2);
