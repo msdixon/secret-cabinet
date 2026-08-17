@@ -173,9 +173,22 @@ function buildGraphData() {
   graphNodeById = new Map(graphNodes.map(n => [n.id, n]));
 
   // Degree (for radius scaling) + grouped undirected links.
+  //
+  // #296 — library-origin 'associated-with' edges (member→theme) are a flat
+  // shortcut graph.js also emits "for easier querying" alongside the
+  // appears-in (member→text) and touches (text→theme) edges that already
+  // connect the same two nodes two hops apart through the text. On the
+  // current roster they were 265 of 464 total edges (57%) and drew no
+  // information the two-hop path didn't already show — just visual mass.
+  // Dropped here, from the *visual* graph only; RAW_GRAPH (and this edge
+  // type) still feeds renderMemberDetail's theme-chip list below, and
+  // session-origin 'associated-with' edges are kept since session nodes
+  // are filtered out of the visual graph entirely and have no equivalent
+  // two-hop path to fall back on.
   const linkMap = new Map();
   RAW_GRAPH.edges.forEach(e => {
     if (!graphNodeById.has(e.source) || !graphNodeById.has(e.target)) return; // touches a session node
+    if (e.type === 'associated-with' && e.origin === 'library') return;
     const [a, b] = [e.source, e.target].sort();
     const key = `${a}|${b}`;
     if (!linkMap.has(key)) linkMap.set(key, { a, b, weight: 0, parts: [] });
