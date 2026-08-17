@@ -14,27 +14,31 @@
         <defs>
           <filter id="decay"><feTurbulence type="fractalNoise" baseFrequency="0.04" numOctaves="4" result="noise"/><feDisplacementMap in="SourceGraphic" in2="noise" scale="3" xChannelSelector="R" yChannelSelector="G"/></filter>
           <radialGradient id="pG" cx="50%" cy="35%" r="60%"><stop offset="0%" stop-color="#3a2010"/><stop offset="60%" stop-color="#1a0d06"/><stop offset="100%" stop-color="#0a0503"/></radialGradient>
-          <radialGradient id="fG" cx="50%" cy="40%" r="50%"><stop offset="0%" stop-color="#5c3a20" stop-opacity="0.8"/><stop offset="100%" stop-color="#1a0d06" stop-opacity="0"/></radialGradient>
+          <radialGradient id="spot" cx="50%" cy="12%" r="55%"><stop offset="0%" stop-color="#f0c878" stop-opacity="0.28"/><stop offset="55%" stop-color="#f0c878" stop-opacity="0.06"/><stop offset="100%" stop-color="#f0c878" stop-opacity="0"/></radialGradient>
+          <radialGradient id="fG" cx="50%" cy="38%" r="52%"><stop offset="0%" stop-color="#7a4e26" stop-opacity="0.92"/><stop offset="100%" stop-color="#1a0d06" stop-opacity="0"/></radialGradient>
           <linearGradient id="fmG" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#8a6520"/><stop offset="30%" stop-color="#c8922a"/><stop offset="60%" stop-color="#7a5010"/><stop offset="100%" stop-color="#e8b84b"/></linearGradient>
           <linearGradient id="dG" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#2d1a0a" stop-opacity="0"/><stop offset="50%" stop-color="#4a0a0a" stop-opacity="0.6"/><stop offset="100%" stop-color="#1a0505" stop-opacity="0.9"/></linearGradient>
+          <linearGradient id="sheen" x1="0%" y1="0%" x2="55%" y2="100%"><stop offset="0%" stop-color="#fff" stop-opacity="0"/><stop offset="47%" stop-color="#fff" stop-opacity="0"/><stop offset="50%" stop-color="#fff" stop-opacity="0.5"/><stop offset="53%" stop-color="#fff" stop-opacity="0"/><stop offset="100%" stop-color="#fff" stop-opacity="0"/></linearGradient>
         </defs>
         <rect x="6" y="6" width="128" height="158" fill="url(#fmG)" rx="2"/>
         <rect x="10" y="10" width="120" height="150" fill="#0a0705" rx="1"/>
         <rect x="4" y="4" width="132" height="162" fill="none" stroke="url(#fmG)" stroke-width="2" rx="3"/>
         <rect x="2" y="2" width="136" height="166" fill="none" stroke="#5a4010" stroke-width="1" rx="3"/>
         <rect x="10" y="10" width="120" height="150" fill="url(#pG)" rx="1"/>
+        <rect x="10" y="10" width="120" height="150" fill="url(#spot)" rx="1"/>
         <ellipse cx="70" cy="58" rx="22" ry="26" fill="url(#fG)" filter="url(#decay)"/>
-        <ellipse cx="70" cy="58" rx="18" ry="20" fill="#2a1508" opacity="0.7" filter="url(#decay)"/>
+        <ellipse cx="70" cy="58" rx="18" ry="20" fill="#241206" opacity="0.55" filter="url(#decay)"/>
         <ellipse cx="63" cy="53" rx="3" ry="2" fill="#1a0d06" opacity="0.8"/>
         <ellipse cx="77" cy="53" rx="3" ry="2" fill="#1a0d06" opacity="0.8"/>
         <path d="M63 65 Q70 68 77 65" stroke="#3a1a0a" stroke-width="1.5" fill="none" opacity="0.6"/>
         <rect x="52" y="85" width="36" height="50" fill="#1e1008" opacity="0.8" rx="2" filter="url(#decay)"/>
         <rect x="10" y="10" width="120" height="150" fill="url(#dG)" rx="1"/>
-        <path d="M30 120 Q50 110 40 140 Q60 130 55 155 Q70 148 80 158" stroke="#4a0a0a" stroke-width="1.5" fill="none" opacity="0.5"/>
-        <path d="M100 80 Q110 95 105 115 Q115 108 118 130" stroke="#3a0808" stroke-width="1" fill="none" opacity="0.4"/>
+        <path d="M30 120 Q50 110 40 140 Q60 130 55 155 Q70 148 80 158" class="decay-crack decay-crack-1" stroke="#4a0a0a" stroke-width="1.5" fill="none"/>
+        <path d="M100 80 Q110 95 105 115 Q115 108 118 130" class="decay-crack decay-crack-2" stroke="#3a0808" stroke-width="1" fill="none"/>
+        <rect x="10" y="10" width="120" height="150" class="frame-sheen" fill="url(#sheen)" rx="1"/>
         <rect x="12" y="144" width="116" height="14" fill="#0e0905" rx="0"/>
         <text x="70" y="154" text-anchor="middle" font-family="'IM Fell English', serif" font-style="italic" font-size="8" fill="#5a4010" letter-spacing="1">est. outside time</text>
-        <rect x="8" y="8" width="6" height="6" fill="url(#fmG)"/><rect x="126" y="8" width="6" height="6" fill="url(#fmG)"/><rect x="8" y="156" width="6" height="6" fill="url(#fmG)"/><rect x="126" y="156" width="6" height="6" fill="url(#fmG)"/>
+        <rect x="8" y="8" width="6" height="6" class="corner-stud" fill="url(#fmG)"/><rect x="126" y="8" width="6" height="6" class="corner-stud" fill="url(#fmG)"/><rect x="8" y="156" width="6" height="6" class="corner-stud" fill="url(#fmG)"/><rect x="126" y="156" width="6" height="6" class="corner-stud" fill="url(#fmG)"/>
       </svg>
     </div>
     <div class="lodge-title-block">
