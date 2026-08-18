@@ -229,6 +229,12 @@
         <div class="witness-controls">
           <span class="witness-label">◎ The Stage</span>
           <span class="witness-hint" id="witness-hint"></span>
+          <!-- #288: one speed control covers room-mode live pacing, replay,
+               and the old stage's typing/reveal timing -- all three already
+               funnel through witness.js's witnessReadingTime(). A cycling
+               button rather than a slider: the stage's chrome is already
+               tight (#257/#279). -->
+          <button class="witness-speed-btn" id="witness-speed-btn" onclick="window.Witness.cycleSpeed()" title="Playback speed — click to cycle">1×</button>
           <button class="witness-exit-btn" id="witness-exit-btn" onclick="window.Witness.exitClicked()" style="display:none;">✕ Exit</button>
         </div>
         <div class="witness-stage" id="witness-stage" onclick="window.Witness.advance()"></div>

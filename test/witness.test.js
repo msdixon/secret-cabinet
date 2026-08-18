@@ -30,6 +30,7 @@ const WITNESS_IDS = [
   'stage-record',
   'stage-pane',
   'witness-hint',
+  'witness-speed-btn',
   'witness-exit-btn',
   'witness-stage',
   'witness-progress',
@@ -46,6 +47,7 @@ const FIXTURE = `
   <div id="stage-record">
     <div id="stage-pane">
       <div id="witness-hint"></div>
+      <button id="witness-speed-btn">1×</button>
       <button id="witness-exit-btn" style="display:none"></button>
       <div id="witness-stage"></div>
       <div id="witness-room">
@@ -1103,5 +1105,84 @@ test("room-mode live pacing (#279): a member's card holds long enough to read be
       2,
       'both beats append immediately in the stage fallback'
     );
+  });
+});
+
+test('playback speed (#288): one multiplier reaches room-mode holds, replay, and the old stage alike', async t => {
+  await t.test('defaults to 1x, cycles through the preset speeds, and persists the choice', t2 => {
+    const { document, window, module: Witness } = boot(t2);
+    const btn = () => document.getElementById('witness-speed-btn').textContent;
+
+    assert.equal(btn(), '1×');
+
+    Witness.cycleSpeed();
+    assert.equal(btn(), '1.5×');
+    assert.equal(window.localStorage.getItem('sc-witness-speed'), '1.5');
+
+    Witness.cycleSpeed();
+    assert.equal(btn(), '2×');
+    Witness.cycleSpeed();
+    assert.equal(btn(), '0.75×', 'cycling past the fastest preset wraps to the slowest');
+    Witness.cycleSpeed();
+    assert.equal(btn(), '1×', 'and back to the default completes the cycle');
+  });
+
+  await t.test('a speed persisted from a prior session is honored on the next load', t2 => {
+    const { document } = boot2WithSpeed(t2, '2');
+    assert.equal(document.getElementById('witness-speed-btn').textContent, '2×');
+  });
+
+  await t.test('an invalid persisted value falls back to 1x rather than breaking pacing', t2 => {
+    const { document } = boot2WithSpeed(t2, 'not-a-number');
+    assert.equal(document.getElementById('witness-speed-btn').textContent, '1×');
+  });
+
+  function boot2WithSpeed(t2, storedValue) {
+    const loaded = loadPublicModule('witness.js', FIXTURE, window => {
+      window.localStorage.setItem('sc-witness-speed', storedValue);
+    });
+    t2.after(loaded.cleanup);
+    return loaded;
+  }
+
+  await t.test("2x halves a room card's #279 reading hold", t2 => {
+    t2.mock.timers.enable({ apis: ['setTimeout'] });
+    const { document, window, module: Witness } = boot(t2);
+    stubScene(window, { crowley: { x: 10, y: 10, visible: true } });
+    Witness.configure(makeDeps());
+    Witness.enableRoom();
+    Witness.cycleSpeed(); // 1x -> 1.5x
+    Witness.cycleSpeed(); // 1.5x -> 2x
+
+    Witness.liveSpeech({ speaker: 'Crowley', text: 'One.', memberId: 'crowley' });
+    Witness.liveSpeech({ speaker: 'Crowley', text: 'Two.', memberId: 'crowley' });
+
+    // At 1x this hold is WITNESS_MIN_PAUSE (1200ms, see the #279 tests above);
+    // at 2x it should flush at half that.
+    t2.mock.timers.tick(600);
+    const card = document.querySelector('#room-speech-layer .room-speech-card');
+    assert.match(latestEntryText(card), /Two\./, 'the hold should already have cleared at twice the speed');
+  });
+
+  await t.test("0.75x slows replay's header pause proportionally", async t2 => {
+    t2.mock.timers.enable({ apis: ['setTimeout'] });
+    const { document, module: Witness } = boot(t2);
+    Witness.cycleSpeed(); // 1x -> 1.5x
+    Witness.cycleSpeed(); // 1.5x -> 2x
+    Witness.cycleSpeed(); // 2x -> 0.75x
+
+    await Witness.start({ rounds: [{ label: 'Round I', text: 'Crowley:\nA line.' }] }, makeDeps());
+    // advance() has already rendered the header block synchronously and
+    // scheduled the next advance after WITNESS_PAUSE_AFTER_HEADER / 0.75.
+    // At full speed (1800ms) the speech block would not yet be rendered at
+    // 1800ms; at 0.75x (2400ms) it should still be pending here.
+    t2.mock.timers.tick(1800);
+    assert.equal(
+      document.querySelectorAll('#witness-stage .transcript-entry').length,
+      0,
+      'the slowed-down header pause should not have elapsed yet'
+    );
+    t2.mock.timers.tick(600); // completes the full 2400ms
+    assert.equal(document.querySelectorAll('#witness-stage .transcript-entry').length, 1);
   });
 });

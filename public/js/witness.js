@@ -775,10 +775,55 @@ window.Witness = (function () {
     return blocks;
   }
 
+  // ── Playback speed (#288) ─────────────────────────────────────────────────
+  // #279 (PR #283) introduced a fixed per-member reading hold with no
+  // user-facing control; the decision on #288 was to make one speed control
+  // cover it plus replay and the old stage's pacing, rather than three
+  // separate knobs. Since all three already funnel through
+  // witnessReadingTime() (room-mode's setRoomHold above calls it directly;
+  // replay's renderWitnessBlock below calls it for both the room's cards and
+  // the old #witness-stage bubbles, which share that one function), a single
+  // multiplier applied at the end of witnessReadingTime -- plus the same
+  // divisor on the fixed header/lull pause below -- reaches every surface
+  // from one place.
+  //
+  // A cycling button, not a slider: #257's and #279's own notes already flag
+  // the room's chrome as tight on space, and a handful of preset speeds is
+  // both simpler to hit precisely and cheaper to fit than a drag control.
+  const WITNESS_SPEED_KEY = 'sc-witness-speed';
+  const WITNESS_SPEEDS = [0.75, 1, 1.5, 2];
+
+  function loadSpeed() {
+    const v = parseFloat(localStorage.getItem(WITNESS_SPEED_KEY));
+    return WITNESS_SPEEDS.includes(v) ? v : 1;
+  }
+
+  let witnessSpeed = loadSpeed();
+
+  function updateSpeedButton() {
+    const btn = document.getElementById('witness-speed-btn');
+    if (btn) btn.textContent = `${witnessSpeed}×`;
+  }
+  updateSpeedButton();
+
+  function setSpeed(v) {
+    if (!WITNESS_SPEEDS.includes(v)) return;
+    witnessSpeed = v;
+    try {
+      localStorage.setItem(WITNESS_SPEED_KEY, String(v));
+    } catch (_) {} // a blocked/full localStorage should cost persistence, not the setting itself
+    updateSpeedButton();
+  }
+
+  function cycleSpeed() {
+    const i = WITNESS_SPEEDS.indexOf(witnessSpeed);
+    setSpeed(WITNESS_SPEEDS[(i + 1) % WITNESS_SPEEDS.length]);
+  }
+
   function witnessReadingTime(text) {
     const words = text.trim().split(/\s+/).length;
     const ms = (words / WITNESS_WPM) * 60 * 1000;
-    return Math.min(Math.max(ms, WITNESS_MIN_PAUSE), WITNESS_MAX_PAUSE);
+    return Math.min(Math.max(ms, WITNESS_MIN_PAUSE), WITNESS_MAX_PAUSE) / witnessSpeed;
   }
 
   // Shared by liveRoundHeader/liveLull above and renderWitnessBlock's replay
@@ -844,12 +889,12 @@ window.Witness = (function () {
   function renderWitnessBlock(block) {
     if (block.type === 'header') {
       const el = createHeaderEl(block.label);
-      return { delay: WITNESS_PAUSE_AFTER_HEADER, undo: () => el.remove() };
+      return { delay: WITNESS_PAUSE_AFTER_HEADER / witnessSpeed, undo: () => el.remove() };
     }
 
     if (block.type === 'lull') {
       const el = createLullEl(block.label);
-      return { delay: WITNESS_PAUSE_AFTER_HEADER, undo: () => el.remove() };
+      return { delay: WITNESS_PAUSE_AFTER_HEADER / witnessSpeed, undo: () => el.remove() };
     }
 
     if (block.type === 'action') {
@@ -970,7 +1015,7 @@ window.Witness = (function () {
 
     // Resume auto-advance from the stepped-back position after a short pause
     // so the user has time to read what they returned to.
-    witnessTimer = setTimeout(advance, WITNESS_MIN_PAUSE * 2);
+    witnessTimer = setTimeout(advance, (WITNESS_MIN_PAUSE * 2) / witnessSpeed);
   }
 
   // ── Touch / swipe support (#90) ────────────────────────────────────────────
@@ -1115,5 +1160,6 @@ window.Witness = (function () {
     exitClicked,
     advance,
     start,
+    cycleSpeed,
   };
 })();
