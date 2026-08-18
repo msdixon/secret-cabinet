@@ -372,7 +372,8 @@ window.Witness = (function () {
     const card = getOrCreateCard(memberId, name);
     const entry = document.createElement('div');
     entry.className = 'room-card-entry room-card-entry-typing';
-    entry.innerHTML = '<div class="bubble-body"><div class="speech-text typing-text transcript-stream-live"></div></div>';
+    entry.innerHTML =
+      '<div class="bubble-body"><div class="speech-text typing-text transcript-stream-live"></div></div>';
     cardEntries(card).appendChild(entry);
     scrollCardToLatest(card);
     touchRoomLoop();
@@ -522,6 +523,7 @@ window.Witness = (function () {
   // Called on Exit (live or replay) and automatically once the user lets a
   // meeting end at a lull -- see app.js's closeMeeting().
   function collapseStage() {
+    window.Voice?.stop(); // #29: the stage that was driving speech is about to be hidden
     const el = document.getElementById('stage-record');
     el?.classList.remove('stage-only');
     el?.classList.add('collapsed');
@@ -913,6 +915,11 @@ window.Witness = (function () {
         return { delay: witnessReadingTime(block.text), undo: () => els.forEach(el => el.remove()) };
       }
       const { undo } = renderSpeechBeat(block);
+      // #29: speak what's now on screen. This is the one seam every
+      // rendering path (stage/room, live/replay) already funnels through --
+      // see voice.js's own comment for why it's a no-op unless the user has
+      // opted in.
+      window.Voice?.speak(block.text, block.memberId, witnessSpeed);
       return { delay: witnessReadingTime(block.text), undo };
     }
 
@@ -978,6 +985,9 @@ window.Witness = (function () {
   function goBack() {
     if (!witnessActive) return;
     clearTimeout(witnessTimer);
+    // #29: the block being undone may still be mid-utterance -- don't leave
+    // it talking about a beat that's no longer on screen.
+    window.Voice?.stop();
 
     // Remove the end-of-session marker and its flag first, so the state
     // machine is in sync with the DOM regardless of whether we go further back.
@@ -1078,6 +1088,7 @@ window.Witness = (function () {
     witnessEnded = false;
     witnessEndEl = null;
 
+    window.Voice?.stop(); // #29: a fresh replay shouldn't inherit a leftover utterance
     const stage = document.getElementById('witness-stage');
     stage.innerHTML = '';
     clearRoom();
@@ -1129,6 +1140,7 @@ window.Witness = (function () {
     witnessEnded = false;
     witnessEndEl = null;
     clearTimeout(witnessTimer);
+    window.Voice?.stop(); // #29: leaving the stage shouldn't leave a voice still talking
     document.removeEventListener('keydown', witnessKeyHandler);
     const stage = document.getElementById('witness-stage');
     const room = document.getElementById('witness-room');
