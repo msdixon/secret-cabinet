@@ -1,1 +1,1 @@
-[#29](https://github.com/msdixon/secret-cabinet/issues/29) voice synthesis, per-member TTS — previously iceboxed, now moved to Todo
+[#29](https://github.com/msdixon/secret-cabinet/issues/29) voice synthesis, per-member TTS — first pass shipped ([PR #319](https://github.com/msdixon/secret-cabinet/pull/319)): Web Speech API playback during Witness mode, deterministic (not hand-authored) per-member voice/pitch/rate. Remaining: ElevenLabs/paid TTS for higher-quality voices, a real per-member voice/accent field, tighter audio/visual sync
