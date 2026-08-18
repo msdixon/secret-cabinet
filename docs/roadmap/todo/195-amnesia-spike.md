@@ -1,0 +1,1 @@
+[#195](https://github.com/msdixon/secret-cabinet/issues/195) amnesia spike — rungs (b)/(c), deliberately deferred (see "Other open decisions" above); Todo on the board but not being actively picked up
