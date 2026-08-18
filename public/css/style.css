@@ -662,8 +662,21 @@ a.archival-image-link:hover { border-color:var(--lodge-amber-dim); cursor:pointe
 .room-speech-card.room-card-fading { opacity:0; }
 .room-speech-card .speaker-name { font-size:13px; margin-bottom:3px; }
 .room-speech-card .speech-text { font-family:'Crimson Pro',serif; font-size:14px; line-height:1.6; color:var(--lodge-cream); }
-.room-speech-card.room-card-typing .speech-text::after { content:'▍'; opacity:0.6; animation:witnessCursorBlink 1s step-end infinite; }
 .room-speech-card .witness-annotation { font-size:12px; }
+/* #287: a member's card is a short-lived stack, not a single overwritten
+   beat -- each new turn appends a .room-card-entry instead of replacing the
+   card's content, so the last few beats stay visible and, once they outgrow
+   max-height above, scrollable -- the same overflow:auto that #291 gave a
+   single overlong beat now doubles as the stack's scrollback. Older entries
+   are dimmed so they read as backscroll behind the live one, which always
+   stays scrolled into view (scrollCardToLatest in witness.js). The whole
+   stack still fades together on inactivity (room-card-fading above): this
+   is short-lived scrollback for the current burst of speech, not a
+   standing history rail. */
+.room-card-entries { display:flex; flex-direction:column; gap:10px; }
+.room-card-entry:not(:last-child) { opacity:0.55; }
+.room-card-entry + .room-card-entry { padding-top:10px; border-top:1px solid var(--lodge-border); }
+.room-card-entry-typing .speech-text::after { content:'▍'; opacity:0.6; animation:witnessCursorBlink 1s step-end infinite; }
 
 /* Round headers, lulls, and unattributed action lines aren't anchored to any
    one member's seat -- they read into a small fixed strip at the top of the
