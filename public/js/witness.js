@@ -151,6 +151,14 @@ window.Witness = (function () {
   // stacking heuristic, not real collision resolution, but enough for the
   // handful of seats that can plausibly be showing a card at once.
   const CARD_COLLISION_WIDTH = 280; // #291: tracks .room-speech-card's max-width (style.css)
+  // #287 fix: this used to be a flat guess -- fine back when a card held one
+  // beat and was rarely taller than this. Now a card's a stack that
+  // routinely reaches its 320px max-height (style.css), and a flat 92px
+  // offset left two nearby members' cards overlapping -- their text visibly
+  // bled into each other on screen (reported live, two screenshots). The
+  // fix below reads the card's own rendered height instead, so the offset
+  // actually clears it; this constant survives only as the floor jsdom
+  // (zero-height layout) needs to keep repositioning testable at all.
   const CARD_STACK_OFFSET = 92;
   // A card grows upward from its seat point (CSS translateY(-100%), so it
   // reads as "hovering above the portrait"), and portraits themselves sit in
@@ -174,7 +182,16 @@ window.Witness = (function () {
     placed.sort((a, b) => a.x - b.x);
     let prev = null;
     placed.forEach(p => {
-      const y = prev && Math.abs(p.x - prev.x) < CARD_COLLISION_WIDTH ? prev.y + CARD_STACK_OFFSET : p.y;
+      let y = p.y;
+      if (prev && Math.abs(p.x - prev.x) < CARD_COLLISION_WIDTH) {
+        // A card grows upward from its anchor (translateY(-100%) below), so
+        // clearing the previous card's bottom edge (sitting at prev.y) means
+        // pushing *this* card's own anchor down by *this* card's own
+        // height, not the previous card's -- offsetting by the wrong
+        // card's height is exactly what let two stacked cards overlap.
+        const ownHeight = p.card.getBoundingClientRect().height || 0;
+        y = prev.y + Math.max(ownHeight, CARD_STACK_OFFSET);
+      }
       p.card.style.left = `${p.x}px`;
       p.card.style.top = `${y}px`;
       prev = { x: p.x, y };

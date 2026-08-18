@@ -924,6 +924,53 @@ test('scrollback (#287): a member\'s card is a short-lived stack of recent beats
       'once nothing new arrives, the whole stack -- every entry -- fades away together'
     );
   });
+
+  await t.test(
+    "a nearby card's stacking offset clears its own rendered height, not a flat guess (regression: two members' stacks bled into each other on screen)",
+    t2 => {
+      t2.mock.timers.enable({ apis: ['setTimeout'] });
+      const { document, window, module: Witness } = boot(t2);
+      stubScene(window, {
+        crowley: { x: 100, y: 200, visible: true },
+        blavatsky: { x: 110, y: 200, visible: true },
+      });
+      Witness.configure(makeDeps());
+      Witness.enableRoom();
+
+      Witness.liveSpeech({ speaker: 'Crowley', text: 'One.', memberId: 'crowley' });
+      Witness.liveSpeech({ speaker: 'Blavatsky', text: 'Two.', memberId: 'blavatsky' });
+
+      const [crowleyCard, blavatskyCard] = document.querySelectorAll('#room-speech-layer .room-speech-card');
+      // jsdom never lays anything out (every rect comes back zero-height),
+      // so stub a realistic stacked-card height -- taller than the old flat
+      // 92px offset (style.css's CARD_STACK_OFFSET), the same as a card
+      // that has accumulated a few beats really would be.
+      blavatskyCard.getBoundingClientRect = () => ({
+        height: 260,
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        width: 0,
+        x: 0,
+        y: 0,
+      });
+
+      // Trigger another reposition pass now that the stub is in place --
+      // Crowley's own second beat, clear of its #279 hold, does it for both
+      // cards (repositionRoomCards always repositions everything at once).
+      t2.mock.timers.tick(1200);
+      Witness.liveSpeech({ speaker: 'Crowley', text: 'Three.', memberId: 'crowley' });
+
+      const crowleyTop = parseInt(crowleyCard.style.top, 10);
+      const blavatskyTop = parseInt(blavatskyCard.style.top, 10);
+      assert.equal(
+        blavatskyTop - crowleyTop,
+        260,
+        "the offset should equal the nearby card's own rendered height, not the old flat 92px guess that let taller stacks overlap"
+      );
+    }
+  );
 });
 
 test("room-mode live pacing (#279): a member's card holds long enough to read before the next mutation lands", async t => {

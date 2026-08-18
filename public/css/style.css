@@ -660,7 +660,17 @@ a.archival-image-link:hover { border-color:var(--lodge-amber-dim); cursor:pointe
   transition:opacity 0.5s ease; opacity:1;
 }
 .room-speech-card.room-card-fading { opacity:0; }
-.room-speech-card .speaker-name { font-size:13px; margin-bottom:3px; }
+/* #287 fix: the header is the card's first child, inside the same
+   overflow:auto region as the entries below it -- scrolling to the newest
+   entry (scrollCardToLatest in witness.js) was pushing it out of view
+   entirely once a stack grew past one screenful, leaving a card of text
+   with no name attached (reported live). Sticky pins it to the scroll
+   container's top edge regardless of how far the entries beneath scroll. */
+.room-speech-card .speaker-name {
+  font-size:13px; margin-bottom:3px;
+  position:sticky; top:0; z-index:1;
+  background:rgba(14,11,8,0.92); padding-bottom:4px;
+}
 .room-speech-card .speech-text { font-family:'Crimson Pro',serif; font-size:14px; line-height:1.6; color:var(--lodge-cream); }
 .room-speech-card .witness-annotation { font-size:12px; }
 /* #287: a member's card is a short-lived stack, not a single overwritten
