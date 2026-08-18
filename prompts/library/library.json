@@ -310,5 +310,17 @@
     "members": ["gurdjieff"],
     "themes": ["effort", "obscurity", "appeal", "initiative", "self-mythology"],
     "file": "gurdjieff-herald-of-coming-good-1933.md"
+  },
+  {
+    "id": "adorno-types-syndromes-1950",
+    "title": "Against Typology — from \"Types and Syndromes\"",
+    "source": "The Authoritarian Personality",
+    "date": "1950",
+    "author": "adorno",
+    "translated": false,
+    "license": "fair-use",
+    "members": ["adorno"],
+    "themes": ["typology", "psychology", "critique", "individuality"],
+    "file": "adorno-types-syndromes-1950.md"
   }
 ]
