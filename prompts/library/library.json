@@ -322,5 +322,17 @@
     "members": ["adorno"],
     "themes": ["typology", "psychology", "critique", "individuality"],
     "file": "adorno-types-syndromes-1950.md"
+  },
+  {
+    "id": "pauli-theory-of-relativity-preface-1956",
+    "title": "The Æther Made Superfluous — Preface to Theory of Relativity",
+    "source": "Theory of Relativity",
+    "date": "1956",
+    "author": "pauli",
+    "translated": true,
+    "license": "fair-use",
+    "members": ["pauli"],
+    "themes": ["relativity", "symmetry", "group-theory", "epistemology"],
+    "file": "pauli-theory-of-relativity-preface-1956.md"
   }
 ]
