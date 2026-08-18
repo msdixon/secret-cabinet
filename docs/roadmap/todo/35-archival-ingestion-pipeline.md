@@ -1,1 +1,1 @@
-[#35](https://github.com/msdixon/secret-cabinet/issues/35) archival ingestion pipeline, 35a track (hand-curated growth continues; 35b bulk tooling deferred)
+[#35](https://github.com/msdixon/secret-cabinet/issues/35) archival ingestion pipeline (35b — bulk OCR tooling), deferred; 35a hand-curated growth split out to [#316](https://github.com/msdixon/secret-cabinet/issues/316)
