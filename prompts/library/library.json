@@ -322,5 +322,17 @@
     "members": ["adorno"],
     "themes": ["typology", "psychology", "critique", "individuality"],
     "file": "adorno-types-syndromes-1950.md"
+  },
+  {
+    "id": "coleman-smith-art-student-think-1908",
+    "title": "Should the Art Student Think?",
+    "source": "The Craftsman",
+    "date": "1908",
+    "author": "pixie",
+    "translated": false,
+    "license": "public-domain",
+    "members": ["pixie"],
+    "themes": ["intention", "attention", "character-study", "pedagogy", "imagination"],
+    "file": "coleman-smith-art-student-think-1908.md"
   }
 ]
