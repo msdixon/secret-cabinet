@@ -124,6 +124,7 @@ async function runRound({
   disposition: priorDisposition,
   loadVoiceExemplar,
   loadResidue,
+  loadRelationshipEdges,
   previousLullNote,
 }) {
   const presentMembers = ROSTER.filter(m => presentMemberIds.includes(m.id));
@@ -171,6 +172,28 @@ async function runRound({
     }
     return residueCache.get(memberId);
   };
+  // #268: the full graph edge set doesn't vary by member or by beat, and
+  // the room's present roster doesn't change mid-round — read it (at most)
+  // once per round, same reasoning as exemplarCache above but with a single
+  // cached value instead of one per member.
+  let relationshipEdgesCache = null;
+  let relationshipEdgesLoaded = false;
+  const relationshipEdges = () => {
+    if (!relationshipEdgesLoaded) {
+      relationshipEdgesLoaded = true;
+      try {
+        relationshipEdgesCache = loadRelationshipEdges?.() || [];
+      } catch (err) {
+        // A malformed or unreadable graph must never cost a member their
+        // turn — fall through to no assembled relationship data, same as a
+        // pair the graph simply has no edges for.
+        console.warn('[relationships]', '—', err.message);
+        relationshipEdgesCache = [];
+      }
+    }
+    return relationshipEdgesCache;
+  };
+
   // Only entries a member actually wrote to this round — most rounds this
   // stays empty (see buildDispositionToolSchema's residueNote: "most turns,
   // nothing belongs here"). The caller persists exactly what's here.
@@ -305,6 +328,8 @@ async function runRound({
       disposition: currentDisposition[memberId],
       voiceExemplar,
       residue,
+      otherPresentMembers: presentMembers.filter(m => m.id !== memberId),
+      relationshipEdges: relationshipEdges(),
     });
     const userMessage = buildSpeakerUserMessage({
       roundPrompt,

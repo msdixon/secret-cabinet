@@ -5,13 +5,19 @@
 // per-speaker call itself.
 
 const { buildCachedSystem, withHistoryCacheControl } = require('./pipeline-core');
+const { buildRelationshipSection } = require('./relationships');
 
 // ── Member section (shared with the legacy full-blob prompt builder) ──────
 
 // Extracted from server.js's buildSystemPrompt so both the legacy full-blob
 // builder and the new per-speaker builder (Stage 2) share identical
 // artifact/session-note injection logic.
-function buildMemberSection(member, artifact, notes, loadMemberFile) {
+//
+// #268: `otherPresentMembers`/`relationshipEdges` are optional — omitting
+// them (existing callers, e.g. the prototype route) just skips the
+// assembled-relationship fallback, same degrade-gracefully contract as
+// artifact/notes being absent.
+function buildMemberSection(member, artifact, notes, loadMemberFile, otherPresentMembers, relationshipEdges) {
   const text = loadMemberFile(member.file);
   if (!text) return '';
   const artifactNote =
@@ -19,7 +25,8 @@ function buildMemberSection(member, artifact, notes, loadMemberFile) {
       ? `\n\n---\n\n## PRIVATE — BEFORE THE MEETING BEGAN\n\nBefore the others arrived, you were shown the following. No one else in the room has seen it. You may reference it, produce it at the right moment, withhold it entirely, or let it colour what you say without naming it. The choice is yours.\n\n${artifact.text.trim()}`
       : '';
   const sessionNote = notes[member.id]?.trim() ? `\n\n---\n\n## SESSION NOTE\n\n${notes[member.id].trim()}` : '';
-  return `---\n${text}${artifactNote}${sessionNote}`;
+  const relationshipSection = buildRelationshipSection(text, member, otherPresentMembers, relationshipEdges);
+  return `---\n${text}${artifactNote}${sessionNote}${relationshipSection}`;
 }
 
 // ── Local hybrid speaker pacing (#164) ─────────────────────────────────────
@@ -291,8 +298,17 @@ function buildSpeakerSystemPrompt({
   disposition,
   voiceExemplar,
   residue,
+  otherPresentMembers,
+  relationshipEdges,
 }) {
-  const memberSection = buildMemberSection(member, artifact, notes, loadMemberFile);
+  const memberSection = buildMemberSection(
+    member,
+    artifact,
+    notes,
+    loadMemberFile,
+    otherPresentMembers,
+    relationshipEdges
+  );
   // #187: sits directly after the character file, since it's evidence for
   // the same thing that file describes — and before the disposition, which
   // is about tonight specifically and wants to be the last thing read.

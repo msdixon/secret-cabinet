@@ -939,6 +939,48 @@ test('buildSpeakerSystemPrompt — voice exemplar wiring', async t => {
       assert.ok(prompt.indexOf('WHAT LINGERS') < prompt.indexOf('YOUR PRIVATE STATE TONIGHT'));
     }
   );
+
+  // #268 — relationship-as-data layer wiring.
+  await t.test('omitting the present-roster/edges args gets the exact pre-#268 prompt', () => {
+    const withoutArg = buildSpeakerSystemPrompt(base);
+    assert.equal(
+      buildSpeakerSystemPrompt({ ...base, otherPresentMembers: undefined, relationshipEdges: undefined }),
+      withoutArg
+    );
+    assert.doesNotMatch(withoutArg, /OTHERS IN THE ROOM TONIGHT/);
+  });
+
+  await t.test('a present member already covered by the file\'s own prose gets no assembled line', () => {
+    const prompt = buildSpeakerSystemPrompt({
+      ...base,
+      loadMemberFile: () =>
+        '# BLAKE\n\n## YOUR RELATIONSHIPS IN THIS ROOM\n\n**Crowley**: You find him vulgar.\n\n## HOW YOU SPEAK\n\nAphoristic.',
+      otherPresentMembers: [{ id: 'crowley', name: 'Crowley' }],
+      relationshipEdges: [{ source: 'william-blake', target: 'crowley', type: 'parallel', label: 'n/a' }],
+    });
+    assert.doesNotMatch(prompt, /OTHERS IN THE ROOM TONIGHT/);
+  });
+
+  await t.test('a present member the prose is silent on gets the assembled fallback', () => {
+    const prompt = buildSpeakerSystemPrompt({
+      ...base,
+      otherPresentMembers: [{ id: 'sun-ra', name: 'Sun Ra' }],
+      relationshipEdges: [{ source: 'william-blake', target: 'sun-ra', type: 'influence', label: 'A cosmic lineage' }],
+    });
+    assert.match(prompt, /OTHERS IN THE ROOM TONIGHT/);
+    assert.match(prompt, /Sun Ra/);
+    assert.match(prompt, /A cosmic lineage/);
+  });
+
+  await t.test('the assembled section sits inside the member section, ahead of the voice exemplar', () => {
+    const prompt = buildSpeakerSystemPrompt({
+      ...base,
+      voiceExemplar: exemplar,
+      otherPresentMembers: [{ id: 'sun-ra', name: 'Sun Ra' }],
+      relationshipEdges: [{ source: 'william-blake', target: 'sun-ra', type: 'influence', label: 'A cosmic lineage' }],
+    });
+    assert.ok(prompt.indexOf('OTHERS IN THE ROOM TONIGHT') < prompt.indexOf('HOW YOU ACTUALLY WRITE'));
+  });
 });
 
 test('makeMetric — voiceExemplar attribution', async t => {
