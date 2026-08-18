@@ -151,6 +151,14 @@ window.Witness = (function () {
   // stacking heuristic, not real collision resolution, but enough for the
   // handful of seats that can plausibly be showing a card at once.
   const CARD_COLLISION_WIDTH = 280; // #291: tracks .room-speech-card's max-width (style.css)
+  // #287 fix: this used to be a flat guess -- fine back when a card held one
+  // beat and was rarely taller than this. Now a card's a stack that
+  // routinely reaches its 320px max-height (style.css), and a flat 92px
+  // offset left two nearby members' cards overlapping -- their text visibly
+  // bled into each other on screen (reported live, two screenshots). The
+  // fix below reads the card's own rendered height instead, so the offset
+  // actually clears it; this constant survives only as the floor jsdom
+  // (zero-height layout) needs to keep repositioning testable at all.
   const CARD_STACK_OFFSET = 92;
   // A card grows upward from its seat point (CSS translateY(-100%), so it
   // reads as "hovering above the portrait"), and portraits themselves sit in
@@ -174,7 +182,16 @@ window.Witness = (function () {
     placed.sort((a, b) => a.x - b.x);
     let prev = null;
     placed.forEach(p => {
-      const y = prev && Math.abs(p.x - prev.x) < CARD_COLLISION_WIDTH ? prev.y + CARD_STACK_OFFSET : p.y;
+      let y = p.y;
+      if (prev && Math.abs(p.x - prev.x) < CARD_COLLISION_WIDTH) {
+        // A card grows upward from its anchor (translateY(-100%) below), so
+        // clearing the previous card's bottom edge (sitting at prev.y) means
+        // pushing *this* card's own anchor down by *this* card's own
+        // height, not the previous card's -- offsetting by the wrong
+        // card's height is exactly what let two stacked cards overlap.
+        const ownHeight = p.card.getBoundingClientRect().height || 0;
+        y = prev.y + Math.max(ownHeight, CARD_STACK_OFFSET);
+      }
       p.card.style.left = `${p.x}px`;
       p.card.style.top = `${y}px`;
       prev = { x: p.x, y };
@@ -236,27 +253,57 @@ window.Witness = (function () {
     stopRoomLoop();
   }
 
-  // Gets or creates the persistent card for a member -- typing and settled
-  // states are the same element so swapping between them (renderRoomCard
-  // replacing a typing card's content) never flickers a remove/re-add.
-  function getOrCreateCard(memberId) {
-    let card = roomCards.get(memberId);
-    if (card) return { card, existed: true, prevHtml: card.innerHTML };
-    card = document.createElement('div');
-    card.className = 'room-speech-card';
-    roomLayer()?.appendChild(card);
-    roomCards.set(memberId, card);
-    return { card, existed: false, prevHtml: null };
-  }
-
-  function speechHtml({ speaker, text, memberId, annotation }) {
+  function speakerNameHtml(memberId, speaker) {
     const nc = memberId ? `voice-${memberId}` : '';
     const glyph = memberGlyph(memberId) ? `<span class="speaker-glyph">${memberGlyph(memberId)}</span>` : '';
-    const nameHtml = `<div class="speaker-name ${nc}">${glyph}${deps.escapeHTML(speaker)}</div>`;
+    return `<div class="speaker-name ${nc}">${glyph}${deps.escapeHTML(speaker)}</div>`;
+  }
+
+  function speechBodyHtml({ text, annotation }) {
     let bodyHtml = `<div class="bubble-body"><div class="speech-text">${deps.renderActions(text)}</div>`;
     if (annotation) bodyHtml += `<div class="witness-annotation">↳ ${deps.escapeHTML(annotation)}</div>`;
     bodyHtml += '</div>';
-    return nameHtml + bodyHtml;
+    return bodyHtml;
+  }
+
+  function speechHtml(block) {
+    return speakerNameHtml(block.memberId, block.speaker) + speechBodyHtml(block);
+  }
+
+  // ── #287: a member's card is a short-lived stack, not one overwritten
+  // beat ──────────────────────────────────────────────────────────────────
+  // getOrCreateCard builds the persistent per-member shell once (speaker
+  // name + an empty .room-card-entries column); every beat after that
+  // appends a .room-card-entry rather than replacing the card's content, so
+  // the last few turns stay on screen and -- once they outgrow the card's
+  // max-height (style.css) -- scroll, the same way #291 already made one
+  // overlong beat scrollable. The whole stack still fades together
+  // (scheduleCardFade) on inactivity; this is backscroll for the current
+  // burst of speech, not a standing history.
+  function getOrCreateCard(memberId, speaker) {
+    let card = roomCards.get(memberId);
+    if (card) return card;
+    card = document.createElement('div');
+    card.className = 'room-speech-card';
+    card.innerHTML = `${speakerNameHtml(memberId, speaker)}<div class="room-card-entries"></div>`;
+    roomLayer()?.appendChild(card);
+    roomCards.set(memberId, card);
+    return card;
+  }
+
+  function cardEntries(card) {
+    return card.querySelector('.room-card-entries');
+  }
+
+  // A card holds at most one open typing entry at a time -- queried rather
+  // than tracked in a parallel map, since renderRoomCard settling it always
+  // leaves at most one behind to find.
+  function openTypingEntry(card) {
+    return card.querySelector('.room-card-entry-typing');
+  }
+
+  function scrollCardToLatest(card) {
+    card.scrollTop = card.scrollHeight;
   }
 
   // Renders one settled speech beat into a member's card, anchored to their
@@ -265,7 +312,7 @@ window.Witness = (function () {
   // markup, same as it would in stage mode. Returns { undo } so replay's
   // go-back can reverse exactly this render.
   function renderRoomCard(block) {
-    const { text, memberId } = block;
+    const { text, memberId, speaker } = block;
     if (!memberId) {
       const el = document.createElement('div');
       el.className = 'transcript-entry room-event-entry';
@@ -274,24 +321,47 @@ window.Witness = (function () {
       return { undo: () => el.remove() };
     }
     cancelCardFade(memberId);
-    const { card, existed, prevHtml } = getOrCreateCard(memberId);
-    card.classList.remove('room-card-typing');
-    card.innerHTML = speechHtml(block);
-    // #291: a settled beat is the full text -- start a reader at its top,
-    // not wherever the typing scroll (below) last left the card sitting.
-    card.scrollTop = 0;
+    const card = getOrCreateCard(memberId, speaker);
+    const typing = openTypingEntry(card);
+
+    // A beat that settles an already-open typing placeholder reuses that
+    // same entry node (no flicker between the two states, same invariant
+    // the old single-card version kept); otherwise it's a fresh entry
+    // appended to the stack. Replay never opens a typing entry (it settles
+    // beats directly), so this branch -- and the undo below that restores
+    // typing markup -- exercises only during live mirroring, where the
+    // returned undo is discarded (see liveSpeech).
+    let entry;
+    let restore;
+    if (typing) {
+      entry = typing;
+      const prevHtml = entry.innerHTML;
+      entry.classList.remove('room-card-entry-typing');
+      restore = () => {
+        entry.innerHTML = prevHtml;
+        entry.classList.add('room-card-entry-typing');
+      };
+    } else {
+      entry = document.createElement('div');
+      entry.className = 'room-card-entry';
+      cardEntries(card).appendChild(entry);
+      restore = () => {
+        entry.remove();
+        if (!cardEntries(card).children.length) {
+          card.remove();
+          roomCards.delete(memberId);
+        }
+      };
+    }
+    entry.innerHTML = speechBodyHtml(block);
+    scrollCardToLatest(card);
     touchRoomLoop();
     scheduleCardFade(memberId, text);
     return {
       undo: () => {
         cancelCardFade(memberId);
-        if (existed) {
-          card.innerHTML = prevHtml;
-          touchRoomLoop();
-        } else {
-          card.remove();
-          roomCards.delete(memberId);
-        }
+        restore();
+        touchRoomLoop();
       },
     };
   }
@@ -299,26 +369,25 @@ window.Witness = (function () {
   function renderRoomTyping(name, memberId) {
     if (!memberId) return; // nothing to anchor a typing indicator to
     cancelCardFade(memberId);
-    const { card } = getOrCreateCard(memberId);
-    card.classList.add('room-card-typing');
-    const nc = `voice-${memberId}`;
-    const glyph = memberGlyph(memberId) ? `<span class="speaker-glyph">${memberGlyph(memberId)}</span>` : '';
-    card.innerHTML =
-      `<div class="speaker-name ${nc}">${glyph}${deps.escapeHTML(name)}</div>` +
-      '<div class="bubble-body"><div class="speech-text typing-text transcript-stream-live"></div></div>';
+    const card = getOrCreateCard(memberId, name);
+    const entry = document.createElement('div');
+    entry.className = 'room-card-entry room-card-entry-typing';
+    entry.innerHTML = '<div class="bubble-body"><div class="speech-text typing-text transcript-stream-live"></div></div>';
+    cardEntries(card).appendChild(entry);
+    scrollCardToLatest(card);
     touchRoomLoop();
   }
 
   function setRoomTypingText(text) {
     const card = liveTypingMemberId && roomCards.get(liveTypingMemberId);
-    const el = card?.querySelector('.typing-text');
+    const el = card && openTypingEntry(card)?.querySelector('.typing-text');
     if (el) el.textContent = text;
     // #291: the card now caps its own height and scrolls internally rather
     // than growing without bound, so a beat that outgrows it needs to be
     // kept scrolled to the tail as it's typed -- the stage's plain-text
     // fallback already does the equivalent (liveTypingSet's stage.scrollTop
     // = stage.scrollHeight below).
-    if (card) card.scrollTop = card.scrollHeight;
+    if (card) scrollCardToLatest(card);
   }
 
   // ── Room-mode live pacing (#279) ─────────────────────────────────────────

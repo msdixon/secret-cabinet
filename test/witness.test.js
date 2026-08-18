@@ -71,6 +71,17 @@ function stubScene(window, positions = {}) {
   window.LodgeScene = { getSeatScreenPosition: memberId => positions[memberId] || null };
 }
 
+// #287: a member's card is a short-lived stack of .room-card-entry nodes,
+// not one overwritten node -- these read the *latest* entry, the one most
+// assertions below actually care about, without asserting on the whole
+// stack's shape.
+function latestEntry(card) {
+  return card.querySelector('.room-card-entries').lastElementChild;
+}
+function latestEntryText(card, selector = '.speech-text') {
+  return latestEntry(card)?.querySelector(selector)?.textContent;
+}
+
 const MEMBERS = [
   { id: 'crowley', name: 'Crowley', glyph: '☿' },
   { id: 'blavatsky', name: 'Blavatsky', glyph: '✹' },
@@ -696,11 +707,11 @@ test('the room (#257): dialogue composited onto the scene, replacing the #202 to
     Witness.liveTypingStart('Crowley', 'crowley');
     let card = document.querySelector('#room-speech-layer .room-speech-card');
     assert.ok(card, 'typing should open a card');
-    assert.ok(card.classList.contains('room-card-typing'));
+    assert.ok(latestEntry(card).classList.contains('room-card-entry-typing'));
 
     Witness.liveTypingSet('The book');
     Witness.liveTypingSet('The book is not the point.');
-    assert.equal(card.querySelector('.typing-text').textContent, 'The book is not the point.');
+    assert.equal(latestEntryText(card, '.typing-text'), 'The book is not the point.');
 
     Witness.liveClearTyping();
     Witness.liveSpeech({ speaker: 'Crowley', text: 'The book is not the point.', memberId: 'crowley' });
@@ -711,8 +722,13 @@ test('the room (#257): dialogue composited onto the scene, replacing the #202 to
       'typing and settled states share one card, not two'
     );
     card = document.querySelector('#room-speech-layer .room-speech-card');
-    assert.equal(card.classList.contains('room-card-typing'), false);
-    assert.match(card.querySelector('.speech-text').textContent, /not the point/);
+    assert.equal(
+      document.querySelectorAll('#room-speech-layer .room-card-entry').length,
+      1,
+      'the typing entry settles in place -- still one entry, not a second'
+    );
+    assert.equal(latestEntry(card).classList.contains('room-card-entry-typing'), false);
+    assert.match(latestEntryText(card), /not the point/);
   });
 
   await t.test('two seats close together on screen get stacked instead of overlapping', t2 => {
@@ -758,7 +774,7 @@ test('the room (#257): dialogue composited onto the scene, replacing the #202 to
   );
 
   await t.test(
-    'replay composites into the room exactly like live mirroring, and go-back restores a card to its prior turn rather than deleting it',
+    'replay composites into the room exactly like live mirroring, and go-back removes the last entry rather than the whole card',
     async t2 => {
       const { document, window, module: Witness } = boot(t2);
       stubScene(window, { crowley: { x: 10, y: 10, visible: true } });
@@ -773,26 +789,37 @@ test('the room (#257): dialogue composited onto the scene, replacing the #202 to
 
       Witness.advance(); // "First thing."
       let card = document.querySelector('#room-speech-layer .room-speech-card');
-      assert.match(card.querySelector('.speech-text').textContent, /First thing/);
+      assert.match(latestEntryText(card), /First thing/);
       assert.equal(document.querySelectorAll('#room-speech-layer .room-speech-card').length, 1);
+      assert.equal(document.querySelectorAll('#room-speech-layer .room-card-entry').length, 1);
 
-      Witness.advance(); // "Second thing." -- same card, overwritten in place
+      Witness.advance(); // "Second thing." -- same card, a second entry stacked on top (#287)
       card = document.querySelector('#room-speech-layer .room-speech-card');
-      assert.match(card.querySelector('.speech-text').textContent, /Second thing/);
+      assert.match(latestEntryText(card), /Second thing/);
       assert.equal(
         document.querySelectorAll('#room-speech-layer .room-speech-card').length,
         1,
         'still one card, not a second'
+      );
+      assert.equal(
+        document.querySelectorAll('#room-speech-layer .room-card-entry').length,
+        2,
+        'the second beat stacks a new entry rather than overwriting the first'
       );
 
       // goBack() isn't part of the public API -- driven the same way the
       // left-arrow key does in the real page.
       window.document.dispatchEvent(new window.KeyboardEvent('keydown', { code: 'ArrowLeft' }));
       card = document.querySelector('#room-speech-layer .room-speech-card');
+      assert.equal(
+        document.querySelectorAll('#room-speech-layer .room-card-entry').length,
+        1,
+        'going back should remove the entry it added, not the whole card'
+      );
       assert.match(
-        card.querySelector('.speech-text').textContent,
+        latestEntryText(card),
         /First thing/,
-        'going back should restore the card to its prior content, not delete it'
+        'going back should leave the card showing its prior turn'
       );
     }
   );
@@ -812,6 +839,140 @@ test('the room (#257): dialogue composited onto the scene, replacing the #202 to
   });
 });
 
+test('scrollback (#287): a member\'s card is a short-lived stack of recent beats, not just the latest', async t => {
+  await t.test('consecutive beats from the same member accumulate as separate entries, oldest first', t2 => {
+    t2.mock.timers.enable({ apis: ['setTimeout'] });
+    const { document, window, module: Witness } = boot(t2);
+    stubScene(window, { crowley: { x: 10, y: 10, visible: true } });
+    Witness.configure(makeDeps());
+    Witness.enableRoom();
+
+    Witness.liveSpeech({ speaker: 'Crowley', text: 'One.', memberId: 'crowley' });
+    t2.mock.timers.tick(1200); // clear #279's per-member reading-time hold between beats
+    Witness.liveSpeech({ speaker: 'Crowley', text: 'Two.', memberId: 'crowley' });
+    t2.mock.timers.tick(1200);
+    Witness.liveSpeech({ speaker: 'Crowley', text: 'Three.', memberId: 'crowley' });
+
+    assert.equal(
+      document.querySelectorAll('#room-speech-layer .room-speech-card').length,
+      1,
+      'three beats from one member still share a single card, not three'
+    );
+    const card = document.querySelector('#room-speech-layer .room-speech-card');
+    const entries = [...document.querySelectorAll('#room-speech-layer .room-card-entry')];
+    assert.equal(entries.length, 3, 'three beats should stack as three entries on that card');
+    assert.deepEqual(
+      entries.map(e => e.querySelector('.speech-text').textContent),
+      ['One.', 'Two.', 'Three.'],
+      'entries stay in speaking order, oldest first, so scrolling up reads backward through the turn'
+    );
+    assert.match(
+      latestEntryText(card),
+      /Three\./,
+      'the newest beat is the one left in view without the reader having to scroll'
+    );
+  });
+
+  await t.test('a typing placeholder settles into a new entry, not a rewrite of the whole stack', t2 => {
+    t2.mock.timers.enable({ apis: ['setTimeout'] });
+    const { document, window, module: Witness } = boot(t2);
+    stubScene(window, { crowley: { x: 10, y: 10, visible: true } });
+    Witness.configure(makeDeps());
+    Witness.enableRoom();
+
+    Witness.liveSpeech({ speaker: 'Crowley', text: 'One.', memberId: 'crowley' });
+    t2.mock.timers.tick(1200);
+    Witness.liveTypingStart('Crowley', 'crowley');
+    Witness.liveTypingSet('Two');
+    Witness.liveClearTyping();
+    Witness.liveSpeech({ speaker: 'Crowley', text: 'Two.', memberId: 'crowley' });
+
+    const entries = [...document.querySelectorAll('#room-speech-layer .room-card-entry')];
+    assert.equal(entries.length, 2, "the settled typing beat is the stack's second entry, not a third node");
+    assert.equal(entries[0].querySelector('.speech-text').textContent, 'One.');
+    assert.equal(entries[1].querySelector('.speech-text').textContent, 'Two.');
+  });
+
+  await t.test('the whole stack fades together once the newest entry has had its reading time', t2 => {
+    t2.mock.timers.enable({ apis: ['setTimeout'] });
+    const { document, window, module: Witness } = boot(t2);
+    stubScene(window, { crowley: { x: 10, y: 10, visible: true } });
+    Witness.configure(makeDeps());
+    Witness.enableRoom();
+
+    Witness.liveSpeech({ speaker: 'Crowley', text: 'One.', memberId: 'crowley' });
+    t2.mock.timers.tick(1200);
+    Witness.liveSpeech({ speaker: 'Crowley', text: 'Two.', memberId: 'crowley' });
+
+    // Fading resets on every new beat (scheduleCardFade), so the two-entry
+    // stack should still be intact well past "One."'s own reading time.
+    t2.mock.timers.tick(1200);
+    assert.ok(
+      document.querySelector('#room-speech-layer .room-speech-card'),
+      'a new beat should reset the fade clock for the whole stack, not just its own entry'
+    );
+
+    // "Two."'s own reading time (WITNESS_MIN_PAUSE) + the fade grace marks
+    // the card fading; the fade-out transition then removes it. Two ticks,
+    // not one -- the second setTimeout is only scheduled once the first
+    // actually fires, so mock timers need a separate tick to reach it.
+    t2.mock.timers.tick(1200 + 1500);
+    t2.mock.timers.tick(550);
+    assert.equal(
+      document.querySelectorAll('#room-speech-layer .room-speech-card').length,
+      0,
+      'once nothing new arrives, the whole stack -- every entry -- fades away together'
+    );
+  });
+
+  await t.test(
+    "a nearby card's stacking offset clears its own rendered height, not a flat guess (regression: two members' stacks bled into each other on screen)",
+    t2 => {
+      t2.mock.timers.enable({ apis: ['setTimeout'] });
+      const { document, window, module: Witness } = boot(t2);
+      stubScene(window, {
+        crowley: { x: 100, y: 200, visible: true },
+        blavatsky: { x: 110, y: 200, visible: true },
+      });
+      Witness.configure(makeDeps());
+      Witness.enableRoom();
+
+      Witness.liveSpeech({ speaker: 'Crowley', text: 'One.', memberId: 'crowley' });
+      Witness.liveSpeech({ speaker: 'Blavatsky', text: 'Two.', memberId: 'blavatsky' });
+
+      const [crowleyCard, blavatskyCard] = document.querySelectorAll('#room-speech-layer .room-speech-card');
+      // jsdom never lays anything out (every rect comes back zero-height),
+      // so stub a realistic stacked-card height -- taller than the old flat
+      // 92px offset (style.css's CARD_STACK_OFFSET), the same as a card
+      // that has accumulated a few beats really would be.
+      blavatskyCard.getBoundingClientRect = () => ({
+        height: 260,
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        width: 0,
+        x: 0,
+        y: 0,
+      });
+
+      // Trigger another reposition pass now that the stub is in place --
+      // Crowley's own second beat, clear of its #279 hold, does it for both
+      // cards (repositionRoomCards always repositions everything at once).
+      t2.mock.timers.tick(1200);
+      Witness.liveSpeech({ speaker: 'Crowley', text: 'Three.', memberId: 'crowley' });
+
+      const crowleyTop = parseInt(crowleyCard.style.top, 10);
+      const blavatskyTop = parseInt(blavatskyCard.style.top, 10);
+      assert.equal(
+        blavatskyTop - crowleyTop,
+        260,
+        "the offset should equal the nearby card's own rendered height, not the old flat 92px guess that let taller stacks overlap"
+      );
+    }
+  );
+});
+
 test("room-mode live pacing (#279): a member's card holds long enough to read before the next mutation lands", async t => {
   await t.test(
     'a second beat from the same member is held, not shown, until the first has had its reading time',
@@ -824,28 +985,28 @@ test("room-mode live pacing (#279): a member's card holds long enough to read be
 
       Witness.liveSpeech({ speaker: 'Crowley', text: 'One.', memberId: 'crowley' });
       let card = document.querySelector('#room-speech-layer .room-speech-card');
-      assert.match(card.querySelector('.speech-text').textContent, /One\./);
+      assert.match(latestEntryText(card), /One\./);
 
       Witness.liveSpeech({ speaker: 'Crowley', text: 'Two.', memberId: 'crowley' });
       card = document.querySelector('#room-speech-layer .room-speech-card');
       assert.match(
-        card.querySelector('.speech-text').textContent,
+        latestEntryText(card),
         /One\./,
         'the second beat must not clobber the first before its reading time is up'
       );
       assert.equal(
-        document.querySelectorAll('#room-speech-layer .room-speech-card').length,
+        document.querySelectorAll('#room-speech-layer .room-card-entry').length,
         1,
-        'still one card, the second beat is held, not appended'
+        'still one entry, the second beat is held, not appended'
       );
 
       // WITNESS_MIN_PAUSE -- the reading-time floor for a beat this short.
       t2.mock.timers.tick(1200);
       card = document.querySelector('#room-speech-layer .room-speech-card');
       assert.match(
-        card.querySelector('.speech-text').textContent,
+        latestEntryText(card),
         /Two\./,
-        'once the hold elapses, the deferred beat replaces the first'
+        'once the hold elapses, the deferred beat is added as the next entry'
       );
     }
   );
@@ -865,11 +1026,11 @@ test("room-mode live pacing (#279): a member's card holds long enough to read be
       Witness.liveTypingStart('Crowley', 'crowley');
       let card = document.querySelector('#room-speech-layer .room-speech-card');
       assert.equal(
-        card.classList.contains('room-card-typing'),
-        false,
-        'typing must not overwrite the settled card before its hold clears'
+        document.querySelectorAll('#room-speech-layer .room-card-entry-typing').length,
+        0,
+        'typing must not overwrite the settled entry before its hold clears'
       );
-      assert.match(card.querySelector('.speech-text').textContent, /One\./);
+      assert.match(latestEntryText(card), /One\./);
 
       // Chunks keep streaming in while the hold is still up -- only the
       // latest text queued behind the deferred typing-start should survive.
@@ -878,12 +1039,13 @@ test("room-mode live pacing (#279): a member's card holds long enough to read be
 
       t2.mock.timers.tick(1200);
       card = document.querySelector('#room-speech-layer .room-speech-card');
-      assert.ok(
-        card.classList.contains('room-card-typing'),
-        'once the hold clears, the deferred typing indicator takes over'
+      assert.equal(
+        document.querySelectorAll('#room-speech-layer .room-card-entry-typing').length,
+        1,
+        'once the hold clears, the deferred typing indicator takes over as the next entry'
       );
       assert.equal(
-        card.querySelector('.typing-text').textContent,
+        latestEntryText(card, '.typing-text'),
         'Two',
         'the latest typing text queued during the hold is applied once it flushes'
       );
@@ -904,11 +1066,11 @@ test("room-mode live pacing (#279): a member's card holds long enough to read be
     t2.mock.timers.tick(1200);
     const card = document.querySelector('#room-speech-layer .room-speech-card');
     assert.equal(
-      card.classList.contains('room-card-typing'),
-      false,
+      document.querySelectorAll('#room-speech-layer .room-card-entry-typing').length,
+      0,
       'the settled beat wins over the stale typing placeholder queued before it'
     );
-    assert.match(card.querySelector('.speech-text').textContent, /Two\./);
+    assert.match(latestEntryText(card), /Two\./);
   });
 
   await t.test('different members are never held back by each other', t2 => {
