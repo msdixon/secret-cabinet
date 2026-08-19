@@ -196,6 +196,66 @@ test('voice.js', async t => {
     assert.ok(first.pitch >= 0.8 && first.pitch < 1.2, 'pitch stays in the documented range');
   });
 
+  // #333 -- gender-aware voice selection for the Web Speech path.
+  await t.test('speak() with a gender narrows voiceForMember to name-matching voices', t2 => {
+    let events;
+    const loaded = loadPublicModule('voice.js', FIXTURE, window => {
+      events = stubSpeech(window, [
+        { name: 'Google UK English Female', lang: 'en-GB' },
+        { name: 'Google US English Male', lang: 'en-US' },
+        { name: 'Samantha', lang: 'en-US' }, // known-name lookup: female
+        { name: 'Daniel', lang: 'en-GB' }, // known-name lookup: male
+      ]);
+    });
+    t2.after(loaded.cleanup);
+    const { Voice } = loaded.window;
+    Voice.setEnabled(true);
+
+    const FEMALE_NAMES = new Set(['Google UK English Female', 'Samantha']);
+    const MALE_NAMES = new Set(['Google US English Male', 'Daniel']);
+
+    Voice.speak('Hello.', 'blavatsky', 1, 'female');
+    assert.ok(FEMALE_NAMES.has(events[1].utterance.voice.name), 'expected a female-recognized voice');
+
+    Voice.speak('Hello.', 'crowley', 1, 'male');
+    assert.ok(MALE_NAMES.has(events[3].utterance.voice.name), 'expected a male-recognized voice');
+  });
+
+  await t.test('speak() without a gender is unaffected — same voice pool as before #333', t2 => {
+    let events;
+    const loaded = loadPublicModule('voice.js', FIXTURE, window => {
+      events = stubSpeech(window, [
+        { name: 'A', lang: 'en-US' },
+        { name: 'B', lang: 'en-GB' },
+      ]);
+    });
+    t2.after(loaded.cleanup);
+    const { Voice } = loaded.window;
+    Voice.setEnabled(true);
+
+    Voice.speak('First turn.', 'crowley', 1);
+    const withoutGender = events[1].utterance.voice;
+    Voice.speak('Second turn.', 'crowley', 1, undefined);
+    const explicitlyUndefined = events[3].utterance.voice;
+    assert.equal(withoutGender, explicitlyUndefined);
+  });
+
+  await t.test('speak() falls back to the full voice list when no voice matches the given gender', t2 => {
+    let events;
+    const loaded = loadPublicModule('voice.js', FIXTURE, window => {
+      events = stubSpeech(window, [
+        { name: 'A', lang: 'en-US' }, // no recognizable gender in either name
+        { name: 'B', lang: 'en-GB' },
+      ]);
+    });
+    t2.after(loaded.cleanup);
+    const { Voice } = loaded.window;
+    Voice.setEnabled(true);
+
+    assert.doesNotThrow(() => Voice.speak('Hello.', 'crowley', 1, 'female'));
+    assert.ok(events[1].utterance.voice, 'expected a voice to still be assigned from the full list');
+  });
+
   await t.test('rate scales with the passed speed multiplier, clamped to stay intelligible', t2 => {
     let events;
     const loaded = loadPublicModule('voice.js', FIXTURE, window => {

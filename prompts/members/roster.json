@@ -4,289 +4,310 @@
     "name": "Crowley",
     "file": "crowley.md",
     "glyph": "☿",
-    "voiceId": "IKne3meq5aSn9XLyUdCD"
+    "voiceId": "SOYHLrjzK2X1ezoPC6cr",
+    "voiceGender": "male"
   },
   {
     "id": "waite",
     "name": "Waite",
     "file": "waite.md",
     "glyph": "✡",
-    "voiceId": "bIHbv24MWmeRgasZH58o"
+    "voiceId": "nPczCjzI2devNBz1zQrb",
+    "voiceGender": "male"
   },
   {
     "id": "pixie",
     "name": "Coleman-Smith",
     "file": "coleman-smith.md",
-    "aliases": [
-      "Pamela",
-      "Pamela Colman Smith"
-    ],
+    "aliases": ["Pamela", "Pamela Colman Smith"],
     "glyph": "♃",
-    "voiceId": "SAz9YHcvj6GT2YYXdXww"
+    "voiceId": "pFZP5JQG7iQjIQuC4Bku",
+    "voiceGender": "female"
   },
   {
     "id": "yeats",
     "name": "Yeats",
     "file": "yeats.md",
     "glyph": "☽",
-    "voiceId": "CwhRBWXzGAHq8TQ4Fs17"
+    "voiceId": "pNInz6obpgDQGcFmaJgB",
+    "voiceGender": "male"
   },
   {
     "id": "blavatsky",
     "name": "Blavatsky",
     "file": "blavatsky.md",
     "glyph": "☸",
-    "voiceId": "cgSgspJ2msm6clMCkdW9"
+    "voiceId": "hpp4J3VqNfWAUOO0d1Us",
+    "voiceGender": "female"
   },
   {
     "id": "levi",
     "name": "Lévi",
     "file": "levi.md",
     "glyph": "△",
-    "voiceId": "bIHbv24MWmeRgasZH58o"
+    "voiceId": "SOYHLrjzK2X1ezoPC6cr",
+    "voiceGender": "male"
   },
   {
     "id": "teresa",
     "name": "Teresa of Ávila",
     "file": "teresa.md",
     "glyph": "✦",
-    "voiceId": "pqHfZKP75CvOlQylNhV4"
+    "voiceId": "pFZP5JQG7iQjIQuC4Bku",
+    "voiceGender": "female"
   },
   {
     "id": "arabi",
     "name": "Ibn Arabi",
     "file": "ibn-arabi.md",
     "glyph": "◯",
-    "voiceId": "CwhRBWXzGAHq8TQ4Fs17"
+    "voiceId": "pNInz6obpgDQGcFmaJgB",
+    "voiceGender": "male"
   },
   {
     "id": "maud",
     "name": "Maud Gonne",
     "file": "maud-gonne.md",
     "glyph": "✿",
-    "voiceId": "iP95p4xoKVk53GoZ742B"
+    "voiceId": "FGY2WhTYpPnrIDTdsKH5",
+    "voiceGender": "female"
   },
   {
     "id": "llull",
     "name": "Llull",
     "file": "llull.md",
     "glyph": "✺",
-    "voiceId": "JBFqnCBsd6RMkjVDRZzb"
+    "voiceId": "N2lVS1w4EtoT3dr4eOWO",
+    "voiceGender": "male"
   },
   {
     "id": "khaldun",
     "name": "Ibn Khaldun",
     "file": "ibn-khaldun.md",
     "glyph": "⬡",
-    "voiceId": "nPczCjzI2devNBz1zQrb"
+    "voiceId": "nPczCjzI2devNBz1zQrb",
+    "voiceGender": "male"
   },
   {
     "id": "dee",
     "name": "John Dee",
     "file": "john-dee.md",
     "glyph": "✧",
-    "voiceId": "FGY2WhTYpPnrIDTdsKH5"
+    "voiceId": "onwK4e9ZLuTAKqWW03F9",
+    "voiceGender": "male"
   },
   {
     "id": "warburg",
     "name": "Aby Warburg",
     "file": "warburg.md",
     "glyph": "☉",
-    "voiceId": "pNInz6obpgDQGcFmaJgB"
+    "voiceId": "bIHbv24MWmeRgasZH58o",
+    "voiceGender": "male"
   },
   {
     "id": "corbin",
     "name": "Henri Corbin",
     "file": "corbin.md",
     "glyph": "♀",
-    "voiceId": "cgSgspJ2msm6clMCkdW9"
+    "voiceId": "onwK4e9ZLuTAKqWW03F9",
+    "voiceGender": "male"
   },
   {
     "id": "adorno",
     "name": "Theodor Adorno",
     "file": "adorno.md",
     "glyph": "♂",
-    "voiceId": "pqHfZKP75CvOlQylNhV4"
+    "voiceId": "CwhRBWXzGAHq8TQ4Fs17",
+    "voiceGender": "male"
   },
   {
     "id": "bruno",
     "name": "Giordano Bruno",
     "file": "bruno.md",
-    "aliases": [
-      "The Nolan",
-      "Nolan"
-    ],
+    "aliases": ["The Nolan", "Nolan"],
     "glyph": "♄",
-    "voiceId": "nPczCjzI2devNBz1zQrb"
+    "voiceId": "nPczCjzI2devNBz1zQrb",
+    "voiceGender": "male"
   },
   {
     "id": "al-hallaj",
     "name": "Al-Hallaj",
     "file": "al-hallaj.md",
-    "aliases": [
-      "Husayn"
-    ],
+    "aliases": ["Husayn"],
     "glyph": "♅",
-    "voiceId": "nPczCjzI2devNBz1zQrb"
+    "voiceId": "nPczCjzI2devNBz1zQrb",
+    "voiceGender": "male"
   },
   {
     "id": "abulafia",
     "name": "Abraham Abulafia",
     "file": "abulafia.md",
     "glyph": "♆",
-    "voiceId": "FGY2WhTYpPnrIDTdsKH5"
+    "voiceId": "nPczCjzI2devNBz1zQrb",
+    "voiceGender": "male"
   },
   {
     "id": "frieda-harris",
     "name": "Lady Frieda Harris",
     "file": "frieda-harris.md",
     "glyph": "♇",
-    "voiceId": "TX3LPaxmHKxFdv7VOQHJ"
+    "voiceId": "FGY2WhTYpPnrIDTdsKH5",
+    "voiceGender": "female"
   },
   {
     "id": "dion-fortune",
     "name": "Dion Fortune",
     "file": "dion-fortune.md",
     "glyph": "☄",
-    "voiceId": "SOYHLrjzK2X1ezoPC6cr"
+    "voiceId": "EXAVITQu4vr4xnSDxMaL",
+    "voiceGender": "female"
   },
   {
     "id": "william-blake",
     "name": "William Blake",
     "file": "william-blake.md",
     "glyph": "★",
-    "voiceId": "SAz9YHcvj6GT2YYXdXww"
+    "voiceId": "cjVigY5qzO86Huf0OWal",
+    "voiceGender": "male"
   },
   {
     "id": "catherine-blake",
     "name": "Catherine Blake",
     "file": "catherine-blake.md",
-    "aliases": [
-      "Kate"
-    ],
+    "aliases": ["Kate"],
     "glyph": "☆",
-    "voiceId": "hpp4J3VqNfWAUOO0d1Us"
+    "voiceId": "EXAVITQu4vr4xnSDxMaL",
+    "voiceGender": "female"
   },
   {
     "id": "yates",
     "name": "Frances Yates",
     "file": "yates.md",
     "glyph": "✪",
-    "voiceId": "EXAVITQu4vr4xnSDxMaL"
+    "voiceId": "FGY2WhTYpPnrIDTdsKH5",
+    "voiceGender": "female"
   },
   {
     "id": "scholem",
     "name": "Gershom Scholem",
     "file": "scholem.md",
     "glyph": "✴",
-    "voiceId": "EXAVITQu4vr4xnSDxMaL"
+    "voiceId": "cjVigY5qzO86Huf0OWal",
+    "voiceGender": "male"
   },
   {
     "id": "moina-mathers",
     "name": "Moina Mathers",
     "file": "moina-mathers.md",
     "glyph": "✷",
-    "voiceId": "TX3LPaxmHKxFdv7VOQHJ"
+    "voiceId": "FGY2WhTYpPnrIDTdsKH5",
+    "voiceGender": "female"
   },
   {
     "id": "randolph",
     "name": "Paschal Beverly Randolph",
     "file": "randolph.md",
     "glyph": "✹",
-    "voiceId": "Xb7hH8MSUJpSbSDYk0k2"
+    "voiceId": "cjVigY5qzO86Huf0OWal",
+    "voiceGender": "male"
   },
   {
     "id": "bamba",
     "name": "Amadou Bamba",
     "file": "bamba.md",
     "glyph": "✵",
-    "voiceId": "SAz9YHcvj6GT2YYXdXww"
+    "voiceId": "CwhRBWXzGAHq8TQ4Fs17",
+    "voiceGender": "male"
   },
   {
     "id": "sun-ra",
     "name": "Sun Ra",
     "file": "sun-ra.md",
     "glyph": "❋",
-    "voiceId": "JBFqnCBsd6RMkjVDRZzb"
+    "voiceId": "iP95p4xoKVk53GoZ742B",
+    "voiceGender": "male"
   },
   {
     "id": "porete",
     "name": "Marguerite Porete",
     "file": "porete.md",
     "glyph": "◆",
-    "voiceId": "EXAVITQu4vr4xnSDxMaL"
+    "voiceId": "FGY2WhTYpPnrIDTdsKH5",
+    "voiceGender": "female"
   },
   {
     "id": "hildegard",
     "name": "Hildegard of Bingen",
     "file": "hildegard.md",
     "glyph": "◇",
-    "voiceId": "pFZP5JQG7iQjIQuC4Bku"
+    "voiceId": "cgSgspJ2msm6clMCkdW9",
+    "voiceGender": "female"
   },
   {
     "id": "julian",
     "name": "Julian of Norwich",
     "file": "julian.md",
     "glyph": "▲",
-    "voiceId": "EXAVITQu4vr4xnSDxMaL"
+    "voiceId": "FGY2WhTYpPnrIDTdsKH5",
+    "voiceGender": "female"
   },
   {
     "id": "jung",
     "name": "Carl Jung",
     "file": "jung.md",
     "glyph": "▽",
-    "voiceId": "cjVigY5qzO86Huf0OWal"
+    "voiceId": "CwhRBWXzGAHq8TQ4Fs17",
+    "voiceGender": "male"
   },
   {
     "id": "pauli",
     "name": "Wolfgang Pauli",
     "file": "pauli.md",
     "glyph": "⬟",
-    "voiceId": "SOYHLrjzK2X1ezoPC6cr"
+    "voiceId": "pNInz6obpgDQGcFmaJgB",
+    "voiceGender": "male"
   },
   {
     "id": "eckhart",
     "name": "Meister Eckhart",
     "file": "eckhart.md",
     "glyph": "●",
-    "voiceId": "SAz9YHcvj6GT2YYXdXww"
+    "voiceId": "N2lVS1w4EtoT3dr4eOWO",
+    "voiceGender": "male"
   },
   {
     "id": "bohme",
     "name": "Jakob Böhme",
     "file": "bohme.md",
-    "aliases": [
-      "Behmen"
-    ],
+    "aliases": ["Behmen"],
     "glyph": "🜂",
-    "voiceId": "pqHfZKP75CvOlQylNhV4"
+    "voiceId": "pNInz6obpgDQGcFmaJgB",
+    "voiceGender": "male"
   },
   {
     "id": "swedenborg",
     "name": "Emanuel Swedenborg",
     "file": "swedenborg.md",
     "glyph": "⬢",
-    "voiceId": "onwK4e9ZLuTAKqWW03F9"
+    "voiceId": "CwhRBWXzGAHq8TQ4Fs17",
+    "voiceGender": "male"
   },
   {
     "id": "paracelsus",
     "name": "Paracelsus",
     "file": "paracelsus.md",
-    "aliases": [
-      "Theophrastus",
-      "von Hohenheim"
-    ],
+    "aliases": ["Theophrastus", "von Hohenheim"],
     "glyph": "🜍",
-    "voiceId": "XrExE9yKIg1WjnnlVkGX"
+    "voiceId": "iP95p4xoKVk53GoZ742B",
+    "voiceGender": "male"
   },
   {
     "id": "gurdjieff",
     "name": "G.I. Gurdjieff",
     "file": "gurdjieff.md",
-    "aliases": [
-      "G"
-    ],
+    "aliases": ["G"],
     "glyph": "✳",
-    "voiceId": "N2lVS1w4EtoT3dr4eOWO"
+    "voiceId": "SOYHLrjzK2X1ezoPC6cr",
+    "voiceGender": "male"
   }
 ]
