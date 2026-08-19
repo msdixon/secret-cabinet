@@ -358,5 +358,17 @@
     "members": ["yates", "bruno"],
     "themes": ["hermeticism", "renaissance", "intellectual-history", "methodology"],
     "file": "yates-giordano-bruno-preface-1964.md"
+  },
+  {
+    "id": "scholem-lamentations-of-youth-diaries",
+    "title": "Torah Is History — from the Diaries, 1913–1919",
+    "source": "Lamentations of Youth: The Diaries of Gershom Scholem, 1913–1919",
+    "date": "1913–1919",
+    "author": "scholem",
+    "translated": true,
+    "license": "fair-use",
+    "members": ["scholem"],
+    "themes": ["kabbalah", "torah", "historiography", "philosophy-of-language", "transmission"],
+    "file": "scholem-lamentations-of-youth-diaries.md"
   }
 ]
