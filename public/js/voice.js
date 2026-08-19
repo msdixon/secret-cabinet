@@ -1,31 +1,68 @@
 'use strict';
 
-// #29 -- first-pass browser TTS for Witness playback (replay + live
-// mirroring). Deliberately scoped small against the issue's "large" label:
-// the Web Speech API only, no ElevenLabs/paid-TTS integration, and no
-// hand-authored per-member voice profile -- there's no character-file field
-// for one, and SpeechSynthesis's voice list is OS/browser-dependent (Chrome
-// vs. Safari vs. whatever's installed differ), so hand-picking "Crowley gets
-// this exact accent" wouldn't reproduce across machines anyway. What ships
-// instead: a deterministic hash of memberId into whatever voices the browser
-// actually has, plus a small per-member pitch/rate offset, so the room reads
-// as several distinct-sounding speakers without pretending to a curated
-// cast. Named follow-ups this leaves, if #29 gets picked up again: a real
-// per-member voice/accent field once there's a paid TTS backend that can
-// honor it, and speech actually synced to the beat-by-beat reveal rather
-// than fired once per rendered beat and left to run its own course.
+// #29 -- browser/server TTS for Witness playback (replay + live mirroring).
+// First pass (PR #319) was Web Speech API only: a deterministic hash of
+// memberId into whatever voices the browser actually has, plus a small
+// per-member pitch/rate offset, since SpeechSynthesis's voice list is
+// OS/browser-dependent and there was no backend that could honor a
+// hand-authored profile anyway. This pass adds that backend -- an
+// ElevenLabs proxy (routes/voice.js) with a per-member voiceId hashed into
+// roster.json the same deterministic way, now server-authored so it's the
+// same voice for every listener instead of whatever their browser happens
+// to ship. ElevenLabs is entirely optional: GET /api/voice/config reports
+// whether the server has a key configured, and every call site here falls
+// straight back to the untouched Web Speech path when it doesn't (no key
+// set) or when a request fails (network hiccup, bad voice id, quota) --
+// this module never assumes ElevenLabs is there. Still-named follow-up:
+// speech actually synced to the beat-by-beat reveal rather than fired once
+// per rendered beat and left to run its own course.
 //
 // Same script-tag/IIFE + configure-free convention as witness.js's siblings
 // (#142) -- window.Voice, one global. Unlike witness.js this module needs no
 // deps from app.js: everything it touches (memberId strings, the browser's
-// own speechSynthesis) is either passed in as an argument or read directly
-// off the platform. witness.js is its only caller, from the single seam
-// that already covers every rendering path -- see renderWitnessBlock's
-// speech branch.
+// own speechSynthesis/fetch/Audio) is either passed in as an argument or
+// read directly off the platform. witness.js is its only caller, from the
+// single seam that already covers every rendering path -- see
+// renderWitnessBlock's speech branch. witness.js's call signature
+// (speak(text, memberId, speedMultiplier)) is unchanged by this pass --
+// which backend actually spoke is an internal decision, not something the
+// caller needs to know.
 window.Voice = (function () {
   const ENABLED_KEY = 'sc-witness-voice-enabled';
   const MIN_RATE = 0.5;
   const MAX_RATE = 3; // SpeechSynthesis itself allows ~[0.1, 10]; keep it intelligible
+
+  // ── ElevenLabs availability ─────────────────────────────────────────────
+  // Whether the server has an API key configured -- the browser has no other
+  // way to know. Checked once at load; a test environment with no `fetch`
+  // (jsdom here has none) simply never flips this, which is what keeps every
+  // pre-existing Web Speech test exercising the exact path it always has.
+  // Deliberately doesn't retry or poll: a config change means a server
+  // restart, at which point a page reload picks it up same as any other
+  // server-side setting.
+  let elevenLabsAvailable = false;
+  if (typeof fetch === 'function') {
+    fetch('/api/voice/config')
+      .then(r => (r.ok ? r.json() : null))
+      .then(cfg => {
+        if (cfg) elevenLabsAvailable = !!cfg.available;
+      })
+      .catch(() => {}); // no server, offline, etc. -- stay on the Web Speech fallback
+  }
+
+  // The one ElevenLabs <audio> currently playing, if any -- tracked so a new
+  // speak() call (next beat) or stop() can interrupt it, the same
+  // cut-to-the-newest-beat behavior speak()'s synth().cancel() already gives
+  // the Web Speech path (see its own comment below for why: witness.js paces
+  // by reading time already, not by waiting for audio to finish).
+  let currentAudio = null;
+
+  function stopCurrentAudio() {
+    if (!currentAudio) return;
+    currentAudio.pause();
+    currentAudio.src = '';
+    currentAudio = null;
+  }
 
   function synth() {
     return typeof window !== 'undefined' ? window.speechSynthesis : undefined;
@@ -63,7 +100,10 @@ window.Voice = (function () {
     try {
       localStorage.setItem(ENABLED_KEY, enabled ? '1' : '0');
     } catch (_) {} // #288 precedent: blocked/full localStorage costs persistence, not the setting
-    if (!enabled) synth()?.cancel();
+    if (!enabled) {
+      stopCurrentAudio();
+      synth()?.cancel();
+    }
     updateButton();
   }
 
@@ -130,18 +170,13 @@ window.Voice = (function () {
     return text.replace(/\*([^*]+)\*/g, '$1').trim();
   }
 
-  // One utterance per rendered speech beat, called from witness.js's single
-  // speech-rendering seam -- covers stage/room and live/replay alike, the
-  // same seam #279's reading-time pacing already hooks into. Cancels any
+  // Unchanged from the first pass -- see module comment up top. Cancels any
   // utterance in flight rather than queueing: witness.js paces reveal by
   // reading time already, so a queue would just mean voice trailing further
   // and further behind text on a fast read-through or a burst of live beats.
   // Cutting to the newest beat keeps audio roughly tracking what's on screen
   // instead of an ever-growing backlog.
-  function speak(text, memberId, speedMultiplier) {
-    if (!enabled || !isSupported() || !text) return;
-    const spoken = stripForSpeech(text);
-    if (!spoken) return;
+  function speakViaWebSpeech(spoken, memberId, speedMultiplier) {
     const s = synth();
     s.cancel();
     const utterance = new SpeechSynthesisUtterance(spoken);
@@ -152,7 +187,59 @@ window.Voice = (function () {
     s.speak(utterance);
   }
 
+  // #29 (ElevenLabs pass) -- proxied through routes/voice.js, which resolves
+  // memberId to a roster voiceId and caches the result, so this is a plain
+  // POST + play. Any failure (network, a member with no voiceId, a bad
+  // ElevenLabs response) falls back to the Web Speech path for this one
+  // beat rather than going silent -- and doesn't flip elevenLabsAvailable
+  // off, since a single failed request shouldn't downgrade every later beat
+  // in the session too.
+  function speakViaElevenLabs(spoken, memberId, speedMultiplier) {
+    const audio = new Audio();
+    currentAudio = audio;
+    fetch('/api/voice/speak', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ memberId, text: spoken }),
+    })
+      .then(r => {
+        if (!r.ok) throw new Error(`voice request failed: ${r.status}`);
+        return r.blob();
+      })
+      .then(blob => {
+        if (currentAudio !== audio) return; // superseded by a newer speak()/stop() before this resolved
+        const url = URL.createObjectURL(blob);
+        audio.src = url;
+        audio.addEventListener('ended', () => URL.revokeObjectURL(url), { once: true });
+        audio.play().catch(() => {}); // e.g. an autoplay-policy rejection -- fail silently, same as a TTS hiccup
+      })
+      .catch(() => {
+        if (currentAudio === audio) {
+          currentAudio = null;
+          speakViaWebSpeech(spoken, memberId, speedMultiplier);
+        }
+      });
+  }
+
+  // One utterance/audio clip per rendered speech beat, called from
+  // witness.js's single speech-rendering seam -- covers stage/room and
+  // live/replay alike, the same seam #279's reading-time pacing already
+  // hooks into. Which backend actually speaks is decided here, not by the
+  // caller -- witness.js's call site is unchanged from the first pass.
+  function speak(text, memberId, speedMultiplier) {
+    if (!enabled || !isSupported() || !text) return;
+    const spoken = stripForSpeech(text);
+    if (!spoken) return;
+    stopCurrentAudio(); // interrupt the previous beat's ElevenLabs audio, if any
+    if (elevenLabsAvailable) {
+      speakViaElevenLabs(spoken, memberId, speedMultiplier);
+      return;
+    }
+    speakViaWebSpeech(spoken, memberId, speedMultiplier);
+  }
+
   function stop() {
+    stopCurrentAudio();
     synth()?.cancel();
   }
 

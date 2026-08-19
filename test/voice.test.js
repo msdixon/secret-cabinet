@@ -214,4 +214,140 @@ test('voice.js', async t => {
     Voice.setEnabled(false);
     assert.equal(events[events.length - 1].type, 'cancel');
   });
+
+  // ── ElevenLabs path (#29 second pass) ─────────────────────────────────────
+  // jsdom has no `fetch` (verified: `typeof window.fetch === 'undefined'`),
+  // so every test above never touches this path at all -- it's the
+  // untouched Web Speech behavior the first pass shipped. These tests stub
+  // `fetch`/`Audio`/`URL.createObjectURL` explicitly to exercise the new
+  // path on its own, the way stubSpeech does for SpeechSynthesis.
+  function stubElevenLabs(window, { configAvailable = true, speakImpl } = {}) {
+    const events = [];
+    window.fetch = (url, opts) => {
+      if (url === '/api/voice/config') {
+        events.push({ type: 'config-check' });
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: configAvailable }) });
+      }
+      if (url === '/api/voice/speak') {
+        events.push({ type: 'speak-request', body: JSON.parse(opts.body) });
+        return speakImpl ? speakImpl() : Promise.resolve({ ok: true, blob: () => Promise.resolve('fake-blob') });
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${url}`));
+    };
+    window.URL.createObjectURL = () => 'blob:fake';
+    window.URL.revokeObjectURL = () => {};
+    class FakeAudio {
+      constructor() {
+        events.push({ type: 'audio-construct' });
+      }
+      play() {
+        events.push({ type: 'audio-play', src: this.src });
+        return Promise.resolve();
+      }
+      pause() {
+        events.push({ type: 'audio-pause' });
+      }
+      addEventListener() {}
+    }
+    window.Audio = FakeAudio;
+    return events;
+  }
+
+  // Flushes the microtask queue enough times for a chain of resolved
+  // promises (config check, then the speak request, then its .blob()) to
+  // settle -- voice.js's ElevenLabs path is async throughout, unlike the
+  // synchronous Web Speech path the rest of this file tests.
+  async function flushMicrotasks(n = 5) {
+    for (let i = 0; i < n; i++) await Promise.resolve();
+  }
+
+  await t.test('when ElevenLabs is available, speak() posts to /api/voice/speak and plays the result', async t2 => {
+    let events;
+    const loaded = loadPublicModule('voice.js', FIXTURE, window => {
+      stubSpeech(window, [{ name: 'A', lang: 'en-US' }]); // still present, but should go unused
+      // Must be stubbed before the module evaluates -- its startup
+      // config-check reads window.fetch at load time, not lazily.
+      events = stubElevenLabs(window);
+    });
+    t2.after(loaded.cleanup);
+    await flushMicrotasks(); // let the module's startup config-check resolve
+
+    loaded.window.Voice.setEnabled(true);
+    loaded.window.Voice.speak('Hello, *waves* there.', 'crowley', 1);
+    await flushMicrotasks();
+
+    const speakEvent = events.find(e => e.type === 'speak-request');
+    assert.ok(speakEvent, 'expected a POST to /api/voice/speak');
+    assert.deepEqual(speakEvent.body, { memberId: 'crowley', text: 'Hello, waves there.' });
+    assert.ok(
+      events.some(e => e.type === 'audio-play'),
+      'expected the resolved audio to be played'
+    );
+  });
+
+  await t.test(
+    'when ElevenLabs is unavailable (no server key), speak() uses the Web Speech path unchanged',
+    async t2 => {
+      let speechEvents;
+      let elevenLabsEvents;
+      const loaded = loadPublicModule('voice.js', FIXTURE, window => {
+        speechEvents = stubSpeech(window, [{ name: 'A', lang: 'en-US' }]);
+        elevenLabsEvents = stubElevenLabs(window, { configAvailable: false });
+      });
+      t2.after(loaded.cleanup);
+      await flushMicrotasks();
+
+      loaded.window.Voice.setEnabled(true);
+      loaded.window.Voice.speak('Hello there.', 'crowley', 1);
+
+      assert.deepEqual(
+        elevenLabsEvents.filter(e => e.type === 'speak-request'),
+        [],
+        'no ElevenLabs request should be made when the server reports it unavailable'
+      );
+      assert.ok(
+        speechEvents.some(e => e.type === 'speak'),
+        'expected the Web Speech fallback to have spoken'
+      );
+    }
+  );
+
+  await t.test('a failed ElevenLabs request falls back to Web Speech for that beat', async t2 => {
+    let speechEvents;
+    const loaded = loadPublicModule('voice.js', FIXTURE, window => {
+      speechEvents = stubSpeech(window, [{ name: 'A', lang: 'en-US' }]);
+      stubElevenLabs(window, { speakImpl: () => Promise.reject(new Error('network down')) });
+    });
+    t2.after(loaded.cleanup);
+    await flushMicrotasks();
+
+    loaded.window.Voice.setEnabled(true);
+    loaded.window.Voice.speak('Hello there.', 'crowley', 1);
+    await flushMicrotasks();
+
+    assert.ok(
+      speechEvents.some(e => e.type === 'speak'),
+      'expected the Web Speech fallback to have spoken after the ElevenLabs request failed'
+    );
+  });
+
+  await t.test('stop() pauses any ElevenLabs audio in flight', async t2 => {
+    let events;
+    const loaded = loadPublicModule('voice.js', FIXTURE, window => {
+      stubSpeech(window, [{ name: 'A', lang: 'en-US' }]);
+      events = stubElevenLabs(window);
+    });
+    t2.after(loaded.cleanup);
+    await flushMicrotasks();
+
+    loaded.window.Voice.setEnabled(true);
+    loaded.window.Voice.speak('Hello there.', 'crowley', 1);
+    await flushMicrotasks();
+    loaded.window.Voice.stop();
+
+    assert.ok(
+      events.some(e => e.type === 'audio-pause'),
+      'expected stop() to pause the playing audio'
+    );
+  });
 });

@@ -58,10 +58,25 @@ const { registerMemberRoutes } = require('./src/routes/member');
 const { registerExportRoutes } = require('./src/routes/export');
 const { registerSessionRoutes } = require('./src/routes/session');
 const { registerConveneRoutes } = require('./src/routes/convene');
+const { registerVoiceRoutes } = require('./src/routes/voice');
 
 // ─── Environment flags ────────────────────────────────────────────────────────
 const IS_LOCAL = process.env.LOCAL === 'true' || process.env.NODE_ENV !== 'production';
 const MODEL = process.env.MODEL || 'claude-sonnet-4-6';
+// #29 (ElevenLabs pass) — unset by default, which is what keeps the feature
+// entirely off (routes/voice.js's /api/voice/config reports `available:
+// false` and voice.js falls back to the Web Speech API, same as before this
+// pass). ELEVENLABS_VOICE_POOL lets a comma-separated list of voice IDs
+// override roster.js's FALLBACK_VOICE_IDS pool without a code change, once
+// you've checked which voices actually exist in the target account's Voice
+// Library.
+const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY || null;
+const ELEVENLABS_MODEL_ID = process.env.ELEVENLABS_MODEL_ID || 'eleven_turbo_v2_5';
+const ELEVENLABS_VOICE_POOL = process.env.ELEVENLABS_VOICE_POOL
+  ? process.env.ELEVENLABS_VOICE_POOL.split(',')
+      .map(s => s.trim())
+      .filter(Boolean)
+  : null;
 
 const app = express();
 // Railway (and any single-hop PaaS proxy) terminates TLS at the edge and
@@ -88,9 +103,15 @@ const AUTH_SESSIONS_DIR = path.join(DATA_DIR, '.auth-sessions');
 const RESIDUE_DIR = path.join(DATA_DIR, 'residue');
 const PROMPTS_DIR = path.join(__dirname, 'prompts');
 const MEMBERS_DIR = path.join(PROMPTS_DIR, 'members');
+// #29 (ElevenLabs pass) — synthesized audio, keyed by voice+text (see
+// routes/voice.js). A sibling of SESSIONS_DIR/RESIDUE_DIR for the same
+// reason: on Railway this needs to survive redeploys or every restart
+// re-spends ElevenLabs credits re-synthesizing lines already paid for.
+const VOICE_CACHE_DIR = path.join(DATA_DIR, 'voice-cache');
 
 if (!fs.existsSync(SESSIONS_DIR)) fs.mkdirSync(SESSIONS_DIR, { recursive: true });
 if (!fs.existsSync(RESIDUE_DIR)) fs.mkdirSync(RESIDUE_DIR, { recursive: true });
+if (!fs.existsSync(VOICE_CACHE_DIR)) fs.mkdirSync(VOICE_CACHE_DIR, { recursive: true });
 
 app.use(express.json({ limit: '4mb' }));
 app.use(express.urlencoded({ extended: false }));
@@ -157,7 +178,11 @@ let ROSTER = [];
 const briefCache = new Map();
 
 function reloadLodgeRoster() {
-  ROSTER = roster.reloadRoster(ROSTER_FILE, MEMBERS_DIR);
+  // Only backfill voiceId when ElevenLabs is actually configured (#29) — an
+  // install with no key set shouldn't get roster.json mutated with voice IDs
+  // nothing will ever call.
+  const voicePool = ELEVENLABS_API_KEY ? ELEVENLABS_VOICE_POOL || roster.FALLBACK_VOICE_IDS : null;
+  ROSTER = roster.reloadRoster(ROSTER_FILE, MEMBERS_DIR, voicePool);
   briefCache.clear();
 }
 reloadLodgeRoster();
@@ -423,6 +448,13 @@ registerSessionRoutes(app, {
   loadArchiveImageIndex,
   groundAgainstLibraryText,
   escalateCitationsToWeb,
+});
+
+registerVoiceRoutes(app, {
+  roster: ROSTER,
+  voiceCacheDir: VOICE_CACHE_DIR,
+  apiKey: ELEVENLABS_API_KEY,
+  modelId: ELEVENLABS_MODEL_ID,
 });
 
 registerConveneRoutes(app, {

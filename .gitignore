@@ -4,6 +4,8 @@ sessions/*
 !sessions/.gitkeep
 residue/*
 !residue/.gitkeep
+voice-cache/*
+!voice-cache/.gitkeep
 .auth-sessions/
 CITATION-MANIFEST.md
 .DS_Store

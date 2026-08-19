@@ -49,24 +49,88 @@ function assignGlyph(roster) {
   return free || FALLBACK_GLYPHS[roster.length % FALLBACK_GLYPHS.length];
 }
 
+// #29 (ElevenLabs pass) — the default `voicePool` a caller can hand
+// reloadRoster() below to backfill a `voiceId` per member. Verified live
+// against GET /v1/voices on 2026-08-19 -- this is the account's actual
+// premade-voice library, not a guess: an earlier draft of this pool used the
+// historically-standard legacy voice IDs (Rachel/Domi/Antoni/etc.), and only
+// 2 of those 9 turned out to still exist here. Override via the
+// ELEVENLABS_VOICE_POOL env var (see server.js) if this account's library
+// changes, or hand-edit a member's voiceId in roster.json for one-offs.
+const FALLBACK_VOICE_IDS = [
+  'CwhRBWXzGAHq8TQ4Fs17', // Roger — laid-back, casual, resonant
+  'EXAVITQu4vr4xnSDxMaL', // Sarah — mature, reassuring, confident
+  'FGY2WhTYpPnrIDTdsKH5', // Laura — enthusiast, quirky attitude
+  'IKne3meq5aSn9XLyUdCD', // Charlie — deep, confident, energetic
+  'JBFqnCBsd6RMkjVDRZzb', // George — warm, captivating storyteller
+  'N2lVS1w4EtoT3dr4eOWO', // Callum — husky trickster
+  'SAz9YHcvj6GT2YYXdXww', // River — relaxed, neutral, informative
+  'SOYHLrjzK2X1ezoPC6cr', // Harry — fierce warrior
+  'TX3LPaxmHKxFdv7VOQHJ', // Liam — energetic, social media creator
+  'Xb7hH8MSUJpSbSDYk0k2', // Alice — clear, engaging educator
+  'XrExE9yKIg1WjnnlVkGX', // Matilda — knowledgeable, professional
+  'bIHbv24MWmeRgasZH58o', // Will — relaxed optimist
+  'cgSgspJ2msm6clMCkdW9', // Jessica — playful, bright, warm
+  'cjVigY5qzO86Huf0OWal', // Eric — smooth, trustworthy
+  'hpp4J3VqNfWAUOO0d1Us', // Bella — professional, bright, warm
+  'iP95p4xoKVk53GoZ742B', // Chris — charming, down-to-earth
+  'nPczCjzI2devNBz1zQrb', // Brian — deep, resonant and comforting
+  'onwK4e9ZLuTAKqWW03F9', // Daniel — steady broadcaster
+  'pFZP5JQG7iQjIQuC4Bku', // Lily — velvety actress
+  'pNInz6obpgDQGcFmaJgB', // Adam — dominant, firm
+  'pqHfZKP75CvOlQylNhV4', // Bill — wise, mature, balanced
+];
+
+// Hashes memberId into a pool index — same FNV-1a scheme voice.js's
+// client-side hash uses for the Web Speech fallback (#29 first pass), so the
+// same member lands on the same pool voice regardless of when this runs or
+// what order the roster is in. Order-independent on purpose, unlike
+// assignGlyph's "first free slot": a voice pool this small (far fewer voices
+// than members) is going to collide members onto the same voice no matter
+// what, but a hash means adding or removing an unrelated member never
+// reshuffles anyone else's already-assigned voice.
+function hashMemberId(id) {
+  let h = 2166136261;
+  for (let i = 0; i < id.length; i++) {
+    h ^= id.charCodeAt(i);
+    h = (h * 16777619) >>> 0;
+  }
+  return h >>> 0;
+}
+
+function assignVoiceId(memberId, pool) {
+  return pool[hashMemberId(memberId) % pool.length];
+}
+
 // Reads and validates roster.json against the members directory on disk,
 // backfilling glyphs and dropping entries whose character file is gone.
 // Rewrites rosterFile only if something actually changed. Returns the
 // cleaned-up roster array — callers own storing it.
-function reloadRoster(rosterFile, membersDir) {
+//
+// `voicePool`, if given a non-empty array, also backfills a `voiceId` for
+// any member missing one (see assignVoiceId above). Left undefined by
+// default so an install with no ElevenLabs key configured never gets
+// roster.json mutated with voice IDs nothing will ever call — server.js only
+// passes a pool once ELEVENLABS_API_KEY is actually set.
+function reloadRoster(rosterFile, membersDir, voicePool) {
   const all = JSON.parse(fs.readFileSync(rosterFile, 'utf8'));
   // Filter out any entry whose character file no longer exists on disk
   const roster = all.filter(m => !m.file || fs.existsSync(path.join(membersDir, m.file)));
-  // Backfill glyphs for any member who doesn't have one yet (e.g. members
-  // added to roster.json before glyphs existed, or by hand without one)
+  // Backfill glyphs (and, if a voicePool was given, voice IDs) for any
+  // member who doesn't have one yet (e.g. members added to roster.json
+  // before the field existed, or by hand without one)
   let backfilled = false;
   for (const m of roster) {
     if (!m.glyph) {
       m.glyph = assignGlyph(roster);
       backfilled = true;
     }
+    if (voicePool && voicePool.length && !m.voiceId) {
+      m.voiceId = assignVoiceId(m.id, voicePool);
+      backfilled = true;
+    }
   }
-  // Rewrite roster.json if entries were removed or glyphs were backfilled
+  // Rewrite roster.json if entries were removed or fields were backfilled
   if (roster.length < all.length || backfilled) {
     fs.writeFileSync(rosterFile, JSON.stringify(roster, null, 2) + '\n', 'utf8');
   }
@@ -117,6 +181,8 @@ function castingRoster(membersDir, briefCache, roster) {
 module.exports = {
   FALLBACK_GLYPHS,
   assignGlyph,
+  FALLBACK_VOICE_IDS,
+  assignVoiceId,
   reloadRoster,
   loadMemberFile,
   extractSection,

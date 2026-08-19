@@ -46,6 +46,20 @@ test('assignGlyph', async t => {
   });
 });
 
+test('assignVoiceId', async t => {
+  await t.test('is deterministic per memberId', () => {
+    const pool = ['a', 'b', 'c'];
+    assert.equal(roster.assignVoiceId('crowley', pool), roster.assignVoiceId('crowley', pool));
+  });
+
+  await t.test('always returns a pool member', () => {
+    const pool = ['a', 'b', 'c'];
+    for (const id of ['crowley', 'waite', 'yeats', 'blavatsky']) {
+      assert.ok(pool.includes(roster.assignVoiceId(id, pool)));
+    }
+  });
+});
+
 test('reloadRoster', async t => {
   await t.test('loads roster.json as-is when every file exists and glyphs are set', () => {
     const { dir, membersDir } = makeFixtureDir();
@@ -110,6 +124,53 @@ test('reloadRoster', async t => {
     assert.ok(result[0].glyph, 'expected a glyph to be backfilled');
     const onDisk = JSON.parse(fs.readFileSync(rosterFile, 'utf8'));
     assert.equal(onDisk[0].glyph, result[0].glyph);
+  });
+
+  await t.test('leaves voiceId untouched when no voicePool is given (default, no ElevenLabs configured)', () => {
+    const { dir, membersDir } = makeFixtureDir();
+    t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+    writeMemberFile(membersDir, 'crowley.md');
+    const rosterFile = path.join(membersDir, 'roster.json');
+    const before = JSON.stringify([{ id: 'crowley', name: 'Crowley', file: 'crowley.md', glyph: '☉' }]);
+    fs.writeFileSync(rosterFile, before, 'utf8');
+
+    const result = roster.reloadRoster(rosterFile, membersDir);
+    assert.equal(result[0].voiceId, undefined);
+    // Not rewritten at all -- nothing changed
+    assert.equal(fs.readFileSync(rosterFile, 'utf8'), before);
+  });
+
+  await t.test('backfills a missing voiceId from the given pool and persists it', () => {
+    const { dir, membersDir } = makeFixtureDir();
+    t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+    writeMemberFile(membersDir, 'crowley.md');
+    const rosterFile = path.join(membersDir, 'roster.json');
+    fs.writeFileSync(
+      rosterFile,
+      JSON.stringify([{ id: 'crowley', name: 'Crowley', file: 'crowley.md', glyph: '☉' }]),
+      'utf8'
+    );
+    const pool = ['voice-a', 'voice-b'];
+
+    const result = roster.reloadRoster(rosterFile, membersDir, pool);
+    assert.ok(pool.includes(result[0].voiceId), 'expected a voiceId backfilled from the pool');
+    const onDisk = JSON.parse(fs.readFileSync(rosterFile, 'utf8'));
+    assert.equal(onDisk[0].voiceId, result[0].voiceId);
+  });
+
+  await t.test('does not overwrite a hand-set voiceId', () => {
+    const { dir, membersDir } = makeFixtureDir();
+    t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+    writeMemberFile(membersDir, 'crowley.md');
+    const rosterFile = path.join(membersDir, 'roster.json');
+    fs.writeFileSync(
+      rosterFile,
+      JSON.stringify([{ id: 'crowley', name: 'Crowley', file: 'crowley.md', glyph: '☉', voiceId: 'hand-picked' }]),
+      'utf8'
+    );
+
+    const result = roster.reloadRoster(rosterFile, membersDir, ['voice-a', 'voice-b']);
+    assert.equal(result[0].voiceId, 'hand-picked');
   });
 });
 
