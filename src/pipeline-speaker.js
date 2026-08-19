@@ -67,12 +67,28 @@ const LOW_BUDGET_WORDS = 120; // below this, favor members who tend to land a sh
 // every unspent intention the instant it becomes eligible.
 const INTERRUPT_INTENT_WEIGHT = 3;
 
+// #330: `pool` arrives in the director's priority order (buildDirectorToolSchema
+// asks for the candidate pool "ordered by priority", and selectSpeakers
+// returns that order verbatim) but until this fix pickNextSpeaker never read
+// it — every pool member had equal odds regardless of how strongly the
+// director judged them relevant, so a member ranked as the single most
+// relevant voice for a provocation could still simply never come up before
+// the round's word budget closed. Each rank step down from the top discounts
+// by this factor, applied uniformly whether `pool` came from the round's
+// opening consult or a mid-round re-consult — both are asked for and return
+// the same "ordered by priority" shape, so there's no signal here to treat
+// them differently. Chosen so the top-ranked member is meaningfully likelier
+// (~2.4x a bottom-ranked member in a 5-seat pool) without making the
+// ranking a forced pick — same "a weight, not a guarantee" spirit as
+// INTERRUPT_INTENT_WEIGHT above, and it stacks with every other factor here.
+const PRIORITY_RANK_DECAY = 0.8;
+
 // Returns a memberId from `pool`, or null if every pool member has already
 // hit MAX_TURNS_PER_POOL_MEMBER (the caller should re-consult the director).
 // `disposition`, if given, is the { [memberId]: { waitingOnMemberId } } map
 // built by callDispositionUpdate (#188/#203) — read-only here.
 function pickNextSpeaker({ pool, spokenCounts, lastSpeakerId, remainingBudget, disposition, rng = Math.random }) {
-  const weights = pool.map(id => {
+  const weights = pool.map((id, rank) => {
     const timesSpoken = spokenCounts.get(id) || 0;
     if (timesSpoken >= MAX_TURNS_PER_POOL_MEMBER) return 0;
     const tendency = lengthTendencyOf(id);
@@ -81,6 +97,7 @@ function pickNextSpeaker({ pool, spokenCounts, lastSpeakerId, remainingBudget, d
     else if (timesSpoken > 0) w *= Math.pow(REPEAT_DECAY, timesSpoken);
     if (remainingBudget < LOW_BUDGET_WORDS && tendency === 'expansive') w *= 0.4;
     if (lastSpeakerId && disposition?.[id]?.waitingOnMemberId === lastSpeakerId) w *= INTERRUPT_INTENT_WEIGHT;
+    w *= Math.pow(PRIORITY_RANK_DECAY, rank);
     return w;
   });
 
@@ -452,6 +469,7 @@ module.exports = {
   buildMemberSection,
   lengthTendencyOf,
   pickNextSpeaker,
+  PRIORITY_RANK_DECAY,
   isPoolExhausted,
   countWords,
   VOICE_EXEMPLAR_WORD_BUDGET,
