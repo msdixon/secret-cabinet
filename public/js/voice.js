@@ -23,10 +23,13 @@
 // own speechSynthesis/fetch/Audio) is either passed in as an argument or
 // read directly off the platform. witness.js is its only caller, from the
 // single seam that already covers every rendering path -- see
-// renderWitnessBlock's speech branch. witness.js's call signature
-// (speak(text, memberId, speedMultiplier)) is unchanged by this pass --
-// which backend actually spoke is an internal decision, not something the
-// caller needs to know.
+// renderWitnessBlock's speech branch. Which backend actually spoke is an
+// internal decision, not something the caller needs to know.
+//
+// #333 added a fourth, optional `memberGender` argument to speak() -- the
+// one piece of roster data this module needs but, per the isolation above,
+// won't reach into app.js's MEMBERS to fetch itself. witness.js already has
+// the roster (deps.members) and resolves it at the call site instead.
 window.Voice = (function () {
   const ENABLED_KEY = 'sc-witness-voice-enabled';
   const MIN_RATE = 0.5;
@@ -146,10 +149,72 @@ window.Voice = (function () {
     return en.length ? en : all;
   }
 
-  function voiceForMember(memberId) {
+  // #333 — SpeechSynthesisVoice carries no structured gender field, only a
+  // browser/OS-assigned `name`. Chrome's own voices spell it out ("Google UK
+  // English Female"); everything else falls back to a lookup of the common
+  // default names macOS, Windows, and Android/Chrome OS actually ship,
+  // covering the voice lists real users hit without pretending to
+  // recognize every voice pack in existence. Unrecognized names return
+  // null, same as no gender info at all -- voiceForMember below treats that
+  // exactly like `gender` being omitted.
+  const KNOWN_VOICE_NAME_GENDERS = {
+    samantha: 'female',
+    karen: 'female',
+    moira: 'female',
+    tessa: 'female',
+    victoria: 'female',
+    fiona: 'female',
+    kate: 'female',
+    serena: 'female',
+    susan: 'female',
+    allison: 'female',
+    ava: 'female',
+    zoe: 'female',
+    nicky: 'female',
+    'microsoft zira': 'female',
+    'microsoft hazel': 'female',
+    'microsoft susan': 'female',
+    alex: 'male',
+    daniel: 'male',
+    fred: 'male',
+    aaron: 'male',
+    arthur: 'male',
+    bruce: 'male',
+    gordon: 'male',
+    lee: 'male',
+    oliver: 'male',
+    rocko: 'male',
+    'microsoft david': 'male',
+    'microsoft mark': 'male',
+    'microsoft james': 'male',
+  };
+
+  function voiceGenderGuess(voice) {
+    const name = (voice.name || '').toLowerCase();
+    if (name.includes('female')) return 'female';
+    if (name.includes('male')) return 'male';
+    for (const known in KNOWN_VOICE_NAME_GENDERS) {
+      if (name.includes(known)) return KNOWN_VOICE_NAME_GENDERS[known];
+    }
+    return null;
+  }
+
+  // `gender`, when given, narrows the browser's own voice list to ones
+  // voiceGenderGuess reads as matching before hashing -- same
+  // filter-then-hash shape as roster.js's server-side assignVoiceId, kept
+  // deterministic per member. Falls back to the full list when `gender` is
+  // omitted or nothing in the list is recognized as matching it, so a
+  // browser whose voices this heuristic can't read stays exactly as
+  // behaved before #333.
+  function voiceForMember(memberId, gender) {
     if (cachedVoices === null) cachedVoices = englishVoices();
     if (!cachedVoices.length) return null;
-    return cachedVoices[hashString(memberId || '—') % cachedVoices.length];
+    let candidates = cachedVoices;
+    if (gender) {
+      const matching = cachedVoices.filter(v => voiceGenderGuess(v) === gender);
+      if (matching.length) candidates = matching;
+    }
+    return candidates[hashString(memberId || '—') % candidates.length];
   }
 
   function pitchForMember(memberId) {
@@ -186,11 +251,11 @@ window.Voice = (function () {
   // and further behind text on a fast read-through or a burst of live beats.
   // Cutting to the newest beat keeps audio roughly tracking what's on screen
   // instead of an ever-growing backlog.
-  function speakViaWebSpeech(spoken, memberId, speedMultiplier) {
+  function speakViaWebSpeech(spoken, memberId, speedMultiplier, memberGender) {
     const s = synth();
     s.cancel();
     const utterance = new SpeechSynthesisUtterance(spoken);
-    const voice = voiceForMember(memberId);
+    const voice = voiceForMember(memberId, memberGender);
     if (voice) utterance.voice = voice;
     utterance.pitch = pitchForMember(memberId);
     utterance.rate = clampRate(baseRateForMember(memberId) * (speedMultiplier || 1));
@@ -204,7 +269,7 @@ window.Voice = (function () {
   // beat rather than going silent -- and doesn't flip elevenLabsAvailable
   // off, since a single failed request shouldn't downgrade every later beat
   // in the session too.
-  function speakViaElevenLabs(spoken, memberId, speedMultiplier) {
+  function speakViaElevenLabs(spoken, memberId, speedMultiplier, memberGender) {
     const audio = new Audio();
     currentAudio = audio;
     fetch('/api/voice/speak', {
@@ -226,7 +291,7 @@ window.Voice = (function () {
       .catch(() => {
         if (currentAudio === audio) {
           currentAudio = null;
-          speakViaWebSpeech(spoken, memberId, speedMultiplier);
+          speakViaWebSpeech(spoken, memberId, speedMultiplier, memberGender);
         }
       });
   }
@@ -235,17 +300,21 @@ window.Voice = (function () {
   // witness.js's single speech-rendering seam -- covers stage/room and
   // live/replay alike, the same seam #279's reading-time pacing already
   // hooks into. Which backend actually speaks is decided here, not by the
-  // caller -- witness.js's call site is unchanged from the first pass.
-  function speak(text, memberId, speedMultiplier) {
+  // caller. `memberGender` (#333) is new as of this pass -- witness.js
+  // resolves it from the roster (the only place that data lives) and
+  // passes it through; it's only ever consulted by the Web Speech path,
+  // since the ElevenLabs path's voiceId is already assigned gender-
+  // appropriately server-side (see roster.js's assignVoiceId).
+  function speak(text, memberId, speedMultiplier, memberGender) {
     if (!enabled || !isSupported() || !text) return;
     const spoken = stripForSpeech(text);
     if (!spoken) return;
     stopCurrentAudio(); // interrupt the previous beat's ElevenLabs audio, if any
     if (elevenLabsAvailable) {
-      speakViaElevenLabs(spoken, memberId, speedMultiplier);
+      speakViaElevenLabs(spoken, memberId, speedMultiplier, memberGender);
       return;
     }
-    speakViaWebSpeech(spoken, memberId, speedMultiplier);
+    speakViaWebSpeech(spoken, memberId, speedMultiplier, memberGender);
   }
 
   function stop() {
