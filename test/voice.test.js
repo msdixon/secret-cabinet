@@ -134,8 +134,8 @@ test('voice.js', async t => {
     assert.equal(events[1].type, 'speak');
     assert.equal(
       events[1].utterance.text,
-      'Hello, waves warmly how are you?',
-      'action-line asterisks are stripped so they are never read aloud'
+      'Hello, how are you?',
+      'the whole action aside is removed, not just its asterisks -- a listener should never hear "waves warmly" spoken as dialogue'
     );
   });
 
@@ -146,8 +146,30 @@ test('voice.js', async t => {
     });
     t2.after(loaded.cleanup);
     loaded.window.Voice.setEnabled(true);
+    loaded.window.Voice.speak('*paces silently, considering*', 'crowley', 1);
+    assert.deepEqual(events, []);
+  });
+
+  await t.test('speak() is a no-op for text that is only whitespace', t2 => {
+    let events;
+    const loaded = loadPublicModule('voice.js', FIXTURE, window => {
+      events = stubSpeech(window, [{ name: 'A', lang: 'en-US' }]);
+    });
+    t2.after(loaded.cleanup);
+    loaded.window.Voice.setEnabled(true);
     loaded.window.Voice.speak('   ', 'crowley', 1);
     assert.deepEqual(events, []);
+  });
+
+  await t.test('a mid-sentence action aside is removed entirely, leaving clean spacing behind', t2 => {
+    let events;
+    const loaded = loadPublicModule('voice.js', FIXTURE, window => {
+      events = stubSpeech(window, [{ name: 'A', lang: 'en-US' }]);
+    });
+    t2.after(loaded.cleanup);
+    loaded.window.Voice.setEnabled(true);
+    loaded.window.Voice.speak('The beast *pauses thoughtfully* stirs at last.', 'crowley', 1);
+    assert.equal(events[1].utterance.text, 'The beast stirs at last.');
   });
 
   await t.test('voice/pitch/rate assignment is deterministic per member', t2 => {
@@ -278,7 +300,7 @@ test('voice.js', async t => {
 
     const speakEvent = events.find(e => e.type === 'speak-request');
     assert.ok(speakEvent, 'expected a POST to /api/voice/speak');
-    assert.deepEqual(speakEvent.body, { memberId: 'crowley', text: 'Hello, waves there.' });
+    assert.deepEqual(speakEvent.body, { memberId: 'crowley', text: 'Hello, there.' });
     assert.ok(
       events.some(e => e.type === 'audio-play'),
       'expected the resolved audio to be played'
