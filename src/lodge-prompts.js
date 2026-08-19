@@ -22,11 +22,11 @@
 // threaded through instruction prose anymore.
 const ARC_NOTES = {
   opening:
-    "The room stirs. Initial reactions to whatever the material woke up — not every member need engage with the document directly; some may respond to the room's reaction to it before responding to it themselves. There is no author to address.",
+    "The room stirs. Initial reactions to whatever the provocation woke up — not every member need engage with it directly; some may respond to the room's reaction to it before responding to it themselves. There is no author to address.",
   crosstalk:
-    'The document recedes. The conversation follows what it raised. Members are now talking to each other about the actual question that has surfaced — disagreements crystallize, alliances form, citations come out, someone is irritated, someone is more interested than they wanted to be. References to the document are welcome but not required; the room is no longer obliged to it. Receipts may be deployed. Actions in asterisks.',
+    'The provocation recedes. The conversation follows what it raised. Members are now talking to each other about the actual question that has surfaced — disagreements crystallize, alliances form, citations come out, someone is irritated, someone is more interested than they wanted to be. References to the provocation are welcome but not required; the room is no longer obliged to it. Receipts may be deployed. Actions in asterisks.',
   embers:
-    'The conversation has gone where it has gone. It may have left the document entirely. The room may be arriving somewhere, or it may not. Someone may say the thing that persists as an ember. Someone may push back hard at a point that has been allowed to stand too long. Someone may simply observe the fire.',
+    'The conversation has gone where it has gone. It may have left the provocation entirely. The room may be arriving somewhere, or it may not. Someone may say the thing that persists as an ember. Someone may push back hard at a point that has been allowed to stand too long. Someone may simply observe the fire.',
   extended:
     'A thread unresolved, a silence wanting breaking, a late arrival to the argument, a member who passed earlier returning with something they have just thought of.',
 };
@@ -82,7 +82,7 @@ function buildPassagePrompt({
       : '';
     const preamble = isTranscriptSource
       ? `A record has been passed around the table — minutes of a previous gathering, authorship uncertain, date unclear. The room considers it.\n\n"${entry}"`
-      : `The document has just been read aloud:\n\n"${entry}"`;
+      : `This has just been set before the room:\n\n"${entry}"`;
     return `${preamble}\n\n${instr}${artifactHint}`;
   }
   return instr;

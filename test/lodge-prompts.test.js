@@ -47,14 +47,14 @@ test('arcNoteForProgress', async t => {
 });
 
 test('buildPassagePrompt', async t => {
-  await t.test('the first passage wraps the entry as freshly read aloud, using the opening arc note', () => {
+  await t.test('the first passage wraps the entry as freshly set before the room, using the opening arc note', () => {
     const prompt = lp.buildPassagePrompt({ entry: 'the document text', isFirst: true, wordsSpent: 0, roster: ROSTER });
-    assert.match(prompt, /The document has just been read aloud/);
+    assert.match(prompt, /This has just been set before the room/);
     assert.match(prompt, /the document text/);
     assert.match(prompt, new RegExp(lp.ARC_NOTES.opening.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   });
 
-  await t.test('the first passage frames a transcript source differently from a fresh document', () => {
+  await t.test('the first passage frames a transcript source differently from a fresh provocation', () => {
     const prompt = lp.buildPassagePrompt({
       entry: 'minutes text',
       isFirst: true,
@@ -63,7 +63,7 @@ test('buildPassagePrompt', async t => {
       roster: ROSTER,
     });
     assert.match(prompt, /minutes of a previous gathering/);
-    assert.doesNotMatch(prompt, /just been read aloud/);
+    assert.doesNotMatch(prompt, /just been set before the room/);
   });
 
   await t.test('the first passage appends an artifact hint when the artifact member resolves', () => {

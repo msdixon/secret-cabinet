@@ -28,7 +28,7 @@ const CASTING_TARGET_MAX = 6;
 function buildCastingToolSchema(candidateIds, minCount, maxCount) {
   return {
     name: 'cast_the_evening',
-    description: 'Choose which further members of the lodge this document would draw to the room tonight.',
+    description: 'Choose which further members of the lodge this provocation would draw to the room tonight.',
     input_schema: {
       type: 'object',
       properties: {
@@ -38,14 +38,14 @@ function buildCastingToolSchema(candidateIds, minCount, maxCount) {
           minItems: minCount,
           maxItems: maxCount,
           uniqueItems: true,
-          description: `Member ids, in order of how strongly the document draws them, from those not already coming: ${candidateIds.join(', ')}.`,
+          description: `Member ids, in order of how strongly the provocation draws them, from those not already coming: ${candidateIds.join(', ')}.`,
         },
         reasoning: {
           // Unlike the per-round director's rationale, this one is shown —
           // it is the proposal's whole case for itself.
           type: 'string',
           description:
-            'One or two sentences, in the register of the lodge, on what in this document draws these people. Shown to the user beside the proposed cast.',
+            'One or two sentences, in the register of the lodge, on what in this provocation draws these people. Shown to the user beside the proposed cast.',
         },
       },
       required: ['speakers', 'reasoning'],
@@ -60,7 +60,7 @@ function buildCastingPrompt({ lodgeContext, candidates, regulars, documentText, 
     ? `ALREADY COMING TONIGHT — the user's regulars. They are always drawn to this room. They are not yours to choose, and not yours to drop:\n${regulars.map(m => `- ${m.name}`).join('\n')}`
     : 'No one is fixed for tonight. The whole room is yours to propose.';
 
-  const document = documentText.trim().slice(0, CASTING_DOCUMENT_LIMIT);
+  const provocation = documentText.trim().slice(0, CASTING_DOCUMENT_LIMIT);
 
   const system = `${lodgeContext}
 
@@ -68,19 +68,19 @@ function buildCastingPrompt({ lodgeContext, candidates, regulars, documentText, 
 
 ## YOUR ROLE RIGHT NOW
 
-You are not writing dialogue, and you are not choosing who speaks within a round. You are saying who the evening's document draws to the room at all — which members of the lodge would find their way in tonight, given what is about to be read aloud.
+You are not writing dialogue, and you are not choosing who speaks within a round. You are saying who the evening's provocation draws to the room at all — which members of the lodge would find their way in tonight, given what is about to be set before them. The provocation may be a document, a bare question, or a passing remark — treat any of these as equally valid grounds for a room to gather around.
 
 ${regularsBlock}
 
 THE REST OF THE LODGE — anyone here may be drawn tonight:
 ${candidateLines}
 
-THE DOCUMENT TO BE READ ALOUD TONIGHT:
-${document}
+TONIGHT'S PROVOCATION:
+${provocation}
 
-Choose between ${minCount} and ${maxCount} further members, ordered by how strongly the document draws them. Cast for friction as much as for affinity — a room where everyone agrees has nothing to say. Consider who the document's subject belongs to, who would dispute it, and who would hear something in it nobody else would. Do not choose for coverage, seniority, or roster order.${regulars.length ? ' The regulars above are already in the room; choose people who make something of what those regulars will say, not duplicates of them.' : ''}`;
+Choose between ${minCount} and ${maxCount} further members, ordered by how strongly the provocation draws them. Cast for friction as much as for affinity — a room where everyone agrees has nothing to say. Consider who the provocation's subject belongs to, who would dispute it, and who would hear something in it nobody else would. Do not choose for coverage, seniority, or roster order.${regulars.length ? ' The regulars above are already in the room; choose people who make something of what those regulars will say, not duplicates of them.' : ''}`;
 
-  const userMessage = 'Say who this document draws tonight.';
+  const userMessage = 'Say who this provocation draws tonight.';
 
   return { system, userMessage };
 }

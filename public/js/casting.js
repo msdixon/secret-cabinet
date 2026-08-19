@@ -127,7 +127,7 @@ window.Casting = (function () {
     if (pending) return;
     const entry = deps.getEntry();
     if (!entry) {
-      if (!auto) deps.setStatus('The room needs a document before it can say who it would draw.', false);
+      if (!auto) deps.setStatus('The room needs a provocation before it can say who it would draw.', false);
       return;
     }
 
@@ -202,14 +202,14 @@ window.Casting = (function () {
     if (pending) {
       panel.style.display = 'block';
       panel.className = 'cast-proposal pending';
-      document.getElementById('cast-proposal-title').textContent = 'Reading the document…';
+      document.getElementById('cast-proposal-title').textContent = 'Reading the provocation…';
       document.getElementById('cast-proposal-names').innerHTML = '';
       document.getElementById('cast-proposal-reason').textContent = 'Asking who this would draw.';
       document.getElementById('cast-proposal-actions').style.display = 'none';
     } else if (proposal) {
       panel.style.display = 'block';
       panel.className = 'cast-proposal';
-      document.getElementById('cast-proposal-title').textContent = 'The document would draw';
+      document.getElementById('cast-proposal-title').textContent = 'The provocation would draw';
       document.getElementById('cast-proposal-names').innerHTML = proposal.cast
         .map(
           id =>
