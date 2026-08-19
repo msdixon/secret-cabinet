@@ -80,15 +80,23 @@ window.LodgeScene = (function () {
   const BOOKSHELF_ANGLES = [0, 1].map(i => (3 * Math.PI) / 8 + i * Math.PI);
   const BOOK_COLORS = ['#5c2a1e', '#2e4a2e', '#1e2e4a', '#5c4520', '#3a2e1e'];
 
+  // #305: shadow map resolution. 1024 is a common "small scene" default --
+  // low enough that the cube-map cost (below) stays bounded, high enough
+  // that the table/seat shadows on the floor don't visibly pixelate at
+  // this room's scale.
+  const SHADOW_MAP_SIZE = 1024;
+
   let sceneRef = null;
   let cameraRef = null;
   let seatMeshes = [];
+  let tableMesh = null;
   const portraitTextures = {}; // memberId -> BABYLON.Texture, cached across seat reassignment
 
   // #294: walls + ceiling + a few sconces -- the bounded first art pass
   // named in the issue (walls, ambient lighting, enclosure). Trim/molding
   // and furnishings followed in #304 (buildWallDressing, below); dynamic
-  // shadow casting is still unattempted.
+  // shadow casting followed in #305 (init(), below -- table/seats/floor
+  // only, not the wall dressing here).
   function buildWalls(scene) {
     // Open cylindrical tube (no caps -- floor/ceiling cover top and bottom
     // separately). backFaceCulling off because the camera sits *inside*
@@ -362,6 +370,7 @@ window.LodgeScene = (function () {
     tableMat.diffuseColor = BABYLON.Color3.FromHexString(LODGE_BORDER);
     tableMat.specularColor = new BABYLON.Color3(0.1, 0.08, 0.05);
     table.material = tableMat;
+    tableMesh = table;
 
     seatMeshes = [];
     for (let i = 0; i < SEAT_COUNT; i++) {
@@ -671,6 +680,29 @@ window.LodgeScene = (function () {
       buildWallDressing(scene);
       buildTableAndSeats(scene);
       sceneRef = scene;
+
+      // #305: hearth-only shadows -- the issue's own steer ("the hearth
+      // alone is probably enough for the effect and cheaper than adding
+      // shadow generators for every sconce too"). Babylon point lights
+      // render shadows as a 6-face cube map internally (unlike a single
+      // shadow map for a directional/spot light), already the most
+      // expensive shadow type available; a generator per sconce would
+      // triple that cost for a room this small, so the sconces stay
+      // shadowless fill light only.
+      const shadowGenerator = new BABYLON.ShadowGenerator(SHADOW_MAP_SIZE, hearth);
+      // Plain exponential map, not the blurred variant -- blurring costs an
+      // extra pass per cube face (x6), and softened edges aren't needed to
+      // read as "shadow" at this room's scale and camera distance.
+      shadowGenerator.useExponentialShadowMap = true;
+      // Table + seat cylinders cast; avatar billboards deliberately don't
+      // (issue's own steer: a flat camera-facing card would cast a
+      // card-shaped shadow that reads as a rendering bug, not atmosphere).
+      // Their material already uses disableLighting (#217), so they
+      // couldn't receive a shadow either even if added as a receiver.
+      const shadowCasters = [tableMesh, ...seatMeshes.map(seat => seat.mesh)];
+      shadowCasters.forEach(mesh => shadowGenerator.addShadowCaster(mesh));
+      floor.receiveShadows = true;
+      tableMesh.receiveShadows = true;
 
       // #232: no continuous auto-rotate — the camera holds the resting shot
       // and only moves when frameCamera() (via setSpeaking) swings it to
