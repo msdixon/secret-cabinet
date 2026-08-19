@@ -20,6 +20,8 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 
+const { computeCoverage } = require('../scripts/count-library-coverage.js');
+
 const LIBRARY_DIR = path.join(__dirname, '..', 'prompts', 'library');
 const MEMBERS_DIR = path.join(__dirname, '..', 'prompts', 'members');
 
@@ -109,5 +111,33 @@ test('library.json — entry files (#187)', async t => {
       if (!body) broken.push(`${entry.id} (empty body)`);
     }
     assert.deepEqual(broken, [], broken.join(', '));
+  });
+});
+
+// #322 — two concurrent #35a PRs (Pauli #318, Yates #322) each hand-bumped
+// README.md's coverage numbers from the same stale base; git's merge didn't
+// conflict on the line, it just silently left the wrong count in place.
+// scripts/count-library-coverage.js derives the true numbers from
+// library.json itself; this asserts README.md's prose actually says that,
+// so a hand-edit that drifts fails CI instead of waiting for a doc-checkin
+// to notice.
+test('library README — coverage numbers match library.json (#322)', async t => {
+  const readme = fs.readFileSync(path.join(LIBRARY_DIR, 'README.md'), 'utf8');
+  const coverage = computeCoverage();
+
+  await t.test('author-coverage line', () => {
+    const expected = `${coverage.authorCoverage} of ${coverage.rosterSize} roster members, not the ${coverage.memberCoverage} that \`members\` gives`;
+    assert.ok(
+      readme.includes(expected),
+      `README.md's author-coverage line doesn't match library.json — expected to find "${expected}". Run: node scripts/count-library-coverage.js`
+    );
+  });
+
+  await t.test('translated-count line', () => {
+    const expected = `${coverage.translated} of the current ${coverage.entries} entries`;
+    assert.ok(
+      readme.includes(expected),
+      `README.md's translated-count line doesn't match library.json — expected to find "${expected}". Run: node scripts/count-library-coverage.js`
+    );
   });
 });
