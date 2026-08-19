@@ -394,5 +394,17 @@
     "members": ["warburg"],
     "themes": ["myth", "symbolism", "technology", "disenchantment", "civilisation"],
     "file": "warburg-lecture-on-serpent-ritual-1923.md"
+  },
+  {
+    "id": "bamba-masalik-al-jinan-my-way-of-fighting",
+    "title": "My Two Weapons — from Masālik al-Jinān",
+    "source": "Masālik al-Jinān (Ways unto Heaven)",
+    "date": "early 20th century (trans. 2009)",
+    "author": "bamba",
+    "translated": true,
+    "license": "fair-use",
+    "members": ["bamba"],
+    "themes": ["nonviolence", "colonialism", "sufism", "spiritual-warfare", "knowledge"],
+    "file": "bamba-masalik-al-jinan-my-way-of-fighting.md"
   }
 ]

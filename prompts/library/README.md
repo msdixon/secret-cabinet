@@ -25,7 +25,7 @@ Since [#187](https://github.com/msdixon/secret-cabinet/issues/187), an entry is 
 
 An entry with no `author` is silently skipped by the exemplar path — it still works for citation grounding and the graph, but its author never sees their own prose. The test is what stops that going unnoticed.
 
-Coverage as an exemplar is therefore counted by distinct `author`, not by union of `members`: 33 of 38 roster members, not the 34 that `members` gives. (The roster grew from 33 to 38 in the 2026-08-10 TV-personas addition — see the 2026-08-10 #35a entry in STATUS.md for the five new members this increment covered.)
+Coverage as an exemplar is therefore counted by distinct `author`, not by union of `members`: 34 of 38 roster members, not the 35 that `members` gives. (The roster grew from 33 to 38 in the 2026-08-10 TV-personas addition — see the 2026-08-10 #35a entry in STATUS.md for the five new members this increment covered.)
 
 ## `license` — public domain vs. licensed/fair-use excerpts
 
