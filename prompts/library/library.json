@@ -334,5 +334,17 @@
     "members": ["pixie"],
     "themes": ["intention", "attention", "character-study", "pedagogy", "imagination"],
     "file": "coleman-smith-art-student-think-1908.md"
+  },
+  {
+    "id": "pauli-theory-of-relativity-preface-1956",
+    "title": "The Æther Made Superfluous — Preface to Theory of Relativity",
+    "source": "Theory of Relativity",
+    "date": "1956",
+    "author": "pauli",
+    "translated": true,
+    "license": "fair-use",
+    "members": ["pauli"],
+    "themes": ["relativity", "symmetry", "group-theory", "epistemology"],
+    "file": "pauli-theory-of-relativity-preface-1956.md"
   }
 ]

@@ -17,6 +17,7 @@ window.LodgeScene = (function () {
   const LODGE_BG = '#0e0b08';
   const LODGE_FIRE = '#d4621a';
   const LODGE_AMBER = '#c8922a';
+  const LODGE_AMBER_DIM = '#7a5418';
   const LODGE_GOLD = '#e8b84b';
   const LODGE_BORDER = '#3a2e1e';
 
@@ -59,6 +60,26 @@ window.LodgeScene = (function () {
   const SCONCE_HEIGHT = 2.4;
   const SCONCE_COUNT = 3;
 
+  // #304: trim/molding + furnishings, the dressing pass #294 deliberately
+  // deferred. Everything below is placed by the same polar convention as
+  // the sconces/seats above (angle -> x=cos*r, z=sin*r) via wallSpot(),
+  // which additionally returns the Y-rotation that keeps a wall-mounted
+  // mesh's local Z (its "depth"/normal axis) pointing along the radius at
+  // that angle -- so a box's flat face or a plane's front sits flush
+  // against the curved wall instead of at a fixed world-space angle.
+  const TRIM_RADIUS = WALL_RADIUS - 0.03; // just inside the wall face, no z-fight
+  const PILASTER_COUNT = 8;
+  const PILASTER_RADIUS = WALL_RADIUS - 0.1;
+  const PILASTER_WIDTH = 0.5;
+  const PILASTER_DEPTH = 0.2;
+  // Portraits/bookshelves sit in the gaps between pilasters (offset by half
+  // a pilaster-spacing), echoing the mantel's own dorian-frame motif
+  // (public/index.html, #295) as the issue's proposed visual throughline.
+  const DRESSING_RADIUS = WALL_RADIUS - 0.11;
+  const PORTRAIT_ANGLES = [0, 1, 2, 3].map(i => Math.PI / 8 + i * (Math.PI / 2));
+  const BOOKSHELF_ANGLES = [0, 1].map(i => (3 * Math.PI) / 8 + i * Math.PI);
+  const BOOK_COLORS = ['#5c2a1e', '#2e4a2e', '#1e2e4a', '#5c4520', '#3a2e1e'];
+
   // #305: shadow map resolution. 1024 is a common "small scene" default --
   // low enough that the cube-map cost (below) stays bounded, high enough
   // that the table/seat shadows on the floor don't visibly pixelate at
@@ -72,11 +93,10 @@ window.LodgeScene = (function () {
   const portraitTextures = {}; // memberId -> BABYLON.Texture, cached across seat reassignment
 
   // #294: walls + ceiling + a few sconces -- the bounded first art pass
-  // named in the issue (walls, ambient lighting, enclosure). Deliberately
-  // not attempted here: wall trim/molding, furnishings (bookshelves,
-  // framed portraits on the walls), or dynamic shadow casting -- all left
-  // for a later, separately-scoped pass per the issue's own "not decided"
-  // list.
+  // named in the issue (walls, ambient lighting, enclosure). Trim/molding
+  // and furnishings followed in #304 (buildWallDressing, below); dynamic
+  // shadow casting followed in #305 (init(), below -- table/seats/floor
+  // only, not the wall dressing here).
   function buildWalls(scene) {
     // Open cylindrical tube (no caps -- floor/ceiling cover top and bottom
     // separately). backFaceCulling off because the camera sits *inside*
@@ -153,6 +173,186 @@ window.LodgeScene = (function () {
       markerMat.disableLighting = true;
       marker.material = markerMat;
     }
+  }
+
+  // Position + facing for a mesh mounted flush against the cylindrical wall
+  // at the given angle/radius -- rotationY keeps the mesh's local Z axis
+  // (front face / depth) aligned with the radius at that point, matching
+  // how CreateBox/CreatePlane default-orient (depth along Z, width along X).
+  function wallSpot(angle, radius) {
+    return {
+      x: Math.cos(angle) * radius,
+      z: Math.sin(angle) * radius,
+      rotationY: Math.PI / 2 - angle,
+    };
+  }
+
+  // Thin open cylinder band (baseboard/chair-rail/crown) -- same NO_CAP +
+  // twoSidedLighting treatment as the wall itself, since it's viewed from
+  // inside the same radius.
+  function buildTrimRing(scene, name, y, height, colorHex, emissiveScale) {
+    const ring = BABYLON.MeshBuilder.CreateCylinder(
+      name,
+      { diameter: TRIM_RADIUS * 2, height, tessellation: 32, cap: BABYLON.Mesh.NO_CAP },
+      scene
+    );
+    ring.position.y = y;
+    const mat = new BABYLON.StandardMaterial(`${name}Mat`, scene);
+    mat.diffuseColor = BABYLON.Color3.FromHexString(colorHex);
+    mat.emissiveColor = BABYLON.Color3.FromHexString(colorHex).scale(emissiveScale);
+    mat.specularColor = new BABYLON.Color3(0, 0, 0);
+    mat.backFaceCulling = false;
+    mat.twoSidedLighting = true;
+    ring.material = mat;
+  }
+
+  // Vertical ribs breaking the flat paneled cylinder into bays -- the
+  // portrait frames and bookshelves below sit in the gaps between them.
+  function buildPilasters(scene) {
+    for (let i = 0; i < PILASTER_COUNT; i++) {
+      const angle = (i / PILASTER_COUNT) * Math.PI * 2;
+      const spot = wallSpot(angle, PILASTER_RADIUS);
+      const pilaster = BABYLON.MeshBuilder.CreateBox(
+        `pilaster-${i}`,
+        { width: PILASTER_WIDTH, height: WALL_HEIGHT - 0.6, depth: PILASTER_DEPTH },
+        scene
+      );
+      pilaster.position.set(spot.x, WALL_HEIGHT / 2, spot.z);
+      pilaster.rotation.y = spot.rotationY;
+      const mat = new BABYLON.StandardMaterial(`pilasterMat-${i}`, scene);
+      mat.diffuseColor = BABYLON.Color3.FromHexString(LODGE_AMBER_DIM);
+      mat.emissiveColor = BABYLON.Color3.FromHexString(LODGE_AMBER_DIM).scale(0.12);
+      mat.specularColor = new BABYLON.Color3(0.05, 0.04, 0.02);
+      pilaster.material = mat;
+    }
+  }
+
+  // Gilt-frame + dark-panel pair per portrait, echoing the dorian-frame's
+  // own amber/gold molding gradient (public/css/style.css's #fmG-equivalent
+  // tokens) rather than a per-member image -- no ancestor art exists to
+  // render here, and an empty gilt frame reads as intentional lodge
+  // furnishing rather than a placeholder.
+  function buildPortraitFrames(scene) {
+    PORTRAIT_ANGLES.forEach((angle, i) => {
+      const frameSpot = wallSpot(angle, DRESSING_RADIUS);
+      const frame = BABYLON.MeshBuilder.CreatePlane(`portraitFrame-${i}`, { width: 0.85, height: 1.05 }, scene);
+      frame.position.set(frameSpot.x, 3.2, frameSpot.z);
+      frame.rotation.y = frameSpot.rotationY;
+      const frameMat = new BABYLON.StandardMaterial(`portraitFrameMat-${i}`, scene);
+      frameMat.diffuseColor = BABYLON.Color3.FromHexString(LODGE_AMBER);
+      frameMat.emissiveColor = BABYLON.Color3.FromHexString(LODGE_GOLD).scale(0.2);
+      frameMat.backFaceCulling = false;
+      frame.material = frameMat;
+
+      const panelSpot = wallSpot(angle, DRESSING_RADIUS - 0.02);
+      const panel = BABYLON.MeshBuilder.CreatePlane(`portraitPanel-${i}`, { width: 0.65, height: 0.85 }, scene);
+      panel.position.set(panelSpot.x, 3.2, panelSpot.z);
+      panel.rotation.y = panelSpot.rotationY;
+      const panelMat = new BABYLON.StandardMaterial(`portraitPanelMat-${i}`, scene);
+      panelMat.diffuseColor = BABYLON.Color3.FromHexString(LODGE_BG);
+      panelMat.emissiveColor = new BABYLON.Color3(0.03, 0.025, 0.015);
+      panelMat.backFaceCulling = false;
+      panel.material = panelMat;
+    });
+  }
+
+  // Open-fronted case (back panel + two end panels, no solid front) with
+  // shelf boards + a row of variously-colored "book" boxes on each --
+  // static dressing only (not tied to the library's actual contents;
+  // #304's own issue flags a books-reflect-the-corpus version as separate,
+  // much larger scope if ever pursued).
+  //
+  // Deliberately NOT a single solid carcass box: an early version used one,
+  // and its own front face (the side nearer the room, at a smaller radius
+  // than the shelf boards it enclosed) occluded every board and book behind
+  // it -- verified via a cropped/brightened render showing a flat dark
+  // silhouette with no visible shelves. Leaving the front open is what
+  // makes the books visible at all from inside the room.
+  function buildBookshelves(scene) {
+    const bayWidth = 1.7;
+    const shelfRadius = WALL_RADIUS - 0.36; // shared by end panels, boards, and books
+    const shelfHeights = [0.5, 1.5, 2.5];
+    const bookCount = 6;
+    BOOKSHELF_ANGLES.forEach((angle, shelfIndex) => {
+      const caseMat = new BABYLON.StandardMaterial(`bookshelfCaseMat-${shelfIndex}`, scene);
+      caseMat.diffuseColor = BABYLON.Color3.FromHexString(LODGE_BORDER);
+      caseMat.specularColor = new BABYLON.Color3(0.05, 0.04, 0.02);
+
+      const backSpot = wallSpot(angle, WALL_RADIUS - 0.05);
+      const backPanel = BABYLON.MeshBuilder.CreateBox(
+        `bookshelfBack-${shelfIndex}`,
+        { width: bayWidth, height: 3.2, depth: 0.08 },
+        scene
+      );
+      backPanel.position.set(backSpot.x, 1.7, backSpot.z);
+      backPanel.rotation.y = backSpot.rotationY;
+      backPanel.material = caseMat;
+
+      const shelfSpot = wallSpot(angle, shelfRadius);
+      const tangentAngle = angle + Math.PI / 2;
+      [-1, 1].forEach(side => {
+        const edgeOffset = side * (bayWidth / 2 - 0.06);
+        const endPanel = BABYLON.MeshBuilder.CreateBox(
+          `bookshelfEnd-${shelfIndex}-${side}`,
+          { width: 0.12, height: 3.2, depth: 0.62 },
+          scene
+        );
+        endPanel.position.set(
+          shelfSpot.x + Math.cos(tangentAngle) * edgeOffset,
+          1.7,
+          shelfSpot.z + Math.sin(tangentAngle) * edgeOffset
+        );
+        endPanel.rotation.y = shelfSpot.rotationY;
+        endPanel.material = caseMat;
+      });
+
+      shelfHeights.forEach((h, shelfLevel) => {
+        const board = BABYLON.MeshBuilder.CreateBox(
+          `shelfBoard-${shelfIndex}-${shelfLevel}`,
+          { width: 1.4, height: 0.06, depth: 0.55 },
+          scene
+        );
+        board.position.set(shelfSpot.x, 0.1 + h, shelfSpot.z);
+        board.rotation.y = shelfSpot.rotationY;
+        const boardMat = new BABYLON.StandardMaterial(`shelfBoardMat-${shelfIndex}-${shelfLevel}`, scene);
+        boardMat.diffuseColor = BABYLON.Color3.FromHexString(LODGE_AMBER_DIM);
+        boardMat.specularColor = new BABYLON.Color3(0, 0, 0);
+        board.material = boardMat;
+
+        for (let b = 0; b < bookCount; b++) {
+          const bookWidth = 0.14 + (b % 3) * 0.03;
+          const bookHeight = 0.38 + (b % 2) * 0.08;
+          // Offset along the shelf's own tangential axis, not the radial
+          // one -- books sit in a row along the shelf, not stacked toward
+          // the room center.
+          const tangentialOffset = -0.6 + b * (1.2 / (bookCount - 1));
+          const bx = shelfSpot.x + Math.cos(tangentAngle) * tangentialOffset;
+          const bz = shelfSpot.z + Math.sin(tangentAngle) * tangentialOffset;
+          const book = BABYLON.MeshBuilder.CreateBox(
+            `book-${shelfIndex}-${shelfLevel}-${b}`,
+            { width: bookWidth, height: bookHeight, depth: 0.45 },
+            scene
+          );
+          book.position.set(bx, 0.1 + h + 0.03 + bookHeight / 2, bz);
+          book.rotation.y = shelfSpot.rotationY;
+          const bookMat = new BABYLON.StandardMaterial(`bookMat-${shelfIndex}-${shelfLevel}-${b}`, scene);
+          bookMat.diffuseColor = BABYLON.Color3.FromHexString(
+            BOOK_COLORS[(shelfLevel * bookCount + b) % BOOK_COLORS.length]
+          );
+          bookMat.specularColor = new BABYLON.Color3(0, 0, 0);
+          book.material = bookMat;
+        }
+      });
+    });
+  }
+
+  function buildWallDressing(scene) {
+    buildTrimRing(scene, 'baseboard', 0.15, 0.3, LODGE_AMBER_DIM, 0.08);
+    buildTrimRing(scene, 'chairRail', 1.3, 0.14, LODGE_GOLD, 0.15);
+    buildTrimRing(scene, 'crownMolding', WALL_HEIGHT - 0.25, 0.25, LODGE_AMBER_DIM, 0.08);
+    buildPilasters(scene);
+    buildPortraitFrames(scene);
+    buildBookshelves(scene);
   }
 
   function buildTableAndSeats(scene) {
@@ -477,6 +677,7 @@ window.LodgeScene = (function () {
       floor.material = floorMat;
 
       buildWalls(scene);
+      buildWallDressing(scene);
       buildTableAndSeats(scene);
       sceneRef = scene;
 
