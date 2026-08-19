@@ -12,7 +12,6 @@ const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
-const SESSIONS_DIR = path.join(ROOT, 'sessions');
 const OUTPUT_FILE = path.join(ROOT, 'CITATION-MANIFEST.md');
 
 const VERDICT_SEVERITY = { unverified: 2, uncertain: 1, verified: 0 };
@@ -30,14 +29,19 @@ function normalizeWorkKey(work) {
   return work.replace(/[*"']/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
-function loadSessions() {
-  if (!fs.existsSync(SESSIONS_DIR)) return [];
+// sessionsDir is passed in explicitly rather than read from a module-level
+// constant, same convention as sessions-store.js/graph.js — this function is
+// also called from src/routes/session.js's admin route (#153 check-in),
+// which must point at the real RAILWAY_VOLUME_MOUNT_PATH-based dir server.js
+// resolves, not a path this module would otherwise have to guess at.
+function loadSessions(sessionsDir) {
+  if (!fs.existsSync(sessionsDir)) return [];
   return fs
-    .readdirSync(SESSIONS_DIR)
+    .readdirSync(sessionsDir)
     .filter(f => f.endsWith('.json'))
     .map(f => {
       try {
-        return JSON.parse(fs.readFileSync(path.join(SESSIONS_DIR, f), 'utf8'));
+        return JSON.parse(fs.readFileSync(path.join(sessionsDir, f), 'utf8'));
       } catch (e) {
         console.warn(`Skipping unreadable session file: ${f}`);
         return null;
@@ -138,7 +142,18 @@ function buildManifest(sessions) {
   return lines.join('\n');
 }
 
-const sessions = loadSessions();
-const manifest = buildManifest(sessions);
-fs.writeFileSync(OUTPUT_FILE, manifest, 'utf8');
-console.log(`Wrote ${OUTPUT_FILE} (${sessions.length} sessions scanned).`);
+module.exports = { loadSessions, buildManifest };
+
+// CLI entry point only — the admin route (src/routes/session.js) calls
+// loadSessions/buildManifest directly instead of shelling out to this file.
+if (require.main === module) {
+  // Same DATA_DIR resolution as server.js's SESSIONS_DIR: previously this
+  // script hardcoded ROOT/sessions unconditionally, which silently scanned
+  // the repo checkout's own (usually empty) sessions/ dir even when run on
+  // a deployed instance with a real volume mounted elsewhere.
+  const sessionsDir = path.join(process.env.RAILWAY_VOLUME_MOUNT_PATH || ROOT, 'sessions');
+  const sessions = loadSessions(sessionsDir);
+  const manifest = buildManifest(sessions);
+  fs.writeFileSync(OUTPUT_FILE, manifest, 'utf8');
+  console.log(`Wrote ${OUTPUT_FILE} (${sessions.length} sessions scanned, from ${sessionsDir}).`);
+}
