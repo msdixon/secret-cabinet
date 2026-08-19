@@ -346,5 +346,17 @@
     "members": ["pauli"],
     "themes": ["relativity", "symmetry", "group-theory", "epistemology"],
     "file": "pauli-theory-of-relativity-preface-1956.md"
+  },
+  {
+    "id": "yates-giordano-bruno-preface-1964",
+    "title": "The Bruno Problem — Preface to Giordano Bruno and the Hermetic Tradition",
+    "source": "Giordano Bruno and the Hermetic Tradition",
+    "date": "1964",
+    "author": "yates",
+    "translated": false,
+    "license": "fair-use",
+    "members": ["yates", "bruno"],
+    "themes": ["hermeticism", "renaissance", "intellectual-history", "methodology"],
+    "file": "yates-giordano-bruno-preface-1964.md"
   }
 ]
