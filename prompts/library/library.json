@@ -370,5 +370,17 @@
     "members": ["scholem"],
     "themes": ["kabbalah", "torah", "historiography", "philosophy-of-language", "transmission"],
     "file": "scholem-lamentations-of-youth-diaries.md"
+  },
+  {
+    "id": "catherine-blake-letter-to-flaxman-1800",
+    "title": "To My Dear Friend, Mrs. Anna Flaxman — on Leaving for Felpham",
+    "source": "The Letters of William Blake, together with a Life by Frederick Tatham",
+    "date": "1800",
+    "author": "catherine-blake",
+    "translated": false,
+    "license": "public-domain",
+    "members": ["catherine-blake", "william-blake"],
+    "themes": ["correspondence", "domestic-life", "felpham", "collaboration", "patronage"],
+    "file": "catherine-blake-letter-to-flaxman-1800.md"
   }
 ]
