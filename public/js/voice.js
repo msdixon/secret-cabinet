@@ -164,10 +164,20 @@ window.Voice = (function () {
     return Math.min(MAX_RATE, Math.max(MIN_RATE, r));
   }
 
-  // Strip action markup (*stands and paces*) before speaking -- a listener
-  // shouldn't hear asterisks read aloud.
+  // Strip action asides (*stands and paces*) before speaking -- a listener
+  // hearing the words "stands and paces" spoken as if they were dialogue is
+  // worse than the asterisks-left-in bug this was meant to fix in the first
+  // place: this member isn't a narrator describing their own stage
+  // directions. The whole matched span is removed, not just the asterisks
+  // (an earlier version of this replaced `*text*` with `text`, keeping the
+  // action's words in the spoken output) -- then whitespace is collapsed
+  // back to single spaces, since removing "*waves warmly* " mid-sentence
+  // otherwise leaves a double space or an awkward gap around it.
   function stripForSpeech(text) {
-    return text.replace(/\*([^*]+)\*/g, '$1').trim();
+    return text
+      .replace(/\*([^*]+)\*/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
   }
 
   // Unchanged from the first pass -- see module comment up top. Cancels any
