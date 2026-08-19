@@ -50,6 +50,7 @@ const library = require('./src/library');
 const citations = require('./src/citations');
 const graph = require('./src/graph');
 const sessionsStore = require('./src/sessions-store');
+const citationManifest = require('./scripts/build-citation-manifest');
 const auth = require('./src/auth');
 const { registerLibraryRoutes } = require('./src/routes/library');
 const { registerGraphRoutes } = require('./src/routes/graph');
@@ -423,6 +424,8 @@ registerSessionRoutes(app, {
   loadArchiveImageIndex,
   groundAgainstLibraryText,
   escalateCitationsToWeb,
+  loadManifestSessions: citationManifest.loadSessions,
+  buildCitationManifest: citationManifest.buildManifest,
 });
 
 registerConveneRoutes(app, {

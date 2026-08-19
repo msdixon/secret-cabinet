@@ -31,6 +31,8 @@ function registerSessionRoutes(
     loadArchiveImageIndex,
     groundAgainstLibraryText,
     escalateCitationsToWeb,
+    loadManifestSessions,
+    buildCitationManifest,
   }
 ) {
   // GET /api/sessions — list recent sessions, with optional ?q=, ?tag=, ?thread= filters
@@ -106,6 +108,21 @@ function registerSessionRoutes(
       res.json(Object.values(threads).sort((a, b) => a.name.localeCompare(b.name)));
     } catch (err) {
       res.status(500).json({ error: 'Failed to list threads' });
+    }
+  });
+
+  // GET /api/admin/citation-manifest — #153's manual-promotion check-in,
+  // run against whatever sessionsDir this process was actually started with
+  // (RAILWAY_VOLUME_MOUNT_PATH-based on a deployed instance with a volume
+  // attached, same as every other route in this file). Sits behind the same
+  // requireAuth gate as the rest of /api/* — no separate admin auth layer.
+  // Returns the aggregate manifest only, never raw session/transcript data.
+  app.get('/api/admin/citation-manifest', (req, res) => {
+    try {
+      const sessions = loadManifestSessions(sessionsDir);
+      res.type('text/markdown').send(buildCitationManifest(sessions));
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to build citation manifest' });
     }
   });
 
