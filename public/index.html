@@ -46,7 +46,7 @@
       <div class="lodge-subtitle">A Salon Outside of Time</div>
     </div>
     <div class="lodge-divider"></div>
-    <div class="mantel-tagline">The fire is lit. The room remembers nothing. The document waits.</div>
+    <div class="mantel-tagline">The fire is lit. The room remembers nothing. The provocation waits.</div>
     <div class="mantel-nav">
       <button class="lodge-btn sessions-btn mantel-sessions-btn" onclick="window.Sessions.openSessionsDrawer()">Past Meetings <span id="sessions-count" class="sessions-count"></span></button>
       <a class="lodge-btn sessions-btn mantel-sessions-btn" href="/lodge">The Lodge ↗</a>
@@ -66,7 +66,7 @@
   <div class="lodge-body">
 
     <div class="journal-panel">
-      <div class="panel-label">I. The Document</div>
+      <div class="panel-label">I. The Provocation</div>
       <div class="journal-controls">
         <input type="text" class="lodge-select library-search-input" id="library-search-input" placeholder="Search the Archival Library…" autocomplete="off" hidden oninput="window.Export.filterLibraryOptions(this.value)" />
         <select class="lodge-select" id="source-select" onmousedown="window.Export.loadSourceOptions()" onchange="window.Export.handleSourceChange()">
@@ -77,7 +77,7 @@
         </select>
       </div>
       <div id="paste-area-container">
-        <textarea class="journal-paste-area" id="paste-area" placeholder="Paste the entry here. The room will hear it." rows="4"></textarea>
+        <textarea class="journal-paste-area" id="paste-area" placeholder="A document, a question, a passing thought — bring anything. The room will hear it." rows="4"></textarea>
         <div class="file-pick-row">
           <button class="lodge-btn file-pick-btn" onclick="document.getElementById('file-input').click()">↑ From file</button>
           <span class="file-pick-name" id="file-pick-name"></span>
@@ -112,7 +112,7 @@
       <div class="panel-label member-panel-head">
         <span class="member-panel-heading">II. The Assembled <span id="member-count-badge" class="member-count-badge"></span></span>
         <span class="member-panel-controls">
-          <button type="button" class="lodge-btn cast-ask-btn" id="cast-ask-btn" onclick="window.Casting.requestProposal()" title="Ask who tonight's document would draw">✦ Who would this draw?</button>
+          <button type="button" class="lodge-btn cast-ask-btn" id="cast-ask-btn" onclick="window.Casting.requestProposal()" title="Ask who tonight's provocation would draw">✦ Who would this draw?</button>
           <input type="text" class="member-filter-input" id="member-filter" placeholder="Filter…" oninput="renderMembers()" />
         </span>
       </div>
@@ -130,7 +130,7 @@
       </div>
       <div class="members-grid" id="members-grid"></div>
       <div class="members-empty-hint" id="members-empty-hint" style="display:none;">No members match "<span id="members-empty-hint-term"></span>".</div>
-      <div class="members-cast-hint" id="members-cast-hint" style="display:none;">No one is seated yet. Bring a document and the room will say who it draws — or pin a regular with ✦ and they will always be here.</div>
+      <div class="members-cast-hint" id="members-cast-hint" style="display:none;">No one is seated yet. Bring a provocation and the room will say who it draws — or pin a regular with ✦ and they will always be here.</div>
       <div style="margin-top:12px;">
         <button class="lodge-btn add-member-btn" onclick="openAddMemberModal()">+ Invite to the Lodge</button>
       </div>
@@ -275,7 +275,7 @@
             The fire throws its light against the panelling.<br>
             Above the mantel, the portrait<br>
             <em style="color:#3a2810">regards the room with practiced indifference.</em><br><br>
-            When the document is read aloud, the meeting begins.
+            When a provocation is set before the room, the meeting begins.
           </div>
           <div id="transcript-content"></div>
         </div>
@@ -301,7 +301,7 @@
           <div class="lodge-menu" id="continue-menu">
             <button class="lodge-btn" id="stir-room-btn" onclick="stirRoom()" title="Draw one more passage out of a meeting that already closed">Stir the room again ↻</button>
             <button class="lodge-btn" id="interject-toggle-btn" style="border-color:#a0c8a0;color:#a0c8a0;" onclick="toggleInterjectForm()">Interject</button>
-            <button class="lodge-btn" onclick="reconveneOnCurrentSession()" title="Use this transcript as the document for a new session">↩ Reconvene</button>
+            <button class="lodge-btn" onclick="reconveneOnCurrentSession()" title="Use this transcript as the provocation for a new session">↩ Reconvene</button>
             <button class="lodge-btn" onclick="branchFromLatestLull()" title="Branch from here — explore an alternate path from this point, original stays untouched">⑂ Branch</button>
           </div>
         </div>

@@ -849,7 +849,7 @@ async function retryFromError() {
 async function convene() {
   const entry = window.Export.getEntry();
   if (!entry) {
-    setStatus('The room requires a document.', false);
+    setStatus('The room requires a provocation.', false);
     return;
   }
   if (activeMembers.size < 2) {
