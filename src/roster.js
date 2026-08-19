@@ -49,24 +49,36 @@ function assignGlyph(roster) {
   return free || FALLBACK_GLYPHS[roster.length % FALLBACK_GLYPHS.length];
 }
 
-// #29 (ElevenLabs pass) — long-standing ElevenLabs premade voice IDs, used
-// only as the default `voicePool` a caller can hand reloadRoster() below to
-// backfill a `voiceId` per member. Unlike FALLBACK_GLYPHS these aren't
-// guaranteed to exist in every account's Voice Library (ElevenLabs has
-// reshuffled its default voice set over time) — verify against the target
-// account before relying on them, and override via the ELEVENLABS_VOICE_POOL
-// env var (see server.js) or by hand-editing a member's voiceId in
-// roster.json if any of these turn out stale.
+// #29 (ElevenLabs pass) — the default `voicePool` a caller can hand
+// reloadRoster() below to backfill a `voiceId` per member. Verified live
+// against GET /v1/voices on 2026-08-19 -- this is the account's actual
+// premade-voice library, not a guess: an earlier draft of this pool used the
+// historically-standard legacy voice IDs (Rachel/Domi/Antoni/etc.), and only
+// 2 of those 9 turned out to still exist here. Override via the
+// ELEVENLABS_VOICE_POOL env var (see server.js) if this account's library
+// changes, or hand-edit a member's voiceId in roster.json for one-offs.
 const FALLBACK_VOICE_IDS = [
-  '21m00Tcm4TlvDq8ikWAM', // Rachel
-  'AZnzlk1XvdvUeBnXmlld', // Domi
-  'EXAVITQu4vr4xnSDxMaL', // Bella
-  'ErXwobaYiN019PkySvjV', // Antoni
-  'MF3mGyEYCl7XYWbV9V6O', // Elli
-  'TxGEqnHWrfWFTfGW9XjX', // Josh
-  'VR6AewLTigWG4xSOukaG', // Arnold
-  'pNInz6obpgDQGcFmaJgB', // Adam
-  'yoZ06aMxZJJ28mfd3POQ', // Sam
+  'CwhRBWXzGAHq8TQ4Fs17', // Roger — laid-back, casual, resonant
+  'EXAVITQu4vr4xnSDxMaL', // Sarah — mature, reassuring, confident
+  'FGY2WhTYpPnrIDTdsKH5', // Laura — enthusiast, quirky attitude
+  'IKne3meq5aSn9XLyUdCD', // Charlie — deep, confident, energetic
+  'JBFqnCBsd6RMkjVDRZzb', // George — warm, captivating storyteller
+  'N2lVS1w4EtoT3dr4eOWO', // Callum — husky trickster
+  'SAz9YHcvj6GT2YYXdXww', // River — relaxed, neutral, informative
+  'SOYHLrjzK2X1ezoPC6cr', // Harry — fierce warrior
+  'TX3LPaxmHKxFdv7VOQHJ', // Liam — energetic, social media creator
+  'Xb7hH8MSUJpSbSDYk0k2', // Alice — clear, engaging educator
+  'XrExE9yKIg1WjnnlVkGX', // Matilda — knowledgeable, professional
+  'bIHbv24MWmeRgasZH58o', // Will — relaxed optimist
+  'cgSgspJ2msm6clMCkdW9', // Jessica — playful, bright, warm
+  'cjVigY5qzO86Huf0OWal', // Eric — smooth, trustworthy
+  'hpp4J3VqNfWAUOO0d1Us', // Bella — professional, bright, warm
+  'iP95p4xoKVk53GoZ742B', // Chris — charming, down-to-earth
+  'nPczCjzI2devNBz1zQrb', // Brian — deep, resonant and comforting
+  'onwK4e9ZLuTAKqWW03F9', // Daniel — steady broadcaster
+  'pFZP5JQG7iQjIQuC4Bku', // Lily — velvety actress
+  'pNInz6obpgDQGcFmaJgB', // Adam — dominant, firm
+  'pqHfZKP75CvOlQylNhV4', // Bill — wise, mature, balanced
 ];
 
 // Hashes memberId into a pool index — same FNV-1a scheme voice.js's

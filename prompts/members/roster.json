@@ -3,13 +3,15 @@
     "id": "crowley",
     "name": "Crowley",
     "file": "crowley.md",
-    "glyph": "☿"
+    "glyph": "☿",
+    "voiceId": "IKne3meq5aSn9XLyUdCD"
   },
   {
     "id": "waite",
     "name": "Waite",
     "file": "waite.md",
-    "glyph": "✡"
+    "glyph": "✡",
+    "voiceId": "bIHbv24MWmeRgasZH58o"
   },
   {
     "id": "pixie",
@@ -19,79 +21,92 @@
       "Pamela",
       "Pamela Colman Smith"
     ],
-    "glyph": "♃"
+    "glyph": "♃",
+    "voiceId": "SAz9YHcvj6GT2YYXdXww"
   },
   {
     "id": "yeats",
     "name": "Yeats",
     "file": "yeats.md",
-    "glyph": "☽"
+    "glyph": "☽",
+    "voiceId": "CwhRBWXzGAHq8TQ4Fs17"
   },
   {
     "id": "blavatsky",
     "name": "Blavatsky",
     "file": "blavatsky.md",
-    "glyph": "☸"
+    "glyph": "☸",
+    "voiceId": "cgSgspJ2msm6clMCkdW9"
   },
   {
     "id": "levi",
     "name": "Lévi",
     "file": "levi.md",
-    "glyph": "△"
+    "glyph": "△",
+    "voiceId": "bIHbv24MWmeRgasZH58o"
   },
   {
     "id": "teresa",
     "name": "Teresa of Ávila",
     "file": "teresa.md",
-    "glyph": "✦"
+    "glyph": "✦",
+    "voiceId": "pqHfZKP75CvOlQylNhV4"
   },
   {
     "id": "arabi",
     "name": "Ibn Arabi",
     "file": "ibn-arabi.md",
-    "glyph": "◯"
+    "glyph": "◯",
+    "voiceId": "CwhRBWXzGAHq8TQ4Fs17"
   },
   {
     "id": "maud",
     "name": "Maud Gonne",
     "file": "maud-gonne.md",
-    "glyph": "✿"
+    "glyph": "✿",
+    "voiceId": "iP95p4xoKVk53GoZ742B"
   },
   {
     "id": "llull",
     "name": "Llull",
     "file": "llull.md",
-    "glyph": "✺"
+    "glyph": "✺",
+    "voiceId": "JBFqnCBsd6RMkjVDRZzb"
   },
   {
     "id": "khaldun",
     "name": "Ibn Khaldun",
     "file": "ibn-khaldun.md",
-    "glyph": "⬡"
+    "glyph": "⬡",
+    "voiceId": "nPczCjzI2devNBz1zQrb"
   },
   {
     "id": "dee",
     "name": "John Dee",
     "file": "john-dee.md",
-    "glyph": "✧"
+    "glyph": "✧",
+    "voiceId": "FGY2WhTYpPnrIDTdsKH5"
   },
   {
     "id": "warburg",
     "name": "Aby Warburg",
     "file": "warburg.md",
-    "glyph": "☉"
+    "glyph": "☉",
+    "voiceId": "pNInz6obpgDQGcFmaJgB"
   },
   {
     "id": "corbin",
     "name": "Henri Corbin",
     "file": "corbin.md",
-    "glyph": "♀"
+    "glyph": "♀",
+    "voiceId": "cgSgspJ2msm6clMCkdW9"
   },
   {
     "id": "adorno",
     "name": "Theodor Adorno",
     "file": "adorno.md",
-    "glyph": "♂"
+    "glyph": "♂",
+    "voiceId": "pqHfZKP75CvOlQylNhV4"
   },
   {
     "id": "bruno",
@@ -101,7 +116,8 @@
       "The Nolan",
       "Nolan"
     ],
-    "glyph": "♄"
+    "glyph": "♄",
+    "voiceId": "nPczCjzI2devNBz1zQrb"
   },
   {
     "id": "al-hallaj",
@@ -110,31 +126,36 @@
     "aliases": [
       "Husayn"
     ],
-    "glyph": "♅"
+    "glyph": "♅",
+    "voiceId": "nPczCjzI2devNBz1zQrb"
   },
   {
     "id": "abulafia",
     "name": "Abraham Abulafia",
     "file": "abulafia.md",
-    "glyph": "♆"
+    "glyph": "♆",
+    "voiceId": "FGY2WhTYpPnrIDTdsKH5"
   },
   {
     "id": "frieda-harris",
     "name": "Lady Frieda Harris",
     "file": "frieda-harris.md",
-    "glyph": "♇"
+    "glyph": "♇",
+    "voiceId": "TX3LPaxmHKxFdv7VOQHJ"
   },
   {
     "id": "dion-fortune",
     "name": "Dion Fortune",
     "file": "dion-fortune.md",
-    "glyph": "☄"
+    "glyph": "☄",
+    "voiceId": "SOYHLrjzK2X1ezoPC6cr"
   },
   {
     "id": "william-blake",
     "name": "William Blake",
     "file": "william-blake.md",
-    "glyph": "★"
+    "glyph": "★",
+    "voiceId": "SAz9YHcvj6GT2YYXdXww"
   },
   {
     "id": "catherine-blake",
@@ -143,79 +164,92 @@
     "aliases": [
       "Kate"
     ],
-    "glyph": "☆"
+    "glyph": "☆",
+    "voiceId": "hpp4J3VqNfWAUOO0d1Us"
   },
   {
     "id": "yates",
     "name": "Frances Yates",
     "file": "yates.md",
-    "glyph": "✪"
+    "glyph": "✪",
+    "voiceId": "EXAVITQu4vr4xnSDxMaL"
   },
   {
     "id": "scholem",
     "name": "Gershom Scholem",
     "file": "scholem.md",
-    "glyph": "✴"
+    "glyph": "✴",
+    "voiceId": "EXAVITQu4vr4xnSDxMaL"
   },
   {
     "id": "moina-mathers",
     "name": "Moina Mathers",
     "file": "moina-mathers.md",
-    "glyph": "✷"
+    "glyph": "✷",
+    "voiceId": "TX3LPaxmHKxFdv7VOQHJ"
   },
   {
     "id": "randolph",
     "name": "Paschal Beverly Randolph",
     "file": "randolph.md",
-    "glyph": "✹"
+    "glyph": "✹",
+    "voiceId": "Xb7hH8MSUJpSbSDYk0k2"
   },
   {
     "id": "bamba",
     "name": "Amadou Bamba",
     "file": "bamba.md",
-    "glyph": "✵"
+    "glyph": "✵",
+    "voiceId": "SAz9YHcvj6GT2YYXdXww"
   },
   {
     "id": "sun-ra",
     "name": "Sun Ra",
     "file": "sun-ra.md",
-    "glyph": "❋"
+    "glyph": "❋",
+    "voiceId": "JBFqnCBsd6RMkjVDRZzb"
   },
   {
     "id": "porete",
     "name": "Marguerite Porete",
     "file": "porete.md",
-    "glyph": "◆"
+    "glyph": "◆",
+    "voiceId": "EXAVITQu4vr4xnSDxMaL"
   },
   {
     "id": "hildegard",
     "name": "Hildegard of Bingen",
     "file": "hildegard.md",
-    "glyph": "◇"
+    "glyph": "◇",
+    "voiceId": "pFZP5JQG7iQjIQuC4Bku"
   },
   {
     "id": "julian",
     "name": "Julian of Norwich",
     "file": "julian.md",
-    "glyph": "▲"
+    "glyph": "▲",
+    "voiceId": "EXAVITQu4vr4xnSDxMaL"
   },
   {
     "id": "jung",
     "name": "Carl Jung",
     "file": "jung.md",
-    "glyph": "▽"
+    "glyph": "▽",
+    "voiceId": "cjVigY5qzO86Huf0OWal"
   },
   {
     "id": "pauli",
     "name": "Wolfgang Pauli",
     "file": "pauli.md",
-    "glyph": "⬟"
+    "glyph": "⬟",
+    "voiceId": "SOYHLrjzK2X1ezoPC6cr"
   },
   {
     "id": "eckhart",
     "name": "Meister Eckhart",
     "file": "eckhart.md",
-    "glyph": "●"
+    "glyph": "●",
+    "voiceId": "SAz9YHcvj6GT2YYXdXww"
   },
   {
     "id": "bohme",
@@ -224,13 +258,15 @@
     "aliases": [
       "Behmen"
     ],
-    "glyph": "🜂"
+    "glyph": "🜂",
+    "voiceId": "pqHfZKP75CvOlQylNhV4"
   },
   {
     "id": "swedenborg",
     "name": "Emanuel Swedenborg",
     "file": "swedenborg.md",
-    "glyph": "⬢"
+    "glyph": "⬢",
+    "voiceId": "onwK4e9ZLuTAKqWW03F9"
   },
   {
     "id": "paracelsus",
@@ -240,7 +276,8 @@
       "Theophrastus",
       "von Hohenheim"
     ],
-    "glyph": "🜍"
+    "glyph": "🜍",
+    "voiceId": "XrExE9yKIg1WjnnlVkGX"
   },
   {
     "id": "gurdjieff",
@@ -249,6 +286,7 @@
     "aliases": [
       "G"
     ],
-    "glyph": "✳"
+    "glyph": "✳",
+    "voiceId": "N2lVS1w4EtoT3dr4eOWO"
   }
 ]
