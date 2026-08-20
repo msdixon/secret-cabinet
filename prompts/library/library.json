@@ -418,5 +418,17 @@
     "members": ["frieda-harris", "crowley"],
     "themes": ["correspondence", "humor", "domestic-life", "alchemy", "magical-practice"],
     "file": "frieda-harris-letters-to-crowley-1939-1944.md"
+  },
+  {
+    "id": "abulafia-sitrei-torah-mafteah-ha-rayon-nations-1274-1280",
+    "title": "The Name of Truth, the Essence of Unity — from Mafteaḥ ha-Ra'ayon and Sitrei Torah",
+    "source": "Mafteaḥ ha-Ra'ayon (opening poem) and Sitrei Torah, commentary on the secrets of Maimonides' Guide of the Perplexed",
+    "date": "1274 and 1280",
+    "author": "abulafia",
+    "translated": true,
+    "license": "cc-by-4.0",
+    "members": ["abulafia"],
+    "themes": ["kabbalah", "divine-name", "universalism", "interfaith", "prophecy", "letter-combination"],
+    "file": "abulafia-sitrei-torah-mafteah-ha-rayon-nations-1274-1280.md"
   }
 ]
