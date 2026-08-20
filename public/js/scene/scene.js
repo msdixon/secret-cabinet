@@ -86,11 +86,173 @@ window.LodgeScene = (function () {
   // this room's scale.
   const SHADOW_MAP_SIZE = 1024;
 
+  // #357: the hearth — the room's most-invoked object, and until now its
+  // thinnest. The fire is named ~14 times across the runtime prose
+  // (`prompts/lodge-context.md`'s opening description and format example,
+  // one of the three stock lull notes in `src/pipeline-lull.js`, and 8
+  // persona files) and was rendered as a single 0.4-diameter emissive
+  // sphere beside a floating PointLight. This builds it as an actual
+  // fireplace, on the same polar wallSpot() convention as the rest of the
+  // #304 dressing.
+  //
+  // HEARTH_ANGLE is chosen for what the *resting* camera sees, not
+  // arbitrarily: CAMERA_DEFAULT_ALPHA is -PI/2, so the camera sits at -Z
+  // looking toward +Z and wall angles near +PI/2 are centre-frame while
+  // everything near -PI/2 is behind the lens. The old hearth light's own
+  // angle was 5PI/4 (atan2(-5,-5)) — squarely behind the camera, which is
+  // why the fire has only ever been visible in the empty state as an
+  // unexplained blown-out pool of light off the left edge. 5PI/8 lands
+  // 22.5 degrees left of centre: comfortably in frame at any plausible
+  // canvas aspect (the default camera's own horizontal half-FOV, driven by
+  // its vertical 0.8rad fov and this canvas's ~2.7:1 aspect, is already
+  // ~48 degrees — verified live via Vector3.Project landing well inside
+  // the canvas bounds, and #358 only widens that further), while staying
+  // off the table's own axis. It's one of the #304 mid-bay slots, so it
+  // sits between pilasters like every other piece of dressing — the
+  // portrait that used to hang there moved out (see PORTRAIT_ANGLES).
+  const HEARTH_ANGLE = (5 * Math.PI) / 8;
+  const HEARTH_WIDTH = 3.2;
+  const HEARTH_DEPTH = 0.9; // how far the chimney breast projects into the room
+  const FIREBOX_WIDTH = 1.9;
+  const FIREBOX_TOP = 1.95;
+  const MANTEL_Y = 2.58;
+  const HEARTH_BACK_RADIUS = WALL_RADIUS - 0.16; // back panel, just inside the wall face
+  const HEARTH_BREAST_RADIUS = HEARTH_BACK_RADIUS - 0.07 - HEARTH_DEPTH / 2;
+  const FIREBOX_RADIUS = HEARTH_BACK_RADIUS - 0.4; // where the fire itself sits
+
+  // The single most delicate number in this file. #294 found that a Babylon
+  // point light with no `range` applies full intensity at any distance, and
+  // fixed it by giving the hearth `range: 11` and raising intensity to 32 to
+  // win the table's brightness back. That worked only because the light was
+  // floating mid-room, 5.9 units clear of the nearest wall — a light with
+  // those numbers placed where a fireplace actually goes blows its own
+  // surround to solid white. (Babylon's StandardMaterial falloff is linear:
+  // attenuation = max(0, 1 - distance/range), so intensity 32 at range 11
+  // still delivers ~30 at point-blank.) The fix is the opposite trade: a
+  // much longer range and a much lower intensity, which flattens the curve
+  // enough that the firebox interior a foot away and the table twelve units
+  // away can both be exposed correctly. Verified live by pixel readback —
+  // see this pass's STATUS.md entry for the measured values.
+  const HEARTH_RANGE = 30;
+  const HEARTH_INTENSITY_BANKED = 3.4;
+  const HEARTH_INTENSITY_LIT = 7.6;
+  // A second, deliberately short-range light just outside the opening: the
+  // main light sits *inside* the firebox, so the surround's room-facing
+  // faces are turned away from it and would otherwise render as an unlit
+  // silhouette. Short range keeps it off the wall to either side.
+  const FIRE_GLOW_RANGE = 4.5;
+  const FIRE_GLOW_INTENSITY_BANKED = 1.1;
+  const FIRE_GLOW_INTENSITY_LIT = 2.8;
+
+  const FLAME_COUNT = 5;
+  const FLAME_HOT = '#ffcf72';
+  const FLAME_MID = '#ff8c2b';
+  const EMBER_HOT = '#ff6a1a';
+  const EMBER_LOW = '#5c1a06';
+  const SOOT = '#0a0806';
+
+  // How the fire reads the meeting. The prose already has it lit, stirred
+  // and waning; the app already knows how far into the evening it is
+  // (passages elapsed), so this costs no model call — it reads state that
+  // exists. Bottoming out at 0.3 rather than 0 because a fire that goes
+  // fully out is a different, sadder room than the one the prose describes:
+  // members keep reaching for it right through a long meeting.
+  const FIRE_BANK_PER_PASSAGE = 0.11;
+  const FIRE_LEVEL_MIN = 0.3;
+  // A stir is a flare, not a reset — it lifts the fire most of the way back
+  // for a few seconds and settles again.
+  const FIRE_STIR_BOOST = 0.55;
+  const FIRE_STIR_MS = 6000;
+
   let sceneRef = null;
   let cameraRef = null;
   let seatMeshes = [];
   let tableMesh = null;
   const portraitTextures = {}; // memberId -> BABYLON.Texture, cached across seat reassignment
+
+  // #357: fire state. fireLevel is the value actually applied to lights/
+  // flames each frame, eased toward fireTargetLevel rather than snapping --
+  // a passage ending should read as the fire settling, not cutting. Reset
+  // to full on every init() (a fresh room starts with a fresh fire);
+  // setPassageCount()/stirFire() (the exposed API, called from app.js as
+  // the meeting progresses) move fireTargetLevel from there.
+  let fireLight = null;
+  let fireGlowLight = null;
+  let flameMeshes = [];
+  let emberMat = null;
+  let fireLevel = 1;
+  let fireTargetLevel = 1;
+  let fireBaseLevel = 1;
+  let fireStirTimer = null;
+  let reducedMotion = false;
+
+  function prefersReducedMotion() {
+    return typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  }
+
+  // How far into the meeting banks the fire down. Passage count, not word
+  // count -- `wordsSpentSoFar` drives arc progression server-side but isn't
+  // sent to the client, while segmentCount already is (app.js tracks it for
+  // branch points and replay). One passage per stock-lull-note-shaped pause
+  // is close enough to the prose's own sense of "the evening wearing on."
+  function passageFireLevel(passageCount) {
+    return Math.max(FIRE_LEVEL_MIN, 1 - passageCount * FIRE_BANK_PER_PASSAGE);
+  }
+
+  // Reads current passage count -> where the fire should settle. Doesn't
+  // interrupt an in-flight stir (stirFire's own timer restores fireBaseLevel
+  // when it expires) so a lull note that both stirs the fire and reports a
+  // new passage count doesn't fight itself.
+  function setPassageCount(passageCount) {
+    if (!sceneRef) return;
+    fireBaseLevel = passageFireLevel(passageCount);
+    if (!fireStirTimer) fireTargetLevel = fireBaseLevel;
+  }
+
+  // #245's lull notes already say "someone stirs the fire" as one of three
+  // stock options; this is what makes that sentence true. A flare toward
+  // (not all the way to) full, held for FIRE_STIR_MS, then eased back to
+  // wherever the passage count says the fire actually is.
+  function stirFire() {
+    if (!sceneRef) return;
+    fireTargetLevel = Math.min(1, fireBaseLevel + FIRE_STIR_BOOST);
+    if (fireStirTimer) clearTimeout(fireStirTimer);
+    fireStirTimer = setTimeout(() => {
+      fireStirTimer = null;
+      fireTargetLevel = fireBaseLevel;
+    }, FIRE_STIR_MS);
+  }
+
+  // Runs once per frame from the render loop, ahead of scene.render(). The
+  // level ease (fireLevel -> fireTargetLevel) is large-scale, deliberate
+  // motion driven by meeting state, not decorative animation, so it runs
+  // regardless of prefers-reduced-motion -- only the per-flame flicker
+  // below is gated on that, per Principle 4 and the precedent #218 set for
+  // the graph's own force simulation.
+  function updateFire() {
+    if (!fireLight) return;
+    fireLevel += (fireTargetLevel - fireLevel) * 0.01;
+
+    fireLight.intensity = HEARTH_INTENSITY_BANKED + (HEARTH_INTENSITY_LIT - HEARTH_INTENSITY_BANKED) * fireLevel;
+    fireGlowLight.intensity =
+      FIRE_GLOW_INTENSITY_BANKED + (FIRE_GLOW_INTENSITY_LIT - FIRE_GLOW_INTENSITY_BANKED) * fireLevel;
+    if (emberMat) {
+      emberMat.emissiveColor = BABYLON.Color3.Lerp(
+        BABYLON.Color3.FromHexString(EMBER_LOW),
+        BABYLON.Color3.FromHexString(EMBER_HOT),
+        fireLevel
+      );
+    }
+
+    const t = performance.now() / 1000;
+    flameMeshes.forEach(f => {
+      const flicker = reducedMotion ? 1 : 0.82 + 0.14 * Math.sin(t * 6.3 + f.phase) + 0.06 * Math.sin(t * 13.1 + f.phase * 2);
+      const h = Math.max(0.05, f.baseHeight * (0.5 + 0.5 * fireLevel) * flicker);
+      f.mesh.scaling.y = h / f.baseHeight;
+      f.mesh.position.y = f.baseY + h / 2;
+      f.mesh.material.emissiveColor = f.baseColor.scale(reducedMotion ? 1 : 0.88 + 0.12 * flicker);
+    });
+  }
 
   // #294: walls + ceiling + a few sconces -- the bounded first art pass
   // named in the issue (walls, ambient lighting, enclosure). Trim/molding
@@ -232,8 +394,14 @@ window.LodgeScene = (function () {
   // tokens) rather than a per-member image -- no ancestor art exists to
   // render here, and an empty gilt frame reads as intentional lodge
   // furnishing rather than a placeholder.
+  //
+  // #357: skips the bay at HEARTH_ANGLE -- that's PORTRAIT_ANGLES[1]
+  // exactly (both PI/8 + PI/2), since the hearth took over that mid-bay
+  // slot. Filtering rather than renumbering keeps every other frame's
+  // angle and mesh name (`portraitFrame-2`, etc.) unchanged.
   function buildPortraitFrames(scene) {
     PORTRAIT_ANGLES.forEach((angle, i) => {
+      if (Math.abs(angle - HEARTH_ANGLE) < 0.001) return;
       const frameSpot = wallSpot(angle, DRESSING_RADIUS);
       const frame = BABYLON.MeshBuilder.CreatePlane(`portraitFrame-${i}`, { width: 0.85, height: 1.05 }, scene);
       frame.position.set(frameSpot.x, 3.2, frameSpot.z);
@@ -353,6 +521,226 @@ window.LodgeScene = (function () {
     buildPilasters(scene);
     buildPortraitFrames(scene);
     buildBookshelves(scene);
+  }
+
+  // #357: the fireplace -- surround geometry, the fire itself, and the two
+  // PointLights that replace the old floating 'hearth' + 'ember' sphere
+  // (see HEARTH_RANGE's comment above for why those old numbers can't just
+  // move here unchanged). No CSG boolean subtract is used to cut a literal
+  // hole -- same approach buildBookshelves' own comment describes avoiding
+  // a solid-box occlusion problem with: layered open geometry (a recessed
+  // soot-dark back panel framed by jambs/lintel that sit proud of the
+  // breast) reads as an opening without one. Sets the fireLight/
+  // fireGlowLight/flameMeshes/emberMat module vars that updateFire() (and
+  // the shadow generator, in init()) address afterward.
+  function buildHearth(scene) {
+    const tangentAngle = HEARTH_ANGLE + Math.PI / 2;
+    const breastFrontRadius = HEARTH_BREAST_RADIUS - HEARTH_DEPTH / 2;
+    const breastHeight = WALL_HEIGHT - 0.6;
+    const jambWidth = 0.22;
+    const lintelHeight = 0.18;
+    // Half-width of the opening the rest of the breast has to leave clear --
+    // jambs sit right at this offset, cheeks start just past it.
+    const openingHalfWidth = FIREBOX_WIDTH / 2 + jambWidth;
+    const openingTop = FIREBOX_TOP + lintelHeight;
+
+    const breastMat = new BABYLON.StandardMaterial('hearthBreastMat', scene);
+    breastMat.diffuseColor = BABYLON.Color3.FromHexString(LODGE_BORDER);
+    breastMat.emissiveColor = BABYLON.Color3.FromHexString(LODGE_AMBER_DIM).scale(0.06);
+    breastMat.specularColor = new BABYLON.Color3(0.04, 0.03, 0.02);
+
+    // Chimney breast -- the projecting mass everything else mounts to, same
+    // box-set-into-the-wall placement as buildBookshelves' back panel. Built
+    // as two side cheeks + a header over the opening, NOT one solid box: an
+    // early version was a single box spanning the full width/height, and
+    // its own front face -- being solid -- occluded the firebox, jambs, and
+    // flame recessed behind it entirely (the camera saw only the breast's
+    // flat face; verified via scene.pick() at the fire's own screen
+    // position hitting 'hearthBreast', not the flame). Same problem
+    // buildBookshelves' own comment describes for a solid carcass, same
+    // fix: leave the opening's footprint clear rather than try to cut it.
+    const cheekWidth = (HEARTH_WIDTH - openingHalfWidth * 2) / 2;
+    [-1, 1].forEach(side => {
+      const spot = wallSpot(HEARTH_ANGLE, HEARTH_BREAST_RADIUS);
+      const offset = side * (openingHalfWidth + cheekWidth / 2);
+      const cheek = BABYLON.MeshBuilder.CreateBox(
+        `hearthCheek-${side}`,
+        { width: cheekWidth, height: breastHeight, depth: HEARTH_DEPTH },
+        scene
+      );
+      cheek.position.set(
+        spot.x + Math.cos(tangentAngle) * offset,
+        breastHeight / 2,
+        spot.z + Math.sin(tangentAngle) * offset
+      );
+      cheek.rotation.y = spot.rotationY;
+      cheek.material = breastMat;
+    });
+    const headerSpot = wallSpot(HEARTH_ANGLE, HEARTH_BREAST_RADIUS);
+    const headerHeight = breastHeight - openingTop;
+    const header = BABYLON.MeshBuilder.CreateBox(
+      'hearthHeader',
+      { width: HEARTH_WIDTH, height: headerHeight, depth: HEARTH_DEPTH },
+      scene
+    );
+    header.position.set(headerSpot.x, openingTop + headerHeight / 2, headerSpot.z);
+    header.rotation.y = headerSpot.rotationY;
+    header.material = breastMat;
+
+    // Firebox back panel -- soot-dark, sitting in the depth the breast's
+    // cheeks/header now leave open. This, not a cut hole, is what reads as
+    // "an opening" once the jambs/lintel frame it and the fire lights it
+    // from in front.
+    const sootSpot = wallSpot(HEARTH_ANGLE, FIREBOX_RADIUS);
+    const sootPanel = BABYLON.MeshBuilder.CreatePlane(
+      'hearthSoot',
+      { width: FIREBOX_WIDTH, height: FIREBOX_TOP },
+      scene
+    );
+    sootPanel.position.set(sootSpot.x, FIREBOX_TOP / 2, sootSpot.z);
+    sootPanel.rotation.y = sootSpot.rotationY;
+    const sootMat = new BABYLON.StandardMaterial('hearthSootMat', scene);
+    sootMat.diffuseColor = BABYLON.Color3.FromHexString(SOOT);
+    sootMat.emissiveColor = BABYLON.Color3.FromHexString(SOOT).scale(0.3);
+    sootMat.specularColor = new BABYLON.Color3(0, 0, 0);
+    sootMat.backFaceCulling = false;
+    sootPanel.material = sootMat;
+
+    // Jambs + lintel -- the frame around the opening, sitting just proud of
+    // the breast's own front face (not coplanar with it) so they read as
+    // applied trim and don't z-fight.
+    const jambRadius = breastFrontRadius - 0.02;
+    const jambMat = new BABYLON.StandardMaterial('hearthJambMat', scene);
+    jambMat.diffuseColor = BABYLON.Color3.FromHexString(LODGE_AMBER_DIM);
+    jambMat.emissiveColor = BABYLON.Color3.FromHexString(LODGE_AMBER_DIM).scale(0.1);
+    jambMat.specularColor = new BABYLON.Color3(0.05, 0.04, 0.02);
+
+    [-1, 1].forEach(side => {
+      const spot = wallSpot(HEARTH_ANGLE, jambRadius);
+      const offset = side * (FIREBOX_WIDTH / 2 + jambWidth / 2);
+      const jamb = BABYLON.MeshBuilder.CreateBox(
+        `hearthJamb-${side}`,
+        { width: jambWidth, height: FIREBOX_TOP, depth: 0.3 },
+        scene
+      );
+      jamb.position.set(
+        spot.x + Math.cos(tangentAngle) * offset,
+        FIREBOX_TOP / 2,
+        spot.z + Math.sin(tangentAngle) * offset
+      );
+      jamb.rotation.y = spot.rotationY;
+      jamb.material = jambMat;
+    });
+
+    const lintelSpot = wallSpot(HEARTH_ANGLE, jambRadius);
+    const lintel = BABYLON.MeshBuilder.CreateBox(
+      'hearthLintel',
+      { width: FIREBOX_WIDTH + jambWidth * 2, height: lintelHeight, depth: 0.3 },
+      scene
+    );
+    lintel.position.set(lintelSpot.x, FIREBOX_TOP + lintelHeight / 2, lintelSpot.z);
+    lintel.rotation.y = lintelSpot.rotationY;
+    lintel.material = jambMat;
+
+    // Mantel shelf -- the dorian-frame echo the issue asks for, projecting
+    // further into the room than the jambs for a real overhang silhouette.
+    const mantelRadius = jambRadius - 0.25;
+    const mantelSpot = wallSpot(HEARTH_ANGLE, mantelRadius);
+    const mantel = BABYLON.MeshBuilder.CreateBox(
+      'hearthMantel',
+      { width: HEARTH_WIDTH, height: 0.14, depth: HEARTH_DEPTH + 0.4 },
+      scene
+    );
+    mantel.position.set(mantelSpot.x, MANTEL_Y, mantelSpot.z);
+    mantel.rotation.y = mantelSpot.rotationY;
+    const mantelMat = new BABYLON.StandardMaterial('hearthMantelMat', scene);
+    mantelMat.diffuseColor = BABYLON.Color3.FromHexString(LODGE_GOLD);
+    mantelMat.emissiveColor = BABYLON.Color3.FromHexString(LODGE_GOLD).scale(0.18);
+    mantelMat.specularColor = new BABYLON.Color3(0.1, 0.08, 0.04);
+    mantel.material = mantelMat;
+
+    // Hearth stone -- a low slab flush with the floor, projecting past the
+    // jambs into the room, the one piece of the surround that isn't
+    // wall-mounted -- what the fire itself sits on.
+    const stoneRadius = jambRadius + 0.3;
+    const stoneSpot = wallSpot(HEARTH_ANGLE, stoneRadius);
+    const stone = BABYLON.MeshBuilder.CreateBox(
+      'hearthStone',
+      { width: HEARTH_WIDTH - 0.4, height: 0.08, depth: 0.9 },
+      scene
+    );
+    stone.position.set(stoneSpot.x, 0.04, stoneSpot.z);
+    stone.rotation.y = stoneSpot.rotationY;
+    const stoneMat = new BABYLON.StandardMaterial('hearthStoneMat', scene);
+    stoneMat.diffuseColor = BABYLON.Color3.FromHexString(LODGE_BORDER);
+    stoneMat.specularColor = new BABYLON.Color3(0.06, 0.05, 0.03);
+    stone.material = stoneMat;
+
+    // The fire itself -- tapered emissive cones for flame (updateFire()
+    // drives their height/brightness every frame), an ember bed glowing
+    // beneath them. Built just in front of the soot panel, inside the jamb
+    // opening.
+    const fireSpot = wallSpot(HEARTH_ANGLE, FIREBOX_RADIUS - 0.15);
+    flameMeshes = [];
+    for (let i = 0; i < FLAME_COUNT; i++) {
+      const spread = -0.55 + i * (1.1 / (FLAME_COUNT - 1));
+      const baseHeight = 0.5 + (i % 2) * 0.18;
+      const baseY = 0.1;
+      const cone = BABYLON.MeshBuilder.CreateCylinder(
+        `flame-${i}`,
+        {
+          diameterBottom: 0.24 - Math.abs(spread) * 0.08,
+          diameterTop: 0.02,
+          height: baseHeight,
+          tessellation: 8,
+        },
+        scene
+      );
+      cone.position.set(
+        fireSpot.x + Math.cos(tangentAngle) * spread,
+        baseY + baseHeight / 2,
+        fireSpot.z + Math.sin(tangentAngle) * spread
+      );
+      cone.rotation.y = fireSpot.rotationY;
+      const baseColor = BABYLON.Color3.FromHexString(i % 2 === 0 ? FLAME_HOT : FLAME_MID);
+      const mat = new BABYLON.StandardMaterial(`flameMat-${i}`, scene);
+      mat.emissiveColor = baseColor;
+      mat.disableLighting = true;
+      mat.backFaceCulling = false;
+      mat.alpha = 0.92;
+      cone.material = mat;
+      flameMeshes.push({ mesh: cone, baseHeight, baseY, phase: i * 1.7, baseColor });
+    }
+
+    emberMat = new BABYLON.StandardMaterial('emberBedMat', scene);
+    emberMat.emissiveColor = BABYLON.Color3.FromHexString(EMBER_HOT);
+    emberMat.disableLighting = true;
+    const emberBed = BABYLON.MeshBuilder.CreateBox(
+      'emberBed',
+      { width: FIREBOX_WIDTH - 0.3, height: 0.08, depth: 0.4 },
+      scene
+    );
+    emberBed.position.set(fireSpot.x, 0.08, fireSpot.z);
+    emberBed.rotation.y = fireSpot.rotationY;
+    emberBed.material = emberMat;
+
+    // The two lights. fireLight sits inside the firebox and does the
+    // room's actual illumination (replaces the old floating 'hearth'
+    // PointLight); fireGlowLight is the short-range fill that keeps the
+    // jambs/mantel lit from the front -- see FIRE_GLOW_RANGE's comment
+    // above for why a second light is needed at all.
+    fireLight = new BABYLON.PointLight('fireLight', new BABYLON.Vector3(fireSpot.x, 0.5, fireSpot.z), scene);
+    fireLight.diffuse = BABYLON.Color3.FromHexString(LODGE_FIRE);
+    fireLight.specular = BABYLON.Color3.FromHexString(LODGE_AMBER);
+    fireLight.range = HEARTH_RANGE;
+    fireLight.intensity = HEARTH_INTENSITY_LIT;
+
+    const glowSpot = wallSpot(HEARTH_ANGLE, FIREBOX_RADIUS - 0.6);
+    fireGlowLight = new BABYLON.PointLight('fireGlowLight', new BABYLON.Vector3(glowSpot.x, 0.9, glowSpot.z), scene);
+    fireGlowLight.diffuse = BABYLON.Color3.FromHexString(LODGE_GOLD);
+    fireGlowLight.specular = BABYLON.Color3.FromHexString(LODGE_GOLD);
+    fireGlowLight.range = FIRE_GLOW_RANGE;
+    fireGlowLight.intensity = FIRE_GLOW_INTENSITY_LIT;
   }
 
   function buildTableAndSeats(scene) {
@@ -642,34 +1030,6 @@ window.LodgeScene = (function () {
       ambient.diffuse = new BABYLON.Color3(0.55, 0.46, 0.36);
       ambient.intensity = 0.5;
 
-      // Positioned off to the side, like a hearth against a room wall, not
-      // at the origin — the table now occupies center stage (Phase 1).
-      const hearthPos = new BABYLON.Vector3(-5, 1.2, -5);
-      const hearth = new BABYLON.PointLight('hearth', hearthPos, scene);
-      hearth.diffuse = BABYLON.Color3.FromHexString(LODGE_FIRE);
-      hearth.specular = BABYLON.Color3.FromHexString(LODGE_AMBER);
-      // #294: same unbounded-range problem as the sconces (see that
-      // comment) -- with no range set, this light's original intensity
-      // (18) applied at full, undimmed strength regardless of distance,
-      // which the enclosing wall now catches and washes out to solid
-      // white. Setting a range switches on real inverse-square falloff,
-      // which also dims everything already lit by this light, including
-      // the table/seats -- intensity raised from 18 to 32 to bring the
-      // table back to close to its pre-wall brightness (verified via
-      // pixel readback: table center pixel ~228,109,21 now vs. ~228,125,24
-      // before, wall stays a dim ~17,13,8 instead of blown out).
-      hearth.intensity = 32;
-      hearth.range = 11;
-
-      // Small emissive core so the hearth reads as a visible light source,
-      // not just a lighting contribution on the floor.
-      const ember = BABYLON.MeshBuilder.CreateSphere('ember', { diameter: 0.4 }, scene);
-      ember.position = new BABYLON.Vector3(-5, 0.3, -5);
-      const emberMat = new BABYLON.StandardMaterial('emberMat', scene);
-      emberMat.emissiveColor = BABYLON.Color3.FromHexString(LODGE_GOLD);
-      emberMat.disableLighting = true;
-      ember.material = emberMat;
-
       const floor = BABYLON.MeshBuilder.CreateGround('floor', { width: FLOOR_SIZE, height: FLOOR_SIZE }, scene);
       const floorMat = new BABYLON.StandardMaterial('floorMat', scene);
       floorMat.diffuseColor = BABYLON.Color3.FromHexString(LODGE_BORDER);
@@ -678,8 +1038,18 @@ window.LodgeScene = (function () {
 
       buildWalls(scene);
       buildWallDressing(scene);
+      buildHearth(scene);
       buildTableAndSeats(scene);
       sceneRef = scene;
+
+      // #357: fresh fire state per init -- a newly opened room starts lit,
+      // not mid-way through wherever a previous scene instance left off.
+      reducedMotion = prefersReducedMotion();
+      fireLevel = 1;
+      fireTargetLevel = 1;
+      fireBaseLevel = 1;
+      if (fireStirTimer) clearTimeout(fireStirTimer);
+      fireStirTimer = null;
 
       // #305: hearth-only shadows -- the issue's own steer ("the hearth
       // alone is probably enough for the effect and cheaper than adding
@@ -688,8 +1058,10 @@ window.LodgeScene = (function () {
       // shadow map for a directional/spot light), already the most
       // expensive shadow type available; a generator per sconce would
       // triple that cost for a room this small, so the sconces stay
-      // shadowless fill light only.
-      const shadowGenerator = new BABYLON.ShadowGenerator(SHADOW_MAP_SIZE, hearth);
+      // shadowless fill light only. #357 moved the hearth from a floating
+      // PointLight to fireLight, seated inside the new firebox geometry --
+      // same shadow-caster role, new source position.
+      const shadowGenerator = new BABYLON.ShadowGenerator(SHADOW_MAP_SIZE, fireLight);
       // Plain exponential map, not the blurred variant -- blurring costs an
       // extra pass per cube face (x6), and softened edges aren't needed to
       // read as "shadow" at this room's scale and camera distance.
@@ -707,7 +1079,10 @@ window.LodgeScene = (function () {
       // #232: no continuous auto-rotate — the camera holds the resting shot
       // and only moves when frameCamera() (via setSpeaking) swings it to
       // whoever's talking, easing back here once no one is.
-      engine.runRenderLoop(() => scene.render());
+      engine.runRenderLoop(() => {
+        updateFire();
+        scene.render();
+      });
 
       const ro = new ResizeObserver(() => engine.resize());
       ro.observe(canvas);
@@ -719,5 +1094,5 @@ window.LodgeScene = (function () {
     }
   }
 
-  return { init, updateSeats, setSpeaking, getSeatScreenPosition };
+  return { init, updateSeats, setSpeaking, getSeatScreenPosition, setPassageCount, stirFire };
 })();

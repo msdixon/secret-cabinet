@@ -14,6 +14,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { registerConveneRoutes } = require('../src/routes/convene.js');
+const record = require('../public/js/record.js');
+const { turnsSoFar } = require('../src/lodge-prompts.js');
 
 function fakeApp() {
   const routes = {};
@@ -94,18 +96,22 @@ function makeDeps(overrides = {}) {
     // route's only job here is handing runRound the ledger it builds from
     // the stored `beats`, which a stub returning {} could not distinguish
     // from not calling it at all.
-    turnsSoFar: require('../src/lodge-prompts.js').turnsSoFar,
+    turnsSoFar,
     defaultPoolSize: 2,
     deriveMeetingNote: () => null,
     playerDirectorPool: members => members,
     resolvePlayerName: (mode, id, name) => name || null,
-    buildPrecedingTurn: (speakerName, playerTurn) => (playerTurn ? { speakerName, text: playerTurn } : null),
+    // #354: real resolvePlayerSpeakerId is roster-free pure logic (see
+    // lodge-prompts.js); this stub mirrors its two real branches without
+    // pulling in record.js, same spirit as the other stand-ins here.
+    resolvePlayerSpeakerId: (mode, id) => (mode === 'member' ? id : mode === 'custom' ? 'player:custom' : null),
+    buildPrecedingTurn: (speakerName, playerTurn, memberId) =>
+      playerTurn ? { speakerName, memberId, text: playerTurn } : null,
     interjectSpeakerCount: 3,
     makeSessionId: entry => `session-${entry.slice(0, 5)}`,
     saveSession: session => savedSessions.set(session.id, session),
     loadSession: id => savedSessions.get(id) || null,
     saveResidueUpdates: updates => savedResidue.push(updates),
-    formatTranscriptText: text => text,
     composeSegmentText: segment =>
       segment.endedBy ? `\n${segment.text}\n\n— ${segment.label} —\n` : `\n— ${segment.label} —\n\n${segment.text}\n`,
     buildTranscriptHeader: (entry, members, date) => `HEADER(${date})\n${entry}\n`,
@@ -371,11 +377,41 @@ test('POST /api/interject', async t => {
     assert.match(saved.transcriptText, /What of silence\?/);
   });
 
-  // #352: an interjection never writes its own turns back to
-  // `session.rounds` (one of the holes #354 closes), but it still reads the
-  // ledger — a member silent all evening is exactly who should be likeliest
-  // to answer the presence.
-  await t.test('reads the turn ledger too, even though its own turns never reach the record', async () => {
+  // #354 item 1: an interjection used to leave no trace in session.rounds at
+  // all -- prose appended straight to transcriptText and nothing else. It's
+  // a real segment now, with the presence's own words as its first beat.
+  await t.test('pushes a real interjection segment onto session.rounds, not just prose (#354)', async () => {
+    const app = fakeApp();
+    const deps = makeDeps();
+    registerConveneRoutes(app, deps);
+    deps.savedSessions.set('s1', {
+      id: 's1',
+      members: ['crowley', 'jung'],
+      conversationHistory: [],
+      rounds: [{ label: 'First Movement', text: 'r0', endedBy: 'lull' }],
+      transcriptText: 'HEADER\n',
+      generationMetrics: [],
+      disposition: {},
+    });
+    const res = fakeSSERes();
+    await app.routes['POST /api/interject'](fakeReq({ sessionId: 's1', text: 'What of silence?' }), res);
+    const saved = deps.savedSessions.get('s1');
+    assert.equal(saved.rounds.length, 2);
+    const segment = saved.rounds[1];
+    assert.equal(segment.kind, record.SEGMENT_KIND_INTERJECTION);
+    assert.equal(segment.label, 'A Presence Passes Through');
+    assert.equal(segment.endedBy, 'budget');
+    assert.equal(segment.beats[0].memberId, record.PRESENCE_SPEAKER_ID);
+    assert.equal(segment.beats[0].text, 'What of silence?');
+    // The room's own reply beats (from the runRound stub) follow the
+    // presence's own turn.
+    assert.deepEqual(segment.beats[1], { memberId: 'crowley', text: 'hello world' });
+    assert.match(segment.text, /What of silence\?/);
+  });
+
+  // #352: reads the meeting-level ledger too, built from session.rounds the
+  // same way /api/round builds it.
+  await t.test('reads the turn ledger, built from the stored beats, before generating its reply', async () => {
     const app = fakeApp();
     let seen;
     const deps = makeDeps({
@@ -396,6 +432,32 @@ test('POST /api/interject', async t => {
     });
     await app.routes['POST /api/interject'](fakeReq({ sessionId: 's1', text: 'hello' }), fakeSSERes());
     assert.deepEqual(seen, { jung: 2 });
+  });
+
+  // #352 + #354 together: since #354 landed, an interjection's own turns are
+  // no longer invisible to the ledger — they round-trip through the same
+  // `session.rounds`/`beats` path a passage's turns always have. This is the
+  // scope-note callout in the PR body made concrete: the thing it flagged as
+  // a future fix already happened by the time this merged.
+  await t.test("a prior interjection's own beats count toward the ledger the next time it's built (#354 round-trip)", () => {
+    const priorRounds = [
+      {
+        kind: record.SEGMENT_KIND_INTERJECTION,
+        text: 'r0',
+        beats: [
+          { memberId: record.PRESENCE_SPEAKER_ID, speakerName: record.PRESENCE_SPEAKER_NAME, text: 'a question' },
+          { memberId: 'crowley', text: 'an answer' },
+        ],
+        endedBy: 'budget',
+      },
+    ];
+    // The presence gets a key too — turnsSoFar counts every beat with a
+    // memberId, sentinel or roster — but it is inert everywhere downstream:
+    // record.PRESENCE_SPEAKER_ID never appears in a director's candidate
+    // pool, so neither pickNextSpeaker's under-heard boost nor the
+    // director's "TURNS TAKEN TONIGHT" block (which looks up by present
+    // members' own roster ids) ever reads that key.
+    assert.deepEqual(turnsSoFar(priorRounds), { [record.PRESENCE_SPEAKER_ID]: 1, crowley: 1 });
   });
 });
 

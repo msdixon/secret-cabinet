@@ -56,6 +56,7 @@ const {
   pickStockLullNote,
   resolveLullNote,
 } = require('../src/pipeline.js');
+const record = require('../public/js/record.js');
 
 // #352's ledger lives in lodge-prompts.js (see its own comment for why) but
 // is exercised here too — the distribution test below is the only place the
@@ -2012,7 +2013,35 @@ test('runRound — passage end-causes and beats (#244)', async t => {
     }
   );
 
-  await t.test("includes the player's preceding turn as a beat with memberId null", async () => {
+  await t.test("includes the player's preceding turn as a beat under a stable identity (#354)", async () => {
+    const client = fakePassageClient({ windingDownOnConsult: [true] });
+    const result = await runRound({
+      client,
+      model: 'test-model',
+      lodgeContext: LODGE,
+      ROSTER: SINGLE_MEMBER_ROSTER,
+      loadMemberFile,
+      presentMemberIds: ['crowley'],
+      artifact: null,
+      notes: {},
+      roundPrompt: 'Opening prompt',
+      conversationHistory: [],
+      speakerCount: 1,
+      round: 0,
+      disposition: {},
+      // The caller (server.js/lodge-prompts.resolvePlayerSpeakerId) resolves
+      // the real memberId before runRound ever sees precedingTurn — here a
+      // custom-name player, so the non-roster sentinel.
+      precedingTurn: { speakerName: 'A Visitor', memberId: record.PLAYER_SPEAKER_ID, text: 'I have a question.' },
+    });
+    assert.deepEqual(result.beats[0], {
+      memberId: record.PLAYER_SPEAKER_ID,
+      speakerName: 'A Visitor',
+      text: 'I have a question.',
+    });
+  });
+
+  await t.test('a precedingTurn with no memberId falls back to the non-roster sentinel, not null (#354)', async () => {
     const client = fakePassageClient({ windingDownOnConsult: [true] });
     const result = await runRound({
       client,
@@ -2030,10 +2059,10 @@ test('runRound — passage end-causes and beats (#244)', async t => {
       disposition: {},
       precedingTurn: { speakerName: 'A Visitor', text: 'I have a question.' },
     });
-    assert.deepEqual(result.beats[0], { memberId: null, text: 'I have a question.' });
+    assert.equal(result.beats[0].memberId, record.PLAYER_SPEAKER_ID);
   });
 
-  await t.test('excludes a failed speaker turn from beats but still ends the passage cleanly', async () => {
+  await t.test('records a failed speaker turn as a beat with no text rather than dropping it (#354)', async () => {
     const client = fakePassageClient({ windingDownOnConsult: [false, true] });
     let streamCalls = 0;
     const originalStream = client.messages.stream;
@@ -2070,10 +2099,18 @@ test('runRound — passage end-causes and beats (#244)', async t => {
       disposition: {},
     });
     // Two beats were attempted (spokenCounts still credits the failed one,
-    // triggering the re-consult that ends the passage via lull), but only
-    // the surviving, successful one is in `beats`.
-    assert.equal(result.beats.length, 1);
-    assert.equal(result.beats[0].text, 'A turn.');
+    // triggering the re-consult that ends the passage via lull): the failed
+    // attempt first, recorded with no text and a failure marker rather than
+    // silently omitted, then the surviving, successful one.
+    assert.equal(result.beats.length, 2);
+    assert.equal(result.beats[0].memberId, 'crowley');
+    assert.equal(result.beats[0].text, '');
+    assert.equal(result.beats[0].failed, true);
+    assert.ok(result.beats[0].error);
+    assert.equal(result.beats[1].text, 'A turn.');
+    assert.equal(result.beats[1].failed, undefined);
+    // The failed attempt contributed no text to the rolled-up passage either.
     assert.ok(result.fullRoundText.length > 0);
+    assert.ok(!result.fullRoundText.includes('undefined'));
   });
 });

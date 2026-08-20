@@ -181,36 +181,38 @@ function countWords(text) {
 
 // ── Voice-register exemplar (#187) ──────────────────────────────────────────
 //
-// The library (#35a) holds a verified primary-source excerpt for 21 of the 33
-// roster members, and until now that text was read only by citation
+// The library (#35a) holds a verified primary-source excerpt authored by a
+// roster member, and until #187 that text was read only by citation
 // verification (#36/#153) — never by the member whose prose it is. Each
 // member's voice therefore rested entirely on their character file's
 // *description* of a register rather than on evidence of one. This injects
 // a trimmed slice of a member's own writing into their speaker prompt as an
 // exemplar of how they actually sound on the page.
 //
-// The 12 members with no library entry of their own get nothing extra and
-// behave exactly as before — the voice doc's description alone. That is the
+// Coverage was 21 of 33 roster members when this shipped; #316's curation
+// track has since taken it to 36 of 38 (measured 2026-08-20). The remaining
+// gap is Corbin and Sun Ra, and only those two — they get nothing extra and
+// behave exactly as before, on the voice doc's description alone. That is the
 // intended degradation, not a gap to paper over: a member is only ever shown
 // text they actually wrote.
 //
-// Twelve, not the ten hard passes STATUS.md's 2026-08-07 entry names. Library
-// *coverage* counts a member as covered if they appear in an entry's
-// `members` list at all, which is the right measure for the graph and for
-// citation matching but the wrong one here: Pamela Colman Smith is listed on
-// Waite's 1911 preface and Corbin on Jung's 1916 text because those entries
-// concern them, not because they wrote a word of them. Handing Waite's prose
-// to Pixie as "how you actually write" would be a fabrication of exactly the
-// kind this project's citation work exists to prevent — hence the explicit
-// `author` field in library.json (added by this change) rather than a reuse
-// of `members`.
+// The gap is measured on `author`, not on library *coverage*, which counts a
+// member as covered if they appear in an entry's `members` list at all. That
+// is the right measure for the graph and for citation matching but the wrong
+// one here: Pamela Colman Smith is listed on Waite's 1911 preface and Corbin
+// on Jung's 1916 text because those entries concern them, not because they
+// wrote a word of them. Handing Waite's prose to Pixie as "how you actually
+// write" would be a fabrication of exactly the kind this project's citation
+// work exists to prevent — hence the explicit `author` field in library.json
+// (added by #187) rather than a reuse of `members`.
 
 // A few hundred words, per the issue — enough to carry a cadence, cheap
 // enough to pay per speaker call (input tokens, uncached until #190). Sized
-// against the real corpus: 16 of 21 entries are already under it and pass
-// through whole; it only bites on the five long ones (Moina Mathers 584
-// words, Porete 434, Dion Fortune 406, Lévi 302, Hildegard 301). The whole
-// section costs ~550 input tokens per beat when present.
+// against the real corpus and still holding as it grows: 30 of the 36
+// authored entries pass through whole, and it only bites on the six long
+// ones (Moina Mathers 584 words, Porete 434, Dion Fortune 406, Catherine
+// Blake 358, Lévi 302, Hildegard 301). The whole section costs ~550 input
+// tokens per beat when present.
 const VOICE_EXEMPLAR_WORD_BUDGET = 300;
 
 // Trims from the top of the excerpt on the largest natural boundary that
@@ -269,7 +271,7 @@ function buildVoiceExemplarSection(exemplar) {
   if (exemplar.source && !exemplar.title?.includes(exemplar.source)) parts.push(exemplar.source);
   parts.push(exemplar.date);
   const provenance = parts.filter(Boolean).join(' — ');
-  // Most of the corpus (12 of 21) is in translation, so for over half these
+  // Most of the corpus (21 of 36) is in translation, so for over half these
   // members the specific English words are a translator's choice, not
   // theirs. Naming that keeps the model from adopting Rosenthal's or Peers's
   // vocabulary as Ibn Khaldun's or Teresa's own.

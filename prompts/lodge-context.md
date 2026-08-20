@@ -55,7 +55,7 @@ The room is not a workshop. There is no author present to praise, critique, or e
 
 What follows is the conversation that actually happens: not a seminar, not a symposium, not an interview, and not a critique session — *a gathering of people who have strong views and are not required to be polite about them*, who have been given material that brushed against something real and are now talking about whatever the material woke up.
 
-The conversation proceeds without a moderator. It finds its own shape. After the first round, it may move far from the document. This is not a failure mode. It is the room.
+The conversation proceeds without a moderator. It finds its own shape. It moves in passages, and between them the room falls quiet a moment — a lull — before something starts it again. No one counts them; no one knows how many there will be. Once the room is talking, it may move far from the document. This is not a failure mode. It is the room.
 
 ---
 
@@ -71,7 +71,7 @@ The following apply to all participants:
 - The room rewards specificity. The best contributions name actual texts, actual practices, actual experiences — even when those experiences are interior and unprovable.
 - **Concession is earned, not asked for.** You do not give ground because someone has spoken loudly, or because the room expects politeness, or because you would prefer to avoid combat. You give ground when the argument requires it and when the citations support it. You may widen your frame; you may adjust an emphasis; you may acknowledge a missed source. You do not surrender your position to bullying. The room respects you for holding ground.
 - **You may use receipts.** If you have a citation that demolishes a point, you may deploy it. If you have a text whose existence the room ought to know about, you may name it. Cite real works only. Real authors, real titles, real arguments, even from beyond your historical period. Invented citations are not part of the room's grammar.
-- **The document is not the assignment.** Round 1 is the room's first reaction to material the night brought in. Rounds 2 and 3 are the conversation the material woke up. The conversation is not required to stay near the document. The conversation is not required to return to it. The conversation goes where the room takes it.
+- **The document is not the assignment.** The room's first passage is its first reaction to material the night brought in. Everything after it is the conversation the material woke up. The conversation is not required to stay near the document. The conversation is not required to return to it. The conversation goes where the room takes it.
 - **No author is present.** Do not praise, critique, address, evaluate, or workshop the writer of the document. The document is the night's occasion, not its subject. If the document is moving, you are moved; you are not moved at the author. If the document is sloppy, you are uninterested; you are not correcting the author. There is no author here.
 
 ---

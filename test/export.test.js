@@ -17,11 +17,13 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { loadPublicModule, assertIdsExistInIndexHtml } = require('./helpers/dom.js');
+const record = require('../public/js/record.js');
 
 const FIXTURE = `
   <div id="transcript-content"></div>
   <button id="export-scholarly-btn"></button>
   <span id="export-journal-name"></span>
+  <span id="export-status"></span>
   <input id="ulysses-group" />
   <input id="ulysses-group-id" />
   <input id="obsidian-vault" />
@@ -56,14 +58,20 @@ function makeCore(overrides = {}) {
   };
 }
 
-function boot(t, { core = makeCore(), bodyHtml = FIXTURE } = {}) {
+function boot(t, { core = makeCore(), bodyHtml = FIXTURE, fetchImpl } = {}) {
   const loaded = loadPublicModule('export.js', bodyHtml);
   t.after(loaded.cleanup);
+  if (fetchImpl) loaded.window.fetch = fetchImpl;
   loaded.module.configure({
     getCore: () => core,
     setCurrentEntry: () => {},
     setCurrentJournal: () => {},
     setCurrentSourceSessionId: () => {},
+    setStatus: () => {},
+    // #354: the real implementations, not stand-ins -- the honesty check
+    // exportScholarly's own tests exercise is exactly this pair.
+    recordCompleteness: record.recordCompleteness,
+    recordCompletenessNote: record.recordCompletenessNote,
   });
   return loaded;
 }
@@ -184,6 +192,58 @@ test('updateScholarlyExportButton', async t => {
     addEntry(document, { speaker: 'Crowley', text: 'The book is not the point.', note: 'a gloss' });
     Export.updateScholarlyExportButton();
     assert.equal(document.getElementById('export-scholarly-btn').disabled, false);
+  });
+});
+
+// #354 item 4: pre-#244 sessions have no `beats` at all, and this export is
+// exactly the "reliably produce a record of itself as a bibliographic
+// source" claim -- so a session that can't back that claim says so.
+test('exportScholarly', async t => {
+  function captureDownload(window, document) {
+    window.URL.createObjectURL = blob => {
+      window.__capturedBlob = blob;
+      return 'blob:fake';
+    };
+    window.URL.revokeObjectURL = () => {};
+    const origCreateElement = document.createElement.bind(document);
+    document.createElement = tag => {
+      const el = origCreateElement(tag);
+      if (tag === 'a') el.click = () => {};
+      return el;
+    };
+  }
+
+  await t.test('a fully post-#244 session (beats on every segment) prints no completeness caveat', async t2 => {
+    const { window, document, module: Export } = boot(t2, {
+      fetchImpl: () =>
+        Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({ rounds: [{ beats: [{ memberId: 'crowley', text: 'a' }] }], citationFlags: [] }),
+        }),
+    });
+    captureDownload(window, document);
+    await Export.exportScholarly();
+    const text = await window.__capturedBlob.text();
+    assert.doesNotMatch(text, /Turn-level record/);
+  });
+
+  await t.test('a session with any pre-#244 segment (no beats array) prints the caveat before the Bibliography', async t2 => {
+    const { window, document, module: Export } = boot(t2, {
+      fetchImpl: () =>
+        Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ rounds: [{ label: 'First Movement', text: 'x' }], citationFlags: [] }),
+        }),
+    });
+    captureDownload(window, document);
+    await Export.exportScholarly();
+    const text = await window.__capturedBlob.text();
+    assert.match(text, /Turn-level record: incomplete/);
+    assert.ok(
+      text.indexOf('Turn-level record') < text.indexOf('## Bibliography'),
+      'the caveat reads before the Bibliography it qualifies'
+    );
   });
 });
 

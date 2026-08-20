@@ -248,10 +248,6 @@ function renderReadingRoomPage(session) {
   return readingRoom.renderReadingRoomPage(session, ROSTER);
 }
 
-function formatTranscriptText(text) {
-  return transcriptFormat.formatTranscriptText(text, ROSTER);
-}
-
 function composeSegmentText(segment) {
   return transcriptFormat.composeSegmentText(segment, ROSTER);
 }
@@ -302,8 +298,8 @@ function resolvePlayerName(playerMode, playerMemberId, playerName) {
   return lodgePrompts.resolvePlayerName(playerMode, playerMemberId, playerName, ROSTER);
 }
 
-function buildPrecedingTurn(speakerName, playerTurn) {
-  return lodgePrompts.buildPrecedingTurn(speakerName, playerTurn, stripInternalBlankLines);
+function buildPrecedingTurn(speakerName, playerTurn, memberId) {
+  return lodgePrompts.buildPrecedingTurn(speakerName, playerTurn, stripInternalBlankLines, memberId);
 }
 
 // ─── Library / graph path constants ──────────────────────────────────────────
@@ -483,12 +479,12 @@ registerConveneRoutes(app, {
   playerDirectorPool,
   resolvePlayerName,
   buildPrecedingTurn,
+  resolvePlayerSpeakerId: lodgePrompts.resolvePlayerSpeakerId,
   interjectSpeakerCount: lodgePrompts.INTERJECT_SPEAKER_COUNT,
   makeSessionId,
   saveSession,
   loadSession,
   saveResidueUpdates,
-  formatTranscriptText,
   composeSegmentText,
   buildTranscriptHeader,
   isLocal: IS_LOCAL,

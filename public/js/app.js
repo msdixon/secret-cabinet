@@ -282,6 +282,17 @@ function addRoundHeader(label, roundIndex = null) {
 //
 // The note is director-authored (or a stock line the server picked), so unlike
 // the fixed round labels it replaces it's model output — escape it.
+//
+// #357: also the single choke point every lull note passes through --live
+// convene (runLullLoop), stirRoom, and sessions.js's restoreSession replay
+// all call this -- so it's where the 3D fire reacts to the meeting's own
+// state instead of app.js reaching into LodgeScene from three places.
+// segmentIndex is already the established per-round ordinal (branch points
+// key off it too), so segmentIndex + 1 is "how many passages have happened
+// so far" with no separate counter to keep in sync; the stock lull note is
+// literally "Someone stirs the fire" (src/pipeline-lull.js), and a
+// director-written note can say the same thing in its own words, so this
+// matches on content rather than hard-coding that one string.
 function addLullDivider(note, segmentIndex = null) {
   const c = document.getElementById('transcript-content');
   const el = document.createElement('div');
@@ -290,6 +301,8 @@ function addLullDivider(note, segmentIndex = null) {
   c.appendChild(el);
   transcriptText += `\n\n— ${note} —\n\n`;
   if (segmentIndex !== null) el.dataset.segment = segmentIndex;
+  window.LodgeScene?.setPassageCount(segmentIndex !== null ? segmentIndex + 1 : segmentCount);
+  if (/\bstir\w*\b/i.test(note) && /\bfire\b/i.test(note)) window.LodgeScene?.stirFire();
   return el;
 }
 
@@ -875,6 +888,7 @@ async function convene() {
   currentSessionId = null;
   segmentCount = 0;
   sessionDate = new Date().toISOString().split('T')[0];
+  window.LodgeScene?.setPassageCount(0);
 
   // Re-enable the "Play as" controls in case the last thing shown was a
   // restored (read-only) session — restorePlayAsControlDisplay() disables them.
@@ -1410,6 +1424,9 @@ function witnessDeps() {
     // rather than read directly off window.Beats, per this module's own
     // "everything comes in as deps" convention.
     splitIntoBeats: window.Beats.splitIntoBeats,
+    // #354: same convention, for the shared label-placement rule -- see
+    // sessionsDeps' identical injection.
+    labelOpensSegment: window.Record.labelOpensSegment,
   };
 }
 
@@ -1589,6 +1606,12 @@ function exportDeps() {
     // asynchronously inside export.js, so there is no DOM event app.js could
     // listen for. This is the notification that a document is now readable.
     onDocumentReady: autoProposeCast,
+    // #354: the scholarly export's honesty check -- whether the session it's
+    // exporting has a complete turn-level record, and the note to print when
+    // it doesn't. Injected rather than read off window.Record, per this
+    // module's own deps convention.
+    recordCompleteness: window.Record.recordCompleteness,
+    recordCompletenessNote: window.Record.recordCompletenessNote,
   };
 }
 window.Export.configure(exportDeps());
@@ -1681,6 +1704,12 @@ function sessionsDeps() {
     applyCitationFlags,
     applyPlayerTurnMarkers,
     showSessionControls,
+    // #354: which side of a segment its label belongs on -- now a shared
+    // rule (record.js) rather than a bare `endedBy` check, since an
+    // interjection segment carries an endedBy of its own but still opens
+    // with its label like an old round header. Injected rather than read
+    // directly off window.Record, per this module's own deps convention.
+    labelOpensSegment: window.Record.labelOpensSegment,
   };
 }
 

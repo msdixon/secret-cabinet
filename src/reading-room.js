@@ -11,6 +11,8 @@
 // pattern pipeline.js already uses for dayone.js.
 
 const { escapeHtml, buildSpeakerHeaderSet, normalizeSpeaker } = require('./transcript-format');
+// #354: the shared label-placement rule — see record.js's own header.
+const record = require('../public/js/record.js');
 
 // Mirrors public/app.js's renderTranscriptInto parsing (same speaker-header
 // heuristics, via the same buildSpeakerHeaderSet/normalizeSpeaker used above)
@@ -69,15 +71,15 @@ function renderRoundHtml(text, roster) {
 function renderReadingRoomPage(session, roster) {
   const members = (session.members || []).map(id => roster.find(m => m.id === id)).filter(Boolean);
   const title = (session.entry || 'A meeting').trim().slice(0, 80);
-  // #245: `endedBy` (written only since #244) separates a segment whose label
-  // opens it -- an old round header -- from one whose label is the lull that
-  // ended it, which belongs after the passage. Same discriminator the record
-  // and the stage use; see public/sessions.js's restore loop.
+  // #245/#354: a segment's label either opens it (an old round header, or an
+  // interjection announcing itself) or closes it (the lull that ended a
+  // passage). One shared rule, in record.js — see the record and the stage,
+  // which read the same one; public/sessions.js's restore loop.
   const roundsHtml = (session.rounds || [])
     .map(r =>
-      r.endedBy
-        ? `<section class="rr-round">${renderRoundHtml(r.text, roster)}<div class="rr-lull">${escapeHtml(r.label)}</div></section>`
-        : `<section class="rr-round"><h2 class="rr-round-label">${escapeHtml(r.label)}</h2>${renderRoundHtml(r.text, roster)}</section>`
+      record.labelOpensSegment(r)
+        ? `<section class="rr-round"><h2 class="rr-round-label">${escapeHtml(r.label)}</h2>${renderRoundHtml(r.text, roster)}</section>`
+        : `<section class="rr-round">${renderRoundHtml(r.text, roster)}<div class="rr-lull">${escapeHtml(r.label)}</div></section>`
     )
     .join('\n');
   // Portraits are AI-generated placeholders, disclosed in docs/MANIFEST.md; not

@@ -12,6 +12,12 @@
 // speaking/speakerDone/done events, and the session confirmed to persist —
 // rather than trusting unit tests alone.
 
+// #354: the record's shared vocabulary — segment kinds and the presence's
+// speaker identity. Required directly rather than injected through the deps
+// bag below: roster-free, stateless constants and pure functions, the same
+// category as `path` in the sibling route modules.
+const record = require('../../public/js/record.js');
+
 function openSSE(res) {
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
@@ -39,13 +45,13 @@ function registerConveneRoutes(
     deriveMeetingNote,
     playerDirectorPool,
     resolvePlayerName,
+    resolvePlayerSpeakerId,
     buildPrecedingTurn,
     interjectSpeakerCount,
     makeSessionId,
     saveSession,
     loadSession,
     saveResidueUpdates,
-    formatTranscriptText,
     composeSegmentText,
     buildTranscriptHeader,
     isLocal,
@@ -62,7 +68,6 @@ function registerConveneRoutes(
     const {
       roundInstructions,
       meetingNote,
-      roundCount,
       artifact,
       notes,
       sourceSessionId,
@@ -97,7 +102,13 @@ function registerConveneRoutes(
     const effectivePlayerMode = playerMode || 'none';
     const effectivePlayerMemberId = effectivePlayerMode === 'member' ? playerMemberId || null : null;
     const effectivePlayerName = resolvePlayerName(effectivePlayerMode, effectivePlayerMemberId, playerName);
-    const precedingTurn = buildPrecedingTurn(effectivePlayerName, playerTurn);
+    // #354: the player's turn is a turn like any other and gets a stable id
+    // in the record, not the `null` it used to carry.
+    const precedingTurn = buildPrecedingTurn(
+      effectivePlayerName,
+      playerTurn,
+      resolvePlayerSpeakerId(effectivePlayerMode, effectivePlayerMemberId)
+    );
 
     openSSE(res);
     try {
@@ -151,7 +162,6 @@ function registerConveneRoutes(
         entry,
         members,
         meetingNote: effectiveMeetingNote || null,
-        roundCount: roundCount || 3,
         artifact: artifact || null,
         notes: notes || {},
         sourceSessionId: sourceSessionId || null,
@@ -236,7 +246,11 @@ function registerConveneRoutes(
     session.generationMetrics = session.generationMetrics || [];
 
     const effectivePlayerName = resolvePlayerName(session.playerMode, session.playerMemberId, session.playerName);
-    const precedingTurn = buildPrecedingTurn(effectivePlayerName, playerTurn);
+    const precedingTurn = buildPrecedingTurn(
+      effectivePlayerName,
+      playerTurn,
+      resolvePlayerSpeakerId(session.playerMode, session.playerMemberId)
+    );
 
     openSSE(res);
     try {
@@ -268,7 +282,11 @@ function registerConveneRoutes(
         // #352: who has already spoken tonight, so the director and the
         // local speaker draw both stop treating each passage as the first.
         meetingTurns: turnsSoFar(session.rounds),
-        previousLullNote: session.rounds[session.rounds.length - 1]?.label || null,
+        // #354: an interjection segment's label is its own event marker, not
+        // a lull note, so it would poison #246's don't-repeat-the-last-one
+        // filter. The passage before it is the one that actually ended in a
+        // lull the user read.
+        previousLullNote: session.rounds.findLast(r => !record.isInterjectionSegment(r))?.label || null,
         onChunk: chunk => res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`),
         onSpeakerStart: memberId => res.write(`data: ${JSON.stringify({ speaking: memberId })}\n\n`),
         onSpeakerEnd: (memberId, name, text) =>
@@ -321,6 +339,8 @@ function registerConveneRoutes(
         fullRoundText: response,
         disposition,
         residueUpdates,
+        beats,
+        endedBy,
       } = await runRound({
         client,
         model,
@@ -338,11 +358,10 @@ function registerConveneRoutes(
         speakerCount: Math.min(interjectSpeakerCount, session.members.length),
         round: session.rounds.length,
         disposition: session.disposition || {},
-        // #352: the ledger is read here even though an interjection never
-        // writes back to it (its own turns never reach `session.rounds` —
-        // one of the holes #354 closes). Reading it still counts: an
-        // interjection is exactly where a member who has been silent all
-        // evening should be likeliest to be the one who answers.
+        // #352: an interjection is exactly where a member who has been
+        // silent all evening should be likeliest to be the one who
+        // answers — and since #354, its own turns now round-trip back into
+        // this same ledger on the next read, same as any passage's.
         meetingTurns: turnsSoFar(session.rounds),
         onChunk: chunk => res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`),
         onSpeakerStart: memberId => res.write(`data: ${JSON.stringify({ speaking: memberId })}\n\n`),
@@ -356,7 +375,40 @@ function registerConveneRoutes(
 
       session.conversationHistory.push({ role: 'user', content: prompt });
       session.conversationHistory.push({ role: 'assistant', content: response });
-      session.transcriptText += `\n— A Presence Passes Through —\n\n— a voice from elsewhere —\n${text}\n\n${formatTranscriptText(response)}\n`;
+
+      // #354 item 1: an interjection is now a real segment on session.rounds,
+      // not prose appended straight to transcriptText.
+      //
+      // It used to be the one turn-generating route that destructured only
+      // { fullRoundText, disposition, residueUpdates } and wrote its own
+      // formatted string, which made every interjection invisible three times
+      // over: absent from `beats` (so nothing built on the structured record
+      // could see it), absent from `wordsSpentSoFar` (so the arc note's sense
+      // of how far the meeting had got ignored it), and absent from the
+      // restored record entirely (session.rounds is what a reload re-renders
+      // from — the interjection survived only in the flat transcriptText).
+      //
+      // `kind` marks it rather than a fourth `endedBy` value, because it is a
+      // different sort of thing from a passage, not a different way for one
+      // to end — the room's own reason for stopping is still worth recording,
+      // and that is what endedBy goes on carrying here.
+      //
+      // The presence's own words lead the segment as a real turn — first beat,
+      // first speaker line — so `text` and `beats` describe the same turns,
+      // and composeSegmentText stays the one owner of how any segment renders.
+      const interjectionSegment = {
+        kind: record.SEGMENT_KIND_INTERJECTION,
+        label: 'A Presence Passes Through',
+        text: `${record.PRESENCE_SPEAKER_NAME}\n${text}\n\n${response}`,
+        historyLength: session.conversationHistory.length,
+        beats: [
+          { memberId: record.PRESENCE_SPEAKER_ID, speakerName: record.PRESENCE_SPEAKER_NAME, text },
+          ...(beats || []),
+        ],
+        endedBy,
+      };
+      session.rounds.push(interjectionSegment);
+      session.transcriptText += composeSegmentText(interjectionSegment);
       session.disposition = disposition || {};
 
       saveSession(session);

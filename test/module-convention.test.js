@@ -26,6 +26,21 @@ const MODULES = [
   // its own top-of-file comment. In the browser it behaves exactly like
   // the other modules below: one window.Beats, added the same way.
   { file: 'beats.js', global: 'Beats', api: ['splitIntoBeats'] },
+  // #354: record.js is also require()-able from Node (pipeline.js and
+  // several src/ modules do) -- see its own top-of-file comment, same dual
+  // Node/browser convention as beats.js just above.
+  {
+    file: 'record.js',
+    global: 'Record',
+    api: [
+      'segmentKind',
+      'isInterjectionSegment',
+      'labelOpensSegment',
+      'isPresenceHeader',
+      'recordCompleteness',
+      'recordCompletenessNote',
+    ],
+  },
   {
     file: 'speaker.js',
     global: 'Speaker',
@@ -34,7 +49,7 @@ const MODULES = [
   {
     file: 'scene/scene.js',
     global: 'LodgeScene',
-    api: ['init', 'updateSeats', 'setSpeaking', 'getSeatScreenPosition'],
+    api: ['init', 'updateSeats', 'setSpeaking', 'getSeatScreenPosition', 'setPassageCount', 'stirFire'],
   },
   // #29: voice.js has no deps bag (unlike its siblings) -- it needs nothing
   // from app.js's core state, only memberId strings witness.js already has

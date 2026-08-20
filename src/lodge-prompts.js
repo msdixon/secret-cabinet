@@ -15,6 +15,12 @@
 // per-round instructions indexed by round number become a continuous "arc
 // note" keyed to meeting progress instead — see arcNoteForProgress below.
 
+// #354: record.js holds the shared vocabulary of the structured record —
+// here, the sentinel id a player speaking under their own name is filed
+// under. Required directly rather than injected: it is roster-free,
+// stateless constants and pure functions, the same category as `path`.
+const record = require('../public/js/record.js');
+
 // #194 touchpoint 2: the three-part arc (reactions -> unbound cross-talk ->
 // embers) survives as *tendency*, not boundary. The old prose's explicit
 // speaker-count hints ("3-5 members speak") are dropped here — pool sizing
@@ -116,27 +122,29 @@ function deriveMeetingNote(session) {
 // nothing in it can be tested directly; `deriveMeetingNote` is already
 // wired into the convene routes the same way.
 //
-// Reduces over each segment's `beats: [{ memberId, text }]`, persisted since
-// #244 as explicit forward-provision — no new call, no new storage, no
-// migration. Sessions predating #244 carry no `beats` at all and reduce to
-// an empty ledger, which every consumer treats as "no signal" and behaves
-// exactly as it did before this existed. Degrade, never throw.
+// Reduces over each segment's `beats`, persisted since #244 as explicit
+// forward-provision — no new call, no new storage, no migration. Sessions
+// predating #244 carry no `beats` at all and reduce to an empty ledger,
+// which every consumer treats as "no signal" and behaves exactly as it did
+// before this existed. Degrade, never throw.
 //
-// Known undercount until #354 lands: a beat only reaches `beats` if the
-// passage that produced it was pushed onto `session.rounds`, and
-// POST /api/interject runs a full round that never pushes a segment — so
-// turns taken in an interjection are invisible here. That biases the ledger
-// toward over-crediting silence, which errs the safe way for the
-// under-heard boost this feeds: it can call a member under-heard who was in
-// fact heard in an interjection, never the reverse.
+// #354 (record integrity, landed after this function was first written)
+// closed the gap this comment used to warn about: an interjection now
+// pushes a real segment onto `session.rounds`, so turns taken there are
+// counted here too, no special-casing needed. It also means a beat's
+// `memberId` is never null any more — the player's own turn carries a
+// roster id or one of record.js's non-roster sentinels — and introduced a
+// beat shape this function does have to special-case: `{ memberId, text:
+// '', failed: true }` for a speaker who was called on and produced nothing.
+// A failed beat is not a turn the room heard, so it must not count toward
+// "heard from tonight" — counting it would tell the under-heard boost and
+// the director's prompt that a member had been given the floor when the
+// room in fact never got a word from them.
 function turnsSoFar(rounds) {
   const ledger = {};
   for (const round of rounds || []) {
     for (const beat of round?.beats || []) {
-      // memberId is null for a human player's own turn (see runRound's
-      // precedingTurn) — a real turn, but not one the director casts or the
-      // local speaker draw can pick, so it holds no seat in this ledger.
-      if (!beat?.memberId) continue;
+      if (!beat?.memberId || beat.failed) continue;
       ledger[beat.memberId] = (ledger[beat.memberId] || 0) + 1;
     }
   }
@@ -162,12 +170,26 @@ function resolvePlayerName(playerMode, playerMemberId, playerName, roster = []) 
   return null;
 }
 
-// Builds the { speakerName, text } object runRound expects, or null if no
-// turn was submitted this round (the player passed, or isn't active).
-function buildPrecedingTurn(speakerName, playerTurn, stripInternalBlankLines) {
+// #354: the stable identity the player's own turn is recorded under, the
+// name-resolution above's counterpart. Playing *as* a roster member means
+// that member's real id — in the fiction it is they who spoke, and a turn
+// filed under Blavatsky's id is a turn of Blavatsky's however it was
+// authored. Playing under one's own name has no roster entry to point at,
+// so it gets record.js's explicit sentinel rather than the `null` that used
+// to stand in for both cases indiscriminately.
+function resolvePlayerSpeakerId(playerMode, playerMemberId) {
+  if (playerMode === 'member') return playerMemberId || null;
+  if (playerMode === 'custom') return record.PLAYER_SPEAKER_ID;
+  return null;
+}
+
+// Builds the { speakerName, memberId, text } object runRound expects, or
+// null if no turn was submitted this round (the player passed, or isn't
+// active). `memberId` (#354) is what lands in the turn's stored beat.
+function buildPrecedingTurn(speakerName, playerTurn, stripInternalBlankLines, memberId = null) {
   const text = playerTurn?.text?.trim();
   if (!speakerName || !text) return null;
-  return { speakerName, text: stripInternalBlankLines(text) };
+  return { speakerName, memberId, text: stripInternalBlankLines(text) };
 }
 
 module.exports = {
@@ -181,5 +203,6 @@ module.exports = {
   turnsSoFar,
   playerDirectorPool,
   resolvePlayerName,
+  resolvePlayerSpeakerId,
   buildPrecedingTurn,
 };

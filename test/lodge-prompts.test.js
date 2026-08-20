@@ -13,6 +13,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const lp = require('../src/lodge-prompts.js');
+const record = require('../public/js/record.js');
 
 const ROSTER = [
   { id: 'crowley', name: 'Crowley' },
@@ -161,10 +162,26 @@ test('turnsSoFar', async t => {
     assert.equal(ledger.blavatsky || 0, 0);
   });
 
-  await t.test("excludes the player's own turn, which carries no memberId", () => {
+  // Since #354, the player's own turn always carries a real memberId (a
+  // roster id, or one of record.js's non-roster sentinels) — never null.
+  // This pins the defensive fallback for a caller or an older stored beat
+  // that still has one, rather than the current live behavior.
+  await t.test('a beat with no memberId at all holds no seat in the ledger', () => {
     assert.deepEqual(lp.turnsSoFar([{ beats: [{ memberId: null, text: 'a human turn' }, { memberId: 'crowley' }] }]), {
       crowley: 1,
     });
+  });
+
+  // #354: a speaker who was called on and produced nothing is recorded as
+  // `{ memberId, text: '', failed: true }` rather than dropped — a turn the
+  // room did not actually hear, so it must not count as one that was.
+  await t.test('excludes a failed turn — called on, but the room never heard from them', () => {
+    assert.deepEqual(
+      lp.turnsSoFar([
+        { beats: [{ memberId: 'crowley', text: '', failed: true, error: 'API error' }, { memberId: 'blavatsky' }] },
+      ]),
+      { blavatsky: 1 }
+    );
   });
 
   await t.test('sessions predating #244 have no beats at all and reduce to an empty ledger, not an error', () => {
@@ -220,20 +237,44 @@ test('resolvePlayerName', async t => {
   });
 });
 
+// #354: the stable identity a player's own turn is recorded under -- roster
+// id when playing as a member (the fiction's speaker really is that member),
+// record.js's PLAYER_SPEAKER_ID sentinel when playing under one's own name
+// (no roster entry to point at), null for every other mode (nothing to
+// record -- runRound never receives a precedingTurn at all).
+test('resolvePlayerSpeakerId', async t => {
+  await t.test('"member" mode resolves to the roster member id', () => {
+    assert.equal(lp.resolvePlayerSpeakerId('member', 'crowley'), 'crowley');
+  });
+
+  await t.test('"custom" mode resolves to the non-roster sentinel', () => {
+    assert.equal(lp.resolvePlayerSpeakerId('custom', null), record.PLAYER_SPEAKER_ID);
+  });
+
+  await t.test('"none" mode (or anything else) resolves to null', () => {
+    assert.equal(lp.resolvePlayerSpeakerId('none', null), null);
+  });
+});
+
 test('buildPrecedingTurn', async t => {
   const strip = text => text.replace(/\n{3,}/g, '\n\n');
 
-  await t.test('builds a turn when both a speaker name and non-empty text are present', () => {
-    const turn = lp.buildPrecedingTurn('Crowley', { text: 'A line.\n\n\n\nMore.' }, strip);
-    assert.deepEqual(turn, { speakerName: 'Crowley', text: 'A line.\n\nMore.' });
+  await t.test('builds a turn carrying speaker name, memberId, and stripped text', () => {
+    const turn = lp.buildPrecedingTurn('Crowley', { text: 'A line.\n\n\n\nMore.' }, strip, 'crowley');
+    assert.deepEqual(turn, { speakerName: 'Crowley', memberId: 'crowley', text: 'A line.\n\nMore.' });
+  });
+
+  await t.test('carries the non-roster sentinel for a custom-name player', () => {
+    const turn = lp.buildPrecedingTurn('A Visitor', { text: 'Hello.' }, strip, record.PLAYER_SPEAKER_ID);
+    assert.equal(turn.memberId, record.PLAYER_SPEAKER_ID);
   });
 
   await t.test('returns null when there is no speaker name', () => {
-    assert.equal(lp.buildPrecedingTurn(null, { text: 'A line.' }, strip), null);
+    assert.equal(lp.buildPrecedingTurn(null, { text: 'A line.' }, strip, 'crowley'), null);
   });
 
   await t.test('returns null when playerTurn has no text', () => {
-    assert.equal(lp.buildPrecedingTurn('Crowley', null, strip), null);
-    assert.equal(lp.buildPrecedingTurn('Crowley', { text: '   ' }, strip), null);
+    assert.equal(lp.buildPrecedingTurn('Crowley', null, strip, 'crowley'), null);
+    assert.equal(lp.buildPrecedingTurn('Crowley', { text: '   ' }, strip, 'crowley'), null);
   });
 });

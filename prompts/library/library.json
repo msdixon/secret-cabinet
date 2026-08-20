@@ -430,5 +430,17 @@
     "members": ["abulafia"],
     "themes": ["kabbalah", "divine-name", "universalism", "interfaith", "prophecy", "letter-combination"],
     "file": "abulafia-sitrei-torah-mafteah-ha-rayon-nations-1274-1280.md"
+  },
+  {
+    "id": "corbin-mundus-imaginalis-1972",
+    "title": "The Imaginal World — from Mundus Imaginalis, or The Imaginary and the Imaginal",
+    "source": "Mundus Imaginalis, or The Imaginary and the Imaginal",
+    "date": "1972",
+    "author": "corbin",
+    "translated": true,
+    "license": "fair-use",
+    "members": ["corbin"],
+    "themes": ["imaginal-world", "imagination", "cosmology", "sufism", "ta-wil", "perception"],
+    "file": "corbin-mundus-imaginalis-1972.md"
   }
 ]
