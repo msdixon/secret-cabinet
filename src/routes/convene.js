@@ -61,7 +61,6 @@ function registerConveneRoutes(
     const {
       roundInstructions,
       meetingNote,
-      roundCount,
       artifact,
       notes,
       sourceSessionId,
@@ -150,7 +149,6 @@ function registerConveneRoutes(
         entry,
         members,
         meetingNote: effectiveMeetingNote || null,
-        roundCount: roundCount || 3,
         artifact: artifact || null,
         notes: notes || {},
         sourceSessionId: sourceSessionId || null,
