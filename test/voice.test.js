@@ -256,6 +256,68 @@ test('voice.js', async t => {
     assert.ok(events[1].utterance.voice, 'expected a voice to still be assigned from the full list');
   });
 
+  // #338 -- demeanor-aware pitch/rate bias for the Web Speech path.
+  await t.test('speak() with a demeanor biases pitch/rate deterministically, without changing the chosen voice', t2 => {
+    let events;
+    const loaded = loadPublicModule('voice.js', FIXTURE, window => {
+      events = stubSpeech(window, [
+        { name: 'A', lang: 'en-US' },
+        { name: 'B', lang: 'en-GB' },
+      ]);
+    });
+    t2.after(loaded.cleanup);
+    const { Voice } = loaded.window;
+    Voice.setEnabled(true);
+
+    Voice.speak('Hello.', 'crowley', 1);
+    const baseline = events[1].utterance;
+    Voice.speak('Hello.', 'crowley', 1, undefined, 'intense');
+    const intense = events[3].utterance;
+    Voice.speak('Hello.', 'crowley', 1, undefined, 'stately');
+    const stately = events[5].utterance;
+
+    assert.equal(intense.voice, baseline.voice, 'demeanor does not affect which voice is picked');
+    assert.equal(stately.voice, baseline.voice);
+    assert.ok(intense.pitch > baseline.pitch, 'intense reads higher than the unbiased baseline');
+    assert.ok(intense.rate > baseline.rate, 'intense reads faster than the unbiased baseline');
+    assert.ok(stately.pitch < baseline.pitch, 'stately reads lower than the unbiased baseline');
+    assert.ok(stately.rate < baseline.rate, 'stately reads slower than the unbiased baseline');
+  });
+
+  await t.test('speak() is deterministic per member for a given demeanor', t2 => {
+    let events;
+    const loaded = loadPublicModule('voice.js', FIXTURE, window => {
+      events = stubSpeech(window, [{ name: 'A', lang: 'en-US' }]);
+    });
+    t2.after(loaded.cleanup);
+    const { Voice } = loaded.window;
+    Voice.setEnabled(true);
+
+    Voice.speak('First turn.', 'crowley', 1, undefined, 'intense');
+    const first = events[1].utterance;
+    Voice.speak('Second turn.', 'crowley', 1, undefined, 'intense');
+    const second = events[3].utterance;
+    assert.equal(first.pitch, second.pitch);
+    assert.equal(first.rate, second.rate);
+  });
+
+  await t.test("speak() with 'grounded' or no demeanor produce identical pitch/rate -- grounded is the pre-#338 baseline", t2 => {
+    let events;
+    const loaded = loadPublicModule('voice.js', FIXTURE, window => {
+      events = stubSpeech(window, [{ name: 'A', lang: 'en-US' }]);
+    });
+    t2.after(loaded.cleanup);
+    const { Voice } = loaded.window;
+    Voice.setEnabled(true);
+
+    Voice.speak('Hello.', 'crowley', 1);
+    const withoutDemeanor = events[1].utterance;
+    Voice.speak('Hello.', 'crowley', 1, undefined, 'grounded');
+    const grounded = events[3].utterance;
+    assert.equal(withoutDemeanor.pitch, grounded.pitch);
+    assert.equal(withoutDemeanor.rate, grounded.rate);
+  });
+
   await t.test('rate scales with the passed speed multiplier, clamped to stay intelligible', t2 => {
     let events;
     const loaded = loadPublicModule('voice.js', FIXTURE, window => {
@@ -411,6 +473,24 @@ test('voice.js', async t => {
       speechEvents.some(e => e.type === 'speak'),
       'expected the Web Speech fallback to have spoken after the ElevenLabs request failed'
     );
+  });
+
+  await t.test('#338 memberDemeanor still reaches the Web Speech fallback after a failed ElevenLabs request', async t2 => {
+    let speechEvents;
+    const loaded = loadPublicModule('voice.js', FIXTURE, window => {
+      speechEvents = stubSpeech(window, [{ name: 'A', lang: 'en-US' }]);
+      stubElevenLabs(window, { speakImpl: () => Promise.reject(new Error('network down')) });
+    });
+    t2.after(loaded.cleanup);
+    await flushMicrotasks();
+
+    loaded.window.Voice.setEnabled(true);
+    loaded.window.Voice.speak('Hello there.', 'crowley', 1, undefined, 'intense');
+    await flushMicrotasks();
+
+    const spoken = speechEvents.find(e => e.type === 'speak');
+    assert.ok(spoken, 'expected the Web Speech fallback to have spoken');
+    assert.ok(spoken.utterance.pitch > 1.0, 'expected the intense demeanor bias to still apply on the fallback path');
   });
 
   await t.test('stop() pauses any ElevenLabs audio in flight', async t2 => {

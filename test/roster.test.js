@@ -77,6 +77,50 @@ test('assignVoiceId', async t => {
     const pool = ['a', 'b', 'c'];
     assert.equal(roster.assignVoiceId('crowley', pool), roster.assignVoiceId('crowley', pool, undefined));
   });
+
+  await t.test('#338 narrows to demeanor-matching voices from FALLBACK_VOICE_IDS when a demeanor is given', () => {
+    for (const id of ['crowley', 'waite', 'yeats', 'blavatsky', 'teresa', 'yates']) {
+      for (const demeanor of ['grounded', 'stately', 'intense']) {
+        const voiceId = roster.assignVoiceId(id, roster.FALLBACK_VOICE_IDS, undefined, demeanor);
+        assert.equal(roster.FALLBACK_VOICE_DEMEANORS[voiceId], demeanor);
+      }
+    }
+  });
+
+  await t.test('#338 applies demeanor on top of gender, narrowing the already gender-matched set', () => {
+    for (const gender of ['male', 'female']) {
+      for (const demeanor of ['grounded', 'stately', 'intense']) {
+        const voiceId = roster.assignVoiceId('crowley', roster.FALLBACK_VOICE_IDS, gender, demeanor);
+        assert.equal(roster.FALLBACK_VOICE_GENDERS[voiceId], gender);
+        // Only asserted when the pool actually has a voice matching both --
+        // the female+intense corner of the current 21-voice pool is empty,
+        // so that combination falls back to the gender-only set instead.
+        const both = roster.FALLBACK_VOICE_IDS.filter(
+          v => roster.FALLBACK_VOICE_GENDERS[v] === gender && roster.FALLBACK_VOICE_DEMEANORS[v] === demeanor
+        );
+        if (both.length) assert.equal(roster.FALLBACK_VOICE_DEMEANORS[voiceId], demeanor);
+      }
+    }
+  });
+
+  await t.test('#338 falls back to the gender-narrowed set when nothing in it matches the given demeanor', () => {
+    // female+intense is empty in the current pool -- must still return a female voice.
+    const voiceId = roster.assignVoiceId('blavatsky', roster.FALLBACK_VOICE_IDS, 'female', 'intense');
+    assert.equal(roster.FALLBACK_VOICE_GENDERS[voiceId], 'female');
+  });
+
+  await t.test('#338 falls back to the full pool when nothing in it matches the given demeanor', () => {
+    const pool = ['a', 'b', 'c']; // none of these are in FALLBACK_VOICE_DEMEANORS
+    assert.ok(pool.includes(roster.assignVoiceId('crowley', pool, undefined, 'intense')));
+  });
+
+  await t.test('#338 ignores demeanor when omitted, unchanged from pre-#338 behavior', () => {
+    const pool = ['a', 'b', 'c'];
+    assert.equal(
+      roster.assignVoiceId('crowley', pool, 'male'),
+      roster.assignVoiceId('crowley', pool, 'male', undefined)
+    );
+  });
 });
 
 test('reloadRoster', async t => {
@@ -190,6 +234,24 @@ test('reloadRoster', async t => {
 
     const result = roster.reloadRoster(rosterFile, membersDir, roster.FALLBACK_VOICE_IDS);
     assert.equal(roster.FALLBACK_VOICE_GENDERS[result[0].voiceId], 'female');
+  });
+
+  await t.test('#338 backfills a voiceId matching a hand-set voiceDemeanor', () => {
+    const { dir, membersDir } = makeFixtureDir();
+    t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+    writeMemberFile(membersDir, 'crowley.md');
+    const rosterFile = path.join(membersDir, 'roster.json');
+    fs.writeFileSync(
+      rosterFile,
+      JSON.stringify([
+        { id: 'crowley', name: 'Crowley', file: 'crowley.md', glyph: '☉', voiceGender: 'male', voiceDemeanor: 'intense' },
+      ]),
+      'utf8'
+    );
+
+    const result = roster.reloadRoster(rosterFile, membersDir, roster.FALLBACK_VOICE_IDS);
+    assert.equal(roster.FALLBACK_VOICE_GENDERS[result[0].voiceId], 'male');
+    assert.equal(roster.FALLBACK_VOICE_DEMEANORS[result[0].voiceId], 'intense');
   });
 
   await t.test('does not overwrite a hand-set voiceId', () => {

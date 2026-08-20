@@ -112,6 +112,36 @@ const FALLBACK_VOICE_GENDERS = {
   pqHfZKP75CvOlQylNhV4: 'male', // Bill
 };
 
+// #338 — a small 3-bucket demeanor each FALLBACK_VOICE_IDS entry reads as,
+// read directly off that array's own adjective comments rather than
+// re-deriving new labels: 'grounded' (laid-back/casual/relaxed/playful),
+// 'stately' (mature/reassuring/professional/dignified), 'intense'
+// (fierce/dominant/high-energy). Layered on top of FALLBACK_VOICE_GENDERS
+// in assignVoiceId below, the same filter-then-hash shape.
+const FALLBACK_VOICE_DEMEANORS = {
+  CwhRBWXzGAHq8TQ4Fs17: 'grounded', // Roger
+  EXAVITQu4vr4xnSDxMaL: 'stately', // Sarah
+  FGY2WhTYpPnrIDTdsKH5: 'grounded', // Laura
+  IKne3meq5aSn9XLyUdCD: 'intense', // Charlie
+  JBFqnCBsd6RMkjVDRZzb: 'stately', // George
+  N2lVS1w4EtoT3dr4eOWO: 'grounded', // Callum
+  SAz9YHcvj6GT2YYXdXww: 'grounded', // River
+  SOYHLrjzK2X1ezoPC6cr: 'intense', // Harry
+  TX3LPaxmHKxFdv7VOQHJ: 'intense', // Liam
+  Xb7hH8MSUJpSbSDYk0k2: 'stately', // Alice
+  XrExE9yKIg1WjnnlVkGX: 'stately', // Matilda
+  bIHbv24MWmeRgasZH58o: 'grounded', // Will
+  cgSgspJ2msm6clMCkdW9: 'grounded', // Jessica
+  cjVigY5qzO86Huf0OWal: 'stately', // Eric
+  hpp4J3VqNfWAUOO0d1Us: 'stately', // Bella
+  iP95p4xoKVk53GoZ742B: 'grounded', // Chris
+  nPczCjzI2devNBz1zQrb: 'stately', // Brian
+  onwK4e9ZLuTAKqWW03F9: 'stately', // Daniel
+  pFZP5JQG7iQjIQuC4Bku: 'stately', // Lily
+  pNInz6obpgDQGcFmaJgB: 'intense', // Adam
+  pqHfZKP75CvOlQylNhV4: 'stately', // Bill
+};
+
 // Hashes memberId into a pool index — same FNV-1a scheme voice.js's
 // client-side hash uses for the Web Speech fallback (#29 first pass), so the
 // same member lands on the same pool voice regardless of when this runs or
@@ -137,10 +167,23 @@ function hashMemberId(id) {
 // (server.js), whose IDs FALLBACK_VOICE_GENDERS knows nothing about. That
 // fallback keeps assignVoiceId total: it always returns a pool member
 // rather than risking an empty-array modulo.
-function assignVoiceId(memberId, pool, gender) {
+//
+// #338 — `demeanor`, when given, narrows the gender-filtered candidates
+// again against FALLBACK_VOICE_DEMEANORS, same shape and same fallback
+// rule: if nothing in the gender-narrowed set carries that demeanor (e.g.
+// no 'intense' voice happens to be tagged 'female' in the current 21-voice
+// pool), candidates stays at the gender-narrowed set rather than resetting
+// to the full 21 or throwing. Demeanor is applied *after* gender, not
+// instead of it, so a member's voice never trades a correct gender for a
+// matching demeanor.
+function assignVoiceId(memberId, pool, gender, demeanor) {
   let candidates = pool;
   if (gender) {
-    const matching = pool.filter(id => FALLBACK_VOICE_GENDERS[id] === gender);
+    const matching = candidates.filter(id => FALLBACK_VOICE_GENDERS[id] === gender);
+    if (matching.length) candidates = matching;
+  }
+  if (demeanor) {
+    const matching = candidates.filter(id => FALLBACK_VOICE_DEMEANORS[id] === demeanor);
     if (matching.length) candidates = matching;
   }
   return candidates[hashMemberId(memberId) % candidates.length];
@@ -170,7 +213,7 @@ function reloadRoster(rosterFile, membersDir, voicePool) {
       backfilled = true;
     }
     if (voicePool && voicePool.length && !m.voiceId) {
-      m.voiceId = assignVoiceId(m.id, voicePool, m.voiceGender);
+      m.voiceId = assignVoiceId(m.id, voicePool, m.voiceGender, m.voiceDemeanor);
       backfilled = true;
     }
   }
@@ -227,6 +270,7 @@ module.exports = {
   assignGlyph,
   FALLBACK_VOICE_IDS,
   FALLBACK_VOICE_GENDERS,
+  FALLBACK_VOICE_DEMEANORS,
   assignVoiceId,
   reloadRoster,
   loadMemberFile,

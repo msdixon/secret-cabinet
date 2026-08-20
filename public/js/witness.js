@@ -84,6 +84,13 @@ window.Witness = (function () {
     return m?.voiceGender || null;
   }
 
+  // #338 -- same pattern for roster.json's hand-set voiceDemeanor field,
+  // for Voice.speak()'s demeanor-aware pitch/rate bias.
+  function memberVoiceDemeanor(memberId) {
+    const m = memberId && deps.members.find(mm => mm.id === memberId);
+    return m?.voiceDemeanor || null;
+  }
+
   // ── The room (#257) ──────────────────────────────────────────────────────
   // #202 shipped a wordless Text/Room toggle -- a user choice between two
   // renderings, one of them mute. #257 retires that choice: there is one
@@ -928,7 +935,13 @@ window.Witness = (function () {
       // rendering path (stage/room, live/replay) already funnels through --
       // see voice.js's own comment for why it's a no-op unless the user has
       // opted in.
-      window.Voice?.speak(block.text, block.memberId, witnessSpeed, memberVoiceGender(block.memberId));
+      window.Voice?.speak(
+        block.text,
+        block.memberId,
+        witnessSpeed,
+        memberVoiceGender(block.memberId),
+        memberVoiceDemeanor(block.memberId)
+      );
       return { delay: witnessReadingTime(block.text), undo };
     }
 
