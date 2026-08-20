@@ -34,7 +34,7 @@ const MODULES = [
   {
     file: 'scene/scene.js',
     global: 'LodgeScene',
-    api: ['init', 'updateSeats', 'setSpeaking', 'getSeatScreenPosition'],
+    api: ['init', 'updateSeats', 'setSpeaking', 'getSeatScreenPosition', 'setPassageCount', 'stirFire'],
   },
   // #29: voice.js has no deps bag (unlike its siblings) -- it needs nothing
   // from app.js's core state, only memberId strings witness.js already has
