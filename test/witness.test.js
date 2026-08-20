@@ -380,6 +380,142 @@ test('replay: advancing and progress', async t => {
   });
 });
 
+// #336: auto-advance used to pace every speech beat off a fixed WPM guess,
+// even when voice was on and the actual utterance/audio ran longer than
+// that guess predicted -- cutting a member off mid-sentence. When
+// window.Voice.speak() hands back a promise (real speech in flight),
+// advance() must wait for it instead of the WPM estimate.
+test('replay: auto-advance paces off real speech duration when Voice reports it', async t => {
+  // Flushes enough microtask ticks for the promise chain renderWitnessBlock
+  // builds (Voice.speak()'s promise -> its own .then() -> advance()'s
+  // Promise.resolve(delay).then()) to fully settle once the underlying
+  // speech promise resolves.
+  async function flushMicrotasks(n = 6) {
+    for (let i = 0; i < n; i++) await Promise.resolve();
+  }
+
+  await t.test(
+    'a beat that talks past the WPM estimate is not cut off — advance waits for Voice.speak() to resolve',
+    async t2 => {
+      t2.mock.timers.enable({ apis: ['setTimeout'] });
+      let resolveSpeech;
+      const loaded = loadPublicModule('witness.js', FIXTURE, window => {
+        window.Voice = {
+          speak: () =>
+            new Promise(resolve => {
+              resolveSpeech = resolve;
+            }),
+          stop: () => {},
+        };
+      });
+      t2.after(loaded.cleanup);
+      const { document, module: Witness } = loaded;
+
+      await Witness.start({ rounds: [{ label: 'Round I', text: 'Crowley:\nOne.' }] }, makeDeps());
+      Witness.advance(); // renders "One." and calls Voice.speak(), whose promise is still pending
+
+      // "One." 's WPM estimate is far under a second, floored at
+      // WITNESS_MIN_PAUSE (1200ms) -- if pacing still used that estimate,
+      // this tick would already have advanced past the end.
+      t2.mock.timers.tick(10000);
+      assert.equal(
+        document.querySelectorAll('#witness-stage .witness-end').length,
+        0,
+        'should still be waiting on the unresolved speech promise, not the WPM guess'
+      );
+
+      resolveSpeech();
+      await flushMicrotasks();
+      assert.equal(
+        document.querySelectorAll('#witness-stage .witness-end').length,
+        0,
+        'the post-speech breath has not elapsed yet'
+      );
+
+      t2.mock.timers.tick(1200); // WITNESS_MIN_PAUSE at 1x speed
+      assert.equal(
+        document.querySelector('#witness-stage .witness-end')?.textContent,
+        'The room falls silent.',
+        'once Voice reports the beat actually finished, advance should proceed'
+      );
+    }
+  );
+
+  await t.test('a beat with voice off paces on the WPM estimate exactly as before', async t2 => {
+    t2.mock.timers.enable({ apis: ['setTimeout'] });
+    const loaded = loadPublicModule('witness.js', FIXTURE, window => {
+      window.Voice = { speak: () => undefined, stop: () => {} }; // disabled/unsupported: no-op, same as no Voice at all
+    });
+    t2.after(loaded.cleanup);
+    const { document, module: Witness } = loaded;
+
+    await Witness.start({ rounds: [{ label: 'Round I', text: 'Crowley:\nOne.' }] }, makeDeps());
+    Witness.advance(); // renders "One."
+    // advance() schedules the actual setTimeout inside a Promise.resolve()
+    // .then() (uniform handling for both a plain ms number and a speech
+    // promise, see advance()'s own comment) -- flush that one microtask hop
+    // before ticking, or the timer isn't registered yet.
+    await flushMicrotasks();
+
+    // "One." floors to WITNESS_MIN_PAUSE (1200ms) -- unchanged WPM pacing.
+    t2.mock.timers.tick(1199);
+    assert.equal(document.querySelectorAll('#witness-stage .witness-end').length, 0);
+    t2.mock.timers.tick(1);
+    assert.equal(document.querySelector('#witness-stage .witness-end')?.textContent, 'The room falls silent.');
+  });
+
+  await t.test('going back while a speech promise is still pending discards it — no phantom early advance', async t2 => {
+    t2.mock.timers.enable({ apis: ['setTimeout'] });
+    let resolveSpeech;
+    const loaded = loadPublicModule('witness.js', FIXTURE, window => {
+      window.Voice = {
+        speak: () =>
+          new Promise(resolve => {
+            resolveSpeech = resolve;
+          }),
+        stop: () => {},
+      };
+    });
+    t2.after(loaded.cleanup);
+    const { document, window, module: Witness } = loaded;
+
+    await Witness.start(
+      { rounds: [{ label: 'Round I', text: 'Crowley:\nOne.\n\nBlavatsky:\nTwo.' }] },
+      makeDeps()
+    );
+    Witness.advance(); // renders "One." (Crowley), Voice.speak() pending
+    window.document.dispatchEvent(new window.KeyboardEvent('keydown', { code: 'ArrowLeft' })); // goBack()
+    assert.equal(
+      document.querySelectorAll('#witness-stage .transcript-entry').length,
+      0,
+      'goBack() should have undone the "One." render'
+    );
+
+    // "One." 's speech promise finally resolves after the user already
+    // stepped back past it. Without the generation guard this would
+    // schedule its own setTimeout(advance, ~1200ms) alongside goBack()'s
+    // legitimate resume timer (scheduled for 2400ms) -- a phantom advance
+    // 1200ms early, re-rendering "One." well before the real resume fires.
+    resolveSpeech();
+    await flushMicrotasks();
+
+    t2.mock.timers.tick(1200);
+    assert.equal(
+      document.querySelectorAll('#witness-stage .transcript-entry').length,
+      0,
+      'the stale promise must not have scheduled an early phantom advance'
+    );
+
+    t2.mock.timers.tick(1200); // completes goBack()'s real 2400ms resume pause
+    assert.equal(
+      document.querySelectorAll('#witness-stage .transcript-entry').length,
+      1,
+      'the legitimate resume should still fire on its own schedule'
+    );
+    assert.match(document.querySelector('#witness-stage .speaker-name').textContent, /Crowley/);
+  });
+});
+
 test('replay: start syncs the record, exit stops playback and collapses the stage', async t => {
   // #184: restoreSession now fires when replay STARTS, not when it exits —
   // both panes show the same session as soon as playback begins, rather

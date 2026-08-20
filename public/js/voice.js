@@ -13,9 +13,16 @@
 // whether the server has a key configured, and every call site here falls
 // straight back to the untouched Web Speech path when it doesn't (no key
 // set) or when a request fails (network hiccup, bad voice id, quota) --
-// this module never assumes ElevenLabs is there. Still-named follow-up:
-// speech actually synced to the beat-by-beat reveal rather than fired once
-// per rendered beat and left to run its own course.
+// this module never assumes ElevenLabs is there.
+//
+// #336 -- speak() now hands back a promise that resolves once the browser
+// reports the utterance/audio actually finished (or errored), instead of
+// firing-and-forgetting. witness.js's auto-advance awaits it to pace the
+// next beat off real speech duration rather than a fixed-WPM guess, which
+// used to cut a long line off mid-sentence when it ran slower than that
+// guess predicted. Returns undefined (no promise) for every case where
+// nothing was actually spoken -- disabled, unsupported, empty text -- so
+// the caller has an unambiguous signal to fall back to its own pacing.
 //
 // Same script-tag/IIFE + configure-free convention as witness.js's siblings
 // (#142) -- window.Voice, one global. Unlike witness.js this module needs no
@@ -259,7 +266,17 @@ window.Voice = (function () {
     if (voice) utterance.voice = voice;
     utterance.pitch = pitchForMember(memberId);
     utterance.rate = clampRate(baseRateForMember(memberId) * (speedMultiplier || 1));
-    s.speak(utterance);
+    // #336: resolved by whichever of 'end'/'error' the browser fires first.
+    // If a later speak() call supersedes this utterance before either fires
+    // (s.cancel() above, for the *next* call), the promise is just left
+    // pending -- witness.js's own generation guard stops awaiting a stale
+    // beat's pacing signal once the user has moved on, so there's nothing
+    // here that needs to force it to settle.
+    return new Promise(resolve => {
+      utterance.addEventListener?.('end', resolve);
+      utterance.addEventListener?.('error', resolve);
+      s.speak(utterance);
+    });
   }
 
   // #29 (ElevenLabs pass) -- proxied through routes/voice.js, which resolves
@@ -272,28 +289,47 @@ window.Voice = (function () {
   function speakViaElevenLabs(spoken, memberId, speedMultiplier, memberGender) {
     const audio = new Audio();
     currentAudio = audio;
-    fetch('/api/voice/speak', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ memberId, text: spoken }),
-    })
-      .then(r => {
-        if (!r.ok) throw new Error(`voice request failed: ${r.status}`);
-        return r.blob();
+    // #336: resolved on the <audio> element's own 'ended'/'error', or by
+    // chaining into the Web Speech fallback's promise when the request
+    // itself fails -- either way the caller is awaiting *this* beat's actual
+    // completion, not whichever backend happened to produce it.
+    return new Promise(resolve => {
+      fetch('/api/voice/speak', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ memberId, text: spoken }),
       })
-      .then(blob => {
-        if (currentAudio !== audio) return; // superseded by a newer speak()/stop() before this resolved
-        const url = URL.createObjectURL(blob);
-        audio.src = url;
-        audio.addEventListener('ended', () => URL.revokeObjectURL(url), { once: true });
-        audio.play().catch(() => {}); // e.g. an autoplay-policy rejection -- fail silently, same as a TTS hiccup
-      })
-      .catch(() => {
-        if (currentAudio === audio) {
-          currentAudio = null;
-          speakViaWebSpeech(spoken, memberId, speedMultiplier, memberGender);
-        }
-      });
+        .then(r => {
+          if (!r.ok) throw new Error(`voice request failed: ${r.status}`);
+          return r.blob();
+        })
+        .then(blob => {
+          if (currentAudio !== audio) {
+            resolve(); // superseded by a newer speak()/stop() before this resolved
+            return;
+          }
+          const url = URL.createObjectURL(blob);
+          audio.src = url;
+          audio.addEventListener(
+            'ended',
+            () => {
+              URL.revokeObjectURL(url);
+              resolve();
+            },
+            { once: true }
+          );
+          audio.addEventListener('error', resolve, { once: true });
+          audio.play().catch(() => {}); // e.g. an autoplay-policy rejection -- fail silently, same as a TTS hiccup
+        })
+        .catch(() => {
+          if (currentAudio === audio) {
+            currentAudio = null;
+            speakViaWebSpeech(spoken, memberId, speedMultiplier, memberGender).then(resolve, resolve);
+          } else {
+            resolve(); // already superseded -- nothing left to wait on
+          }
+        });
+    });
   }
 
   // One utterance/audio clip per rendered speech beat, called from
@@ -305,16 +341,21 @@ window.Voice = (function () {
   // passes it through; it's only ever consulted by the Web Speech path,
   // since the ElevenLabs path's voiceId is already assigned gender-
   // appropriately server-side (see roster.js's assignVoiceId).
+  //
+  // #336: returns whatever the chosen backend's promise is (resolves on
+  // actual completion) so witness.js can pace off it; returns undefined,
+  // not a promise, for the three no-op cases below, so the caller can tell
+  // "nothing was spoken" apart from "something is speaking" without an
+  // extra isEnabled()/isSupported() check of its own.
   function speak(text, memberId, speedMultiplier, memberGender) {
     if (!enabled || !isSupported() || !text) return;
     const spoken = stripForSpeech(text);
     if (!spoken) return;
     stopCurrentAudio(); // interrupt the previous beat's ElevenLabs audio, if any
     if (elevenLabsAvailable) {
-      speakViaElevenLabs(spoken, memberId, speedMultiplier, memberGender);
-      return;
+      return speakViaElevenLabs(spoken, memberId, speedMultiplier, memberGender);
     }
-    speakViaWebSpeech(spoken, memberId, speedMultiplier, memberGender);
+    return speakViaWebSpeech(spoken, memberId, speedMultiplier, memberGender);
   }
 
   function stop() {
