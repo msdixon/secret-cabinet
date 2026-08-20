@@ -90,6 +90,11 @@ function makeDeps(overrides = {}) {
     castingRoster: () => [{ id: 'crowley', name: 'Crowley', brief: 'brief' }],
     buildPassagePrompt: ({ entry, isFirst }) => `PROMPT(${isFirst}): ${entry}`,
     wordsSpentSoFar: () => 0,
+    // #352: the real reduction rather than a stub — it's pure, and the
+    // route's only job here is handing runRound the ledger it builds from
+    // the stored `beats`, which a stub returning {} could not distinguish
+    // from not calling it at all.
+    turnsSoFar: require('../src/lodge-prompts.js').turnsSoFar,
     defaultPoolSize: 2,
     deriveMeetingNote: () => null,
     playerDirectorPool: members => members,
@@ -287,6 +292,46 @@ test('POST /api/round', async t => {
     assert.equal(saved.rounds[1].endedBy, 'budget');
     assert.equal(saved.conversationHistory.length, 4);
   });
+
+  // #352: the ledger is built at the route, from the stored record, and
+  // handed to runRound — the one seam where the whole feature can go silent
+  // without anything failing, since pickNextSpeaker treats an absent ledger
+  // as a supported no-op rather than an error.
+  await t.test('hands runRound the meeting-level turn ledger built from the stored beats', async () => {
+    const app = fakeApp();
+    let seen;
+    const deps = makeDeps({
+      runRound: async args => {
+        seen = args.meetingTurns;
+        return {
+          fullRoundText: 'text',
+          speakerOrder: [],
+          disposition: {},
+          residueUpdates: {},
+          beats: [],
+          endedBy: 'budget',
+          lullNote: 'A pause.',
+        };
+      },
+    });
+    registerConveneRoutes(app, deps);
+    deps.savedSessions.set('s1', {
+      id: 's1',
+      entry: 'entry',
+      members: ['crowley', 'jung'],
+      conversationHistory: [],
+      rounds: [
+        { text: 'r0', beats: [{ memberId: 'crowley' }, { memberId: null, text: 'a player turn' }] },
+        { text: 'r1', beats: [{ memberId: 'crowley' }] },
+        { text: 'r2' }, // a passage from before #244 stored beats
+      ],
+      transcriptText: '',
+      generationMetrics: [],
+      disposition: {},
+    });
+    await app.routes['POST /api/round'](fakeReq({ sessionId: 's1' }), fakeSSERes());
+    assert.deepEqual(seen, { crowley: 2 }, 'jung never spoke, so has no key — the whole point of the ledger');
+  });
 });
 
 test('POST /api/interject', async t => {
@@ -324,6 +369,33 @@ test('POST /api/interject', async t => {
     const saved = deps.savedSessions.get('s1');
     assert.match(saved.transcriptText, /A Presence Passes Through/);
     assert.match(saved.transcriptText, /What of silence\?/);
+  });
+
+  // #352: an interjection never writes its own turns back to
+  // `session.rounds` (one of the holes #354 closes), but it still reads the
+  // ledger — a member silent all evening is exactly who should be likeliest
+  // to answer the presence.
+  await t.test('reads the turn ledger too, even though its own turns never reach the record', async () => {
+    const app = fakeApp();
+    let seen;
+    const deps = makeDeps({
+      runRound: async args => {
+        seen = args.meetingTurns;
+        return { fullRoundText: 'text', speakerOrder: [], disposition: {}, residueUpdates: {} };
+      },
+    });
+    registerConveneRoutes(app, deps);
+    deps.savedSessions.set('s1', {
+      id: 's1',
+      members: ['crowley', 'jung'],
+      conversationHistory: [],
+      rounds: [{ text: 'r0', beats: [{ memberId: 'jung' }, { memberId: 'jung' }] }],
+      transcriptText: '',
+      generationMetrics: [],
+      disposition: {},
+    });
+    await app.routes['POST /api/interject'](fakeReq({ sessionId: 's1', text: 'hello' }), fakeSSERes());
+    assert.deepEqual(seen, { jung: 2 });
   });
 });
 

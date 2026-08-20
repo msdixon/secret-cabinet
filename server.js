@@ -269,6 +269,11 @@ function wordsSpentSoFar(rounds) {
   return (rounds || []).reduce((sum, r) => sum + countWords(r.text || ''), 0);
 }
 
+// Its who-has-spoken sibling, `turnsSoFar` (#352), lives in lodge-prompts.js
+// and is passed straight through to the convene routes below the same way
+// `deriveMeetingNote` is — see that function's own comment for why it isn't
+// written out here alongside this one.
+
 function buildPassagePrompt({
   entry,
   meetingNote,
@@ -472,6 +477,7 @@ registerConveneRoutes(app, {
   castingRoster,
   buildPassagePrompt,
   wordsSpentSoFar,
+  turnsSoFar: lodgePrompts.turnsSoFar,
   defaultPoolSize: lodgePrompts.DEFAULT_POOL_SIZE,
   deriveMeetingNote: lodgePrompts.deriveMeetingNote,
   playerDirectorPool,

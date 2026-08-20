@@ -106,6 +106,43 @@ function deriveMeetingNote(session) {
   return null;
 }
 
+// ─── Meeting-level turn ledger (#352) ─────────────────────────────────────────
+//
+// Who has spoken tonight, counted across the whole meeting: { [memberId]:
+// turns }. The who-has-spoken sibling to server.js's wordsSpentSoFar — same
+// shape (one pure reduction over `session.rounds`), same job (a
+// meeting-level aggregate threaded into a prompt). It lives here rather
+// than beside that function only because server.js isn't a module and so
+// nothing in it can be tested directly; `deriveMeetingNote` is already
+// wired into the convene routes the same way.
+//
+// Reduces over each segment's `beats: [{ memberId, text }]`, persisted since
+// #244 as explicit forward-provision — no new call, no new storage, no
+// migration. Sessions predating #244 carry no `beats` at all and reduce to
+// an empty ledger, which every consumer treats as "no signal" and behaves
+// exactly as it did before this existed. Degrade, never throw.
+//
+// Known undercount until #354 lands: a beat only reaches `beats` if the
+// passage that produced it was pushed onto `session.rounds`, and
+// POST /api/interject runs a full round that never pushes a segment — so
+// turns taken in an interjection are invisible here. That biases the ledger
+// toward over-crediting silence, which errs the safe way for the
+// under-heard boost this feeds: it can call a member under-heard who was in
+// fact heard in an interjection, never the reverse.
+function turnsSoFar(rounds) {
+  const ledger = {};
+  for (const round of rounds || []) {
+    for (const beat of round?.beats || []) {
+      // memberId is null for a human player's own turn (see runRound's
+      // precedingTurn) — a real turn, but not one the director casts or the
+      // local speaker draw can pick, so it holds no seat in this ledger.
+      if (!beat?.memberId) continue;
+      ledger[beat.memberId] = (ledger[beat.memberId] || 0) + 1;
+    }
+  }
+  return ledger;
+}
+
 // ─── Player-as-member ─────────────────────────────────────────────────────────
 // A human can write turns as one voice in the room instead of only observing.
 // Mode 'member': the human stands in for an existing roster seat — that
@@ -141,6 +178,7 @@ module.exports = {
   INTERJECT_SPEAKER_COUNT,
   buildPassagePrompt,
   deriveMeetingNote,
+  turnsSoFar,
   playerDirectorPool,
   resolvePlayerName,
   buildPrecedingTurn,

@@ -34,6 +34,7 @@ function registerConveneRoutes(
     castingRoster,
     buildPassagePrompt,
     wordsSpentSoFar,
+    turnsSoFar,
     defaultPoolSize,
     deriveMeetingNote,
     playerDirectorPool,
@@ -264,6 +265,9 @@ function registerConveneRoutes(
         round: roundIndex,
         precedingTurn,
         disposition: session.disposition || {},
+        // #352: who has already spoken tonight, so the director and the
+        // local speaker draw both stop treating each passage as the first.
+        meetingTurns: turnsSoFar(session.rounds),
         previousLullNote: session.rounds[session.rounds.length - 1]?.label || null,
         onChunk: chunk => res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`),
         onSpeakerStart: memberId => res.write(`data: ${JSON.stringify({ speaking: memberId })}\n\n`),
@@ -334,6 +338,12 @@ function registerConveneRoutes(
         speakerCount: Math.min(interjectSpeakerCount, session.members.length),
         round: session.rounds.length,
         disposition: session.disposition || {},
+        // #352: the ledger is read here even though an interjection never
+        // writes back to it (its own turns never reach `session.rounds` —
+        // one of the holes #354 closes). Reading it still counts: an
+        // interjection is exactly where a member who has been silent all
+        // evening should be likeliest to be the one who answers.
+        meetingTurns: turnsSoFar(session.rounds),
         onChunk: chunk => res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`),
         onSpeakerStart: memberId => res.write(`data: ${JSON.stringify({ speaking: memberId })}\n\n`),
         onSpeakerEnd: (memberId, name, text) =>
