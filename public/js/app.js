@@ -530,7 +530,7 @@ function addSpeech(speaker, text, isObserver, memberId, existingAnnotation) {
     ? `<img class="speaker-avatar" src="/portraits/${memberId}.png" alt="" loading="lazy" onerror="portraitFallback(this,'glyph','${memberGlyph(memberId)}')">`
     : '';
   const nameEl = `<div class="speaker-name ${nc}" ${memberId ? `onclick="window.Sessions.highlightDossierEntry('${memberId}')" style="cursor:pointer"` : ''}>${glyph}${escapeHTML(speaker)}</div>`;
-  e.innerHTML = `${nameEl}<div class="bubble-body"><div class="speech-text" onclick="toggleAnnotation(this.closest('.transcript-entry'))">${renderActions(text)}</div><div class="annotation-area" style="display:none"><textarea class="annotation-input" placeholder="Note…" onblur="saveAnnotation(this)" onkeydown="if(event.key==='Escape')closeAnnotation(this.closest('.transcript-entry'))"></textarea></div></div>`;
+  e.innerHTML = `${nameEl}<div class="bubble-body"><div class="speech-text" onclick="toggleAnnotation(this.closest('.transcript-entry'))" title="Click to add a scholarly note">${renderActions(text)}</div><div class="annotation-area" style="display:none"><textarea class="annotation-input" placeholder="Note…" onblur="saveAnnotation(this)" onkeydown="if(event.key==='Escape')closeAnnotation(this.closest('.transcript-entry'))"></textarea></div></div>`;
   if (existingAnnotation) {
     e.classList.add('annotated');
     e.querySelector('.annotation-input').value = existingAnnotation;
@@ -1144,6 +1144,7 @@ async function verifyCitations() {
     if (!res.ok) throw new Error('Verification failed');
     const { citations } = await res.json();
     applyCitationFlags(citations);
+    window.Export.updateScholarlyExportButton();
     setStatus(`${citations.length} citation${citations.length === 1 ? '' : 's'} reviewed.`, false);
   } catch (err) {
     setError('Citation verification failed.', verifyCitations);

@@ -58,6 +58,25 @@ test('assignVoiceId', async t => {
       assert.ok(pool.includes(roster.assignVoiceId(id, pool)));
     }
   });
+
+  await t.test('#333 narrows to gender-matching voices from FALLBACK_VOICE_IDS when a gender is given', () => {
+    for (const id of ['crowley', 'waite', 'yeats', 'blavatsky', 'teresa', 'yates']) {
+      for (const gender of ['male', 'female']) {
+        const voiceId = roster.assignVoiceId(id, roster.FALLBACK_VOICE_IDS, gender);
+        assert.equal(roster.FALLBACK_VOICE_GENDERS[voiceId], gender);
+      }
+    }
+  });
+
+  await t.test('#333 falls back to the full pool when nothing in it matches the given gender', () => {
+    const pool = ['a', 'b', 'c']; // none of these are in FALLBACK_VOICE_GENDERS
+    assert.ok(pool.includes(roster.assignVoiceId('crowley', pool, 'female')));
+  });
+
+  await t.test('#333 ignores gender when omitted, unchanged from pre-#333 behavior', () => {
+    const pool = ['a', 'b', 'c'];
+    assert.equal(roster.assignVoiceId('crowley', pool), roster.assignVoiceId('crowley', pool, undefined));
+  });
 });
 
 test('reloadRoster', async t => {
@@ -156,6 +175,21 @@ test('reloadRoster', async t => {
     assert.ok(pool.includes(result[0].voiceId), 'expected a voiceId backfilled from the pool');
     const onDisk = JSON.parse(fs.readFileSync(rosterFile, 'utf8'));
     assert.equal(onDisk[0].voiceId, result[0].voiceId);
+  });
+
+  await t.test('#333 backfills a voiceId matching a hand-set voiceGender', () => {
+    const { dir, membersDir } = makeFixtureDir();
+    t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+    writeMemberFile(membersDir, 'crowley.md');
+    const rosterFile = path.join(membersDir, 'roster.json');
+    fs.writeFileSync(
+      rosterFile,
+      JSON.stringify([{ id: 'crowley', name: 'Crowley', file: 'crowley.md', glyph: '☉', voiceGender: 'female' }]),
+      'utf8'
+    );
+
+    const result = roster.reloadRoster(rosterFile, membersDir, roster.FALLBACK_VOICE_IDS);
+    assert.equal(roster.FALLBACK_VOICE_GENDERS[result[0].voiceId], 'female');
   });
 
   await t.test('does not overwrite a hand-set voiceId', () => {

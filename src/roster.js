@@ -81,6 +81,37 @@ const FALLBACK_VOICE_IDS = [
   'pqHfZKP75CvOlQylNhV4', // Bill — wise, mature, balanced
 ];
 
+// #333 — the gender each FALLBACK_VOICE_IDS entry is voiced as (per
+// ElevenLabs' own premade-voice library, matching the name in that array's
+// comments), so assignVoiceId below can filter to gender-appropriate voices
+// before hashing rather than hashing across all 21 regardless of who's
+// speaking. 'neutral' (River) is never hand-assigned to a roster member
+// today, but stays available for a future member whose gender isn't a
+// simple binary read of the historical record.
+const FALLBACK_VOICE_GENDERS = {
+  CwhRBWXzGAHq8TQ4Fs17: 'male', // Roger
+  EXAVITQu4vr4xnSDxMaL: 'female', // Sarah
+  FGY2WhTYpPnrIDTdsKH5: 'female', // Laura
+  IKne3meq5aSn9XLyUdCD: 'male', // Charlie
+  JBFqnCBsd6RMkjVDRZzb: 'male', // George
+  N2lVS1w4EtoT3dr4eOWO: 'male', // Callum
+  SAz9YHcvj6GT2YYXdXww: 'neutral', // River
+  SOYHLrjzK2X1ezoPC6cr: 'male', // Harry
+  TX3LPaxmHKxFdv7VOQHJ: 'male', // Liam
+  Xb7hH8MSUJpSbSDYk0k2: 'female', // Alice
+  XrExE9yKIg1WjnnlVkGX: 'female', // Matilda
+  bIHbv24MWmeRgasZH58o: 'male', // Will
+  cgSgspJ2msm6clMCkdW9: 'female', // Jessica
+  cjVigY5qzO86Huf0OWal: 'male', // Eric
+  hpp4J3VqNfWAUOO0d1Us: 'female', // Bella
+  iP95p4xoKVk53GoZ742B: 'male', // Chris
+  nPczCjzI2devNBz1zQrb: 'male', // Brian
+  onwK4e9ZLuTAKqWW03F9: 'male', // Daniel
+  pFZP5JQG7iQjIQuC4Bku: 'female', // Lily
+  pNInz6obpgDQGcFmaJgB: 'male', // Adam
+  pqHfZKP75CvOlQylNhV4: 'male', // Bill
+};
+
 // Hashes memberId into a pool index — same FNV-1a scheme voice.js's
 // client-side hash uses for the Web Speech fallback (#29 first pass), so the
 // same member lands on the same pool voice regardless of when this runs or
@@ -98,8 +129,21 @@ function hashMemberId(id) {
   return h >>> 0;
 }
 
-function assignVoiceId(memberId, pool) {
-  return pool[hashMemberId(memberId) % pool.length];
+// #333 — narrows `pool` to voices FALLBACK_VOICE_GENDERS tags as matching
+// `gender` before hashing, so a member reads as historically appropriate
+// instead of landing on any of the 21 regardless of who they are. Falls
+// back to the full pool when `gender` is omitted, or when nothing in the
+// pool is tagged with it -- e.g. a custom ELEVENLABS_VOICE_POOL override
+// (server.js), whose IDs FALLBACK_VOICE_GENDERS knows nothing about. That
+// fallback keeps assignVoiceId total: it always returns a pool member
+// rather than risking an empty-array modulo.
+function assignVoiceId(memberId, pool, gender) {
+  let candidates = pool;
+  if (gender) {
+    const matching = pool.filter(id => FALLBACK_VOICE_GENDERS[id] === gender);
+    if (matching.length) candidates = matching;
+  }
+  return candidates[hashMemberId(memberId) % candidates.length];
 }
 
 // Reads and validates roster.json against the members directory on disk,
@@ -126,7 +170,7 @@ function reloadRoster(rosterFile, membersDir, voicePool) {
       backfilled = true;
     }
     if (voicePool && voicePool.length && !m.voiceId) {
-      m.voiceId = assignVoiceId(m.id, voicePool);
+      m.voiceId = assignVoiceId(m.id, voicePool, m.voiceGender);
       backfilled = true;
     }
   }
@@ -182,6 +226,7 @@ module.exports = {
   FALLBACK_GLYPHS,
   assignGlyph,
   FALLBACK_VOICE_IDS,
+  FALLBACK_VOICE_GENDERS,
   assignVoiceId,
   reloadRoster,
   loadMemberFile,

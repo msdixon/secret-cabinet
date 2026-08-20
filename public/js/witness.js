@@ -75,6 +75,15 @@ window.Witness = (function () {
     return m?.glyph || '';
   }
 
+  // #333 -- roster.json's hand-set voiceGender field, for Voice.speak()'s
+  // gender-aware Web Speech voice pick. deps.members is the only place this
+  // data lives client-side; voice.js deliberately doesn't reach for it
+  // itself (see that module's own header comment).
+  function memberVoiceGender(memberId) {
+    const m = memberId && deps.members.find(mm => mm.id === memberId);
+    return m?.voiceGender || null;
+  }
+
   // ── The room (#257) ──────────────────────────────────────────────────────
   // #202 shipped a wordless Text/Room toggle -- a user choice between two
   // renderings, one of them mute. #257 retires that choice: there is one
@@ -919,7 +928,7 @@ window.Witness = (function () {
       // rendering path (stage/room, live/replay) already funnels through --
       // see voice.js's own comment for why it's a no-op unless the user has
       // opted in.
-      window.Voice?.speak(block.text, block.memberId, witnessSpeed);
+      window.Voice?.speak(block.text, block.memberId, witnessSpeed, memberVoiceGender(block.memberId));
       return { delay: witnessReadingTime(block.text), undo };
     }
 

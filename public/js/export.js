@@ -350,9 +350,19 @@ window.Export = (function () {
     }));
   }
 
+  // #331 — verifying citations is the instinctive first move for a feature framed
+  // around scholarly citation, and a fully-cited session with zero annotations is
+  // still a complete-enough artifact (bibliography only). So either signal unlocks
+  // the export, not just the (undiscoverable) click-to-annotate path.
   function updateScholarlyExportButton() {
     const btn = document.getElementById('export-scholarly-btn');
-    if (btn) btn.disabled = getAnnotatedPassages().length === 0;
+    if (!btn) return;
+    const hasAnnotations = getAnnotatedPassages().length > 0;
+    const hasVerifiedCitations = document.querySelector('.transcript-entry.flagged-citation') != null;
+    btn.disabled = !hasAnnotations && !hasVerifiedCitations;
+    btn.title = btn.disabled
+      ? 'Verify Citations, or click a passage above to add a note, to enable'
+      : 'Export a Markdown note with your annotated passages and/or citation bibliography';
   }
 
   // #153 part 3 — how a verdict was actually reached. Own copy rather than
@@ -399,8 +409,8 @@ window.Export = (function () {
   }
 
   async function exportScholarly() {
+    if (!deps.getCore().currentSessionId) return;
     const passages = getAnnotatedPassages();
-    if (!passages.length || !deps.getCore().currentSessionId) return;
     const statusEl = document.getElementById('export-status');
     statusEl.textContent = 'Building scholarly note...';
     try {
@@ -423,12 +433,13 @@ window.Export = (function () {
         `**Members:** ${names}`,
         `**Source:** ${sourceExcerpt}`,
         '',
-        '## Selected Passages',
-        '',
       ];
-      passages.forEach(p => {
-        lines.push(`**${p.speaker}** —`, '', p.text, '', `> ${p.note}`, '');
-      });
+      if (passages.length) {
+        lines.push('## Selected Passages', '');
+        passages.forEach(p => {
+          lines.push(`**${p.speaker}** —`, '', p.text, '', `> ${p.note}`, '');
+        });
+      }
       lines.push('## Bibliography', '', renderBibliography(session.citationFlags || []));
 
       const blob = new Blob([lines.join('\n')], { type: 'text/markdown' });

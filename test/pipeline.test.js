@@ -19,6 +19,7 @@ const {
   BEAT_WORD_THRESHOLD,
   countWords,
   lengthTendencyOf,
+  PRIORITY_RANK_DECAY,
   DISPOSITION_MAX_CHARS,
   buildDispositionToolSchema,
   buildDispositionSystemPrompt,
@@ -144,6 +145,11 @@ test('pickNextSpeaker', async t => {
     assert.equal(shareOf('blavatsky', args), 1);
   });
 
+  // These pools all put the member under test at rank 0 (pool[0]) and the
+  // other candidate at rank 1, so #330's priority weighting (PRIORITY_RANK_DECAY
+  // applied to the rank-1 candidate, 1x to rank 0) is baked into every
+  // expected share below, not just the tests that name it explicitly.
+
   await t.test('speaking back-to-back is rare but possible (~12% against one fresh voice)', () => {
     const share = shareOf('scholem', {
       pool: ['scholem', 'blavatsky'],
@@ -151,8 +157,8 @@ test('pickNextSpeaker', async t => {
       lastSpeakerId: 'scholem',
       remainingBudget: 500,
     });
-    // 0.12 / (0.12 + 1)
-    assert.ok(Math.abs(share - 0.107) < 0.01, `back-to-back share was ${share}`);
+    // 0.12 / (0.12 + 1 * PRIORITY_RANK_DECAY)
+    assert.ok(Math.abs(share - 0.13) < 0.01, `back-to-back share was ${share}`);
     assert.ok(share > 0, 'back-to-back must stay possible, not impossible');
   });
 
@@ -165,8 +171,8 @@ test('pickNextSpeaker', async t => {
       lastSpeakerId: 'crowley',
       remainingBudget: 500,
     });
-    // 0.45 / (0.45 + 1) — discounted, but far likelier than the back-to-back case
-    assert.ok(Math.abs(share - 0.31) < 0.01, `repeat-after-gap share was ${share}`);
+    // 0.45 / (0.45 + 1 * PRIORITY_RANK_DECAY) — discounted, but far likelier than the back-to-back case
+    assert.ok(Math.abs(share - 0.36) < 0.01, `repeat-after-gap share was ${share}`);
   });
 
   await t.test('expansive voices are favoured while there is budget to spend', () => {
@@ -176,8 +182,8 @@ test('pickNextSpeaker', async t => {
       lastSpeakerId: null,
       remainingBudget: 500,
     });
-    // 1.35 / (1.35 + 1)
-    assert.ok(Math.abs(share - 0.574) < 0.01, `expansive share was ${share}`);
+    // 1.35 / (1.35 + 1 * PRIORITY_RANK_DECAY)
+    assert.ok(Math.abs(share - 0.628) < 0.01, `expansive share was ${share}`);
   });
 
   await t.test('below the low-budget threshold that preference inverts, so the round can close', () => {
@@ -187,9 +193,9 @@ test('pickNextSpeaker', async t => {
       lastSpeakerId: null,
       remainingBudget: 100, // < LOW_BUDGET_WORDS (120)
     };
-    // 1.35 * 0.4 = 0.54, against a medium voice's 1
+    // 1.35 * 0.4 = 0.54, against a medium voice's 1 * PRIORITY_RANK_DECAY
     const share = shareOf('crowley', args);
-    assert.ok(Math.abs(share - 0.351) < 0.01, `low-budget expansive share was ${share}`);
+    assert.ok(Math.abs(share - 0.403) < 0.01, `low-budget expansive share was ${share}`);
     assert.ok(share < shareOf('scholem', args), 'terse-ish voices should win on a thin budget');
   });
 
@@ -240,9 +246,9 @@ test('pickNextSpeaker', async t => {
       remainingBudget: 500,
       disposition: { scholem: { waitingOnMemberId: 'crowley' } },
     };
-    // 3 / (3 + 1)
+    // 3 / (3 + 1 * PRIORITY_RANK_DECAY)
     const share = shareOf('scholem', args);
-    assert.ok(Math.abs(share - 0.75) < 0.02, `waiting-on share was ${share}`);
+    assert.ok(Math.abs(share - 0.789) < 0.02, `waiting-on share was ${share}`);
   });
 
   await t.test('the boost only applies when the target actually just spoke', () => {
@@ -253,7 +259,8 @@ test('pickNextSpeaker', async t => {
       remainingBudget: 500,
       disposition: { scholem: { waitingOnMemberId: 'crowley' } },
     });
-    assert.ok(Math.abs(withoutMatch - 0.5) < 0.02, `unmatched-target share was ${withoutMatch}`);
+    // 1 / (1 + 1 * PRIORITY_RANK_DECAY) — no interrupt boost, just rank 0 vs rank 1
+    assert.ok(Math.abs(withoutMatch - 0.556) < 0.02, `unmatched-target share was ${withoutMatch}`);
   });
 
   await t.test('is a no-op with no disposition map, and tolerant of a member missing from it', () => {
@@ -263,8 +270,9 @@ test('pickNextSpeaker', async t => {
       lastSpeakerId: 'crowley',
       remainingBudget: 500,
     };
-    assert.ok(Math.abs(shareOf('scholem', args) - 0.5) < 0.02);
-    assert.ok(Math.abs(shareOf('scholem', { ...args, disposition: {} }) - 0.5) < 0.02);
+    // 1 / (1 + 1 * PRIORITY_RANK_DECAY)
+    assert.ok(Math.abs(shareOf('scholem', args) - 0.556) < 0.02);
+    assert.ok(Math.abs(shareOf('scholem', { ...args, disposition: {} }) - 0.556) < 0.02);
   });
 
   await t.test('a null lastSpeakerId (round-opening pick) never triggers the boost', () => {
@@ -277,7 +285,45 @@ test('pickNextSpeaker', async t => {
       remainingBudget: 500,
       disposition: { scholem: { waitingOnMemberId: null } },
     });
-    assert.ok(Math.abs(share - 0.5) < 0.02);
+    // 1 / (1 + 1 * PRIORITY_RANK_DECAY)
+    assert.ok(Math.abs(share - 0.556) < 0.02);
+  });
+
+  // #330: the director's own priority order (pool[0] = highest priority) is
+  // now a real factor in the draw, not just a shortlist. Isolate it from
+  // every other weighting factor — same tendency, no repeats, no interrupt —
+  // so this test fails on its own if the rank multiplier regresses.
+  await t.test('the director-ranked candidate is meaningfully likelier to be drawn, all else equal (#330)', () => {
+    const base = {
+      pool: ['blavatsky', 'scholem', 'yeats', 'crowley', 'waite'],
+      spokenCounts: counts([]),
+      lastSpeakerId: null,
+      remainingBudget: 500,
+    };
+    const topShare = shareOf('blavatsky', base); // rank 0
+    const bottomShare = shareOf('waite', base); // rank 4
+    // yeats/crowley are seeded 'expansive' (LENGTH_WEIGHT), so rank alone
+    // isn't a clean signal against them — waite stays default 'medium' like
+    // blavatsky and scholem, isolating the rank effect from tendency.
+    assert.ok(
+      Math.abs(topShare / bottomShare - 1 / Math.pow(PRIORITY_RANK_DECAY, 4)) < 0.15,
+      `top-vs-bottom ratio was ${topShare / bottomShare}, expected ~${1 / Math.pow(PRIORITY_RANK_DECAY, 4)}`
+    );
+    assert.ok(topShare > bottomShare, 'the top-ranked candidate should be drawn more often than the bottom-ranked one');
+  });
+
+  await t.test('an unranked (unordered) pool still sums to a valid distribution', () => {
+    // Pool order is the only signal for rank — a single-member pool has no
+    // rank-1+ neighbor to be discounted against, so it should draw exactly
+    // as often as an unweighted pick (this is really a sanity check that the
+    // rank multiplier can't zero out or distort a trivial pool).
+    const share = shareOf('scholem', {
+      pool: ['scholem'],
+      spokenCounts: counts([]),
+      lastSpeakerId: null,
+      remainingBudget: 500,
+    });
+    assert.equal(share, 1);
   });
 });
 
