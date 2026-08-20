@@ -314,6 +314,32 @@ test('POST /api/sessions/:id/close', async t => {
     assert.equal(saved.rounds[0].endedBy, 'lull', 'earlier passages keep their own end-cause');
   });
 
+  // #354: interjections are real segments now, and the last segment isn't
+  // necessarily a passage any more. "Let it end" answers a lull; only a
+  // passage ends in one, so an interjection tacked on after it must be
+  // skipped rather than wrongly marked as the thing the user closed.
+  await t.test('skips a trailing interjection segment and closes the passage before it', () => {
+    const dir = makeFixtureDir();
+    t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+    store.saveSession(
+      dir,
+      baseSession('s1', {
+        rounds: [
+          { label: 'The room draws breath.', text: 'a', endedBy: 'budget' },
+          { kind: 'interjection', label: 'A Presence Passes Through', text: 'b', endedBy: 'budget' },
+        ],
+      })
+    );
+    const app = fakeApp();
+    registerSessionRoutes(app, makeDeps(dir));
+    const res = fakeRes();
+    app.routes['POST /api/sessions/:id/close'](fakeReq({ params: { id: 's1' } }), res);
+    assert.equal(res.body.closedAt, 0);
+    const saved = store.loadSession(dir, 's1');
+    assert.equal(saved.rounds[0].endedBy, 'closed');
+    assert.equal(saved.rounds[1].endedBy, 'budget', "the interjection's own end-cause is untouched");
+  });
+
   await t.test('404s for a session that does not exist', () => {
     const dir = makeFixtureDir();
     t.after(() => fs.rmSync(dir, { recursive: true, force: true }));

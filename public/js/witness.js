@@ -738,12 +738,12 @@ window.Witness = (function () {
     const annotations = session.annotations || {};
 
     (session.rounds || []).forEach(round => {
-      // #245: `endedBy` (written only since #244) separates a segment whose
-      // label opens it -- an old round header -- from one whose label is the
-      // lull that ended it, which plays after the passage, where the room
-      // actually drew breath. Same discriminator sessions.js's restore uses.
-      const endsInLull = !!round.endedBy;
-      if (!endsInLull) blocks.push({ type: 'header', label: round.label });
+      // #245/#354: a segment's label either opens it (an old round header,
+      // or an interjection announcing itself) or plays after the passage,
+      // where the room actually drew breath (a lull note). Same shared rule
+      // sessions.js's restore uses -- injected as deps.labelOpensSegment,
+      // per this module's own "never reach into a sibling module" convention.
+      if (deps.labelOpensSegment(round)) blocks.push({ type: 'header', label: round.label });
 
       const lines = (round.text || '').split('\n');
       let speaker = null,
@@ -796,7 +796,7 @@ window.Witness = (function () {
         } else if (speaker) textLines.push(t);
       });
       flush();
-      if (endsInLull) blocks.push({ type: 'lull', label: round.label });
+      if (!deps.labelOpensSegment(round)) blocks.push({ type: 'lull', label: round.label });
     });
 
     return blocks;

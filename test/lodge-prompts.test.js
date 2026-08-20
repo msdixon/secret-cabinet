@@ -13,6 +13,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const lp = require('../src/lodge-prompts.js');
+const record = require('../public/js/record.js');
 
 const ROSTER = [
   { id: 'crowley', name: 'Crowley' },
@@ -179,20 +180,44 @@ test('resolvePlayerName', async t => {
   });
 });
 
+// #354: the stable identity a player's own turn is recorded under -- roster
+// id when playing as a member (the fiction's speaker really is that member),
+// record.js's PLAYER_SPEAKER_ID sentinel when playing under one's own name
+// (no roster entry to point at), null for every other mode (nothing to
+// record -- runRound never receives a precedingTurn at all).
+test('resolvePlayerSpeakerId', async t => {
+  await t.test('"member" mode resolves to the roster member id', () => {
+    assert.equal(lp.resolvePlayerSpeakerId('member', 'crowley'), 'crowley');
+  });
+
+  await t.test('"custom" mode resolves to the non-roster sentinel', () => {
+    assert.equal(lp.resolvePlayerSpeakerId('custom', null), record.PLAYER_SPEAKER_ID);
+  });
+
+  await t.test('"none" mode (or anything else) resolves to null', () => {
+    assert.equal(lp.resolvePlayerSpeakerId('none', null), null);
+  });
+});
+
 test('buildPrecedingTurn', async t => {
   const strip = text => text.replace(/\n{3,}/g, '\n\n');
 
-  await t.test('builds a turn when both a speaker name and non-empty text are present', () => {
-    const turn = lp.buildPrecedingTurn('Crowley', { text: 'A line.\n\n\n\nMore.' }, strip);
-    assert.deepEqual(turn, { speakerName: 'Crowley', text: 'A line.\n\nMore.' });
+  await t.test('builds a turn carrying speaker name, memberId, and stripped text', () => {
+    const turn = lp.buildPrecedingTurn('Crowley', { text: 'A line.\n\n\n\nMore.' }, strip, 'crowley');
+    assert.deepEqual(turn, { speakerName: 'Crowley', memberId: 'crowley', text: 'A line.\n\nMore.' });
+  });
+
+  await t.test('carries the non-roster sentinel for a custom-name player', () => {
+    const turn = lp.buildPrecedingTurn('A Visitor', { text: 'Hello.' }, strip, record.PLAYER_SPEAKER_ID);
+    assert.equal(turn.memberId, record.PLAYER_SPEAKER_ID);
   });
 
   await t.test('returns null when there is no speaker name', () => {
-    assert.equal(lp.buildPrecedingTurn(null, { text: 'A line.' }, strip), null);
+    assert.equal(lp.buildPrecedingTurn(null, { text: 'A line.' }, strip, 'crowley'), null);
   });
 
   await t.test('returns null when playerTurn has no text', () => {
-    assert.equal(lp.buildPrecedingTurn('Crowley', null, strip), null);
-    assert.equal(lp.buildPrecedingTurn('Crowley', { text: '   ' }, strip), null);
+    assert.equal(lp.buildPrecedingTurn('Crowley', null, strip, 'crowley'), null);
+    assert.equal(lp.buildPrecedingTurn('Crowley', { text: '   ' }, strip, 'crowley'), null);
   });
 });

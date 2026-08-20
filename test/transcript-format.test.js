@@ -9,6 +9,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const tf = require('../src/transcript-format.js');
+const record = require('../public/js/record.js');
 
 const ROSTER = [
   { id: 'crowley', name: 'Aleister Crowley', aliases: ['Beast'] },
@@ -86,6 +87,15 @@ test('formatTranscriptText', async t => {
     const text = 'An ordinary line of prose.';
     assert.equal(tf.formatTranscriptText(text, ROSTER), text);
   });
+
+  // #354: the presence's own header already reads as marked-off ("— a voice
+  // from elsewhere —"); the ' —' suffix real speaker lines get would double
+  // it up.
+  await t.test("leaves the interjecting presence's header line as-is", () => {
+    const text = `${record.PRESENCE_SPEAKER_NAME}
+What of silence?`;
+    assert.equal(tf.formatTranscriptText(text, ROSTER), text);
+  });
 });
 
 // #245: the `endedBy` discriminator is the whole point here — without it there
@@ -108,6 +118,34 @@ test('composeSegmentText', async t => {
   await t.test('treats a user-closed segment as ending in a lull like any other', () => {
     const out = tf.composeSegmentText({ label: 'The fire settles.', text: 'Crowley\nOne.', endedBy: 'closed' }, ROSTER);
     assert.match(out, /One\.\n\n— The fire settles\. —\n$/);
+  });
+
+  // #354: an interjection segment carries an `endedBy` of its own (the
+  // room's reason for stopping), but its label still announces the event
+  // rather than closing it — the bare `endedBy` check alone would place it
+  // wrong, which is why the rule lives in record.js now.
+  await t.test('opens with its label despite carrying an endedBy, for an interjection segment', () => {
+    const out = tf.composeSegmentText(
+      {
+        kind: record.SEGMENT_KIND_INTERJECTION,
+        label: 'A Presence Passes Through',
+        text: `${record.PRESENCE_SPEAKER_NAME}\nWhat of silence?\n\nCrowley\nOne.`,
+        endedBy: 'budget',
+      },
+      ROSTER
+    );
+    assert.equal(
+      out,
+      `
+— A Presence Passes Through —
+
+${record.PRESENCE_SPEAKER_NAME}
+What of silence?
+
+Crowley —
+One.
+`
+    );
   });
 });
 

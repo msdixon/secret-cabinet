@@ -14,6 +14,12 @@
 // Kept in sync with that client-side logic; if one changes, change both.
 const ALIAS_STOPWORDS = new Set(['of', 'the', 'van', 'der', 'de', 'la', 'lady', 'sir', 'dr', 'st']);
 
+// #354: the record's shared vocabulary — the label-placement rule (which now
+// has three segment shapes to tell apart, not two) and the presence's
+// speaker header. Required directly rather than taken as a parameter like
+// `roster`: it is roster-free, stateless constants and pure functions.
+const record = require('../public/js/record.js');
+
 function normalizeSpeaker(s) {
   return s
     .normalize('NFD')
@@ -64,6 +70,11 @@ function formatTranscriptText(text, roster) {
     .split('\n')
     .map(line => {
       const t = line.trim();
+      // #354: the presence who interjects signs with a line that already
+      // reads as a marked-off header ("— a voice from elsewhere —"), so the
+      // ' —' suffix would double up on it. A real speaker line, formatted
+      // as-is.
+      if (record.isPresenceHeader(t)) return line;
       const bare = t.endsWith(':') ? t.slice(0, -1) : t;
       return headers.has(normalizeSpeaker(bare)) ? `${bare} —` : line;
     })
@@ -73,13 +84,21 @@ function formatTranscriptText(text, roster) {
 // #245: a segment's `label` means opposite things either side of the
 // continuous-stream migration. Pre-#244 segments carry an opening header
 // ("First Movement") naming the passage about to happen; new ones carry the
-// lull note that ended it ("The fire settles"). `endedBy` tells them apart —
-// it exists only on segments written since #244 — so the marker sits above
-// the old and below the new, and an archived meeting still reads the way it
-// did the night it was held.
+// lull note that ended it ("The fire settles"), so the marker sits above the
+// old and below the new, and an archived meeting still reads the way it did
+// the night it was held.
+//
+// #354 adds a third shape — the interjection segment, which announces itself
+// like a round header but also records why the room stopped reacting — so
+// the discriminator is no longer the bare `endedBy` check it was. It lives
+// in record.js now, shared with the three client-side copies of the same
+// rule (sessions.js's restore and compare loops, witness.js's replay parse)
+// and the reading room's.
 function composeSegmentText(segment, roster) {
   const body = formatTranscriptText(segment.text, roster);
-  return segment.endedBy ? `\n${body}\n\n— ${segment.label} —\n` : `\n— ${segment.label} —\n\n${body}\n`;
+  return record.labelOpensSegment(segment)
+    ? `\n— ${segment.label} —\n\n${body}\n`
+    : `\n${body}\n\n— ${segment.label} —\n`;
 }
 
 function buildTranscriptHeader(entry, memberIds, date, roster) {

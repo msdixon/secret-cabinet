@@ -15,6 +15,12 @@
 // per-round instructions indexed by round number become a continuous "arc
 // note" keyed to meeting progress instead — see arcNoteForProgress below.
 
+// #354: record.js holds the shared vocabulary of the structured record —
+// here, the sentinel id a player speaking under their own name is filed
+// under. Required directly rather than injected: it is roster-free,
+// stateless constants and pure functions, the same category as `path`.
+const record = require('../public/js/record.js');
+
 // #194 touchpoint 2: the three-part arc (reactions -> unbound cross-talk ->
 // embers) survives as *tendency*, not boundary. The old prose's explicit
 // speaker-count hints ("3-5 members speak") are dropped here — pool sizing
@@ -125,12 +131,26 @@ function resolvePlayerName(playerMode, playerMemberId, playerName, roster = []) 
   return null;
 }
 
-// Builds the { speakerName, text } object runRound expects, or null if no
-// turn was submitted this round (the player passed, or isn't active).
-function buildPrecedingTurn(speakerName, playerTurn, stripInternalBlankLines) {
+// #354: the stable identity the player's own turn is recorded under, the
+// name-resolution above's counterpart. Playing *as* a roster member means
+// that member's real id — in the fiction it is they who spoke, and a turn
+// filed under Blavatsky's id is a turn of Blavatsky's however it was
+// authored. Playing under one's own name has no roster entry to point at,
+// so it gets record.js's explicit sentinel rather than the `null` that used
+// to stand in for both cases indiscriminately.
+function resolvePlayerSpeakerId(playerMode, playerMemberId) {
+  if (playerMode === 'member') return playerMemberId || null;
+  if (playerMode === 'custom') return record.PLAYER_SPEAKER_ID;
+  return null;
+}
+
+// Builds the { speakerName, memberId, text } object runRound expects, or
+// null if no turn was submitted this round (the player passed, or isn't
+// active). `memberId` (#354) is what lands in the turn's stored beat.
+function buildPrecedingTurn(speakerName, playerTurn, stripInternalBlankLines, memberId = null) {
   const text = playerTurn?.text?.trim();
   if (!speakerName || !text) return null;
-  return { speakerName, text: stripInternalBlankLines(text) };
+  return { speakerName, memberId, text: stripInternalBlankLines(text) };
 }
 
 module.exports = {
@@ -143,5 +163,6 @@ module.exports = {
   deriveMeetingNote,
   playerDirectorPool,
   resolvePlayerName,
+  resolvePlayerSpeakerId,
   buildPrecedingTurn,
 };
