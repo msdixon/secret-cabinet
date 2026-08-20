@@ -394,5 +394,17 @@
     "members": ["warburg"],
     "themes": ["myth", "symbolism", "technology", "disenchantment", "civilisation"],
     "file": "warburg-lecture-on-serpent-ritual-1923.md"
+  },
+  {
+    "id": "frieda-harris-letters-to-crowley-1939-1944",
+    "title": "Mercury Is in a Very Ape-Like Mood — from Letters to Aleister Crowley",
+    "source": "Correspondence, Aleister Crowley Papers (Syracuse) & Frieda Harris Correspondence, NS37 Yorke Collection (Warburg Institute)",
+    "date": "1939–1944",
+    "author": "frieda-harris",
+    "translated": false,
+    "license": "fair-use",
+    "members": ["frieda-harris", "crowley"],
+    "themes": ["correspondence", "humor", "domestic-life", "alchemy", "magical-practice"],
+    "file": "frieda-harris-letters-to-crowley-1939-1944.md"
   }
 ]
