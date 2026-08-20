@@ -1,0 +1,1 @@
+[#352](https://github.com/msdixon/secret-cabinet/issues/352) meeting-level turn ledger — nothing in the pipeline knows who has spoken this meeting, so the bottom-ranked pool member never speaks in 71% of passages. The review's single highest-leverage fix; the data is already persisted in `beats`

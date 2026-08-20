@@ -1,0 +1,1 @@
+[#357](https://github.com/msdixon/secret-cabinet/issues/357) the room has no fireplace — the fire is invoked ~14 times across the runtime prose and rendered as one 0.4-diameter sphere. Rachel's named prerequisite for [#358](https://github.com/msdixon/secret-cabinet/issues/358): the empty state has to earn the fold
