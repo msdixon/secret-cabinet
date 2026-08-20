@@ -1,1 +1,0 @@
-[#363](https://github.com/msdixon/secret-cabinet/issues/363) retire the rounds vocabulary from `lodge-context.md` — it still teaches "Round 1... Rounds 2 and 3" as the cached prefix on every model call. Plus two stale constants
