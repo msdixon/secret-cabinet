@@ -698,6 +698,15 @@ window.Witness = (function () {
   // Both are reset in start() and maintained in advance() / goBack().
   let witnessUndos = [];
   let witnessSideSnapshots = [];
+  // #336: bumped on every advance()/goBack() call. renderWitnessBlock's
+  // speech branch can return a promise (real speech duration) instead of a
+  // plain ms number, and that promise may resolve late or never (a
+  // superseded utterance's 'end' event isn't guaranteed to fire -- see
+  // voice.js). Capturing the generation at the top of advance() and
+  // checking it again once the delay settles means a stale beat's pacing
+  // signal can't schedule a phantom advance after the user has already gone
+  // back or moved on.
+  let witnessGeneration = 0;
   // End-of-session state: tracked separately so clicking/arrowing at the end
   // doesn't stack up multiple "The room falls silent." markers.
   let witnessEnded = false;
@@ -928,8 +937,23 @@ window.Witness = (function () {
       // rendering path (stage/room, live/replay) already funnels through --
       // see voice.js's own comment for why it's a no-op unless the user has
       // opted in.
-      window.Voice?.speak(block.text, block.memberId, witnessSpeed, memberVoiceGender(block.memberId));
-      return { delay: witnessReadingTime(block.text), undo };
+      //
+      // #336: when something was actually spoken, Voice.speak() hands back
+      // a promise that resolves once that audio/utterance really finishes --
+      // pace on that instead of the WPM guess, so a line that runs long
+      // relative to WITNESS_WPM's estimate is never cut off mid-sentence.
+      // Voice.speak() returns undefined for every case where nothing was
+      // spoken (voice off, unsupported, or nothing left after stripping
+      // asides), and the WPM estimate is exactly what should drive pacing
+      // there -- it's the only signal there is. advance() (the only place
+      // that reads a speech block's `delay`) already treats a plain number
+      // and a promise uniformly via Promise.resolve(delay).then(...).
+      const spoken = window.Voice?.speak(block.text, block.memberId, witnessSpeed, memberVoiceGender(block.memberId));
+      const delay =
+        spoken && typeof spoken.then === 'function'
+          ? spoken.then(() => WITNESS_MIN_PAUSE / witnessSpeed) // a short beat-to-beat breath, same floor pacing uses elsewhere
+          : witnessReadingTime(block.text);
+      return { delay, undo };
     }
 
     return { delay: WITNESS_MIN_PAUSE, undo: () => {} };
@@ -955,6 +979,7 @@ window.Witness = (function () {
   function advance() {
     if (!witnessActive) return;
     clearTimeout(witnessTimer);
+    const myGeneration = ++witnessGeneration;
 
     // At the end: add the closing marker exactly once, then stop.
     if (witnessIndex >= witnessBlocks.length) {
@@ -981,8 +1006,16 @@ window.Witness = (function () {
     witnessIndex++;
     _updateControls();
 
-    // Schedule auto-advance
-    witnessTimer = setTimeout(advance, delay);
+    // Schedule auto-advance. `delay` is a plain ms number for every block
+    // except a spoken speech beat with voice actually on, where it's a
+    // promise instead (#336) -- Promise.resolve(delay) is already-resolved
+    // for the plain-number case, so this one path covers both without a
+    // branch here. The generation check discards a late-arriving speech
+    // promise if the user has since gone back or exited.
+    Promise.resolve(delay).then(resolvedDelay => {
+      if (!witnessActive || myGeneration !== witnessGeneration) return;
+      witnessTimer = setTimeout(advance, resolvedDelay);
+    });
   }
 
   // Step back one block (#90). Reverses the last rendered block's effect via
@@ -994,6 +1027,10 @@ window.Witness = (function () {
   function goBack() {
     if (!witnessActive) return;
     clearTimeout(witnessTimer);
+    // #336: the block being undone may have a pacing promise still in
+    // flight (see advance()) -- bump the generation so it can't schedule an
+    // advance once we've already stepped back past it.
+    witnessGeneration++;
     // #29: the block being undone may still be mid-utterance -- don't leave
     // it talking about a beat that's no longer on screen.
     window.Voice?.stop();
@@ -1096,6 +1133,7 @@ window.Witness = (function () {
     witnessSideSnapshots = [];
     witnessEnded = false;
     witnessEndEl = null;
+    witnessGeneration++; // #336: a stale pacing promise from a prior replay must not reach into this one
 
     window.Voice?.stop(); // #29: a fresh replay shouldn't inherit a leftover utterance
     const stage = document.getElementById('witness-stage');

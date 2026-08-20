@@ -1,1 +1,0 @@
-[#336](https://github.com/msdixon/secret-cabinet/issues/336) Witness auto-advance cuts a member's voice off mid-sentence — pacing is a fixed WPM estimate, not actual speech duration. Confirmed live, not just theoretical. Split out of #29's old remaining-work note when [#333](https://github.com/msdixon/secret-cabinet/issues/333) closed the voice-assignment half of that note.
