@@ -442,5 +442,17 @@
     "members": ["corbin"],
     "themes": ["imaginal-world", "imagination", "cosmology", "sufism", "ta-wil", "perception"],
     "file": "corbin-mundus-imaginalis-1972.md"
+  },
+  {
+    "id": "sun-ra-the-flesh-broadsheet-1950s-1972",
+    "title": "The Word That Was Made Flesh Was Made Fresh \u2014 from \"The Flesh\" and a Chicago Broadsheet",
+    "source": "\"The Flesh,\" collected in The Immeasurable Equation: The Collected Poetry and Prose of Sun Ra; and the streetcorner broadsheet \"Jesus Said, 'Let the Negro Bury the Negro',\" collected in The Wisdom of Sun Ra",
+    "date": "1950s and 1972",
+    "author": "sun-ra",
+    "translated": false,
+    "license": "fair-use",
+    "members": ["sun-ra"],
+    "themes": ["philosophy-of-language", "hidden-meaning", "etymology", "scripture", "myth", "afrofuturism"],
+    "file": "sun-ra-the-flesh-broadsheet-1950s-1972.md"
   }
 ]
