@@ -23,6 +23,11 @@
 // pure functions (test/pipeline.test.js).
 const { splitIntoBeats, BEAT_WORD_THRESHOLD } = require('../public/js/beats.js');
 
+// #354: the record's shared vocabulary — non-roster speaker ids, segment
+// kinds, the label-placement rule. Same dual Node/browser module convention
+// and the same reason for it as beats.js above; see that file's own header.
+const record = require('../public/js/record.js');
+
 const core = require('./pipeline-core');
 const director = require('./pipeline-director');
 const casting = require('./pipeline-casting');
@@ -208,21 +213,49 @@ async function runRound({
   // #244: beats: [{memberId, text}] alongside the rolled-up roundSoFar —
   // persisted forward-provision for beat-level branching (#33 v2) and side
   // conversations (#196), so neither ever needs a second migration pass
-  // over stored sessions. Mirrors roundSoFar's content exactly (only
-  // successful, actually-spoken beats), including the player's own turn
-  // below.
+  // over stored sessions.
+  //
+  // #354: this is now the authoritative record of every turn that happened,
+  // which is strictly more than roundSoFar holds. Three shapes:
+  //
+  //   { memberId, text }                        a turn that was spoken
+  //   { memberId, speakerName, text }            ...by someone off-roster
+  //   { memberId, text: '', failed: true, error} a turn that produced nothing
+  //
+  // A failed beat has no text and so contributes nothing to roundSoFar —
+  // that asymmetry is the point. A member who was called on and produced
+  // nothing used to be indistinguishable in the record from one who was
+  // never called on at all, and from one who chose not to speak; a record
+  // that says "they were called on and produced nothing" is honest, and
+  // silence-by-omission is not. Consumers reading beats for prose must
+  // therefore filter on `failed`, not assume every beat has text.
+  //
+  // `memberId` is a roster id, or one of record.js's non-roster sentinels
+  // for a speaker who has no roster entry — never null. It used to be null
+  // for the player's own turn, which left that turn attributable only by
+  // display-name string match.
   const beatsList = [];
   if (precedingTurn) {
     const seed = `${precedingTurn.speakerName}\n${precedingTurn.text}`;
     onChunk?.(`${seed}\n\n`);
-    // No memberId to offer here -- precedingTurn only ever carries a display
-    // name (see server.js's buildPrecedingTurn), same as the final settled
-    // parse today, which resolves the player's turn by name match rather
-    // than a stored id. #115: still worth a speaker-end signal so the live
-    // view renders it as a proper attributed block instead of raw text.
+    // #115: worth a speaker-end signal so the live view renders this as a
+    // proper attributed block instead of raw text. Still signalled with a
+    // null memberId even though #354 now knows the real one: the stage
+    // anchors a signalled memberId to that member's seat, and the player
+    // speaking *as* a member is not the room's AI speaking — that's a
+    // presentation call to make deliberately, not a side effect of fixing
+    // the record. The record and the live signal disagree on purpose here.
     onSpeakerEnd?.(null, precedingTurn.speakerName, precedingTurn.text);
     roundSoFar = seed;
-    beatsList.push({ memberId: null, text: precedingTurn.text });
+    beatsList.push({
+      // #354: the roster id when the player plays a member, record.js's
+      // PLAYER_SPEAKER_ID sentinel when they play under their own name.
+      // The caller resolves which (see lodge-prompts' resolvePlayerSpeakerId);
+      // the fallback keeps a caller that passes no id from reintroducing null.
+      memberId: precedingTurn.memberId || record.PLAYER_SPEAKER_ID,
+      speakerName: precedingTurn.speakerName,
+      text: precedingTurn.text,
+    });
   }
 
   const initialPoolTarget = Math.min(presentMembers.length, effectiveCount + POOL_SLACK);
@@ -429,7 +462,12 @@ async function runRound({
           voiceExemplar: voiceExemplar?.id,
         })
       );
-      // Skip this speaker, keep the round going with fewer voices.
+      // #354: the round goes on with fewer voices, but the attempt is not
+      // dropped from the record. No text (there is none — the call failed
+      // after its retry), so roundSoFar and the transcript are unchanged and
+      // the reader sees exactly what they saw before; the beat is what makes
+      // "called on, produced nothing" recoverable afterwards.
+      beatsList.push({ memberId, text: '', failed: true, error: err.message });
     }
 
     // Recorded whether the beat succeeded or failed — a failing member

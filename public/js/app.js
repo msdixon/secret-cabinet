@@ -1410,6 +1410,9 @@ function witnessDeps() {
     // rather than read directly off window.Beats, per this module's own
     // "everything comes in as deps" convention.
     splitIntoBeats: window.Beats.splitIntoBeats,
+    // #354: same convention, for the shared label-placement rule -- see
+    // sessionsDeps' identical injection.
+    labelOpensSegment: window.Record.labelOpensSegment,
   };
 }
 
@@ -1589,6 +1592,12 @@ function exportDeps() {
     // asynchronously inside export.js, so there is no DOM event app.js could
     // listen for. This is the notification that a document is now readable.
     onDocumentReady: autoProposeCast,
+    // #354: the scholarly export's honesty check -- whether the session it's
+    // exporting has a complete turn-level record, and the note to print when
+    // it doesn't. Injected rather than read off window.Record, per this
+    // module's own deps convention.
+    recordCompleteness: window.Record.recordCompleteness,
+    recordCompletenessNote: window.Record.recordCompletenessNote,
   };
 }
 window.Export.configure(exportDeps());
@@ -1681,6 +1690,12 @@ function sessionsDeps() {
     applyCitationFlags,
     applyPlayerTurnMarkers,
     showSessionControls,
+    // #354: which side of a segment its label belongs on -- now a shared
+    // rule (record.js) rather than a bare `endedBy` check, since an
+    // interjection segment carries an endedBy of its own but still opens
+    // with its label like an old round header. Injected rather than read
+    // directly off window.Record, per this module's own deps convention.
+    labelOpensSegment: window.Record.labelOpensSegment,
   };
 }
 

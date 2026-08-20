@@ -23,6 +23,7 @@ const assert = require('node:assert/strict');
 
 const { loadPublicModule, assertIdsExistInIndexHtml } = require('./helpers/dom.js');
 const { splitIntoBeats } = require('../public/js/beats.js');
+const { labelOpensSegment } = require('../public/js/record.js');
 
 // The elements witness.js reaches for by id. Kept in one place so the drift
 // guard below and the fixture can't disagree with each other.
@@ -103,6 +104,8 @@ function makeDeps(overrides = {}) {
     // splitting is exactly the thing under test in the block below, so a
     // dumb stub would test nothing.
     splitIntoBeats,
+    // #354: same reasoning -- the real rule, not a stand-in.
+    labelOpensSegment,
     ...overrides,
   };
 }

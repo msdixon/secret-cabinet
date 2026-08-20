@@ -12,6 +12,8 @@
 
 const fs = require('fs');
 const path = require('path');
+// #354: the record's shared segment vocabulary — see record.js's own header.
+const record = require('../../public/js/record.js');
 
 function registerSessionRoutes(
   app,
@@ -312,11 +314,15 @@ The "quote" field must be a verbatim excerpt (~10-25 words) copied exactly from 
   app.post('/api/sessions/:id/close', (req, res) => {
     const session = loadSession(req.params.id);
     if (!session) return res.status(404).json({ error: 'Session not found' });
-    const last = session.rounds?.[session.rounds.length - 1];
-    if (!last) return res.status(400).json({ error: 'Session has no passages to close' });
-    last.endedBy = 'closed';
+    // #354: interjections are segments now, so the last segment is no longer
+    // necessarily a passage. "Let it end" is an answer to a lull, and only a
+    // passage ends in one — marking an interjection `closed` would record the
+    // user cutting off a turn they never chose to take.
+    const closedAt = (session.rounds || []).findLastIndex(r => !record.isInterjectionSegment(r));
+    if (closedAt < 0) return res.status(400).json({ error: 'Session has no passages to close' });
+    session.rounds[closedAt].endedBy = 'closed';
     saveSession(session);
-    res.json({ ok: true, closedAt: session.rounds.length - 1 });
+    res.json({ ok: true, closedAt });
   });
 
   // POST /api/sessions/:id/branch — fork a new session sharing history up to roundIndex

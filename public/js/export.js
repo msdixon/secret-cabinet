@@ -440,6 +440,13 @@ window.Export = (function () {
           lines.push(`**${p.speaker}** —`, '', p.text, '', `> ${p.note}`, '');
         });
       }
+      // #354 item 4: pre-#244 sessions have no turn-level record at all, and
+      // this export is exactly the "reliably produce a record of itself as a
+      // bibliographic source" claim (PROJECT.md's Research-grounding row) --
+      // so a session that can't back that claim says so, rather than a gap
+      // that only shows up as citations quietly missing.
+      const completeness = deps.recordCompletenessNote(session);
+      if (!deps.recordCompleteness(session).complete) lines.push(`*${completeness}*`, '');
       lines.push('## Bibliography', '', renderBibliography(session.citationFlags || []));
 
       const blob = new Blob([lines.join('\n')], { type: 'text/markdown' });

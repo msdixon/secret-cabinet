@@ -416,25 +416,28 @@ window.Sessions = (function () {
       // Re-render segments from stored data.
       //
       // #245: `label` means opposite things either side of the continuous-
-      // stream migration, and `endedBy` (written only since #244) is what
-      // tells them apart. Old segments carry an opening header naming the
+      // stream migration. Old segments carry an opening header naming the
       // passage about to happen ("First Movement"), so it renders above them,
       // exactly as it always did — an archived meeting still reads the way it
       // did the night it was held. New ones carry the lull note that *ended*
-      // the passage, so it renders below, where the user saw it live.
+      // the passage, so it renders below, where the user saw it live. #354's
+      // interjection segments are a third case (announced above, like the
+      // old headers, but carrying an `endedBy` of their own), so the rule
+      // lives in record.js rather than being spelled out at each of its four
+      // call sites.
       //
       // The branch control follows the divider either way: a lull is
       // checkpoint-consistent in the same way a round boundary was, so
       // roundIndex keeps its meaning and no stored branch needed migrating.
       (session.rounds || []).forEach((segment, idx) => {
-        if (segment.endedBy) {
-          deps.setRenderSegment(idx);
-          deps.parseAndRenderTranscript(segment.text);
-          deps.addBranchControl(deps.addLullDivider(segment.label, idx), idx);
-        } else {
+        if (deps.labelOpensSegment(segment)) {
           const header = deps.addRoundHeader(segment.label, idx);
           deps.addBranchControl(header, idx);
           deps.parseAndRenderTranscript(segment.text);
+        } else {
+          deps.setRenderSegment(idx);
+          deps.parseAndRenderTranscript(segment.text);
+          deps.addBranchControl(deps.addLullDivider(segment.label, idx), idx);
         }
       });
 
@@ -634,21 +637,21 @@ window.Sessions = (function () {
 
     // Render each round into the panel
     const transcriptEl = document.getElementById(`${containerId}-transcript`);
-    // Same #245 label-placement rule as the main restore loop above, minus the
-    // branch controls — compare is read-only. The label is model output on new
+    // Same #245/#354 label-placement rule as the main restore loop above,
+    // minus the branch controls — compare is read-only. The label is model output on new
     // segments, so it's escaped here too.
     (session.rounds || []).forEach(segment => {
       const divider = document.createElement('div');
-      if (segment.endedBy) {
-        divider.className = 'transcript-lull';
-        divider.innerHTML = `<div class="lull-rule"></div><span class="lull-note">${deps.escapeHTML(segment.label)}</span><div class="lull-rule"></div>`;
-        renderTranscriptInto(transcriptEl, segment.text);
-        transcriptEl.appendChild(divider);
-      } else {
+      if (deps.labelOpensSegment(segment)) {
         divider.className = 'transcript-round-header';
         divider.innerHTML = `<div class="round-rule"></div><span class="round-rule-label">${deps.escapeHTML(segment.label)}</span><div class="round-rule"></div>`;
         transcriptEl.appendChild(divider);
         renderTranscriptInto(transcriptEl, segment.text);
+      } else {
+        divider.className = 'transcript-lull';
+        divider.innerHTML = `<div class="lull-rule"></div><span class="lull-note">${deps.escapeHTML(segment.label)}</span><div class="lull-rule"></div>`;
+        renderTranscriptInto(transcriptEl, segment.text);
+        transcriptEl.appendChild(divider);
       }
     });
   }

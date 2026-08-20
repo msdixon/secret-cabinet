@@ -13,6 +13,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { loadPublicModule, assertIdsExistInIndexHtml } = require('./helpers/dom.js');
+const { labelOpensSegment } = require('../public/js/record.js');
 
 const FIXTURE = `
   <div id="sessions-overlay"></div>
@@ -102,6 +103,9 @@ function makeDeps(document, calls) {
       el.innerHTML = '<textarea class="annotation-input"></textarea>';
       document.getElementById('transcript-content').appendChild(el);
     },
+    // #354: the real rule, not a stand-in -- same reasoning as witness.test.js's
+    // makeDeps.
+    labelOpensSegment,
   };
 }
 

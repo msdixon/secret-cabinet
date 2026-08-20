@@ -14,6 +14,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { registerConveneRoutes } = require('../src/routes/convene.js');
+const record = require('../public/js/record.js');
 
 function fakeApp() {
   const routes = {};
@@ -94,13 +95,17 @@ function makeDeps(overrides = {}) {
     deriveMeetingNote: () => null,
     playerDirectorPool: members => members,
     resolvePlayerName: (mode, id, name) => name || null,
-    buildPrecedingTurn: (speakerName, playerTurn) => (playerTurn ? { speakerName, text: playerTurn } : null),
+    // #354: real resolvePlayerSpeakerId is roster-free pure logic (see
+    // lodge-prompts.js); this stub mirrors its two real branches without
+    // pulling in record.js, same spirit as the other stand-ins here.
+    resolvePlayerSpeakerId: (mode, id) => (mode === 'member' ? id : mode === 'custom' ? 'player:custom' : null),
+    buildPrecedingTurn: (speakerName, playerTurn, memberId) =>
+      playerTurn ? { speakerName, memberId, text: playerTurn } : null,
     interjectSpeakerCount: 3,
     makeSessionId: entry => `session-${entry.slice(0, 5)}`,
     saveSession: session => savedSessions.set(session.id, session),
     loadSession: id => savedSessions.get(id) || null,
     saveResidueUpdates: updates => savedResidue.push(updates),
-    formatTranscriptText: text => text,
     composeSegmentText: segment =>
       segment.endedBy ? `\n${segment.text}\n\n— ${segment.label} —\n` : `\n— ${segment.label} —\n\n${segment.text}\n`,
     buildTranscriptHeader: (entry, members, date) => `HEADER(${date})\n${entry}\n`,
@@ -324,6 +329,38 @@ test('POST /api/interject', async t => {
     const saved = deps.savedSessions.get('s1');
     assert.match(saved.transcriptText, /A Presence Passes Through/);
     assert.match(saved.transcriptText, /What of silence\?/);
+  });
+
+  // #354 item 1: an interjection used to leave no trace in session.rounds at
+  // all -- prose appended straight to transcriptText and nothing else. It's
+  // a real segment now, with the presence's own words as its first beat.
+  await t.test('pushes a real interjection segment onto session.rounds, not just prose (#354)', async () => {
+    const app = fakeApp();
+    const deps = makeDeps();
+    registerConveneRoutes(app, deps);
+    deps.savedSessions.set('s1', {
+      id: 's1',
+      members: ['crowley', 'jung'],
+      conversationHistory: [],
+      rounds: [{ label: 'First Movement', text: 'r0', endedBy: 'lull' }],
+      transcriptText: 'HEADER\n',
+      generationMetrics: [],
+      disposition: {},
+    });
+    const res = fakeSSERes();
+    await app.routes['POST /api/interject'](fakeReq({ sessionId: 's1', text: 'What of silence?' }), res);
+    const saved = deps.savedSessions.get('s1');
+    assert.equal(saved.rounds.length, 2);
+    const segment = saved.rounds[1];
+    assert.equal(segment.kind, record.SEGMENT_KIND_INTERJECTION);
+    assert.equal(segment.label, 'A Presence Passes Through');
+    assert.equal(segment.endedBy, 'budget');
+    assert.equal(segment.beats[0].memberId, record.PRESENCE_SPEAKER_ID);
+    assert.equal(segment.beats[0].text, 'What of silence?');
+    // The room's own reply beats (from the runRound stub) follow the
+    // presence's own turn.
+    assert.deepEqual(segment.beats[1], { memberId: 'crowley', text: 'hello world' });
+    assert.match(segment.text, /What of silence\?/);
   });
 });
 
