@@ -141,6 +141,63 @@ test('deriveMeetingNote', async t => {
   });
 });
 
+// #352 — the meeting-level turn ledger. Its whole contract is "read the
+// record, never throw": every consumer treats a missing or partial `beats`
+// as no signal, so the degradation cases below matter as much as the
+// counting one.
+test('turnsSoFar', async t => {
+  await t.test('counts one turn per beat, per member, across every passage', () => {
+    assert.deepEqual(
+      lp.turnsSoFar([
+        { beats: [{ memberId: 'crowley' }, { memberId: 'blavatsky' }, { memberId: 'crowley' }] },
+        { beats: [{ memberId: 'crowley' }] },
+      ]),
+      { crowley: 3, blavatsky: 1 }
+    );
+  });
+
+  await t.test('a member who never spoke has no key, which every consumer reads as zero', () => {
+    const ledger = lp.turnsSoFar([{ beats: [{ memberId: 'crowley' }] }]);
+    assert.equal('blavatsky' in ledger, false);
+    assert.equal(ledger.blavatsky || 0, 0);
+  });
+
+  // Since #354, the player's own turn always carries a real memberId (a
+  // roster id, or one of record.js's non-roster sentinels) — never null.
+  // This pins the defensive fallback for a caller or an older stored beat
+  // that still has one, rather than the current live behavior.
+  await t.test('a beat with no memberId at all holds no seat in the ledger', () => {
+    assert.deepEqual(lp.turnsSoFar([{ beats: [{ memberId: null, text: 'a human turn' }, { memberId: 'crowley' }] }]), {
+      crowley: 1,
+    });
+  });
+
+  // #354: a speaker who was called on and produced nothing is recorded as
+  // `{ memberId, text: '', failed: true }` rather than dropped — a turn the
+  // room did not actually hear, so it must not count as one that was.
+  await t.test('excludes a failed turn — called on, but the room never heard from them', () => {
+    assert.deepEqual(
+      lp.turnsSoFar([
+        { beats: [{ memberId: 'crowley', text: '', failed: true, error: 'API error' }, { memberId: 'blavatsky' }] },
+      ]),
+      { blavatsky: 1 }
+    );
+  });
+
+  await t.test('sessions predating #244 have no beats at all and reduce to an empty ledger, not an error', () => {
+    assert.deepEqual(lp.turnsSoFar([{ text: 'a passage from before beats were stored' }, { text: 'another' }]), {});
+  });
+
+  await t.test('tolerates no rounds, a null rounds, and a malformed segment', () => {
+    assert.deepEqual(lp.turnsSoFar([]), {});
+    assert.deepEqual(lp.turnsSoFar(undefined), {});
+    assert.deepEqual(lp.turnsSoFar(null), {});
+    assert.deepEqual(lp.turnsSoFar([null, { beats: null }, { beats: [null, { memberId: 'crowley' }] }]), {
+      crowley: 1,
+    });
+  });
+});
+
 test('playerDirectorPool', async t => {
   await t.test('excludes the player-voiced member id in "member" mode', () => {
     const pool = lp.playerDirectorPool(['crowley', 'blavatsky'], 'member', 'crowley');

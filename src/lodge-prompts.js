@@ -112,6 +112,45 @@ function deriveMeetingNote(session) {
   return null;
 }
 
+// ─── Meeting-level turn ledger (#352) ─────────────────────────────────────────
+//
+// Who has spoken tonight, counted across the whole meeting: { [memberId]:
+// turns }. The who-has-spoken sibling to server.js's wordsSpentSoFar — same
+// shape (one pure reduction over `session.rounds`), same job (a
+// meeting-level aggregate threaded into a prompt). It lives here rather
+// than beside that function only because server.js isn't a module and so
+// nothing in it can be tested directly; `deriveMeetingNote` is already
+// wired into the convene routes the same way.
+//
+// Reduces over each segment's `beats`, persisted since #244 as explicit
+// forward-provision — no new call, no new storage, no migration. Sessions
+// predating #244 carry no `beats` at all and reduce to an empty ledger,
+// which every consumer treats as "no signal" and behaves exactly as it did
+// before this existed. Degrade, never throw.
+//
+// #354 (record integrity, landed after this function was first written)
+// closed the gap this comment used to warn about: an interjection now
+// pushes a real segment onto `session.rounds`, so turns taken there are
+// counted here too, no special-casing needed. It also means a beat's
+// `memberId` is never null any more — the player's own turn carries a
+// roster id or one of record.js's non-roster sentinels — and introduced a
+// beat shape this function does have to special-case: `{ memberId, text:
+// '', failed: true }` for a speaker who was called on and produced nothing.
+// A failed beat is not a turn the room heard, so it must not count toward
+// "heard from tonight" — counting it would tell the under-heard boost and
+// the director's prompt that a member had been given the floor when the
+// room in fact never got a word from them.
+function turnsSoFar(rounds) {
+  const ledger = {};
+  for (const round of rounds || []) {
+    for (const beat of round?.beats || []) {
+      if (!beat?.memberId || beat.failed) continue;
+      ledger[beat.memberId] = (ledger[beat.memberId] || 0) + 1;
+    }
+  }
+  return ledger;
+}
+
 // ─── Player-as-member ─────────────────────────────────────────────────────────
 // A human can write turns as one voice in the room instead of only observing.
 // Mode 'member': the human stands in for an existing roster seat — that
@@ -161,6 +200,7 @@ module.exports = {
   INTERJECT_SPEAKER_COUNT,
   buildPassagePrompt,
   deriveMeetingNote,
+  turnsSoFar,
   playerDirectorPool,
   resolvePlayerName,
   resolvePlayerSpeakerId,

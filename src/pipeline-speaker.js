@@ -83,11 +83,68 @@ const INTERRUPT_INTENT_WEIGHT = 3;
 // INTERRUPT_INTENT_WEIGHT above, and it stacks with every other factor here.
 const PRIORITY_RANK_DECAY = 0.8;
 
+// #352: until now nothing in the pipeline had a meeting-level view of who
+// had spoken. `spokenCounts` covers a single passage and is rebuilt from
+// scratch on every mid-passage re-consult, and REPEAT_DECAY is a *penalty*
+// for having just spoken rather than a boost for never having spoken — so a
+// member silent through four passages entered the fifth weighted identically
+// to one who had spoken eight times. Simulated against this function, the
+// bottom-ranked member of a 7-seat pool was silent in 71% of passages: a
+// 3.3x weight gap opens before anyone has said a word, because
+// PRIORITY_RANK_DECAY and LENGTH_WEIGHT both push toward the top of the pool
+// with nothing pushing back.
+//
+// The counterweight is a boost, not a forced pick — same spirit as
+// INTERRUPT_INTENT_WEIGHT and PRIORITY_RANK_DECAY above. Each whole turn a
+// member sits below the pool's own average for the night multiplies their
+// weight by this, so silence accumulates pressure across passages instead of
+// being forgotten at each passage boundary. Pool-relative rather than
+// roster-relative because the pool is the only thing this function can draw
+// from: a member the director never shortlisted cannot be picked however
+// long they have been quiet, which is what the director half of #352 (the
+// explicit who-hasn't-spoken line in buildDirectorPrompt) addresses instead.
+const UNDER_HEARD_BOOST = 1.8;
+// Ceiling on the deficit, so one runaway talker can't turn every other seat
+// into a near-certainty. At the cap the boost is ~5.8x, enough to overcome a
+// bottom-of-pool PRIORITY_RANK_DECAY (0.8^6 ≈ 0.26) and land such a member
+// slightly ahead of an at-par top-ranked one — a real thumb on the scale,
+// still well short of a queue.
+const MAX_UNDER_HEARD_DEFICIT = 3;
+
+// Mean turns-tonight across the pool, or 0 when no ledger was supplied — by
+// a caller predating #352, or for a session predating #244's `beats` (see
+// lodge-prompts.js's turnsSoFar). A zero mean makes every deficit zero and
+// every boost exactly 1x, so an absent ledger reproduces the old weighting
+// precisely rather than approximating it.
+function poolAverageTurns(pool, meetingTurns) {
+  if (!meetingTurns || !pool.length) return 0;
+  return pool.reduce((sum, id) => sum + (meetingTurns[id] || 0), 0) / pool.length;
+}
+
+// How far below the pool's average for the night this member sits, clamped
+// to [0, MAX_UNDER_HEARD_DEFICIT]. Fractional by design — the boost should
+// rise smoothly as a member falls behind, not step at whole turns.
+function underHeardDeficit(id, meetingTurns, averageTurns) {
+  return Math.min(MAX_UNDER_HEARD_DEFICIT, Math.max(0, averageTurns - (meetingTurns?.[id] || 0)));
+}
+
 // Returns a memberId from `pool`, or null if every pool member has already
 // hit MAX_TURNS_PER_POOL_MEMBER (the caller should re-consult the director).
 // `disposition`, if given, is the { [memberId]: { waitingOnMemberId } } map
 // built by callDispositionUpdate (#188/#203) — read-only here.
-function pickNextSpeaker({ pool, spokenCounts, lastSpeakerId, remainingBudget, disposition, rng = Math.random }) {
+// `meetingTurns`, if given, is the { [memberId]: turns } meeting-level
+// ledger from lodge-prompts.js's turnsSoFar (#352) — also read-only, and
+// omitting it is a supported no-op, not a degraded mode.
+function pickNextSpeaker({
+  pool,
+  spokenCounts,
+  lastSpeakerId,
+  remainingBudget,
+  disposition,
+  meetingTurns,
+  rng = Math.random,
+}) {
+  const averageTurns = poolAverageTurns(pool, meetingTurns);
   const weights = pool.map((id, rank) => {
     const timesSpoken = spokenCounts.get(id) || 0;
     if (timesSpoken >= MAX_TURNS_PER_POOL_MEMBER) return 0;
@@ -97,6 +154,7 @@ function pickNextSpeaker({ pool, spokenCounts, lastSpeakerId, remainingBudget, d
     else if (timesSpoken > 0) w *= Math.pow(REPEAT_DECAY, timesSpoken);
     if (remainingBudget < LOW_BUDGET_WORDS && tendency === 'expansive') w *= 0.4;
     if (lastSpeakerId && disposition?.[id]?.waitingOnMemberId === lastSpeakerId) w *= INTERRUPT_INTENT_WEIGHT;
+    w *= Math.pow(UNDER_HEARD_BOOST, underHeardDeficit(id, meetingTurns, averageTurns));
     w *= Math.pow(PRIORITY_RANK_DECAY, rank);
     return w;
   });
@@ -472,6 +530,10 @@ module.exports = {
   lengthTendencyOf,
   pickNextSpeaker,
   PRIORITY_RANK_DECAY,
+  UNDER_HEARD_BOOST,
+  MAX_UNDER_HEARD_DEFICIT,
+  poolAverageTurns,
+  underHeardDeficit,
   isPoolExhausted,
   countWords,
   VOICE_EXEMPLAR_WORD_BUDGET,

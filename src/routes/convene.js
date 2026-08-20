@@ -40,6 +40,7 @@ function registerConveneRoutes(
     castingRoster,
     buildPassagePrompt,
     wordsSpentSoFar,
+    turnsSoFar,
     defaultPoolSize,
     deriveMeetingNote,
     playerDirectorPool,
@@ -278,6 +279,9 @@ function registerConveneRoutes(
         round: roundIndex,
         precedingTurn,
         disposition: session.disposition || {},
+        // #352: who has already spoken tonight, so the director and the
+        // local speaker draw both stop treating each passage as the first.
+        meetingTurns: turnsSoFar(session.rounds),
         // #354: an interjection segment's label is its own event marker, not
         // a lull note, so it would poison #246's don't-repeat-the-last-one
         // filter. The passage before it is the one that actually ended in a
@@ -354,6 +358,11 @@ function registerConveneRoutes(
         speakerCount: Math.min(interjectSpeakerCount, session.members.length),
         round: session.rounds.length,
         disposition: session.disposition || {},
+        // #352: an interjection is exactly where a member who has been
+        // silent all evening should be likeliest to be the one who
+        // answers — and since #354, its own turns now round-trip back into
+        // this same ledger on the next read, same as any passage's.
+        meetingTurns: turnsSoFar(session.rounds),
         onChunk: chunk => res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`),
         onSpeakerStart: memberId => res.write(`data: ${JSON.stringify({ speaking: memberId })}\n\n`),
         onSpeakerEnd: (memberId, name, text) =>

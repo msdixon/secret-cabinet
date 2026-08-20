@@ -50,8 +50,43 @@ function buildDirectorToolSchema(presentIds, minCount, maxCount) {
   };
 }
 
-function buildDirectorPrompt({ lodgeContext, presentMembers, instruction, minCount, maxCount, roundSoFar }) {
+// #352: the director's prompt has always asked it to weigh "who hasn't been
+// heard from," and until now handed it nothing to answer with — on a
+// mid-passage re-consult, `roundSoFar` plus `conversationHistory.slice(-6)`,
+// three passages of raw prose to infer from; on a passage's opening consult,
+// not even that. This states it outright instead.
+//
+// Omitted entirely when the ledger is empty — the meeting's very first
+// consult, or a session predating #244's `beats` — where a column of zeros
+// would read as a claim that nobody has spoken rather than as an absence of
+// data.
+function buildTurnLedgerBlock(presentMembers, meetingTurns) {
+  if (!meetingTurns) return '';
+  const counted = presentMembers.map(m => ({ name: m.name, turns: meetingTurns[m.id] || 0 }));
+  if (!counted.some(c => c.turns > 0)) return '';
+
+  const lines = counted
+    .map(c => `- ${c.name}: ${c.turns === 0 ? 'not once' : `${c.turns} turn${c.turns === 1 ? '' : 's'}`}`)
+    .join('\n');
+  const silent = counted.filter(c => c.turns === 0).map(c => c.name);
+  const silentLine = silent.length
+    ? `\n\n${silent.length === 1 ? `${silent[0]} has` : `${silent.slice(0, -1).join(', ')} and ${silent[silent.length - 1]} have`} not spoken at all tonight. That is not automatically wrong — a member may be listening on purpose, and the room is not a rota — but by now it should be a choice you are making, not an accident of who kept getting the floor.`
+    : '';
+
+  return `\n\nTURNS TAKEN TONIGHT (the whole meeting so far, not only this passage):\n${lines}${silentLine}`;
+}
+
+function buildDirectorPrompt({
+  lodgeContext,
+  presentMembers,
+  instruction,
+  minCount,
+  maxCount,
+  roundSoFar,
+  meetingTurns,
+}) {
   const rosterLines = presentMembers.map(m => `- ${m.name}`).join('\n');
+  const turnLedgerBlock = buildTurnLedgerBlock(presentMembers, meetingTurns);
 
   const soFarBlock = roundSoFar?.trim()
     ? `\n\nTHE ROUND SO FAR:\n${roundSoFar.trim()}\n\nYou are being asked again mid-round — the earlier candidate pool ran dry, or the round has gone on long enough to want fresh judgment. Choose the next pool considering what's already happened above: who hasn't been heard from, who has something left to react to, whether the room needs a new voice or more from someone already in it.`
@@ -66,7 +101,7 @@ function buildDirectorPrompt({ lodgeContext, presentMembers, instruction, minCou
 You are not writing dialogue. You are proposing a candidate pool of who might speak next in this round of the salon — a shortlist and rough priority order, not a fixed cast or an exact script. You will not write any of their words.
 
 PRESENT TONIGHT:
-${rosterLines}
+${rosterLines}${turnLedgerBlock}
 
 THIS ROUND'S INSTRUCTION:
 ${instruction}${soFarBlock}
@@ -205,6 +240,7 @@ async function selectSpeakers({
   round,
   onMetric,
   roundSoFar,
+  meetingTurns,
 }) {
   const presentIds = presentMembers.map(m => m.id);
   const { system, userMessage } = buildDirectorPrompt({
@@ -214,6 +250,7 @@ async function selectSpeakers({
     minCount,
     maxCount,
     roundSoFar,
+    meetingTurns,
   });
 
   return runDirectorSelection({
@@ -239,6 +276,7 @@ async function selectSpeakers({
 module.exports = {
   buildDirectorToolSchema,
   buildDirectorPrompt,
+  buildTurnLedgerBlock,
   callDirector,
   isValidSelection,
   runDirectorSelection,

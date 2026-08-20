@@ -131,6 +131,7 @@ async function runRound({
   loadResidue,
   loadRelationshipEdges,
   previousLullNote,
+  meetingTurns: priorMeetingTurns,
 }) {
   const presentMembers = ROSTER.filter(m => presentMemberIds.includes(m.id));
   const effectiveCount = Math.min(speakerCount, presentMembers.length);
@@ -138,6 +139,15 @@ async function runRound({
   // one round (MAX_TURNS_PER_POOL_MEMBER) sees their own just-updated state
   // on the second turn, not the state from before the round started.
   const currentDisposition = { ...(priorDisposition || {}) };
+  // #352: the meeting-level turn ledger the caller built from the saved
+  // record (lodge-prompts.js's turnsSoFar), copied and then mutated in place
+  // through the passage for the same reason as currentDisposition above —
+  // "who has spoken tonight" has to include the beats *this* passage has
+  // already spent, or the pool's second half would be judged against a
+  // snapshot that stops at the passage boundary. Absent (the prototype
+  // route, and every caller predating #352) it stays null all the way down,
+  // and both consumers treat that as no signal rather than as all-zeros.
+  const meetingTurns = priorMeetingTurns ? { ...priorMeetingTurns } : null;
   // #187: the library doesn't change mid-round, and a member can take more
   // than one beat in a round — read each member's exemplar off disk once.
   const exemplarCache = new Map();
@@ -270,6 +280,7 @@ async function runRound({
     maxCount: initialPoolTarget,
     round,
     onMetric,
+    meetingTurns,
   });
 
   let pool = initialPool;
@@ -311,6 +322,7 @@ async function runRound({
         round,
         onMetric,
         roundSoFar,
+        meetingTurns,
       });
       // #244: the exhaustion signal. The director judging the room itself
       // winding down ends the passage right here, before drawing from the
@@ -333,6 +345,7 @@ async function runRound({
       lastSpeakerId,
       remainingBudget,
       disposition: currentDisposition,
+      meetingTurns,
     });
     if (!memberId) break; // no viable candidate even after a fresh consult — end the round here
 
@@ -395,6 +408,13 @@ async function runRound({
       roundSoFar += (roundSoFar ? '\n\n' : '') + `${member.name}\n${settledText}`;
       speakerOrder.push(memberId);
       beatsList.push({ memberId, text: settledText });
+      // #352: incremented here, on the success path beside the beat that
+      // will actually be persisted — deliberately *not* alongside
+      // spokenCounts below, which counts failed turns too. A turn that
+      // produced no words is not one the room heard, and counting it here
+      // would put the live ledger out of step with what turnsSoFar rebuilds
+      // from `beats` on the next passage.
+      if (meetingTurns) meetingTurns[memberId] = (meetingTurns[memberId] || 0) + 1;
       onSpeakerEnd?.(memberId, member.name, settledText);
       onChunk?.('\n\n');
       remainingBudget -= countWords(settledText);

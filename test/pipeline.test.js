@@ -20,6 +20,9 @@ const {
   countWords,
   lengthTendencyOf,
   PRIORITY_RANK_DECAY,
+  MAX_UNDER_HEARD_DEFICIT,
+  poolAverageTurns,
+  underHeardDeficit,
   DISPOSITION_MAX_CHARS,
   buildDispositionToolSchema,
   buildDispositionSystemPrompt,
@@ -43,6 +46,8 @@ const {
   buildCachedSystem,
   withHistoryCacheControl,
   callDirector,
+  buildDirectorPrompt,
+  buildTurnLedgerBlock,
   callSpeakerTurn,
   runRound,
   BREATH_BUDGET_WORDS,
@@ -52,6 +57,11 @@ const {
   resolveLullNote,
 } = require('../src/pipeline.js');
 const record = require('../public/js/record.js');
+
+// #352's ledger lives in lodge-prompts.js (see its own comment for why) but
+// is exercised here too — the distribution test below is the only place the
+// reduction and the draw it feeds are measured together.
+const { turnsSoFar } = require('../src/lodge-prompts.js');
 
 // pickNextSpeaker is weighted-random. Rather than seed a PRNG, sweep rng
 // deterministically across [0,1) and count outcomes -- the resulting share
@@ -313,6 +323,96 @@ test('pickNextSpeaker', async t => {
     assert.ok(topShare > bottomShare, 'the top-ranked candidate should be drawn more often than the bottom-ranked one');
   });
 
+  // #352: the meeting-level counterweight. Every test above passes no
+  // `meetingTurns` at all, which is itself the first assertion here — the
+  // boost has to be exactly inert without a ledger, since that is what a
+  // session predating #244's `beats` (and the prototype route) will always
+  // hand it.
+  await t.test('is exactly inert with no ledger, an empty ledger, or an all-equal one', () => {
+    const base = {
+      pool: ['scholem', 'blavatsky'],
+      spokenCounts: counts([]),
+      lastSpeakerId: null,
+      remainingBudget: 500,
+    };
+    // 1 / (1 + 1 * PRIORITY_RANK_DECAY), the same share every pre-#352 test asserts
+    assert.ok(Math.abs(shareOf('scholem', base) - 0.556) < 0.02);
+    assert.ok(Math.abs(shareOf('scholem', { ...base, meetingTurns: {} }) - 0.556) < 0.02);
+    assert.ok(Math.abs(shareOf('scholem', { ...base, meetingTurns: { scholem: 3, blavatsky: 3 } }) - 0.556) < 0.02);
+  });
+
+  await t.test('a member who has not spoken tonight is boosted against one who has', () => {
+    const base = {
+      pool: ['scholem', 'blavatsky'],
+      spokenCounts: counts([]),
+      lastSpeakerId: null,
+      remainingBudget: 500,
+    };
+    // Pool average 1; scholem's deficit 0, blavatsky's 1 -> 1.8x on the
+    // rank-1 seat: 1 / (1 + 1.8 * PRIORITY_RANK_DECAY)
+    const share = shareOf('scholem', { ...base, meetingTurns: { scholem: 2, blavatsky: 0 } });
+    assert.ok(Math.abs(share - 0.41) < 0.02, `under-heard share was ${share}`);
+    // ...and the direction is what matters: rank 0 has gone from favoured to
+    // outdrawn by the silent member below it.
+    assert.ok(share < 0.5, 'a silent rank-1 member should outdraw a talkative rank-0 one');
+  });
+
+  await t.test('the deficit is fractional, so pressure builds smoothly rather than stepping at whole turns', () => {
+    const shares = [0, 1, 2, 3].map(
+      turns =>
+        1 -
+        shareOf('scholem', {
+          pool: ['scholem', 'blavatsky'],
+          spokenCounts: counts([]),
+          lastSpeakerId: null,
+          remainingBudget: 500,
+          meetingTurns: { scholem: turns, blavatsky: 0 },
+        })
+    );
+    for (let i = 1; i < shares.length; i++) {
+      assert.ok(shares[i] > shares[i - 1], `blavatsky's share should keep rising: ${shares.join(', ')}`);
+    }
+  });
+
+  await t.test('the deficit is capped, so one runaway talker cannot make every other seat a certainty', () => {
+    const capped = shareOf('blavatsky', {
+      pool: ['scholem', 'blavatsky'],
+      spokenCounts: counts([]),
+      lastSpeakerId: null,
+      // Pool average 20; blavatsky's raw deficit is 20, clamped to 3.
+      remainingBudget: 500,
+      meetingTurns: { scholem: 40, blavatsky: 0 },
+    });
+    // 1.8^3 * PRIORITY_RANK_DECAY / (1 + 1.8^3 * PRIORITY_RANK_DECAY)
+    assert.ok(Math.abs(capped - 0.823) < 0.02, `capped share was ${capped}`);
+    assert.ok(capped < 1, 'a boost, never a forced pick');
+    assert.equal(underHeardDeficit('blavatsky', { scholem: 40 }, 20), MAX_UNDER_HEARD_DEFICIT);
+  });
+
+  await t.test('a member at the turn cap stays unpickable however long they have been silent overall', () => {
+    // The cap is a hard zero, applied before any weighting — the boost must
+    // not resurrect a member who has already taken their two turns this
+    // passage just because the meeting owes them.
+    const share = shareOf('scholem', {
+      pool: ['scholem', 'blavatsky'],
+      spokenCounts: counts([['scholem', 2]]),
+      lastSpeakerId: null,
+      remainingBudget: 500,
+      meetingTurns: { scholem: 0, blavatsky: 30 },
+    });
+    assert.equal(share, 0);
+  });
+
+  await t.test('poolAverageTurns reads only the pool, ignoring members not shortlisted tonight', () => {
+    // Deliberate: this function can only draw from the pool, so a silent
+    // member the director never shortlisted must not drag the average down
+    // and inflate everyone else's deficit. Getting *them* a turn is the
+    // director half of #352 (buildTurnLedgerBlock), not this half.
+    assert.equal(poolAverageTurns(['a', 'b'], { a: 3, b: 1, someone_else: 0 }), 2);
+    assert.equal(poolAverageTurns(['a', 'b'], null), 0);
+    assert.equal(poolAverageTurns([], { a: 3 }), 0);
+  });
+
   await t.test('an unranked (unordered) pool still sums to a valid distribution', () => {
     // Pool order is the only signal for rank — a single-member pool has no
     // rank-1+ neighbor to be discounted against, so it should draw exactly
@@ -325,6 +425,216 @@ test('pickNextSpeaker', async t => {
       remainingBudget: 500,
     });
     assert.equal(share, 1);
+  });
+});
+
+// #352, director half. The prompt has always asked the director to weigh
+// "who hasn't been heard from" and never gave it the means — these pin the
+// line that does, and the two cases where saying nothing is the right call.
+test('buildTurnLedgerBlock', async t => {
+  const present = [
+    { id: 'crowley', name: 'Aleister Crowley' },
+    { id: 'yeats', name: 'W.B. Yeats' },
+    { id: 'blavatsky', name: 'H.P. Blavatsky' },
+  ];
+
+  await t.test('names every present member with their count, and singularizes one turn', () => {
+    const block = buildTurnLedgerBlock(present, { crowley: 3, yeats: 1 });
+    assert.match(block, /TURNS TAKEN TONIGHT/);
+    assert.match(block, /- Aleister Crowley: 3 turns/);
+    assert.match(block, /- W\.B\. Yeats: 1 turn$/m);
+    assert.match(block, /- H\.P\. Blavatsky: not once/);
+  });
+
+  await t.test('calls out the silent members by name, and licenses silence as a choice', () => {
+    const block = buildTurnLedgerBlock(present, { crowley: 3 });
+    assert.match(block, /W\.B\. Yeats and H\.P\. Blavatsky have not spoken at all tonight/);
+    assert.match(block, /not automatically wrong/);
+    assert.match(block, /not an accident of who kept getting the floor/);
+  });
+
+  await t.test('a single silent member reads as singular, not as a one-item list', () => {
+    assert.match(buildTurnLedgerBlock(present, { crowley: 2, yeats: 2 }), /H\.P\. Blavatsky has not spoken/);
+  });
+
+  await t.test('says nothing at all when everyone present has spoken', () => {
+    const block = buildTurnLedgerBlock(present, { crowley: 1, yeats: 1, blavatsky: 1 });
+    assert.match(block, /TURNS TAKEN TONIGHT/);
+    assert.doesNotMatch(block, /not spoken at all tonight/);
+  });
+
+  await t.test('is omitted entirely with no ledger, an empty one, or an all-zero one', () => {
+    // The meeting's opening consult and any session predating #244's
+    // `beats` both land here. A column of zeros would read as a claim that
+    // the room has sat in silence rather than as an absence of data.
+    assert.equal(buildTurnLedgerBlock(present, undefined), '');
+    assert.equal(buildTurnLedgerBlock(present, {}), '');
+    assert.equal(buildTurnLedgerBlock(present, { someone_absent: 4 }), '');
+  });
+});
+
+test('buildDirectorPrompt', async t => {
+  const present = [
+    { id: 'crowley', name: 'Aleister Crowley' },
+    { id: 'blavatsky', name: 'H.P. Blavatsky' },
+  ];
+  const args = { lodgeContext: 'THE LODGE', presentMembers: present, instruction: 'Discuss.', minCount: 1, maxCount: 2 };
+
+  await t.test('carries the ledger next to the roster it annotates', () => {
+    const { system } = buildDirectorPrompt({ ...args, meetingTurns: { crowley: 4 } });
+    assert.ok(
+      system.indexOf('PRESENT TONIGHT') < system.indexOf('TURNS TAKEN TONIGHT'),
+      'the ledger should follow the roster it counts'
+    );
+    assert.ok(
+      system.indexOf('TURNS TAKEN TONIGHT') < system.indexOf("THIS ROUND'S INSTRUCTION"),
+      'and precede the instruction'
+    );
+    assert.match(system, /H\.P\. Blavatsky has not spoken at all tonight/);
+  });
+
+  await t.test('is byte-identical to the pre-#352 prompt when no ledger is passed', () => {
+    // The opening consult of a meeting's first passage takes this path on
+    // every single run, so it is the shape most sessions actually see.
+    assert.equal(buildDirectorPrompt(args).system, buildDirectorPrompt({ ...args, meetingTurns: {} }).system);
+    assert.doesNotMatch(buildDirectorPrompt(args).system, /TURNS TAKEN TONIGHT/);
+  });
+});
+
+// #352 — the whole-meeting distribution, measured rather than reasoned
+// about. The issue was filed off a simulation against these exact
+// functions; this pins the result so a future tuning change to
+// PRIORITY_RANK_DECAY, LENGTH_WEIGHT, or the boost itself can't quietly
+// reopen it.
+//
+// The harness is runRound's beat loop with every API call and every piece
+// of I/O removed: the real pickNextSpeaker and isPoolExhausted, the real
+// turnsSoFar reduction over the record each passage leaves behind, and the
+// real budget/re-consult arithmetic. Two deliberate simplifications, both
+// worst-case rather than flattering: every member is default 'medium'
+// tendency (so LENGTH_WEIGHT can't be what moves the numbers), and a
+// re-consult returns the same pool in the same order (a real director
+// re-orders, which would help on its own — this measures the floor).
+//
+// It therefore reproduces the *shape* of the issue's table, not its exact
+// figures. The gradient is the claim: rank 0 is heard far more than rank 6,
+// and nothing in the loop ever notices.
+test('#352 whole-meeting turn distribution', async t => {
+  const POOL = ['m0', 'm1', 'm2', 'm3', 'm4', 'm5', 'm6']; // DEFAULT_POOL_SIZE 5 + POOL_SLACK 2
+  const MIN_WORDS_FOR_ANOTHER_BEAT = 40;
+  const MAX_TOTAL_BEATS = 16;
+  const WORDS_PER_TURN = 220; // ~4.3 beats per 1000-word breath budget
+
+  // A tiny LCG rather than Math.random — this test asserts on percentages,
+  // so it has to give the same ones on every run or it's a flake generator.
+  function seededRng(seed) {
+    let s = seed >>> 0;
+    return () => {
+      s = (s * 1664525 + 1013904223) >>> 0;
+      return s / 4294967296;
+    };
+  }
+
+  function runPassage(rng, meetingTurns) {
+    const beats = [];
+    let spokenCounts = new Map();
+    let lastSpeakerId = null;
+    let beatsSinceConsult = 0;
+    let remainingBudget = BREATH_BUDGET_WORDS;
+    while (remainingBudget >= MIN_WORDS_FOR_ANOTHER_BEAT && beats.length < MAX_TOTAL_BEATS) {
+      if (isPoolExhausted(POOL, spokenCounts) || beatsSinceConsult >= POOL.length + 3) {
+        spokenCounts = new Map();
+        beatsSinceConsult = 0;
+      }
+      const memberId = pickNextSpeaker({
+        pool: POOL,
+        spokenCounts,
+        lastSpeakerId,
+        remainingBudget,
+        meetingTurns,
+        rng,
+      });
+      if (!memberId) break;
+      beats.push({ memberId, text: 'a turn' });
+      if (meetingTurns) meetingTurns[memberId] = (meetingTurns[memberId] || 0) + 1;
+      spokenCounts.set(memberId, (spokenCounts.get(memberId) || 0) + 1);
+      lastSpeakerId = memberId;
+      beatsSinceConsult++;
+      remainingBudget -= WORDS_PER_TURN;
+    }
+    return { beats };
+  }
+
+  // `withLedger: false` is the pre-#352 pipeline exactly — runRound simply
+  // never built a ledger to pass down.
+  function simulate({ withLedger, passages = 5, meetings = 2000 }) {
+    const rng = seededRng(20260820);
+    const silentAllMeeting = POOL.map(() => 0);
+    const totalTurns = POOL.map(() => 0);
+    for (let i = 0; i < meetings; i++) {
+      const rounds = [];
+      for (let p = 0; p < passages; p++) {
+        rounds.push(runPassage(rng, withLedger ? turnsSoFar(rounds) : undefined));
+      }
+      const ledger = turnsSoFar(rounds);
+      POOL.forEach((id, rank) => {
+        totalTurns[rank] += ledger[id] || 0;
+        if (!ledger[id]) silentAllMeeting[rank]++;
+      });
+    }
+    return {
+      silentShare: silentAllMeeting.map(n => n / meetings),
+      avgTurns: totalTurns.map(n => n / meetings),
+    };
+  }
+
+  const before = simulate({ withLedger: false });
+  const after = simulate({ withLedger: true });
+
+  await t.test('reproduces the defect: without a ledger, the bottom of the pool goes whole meetings unheard', () => {
+    assert.ok(
+      before.silentShare[6] > 0.05,
+      `bottom-ranked member sat out ${(before.silentShare[6] * 100).toFixed(1)}% of whole meetings, expected >5%`
+    );
+    assert.ok(
+      before.avgTurns[0] / before.avgTurns[6] > 2,
+      `top-vs-bottom turn ratio was ${(before.avgTurns[0] / before.avgTurns[6]).toFixed(2)}, expected >2x`
+    );
+  });
+
+  await t.test('the ledger all but eliminates the never-spoke-all-evening case', () => {
+    assert.ok(
+      after.silentShare[6] < 0.01,
+      `bottom-ranked member still sat out ${(after.silentShare[6] * 100).toFixed(1)}% of whole meetings`
+    );
+    assert.ok(
+      after.silentShare[6] < before.silentShare[6] / 5,
+      `expected at least a 5x drop, got ${before.silentShare[6]} -> ${after.silentShare[6]}`
+    );
+  });
+
+  await t.test('it narrows the spread rather than flattening it — the director\'s ranking still counts', () => {
+    const ratio = after.avgTurns[0] / after.avgTurns[6];
+    assert.ok(ratio < before.avgTurns[0] / before.avgTurns[6], 'the top-to-bottom spread should narrow');
+    assert.ok(ratio > 1.2, `ranking should still be visible in the outcome, ratio was ${ratio.toFixed(2)}`);
+    // Monotonic in rank: priority order still orders the result.
+    for (let rank = 1; rank < POOL.length; rank++) {
+      assert.ok(after.avgTurns[rank] < after.avgTurns[rank - 1], `rank ${rank} outdrew rank ${rank - 1}`);
+    }
+  });
+
+  await t.test('a single-passage meeting is barely affected, which is the correct scope for this fix', () => {
+    // Silence within one passage is a legitimate outcome and REPEAT_DECAY's
+    // business, not this boost's. With no prior passages there is no
+    // meeting history to weigh, so the numbers should stay close to
+    // pre-#352 — if this test ever starts failing loudly, the boost has
+    // grown into a within-passage rota.
+    const oneBefore = simulate({ withLedger: false, passages: 1 });
+    const oneAfter = simulate({ withLedger: true, passages: 1 });
+    assert.ok(
+      Math.abs(oneAfter.silentShare[6] - oneBefore.silentShare[6]) < 0.05,
+      `single-passage silence moved from ${oneBefore.silentShare[6]} to ${oneAfter.silentShare[6]}`
+    );
   });
 });
 
