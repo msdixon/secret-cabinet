@@ -84,6 +84,13 @@ window.Witness = (function () {
     return m?.voiceGender || null;
   }
 
+  // #338 -- same pattern for roster.json's hand-set voiceDemeanor field,
+  // for Voice.speak()'s demeanor-aware pitch/rate bias.
+  function memberVoiceDemeanor(memberId) {
+    const m = memberId && deps.members.find(mm => mm.id === memberId);
+    return m?.voiceDemeanor || null;
+  }
+
   // ── The room (#257) ──────────────────────────────────────────────────────
   // #202 shipped a wordless Text/Room toggle -- a user choice between two
   // renderings, one of them mute. #257 retires that choice: there is one
@@ -948,7 +955,13 @@ window.Witness = (function () {
       // there -- it's the only signal there is. advance() (the only place
       // that reads a speech block's `delay`) already treats a plain number
       // and a promise uniformly via Promise.resolve(delay).then(...).
-      const spoken = window.Voice?.speak(block.text, block.memberId, witnessSpeed, memberVoiceGender(block.memberId));
+      const spoken = window.Voice?.speak(
+        block.text,
+        block.memberId,
+        witnessSpeed,
+        memberVoiceGender(block.memberId),
+        memberVoiceDemeanor(block.memberId)
+      );
       const delay =
         spoken && typeof spoken.then === 'function'
           ? spoken.then(() => WITNESS_MIN_PAUSE / witnessSpeed) // a short beat-to-beat breath, same floor pacing uses elsewhere

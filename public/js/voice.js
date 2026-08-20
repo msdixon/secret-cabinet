@@ -37,6 +37,14 @@
 // one piece of roster data this module needs but, per the isolation above,
 // won't reach into app.js's MEMBERS to fetch itself. witness.js already has
 // the roster (deps.members) and resolves it at the call site instead.
+//
+// #338 added a fifth, optional `memberDemeanor` argument the same way. It
+// only ever biases the Web Speech path's pitch/rate, not voice selection --
+// unlike gender, there's no per-voice demeanor signal in a browser's own
+// voice list to filter against (no KNOWN_VOICE_NAME_GENDERS equivalent
+// exists for demeanor), so ElevenLabs' voiceId, already assigned demeanor-
+// appropriately server-side (roster.js's assignVoiceId), is the only place
+// demeanor actually picks a voice; see pitchForMember/baseRateForMember below.
 window.Voice = (function () {
   const ENABLED_KEY = 'sc-witness-voice-enabled';
   const MIN_RATE = 0.5;
@@ -224,12 +232,23 @@ window.Voice = (function () {
     return candidates[hashString(memberId || '—') % candidates.length];
   }
 
-  function pitchForMember(memberId) {
-    return 0.8 + fraction(`${memberId || '—'}:pitch`) * 0.4; // [0.8, 1.2)
+  // #338 -- small per-demeanor nudges layered on the deterministic per-member
+  // base above: 'intense' reads a touch higher and faster, 'stately' a touch
+  // lower and slower, 'grounded' stays at the pre-#338 baseline. Omitted or
+  // unrecognized demeanor (undefined lookup -> `|| 0`) leaves both functions
+  // producing exactly their pre-#338 output, so every existing caller and
+  // test that doesn't pass a demeanor is unaffected.
+  const DEMEANOR_PITCH_BIAS = { intense: 0.06, stately: -0.08, grounded: 0 };
+  const DEMEANOR_RATE_BIAS = { intense: 0.06, stately: -0.05, grounded: 0 };
+
+  function pitchForMember(memberId, demeanor) {
+    const bias = DEMEANOR_PITCH_BIAS[demeanor] || 0;
+    return 0.8 + fraction(`${memberId || '—'}:pitch`) * 0.4 + bias; // [0.8, 1.2) + demeanor bias
   }
 
-  function baseRateForMember(memberId) {
-    return 0.92 + fraction(`${memberId || '—'}:rate`) * 0.16; // [0.92, 1.08)
+  function baseRateForMember(memberId, demeanor) {
+    const bias = DEMEANOR_RATE_BIAS[demeanor] || 0;
+    return 0.92 + fraction(`${memberId || '—'}:rate`) * 0.16 + bias; // [0.92, 1.08) + demeanor bias
   }
 
   function clampRate(r) {
@@ -258,14 +277,14 @@ window.Voice = (function () {
   // and further behind text on a fast read-through or a burst of live beats.
   // Cutting to the newest beat keeps audio roughly tracking what's on screen
   // instead of an ever-growing backlog.
-  function speakViaWebSpeech(spoken, memberId, speedMultiplier, memberGender) {
+  function speakViaWebSpeech(spoken, memberId, speedMultiplier, memberGender, memberDemeanor) {
     const s = synth();
     s.cancel();
     const utterance = new SpeechSynthesisUtterance(spoken);
     const voice = voiceForMember(memberId, memberGender);
     if (voice) utterance.voice = voice;
-    utterance.pitch = pitchForMember(memberId);
-    utterance.rate = clampRate(baseRateForMember(memberId) * (speedMultiplier || 1));
+    utterance.pitch = pitchForMember(memberId, memberDemeanor);
+    utterance.rate = clampRate(baseRateForMember(memberId, memberDemeanor) * (speedMultiplier || 1));
     // #336: resolved by whichever of 'end'/'error' the browser fires first.
     // If a later speak() call supersedes this utterance before either fires
     // (s.cancel() above, for the *next* call), the promise is just left
@@ -286,7 +305,7 @@ window.Voice = (function () {
   // beat rather than going silent -- and doesn't flip elevenLabsAvailable
   // off, since a single failed request shouldn't downgrade every later beat
   // in the session too.
-  function speakViaElevenLabs(spoken, memberId, speedMultiplier, memberGender) {
+  function speakViaElevenLabs(spoken, memberId, speedMultiplier, memberGender, memberDemeanor) {
     const audio = new Audio();
     currentAudio = audio;
     // #336: resolved on the <audio> element's own 'ended'/'error', or by
@@ -324,7 +343,7 @@ window.Voice = (function () {
         .catch(() => {
           if (currentAudio === audio) {
             currentAudio = null;
-            speakViaWebSpeech(spoken, memberId, speedMultiplier, memberGender).then(resolve, resolve);
+            speakViaWebSpeech(spoken, memberId, speedMultiplier, memberGender, memberDemeanor).then(resolve, resolve);
           } else {
             resolve(); // already superseded -- nothing left to wait on
           }
@@ -336,26 +355,26 @@ window.Voice = (function () {
   // witness.js's single speech-rendering seam -- covers stage/room and
   // live/replay alike, the same seam #279's reading-time pacing already
   // hooks into. Which backend actually speaks is decided here, not by the
-  // caller. `memberGender` (#333) is new as of this pass -- witness.js
-  // resolves it from the roster (the only place that data lives) and
-  // passes it through; it's only ever consulted by the Web Speech path,
-  // since the ElevenLabs path's voiceId is already assigned gender-
-  // appropriately server-side (see roster.js's assignVoiceId).
+  // caller. `memberGender` (#333) and `memberDemeanor` (#338) are resolved
+  // by witness.js from the roster (the only place that data lives) and
+  // passed through; both are only ever consulted by the Web Speech path,
+  // since the ElevenLabs path's voiceId is already assigned gender- and
+  // demeanor-appropriately server-side (see roster.js's assignVoiceId).
   //
   // #336: returns whatever the chosen backend's promise is (resolves on
   // actual completion) so witness.js can pace off it; returns undefined,
   // not a promise, for the three no-op cases below, so the caller can tell
   // "nothing was spoken" apart from "something is speaking" without an
   // extra isEnabled()/isSupported() check of its own.
-  function speak(text, memberId, speedMultiplier, memberGender) {
+  function speak(text, memberId, speedMultiplier, memberGender, memberDemeanor) {
     if (!enabled || !isSupported() || !text) return;
     const spoken = stripForSpeech(text);
     if (!spoken) return;
     stopCurrentAudio(); // interrupt the previous beat's ElevenLabs audio, if any
     if (elevenLabsAvailable) {
-      return speakViaElevenLabs(spoken, memberId, speedMultiplier, memberGender);
+      return speakViaElevenLabs(spoken, memberId, speedMultiplier, memberGender, memberDemeanor);
     }
-    return speakViaWebSpeech(spoken, memberId, speedMultiplier, memberGender);
+    return speakViaWebSpeech(spoken, memberId, speedMultiplier, memberGender, memberDemeanor);
   }
 
   function stop() {
