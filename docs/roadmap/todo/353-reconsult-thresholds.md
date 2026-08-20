@@ -1,0 +1,1 @@
+[#353](https://github.com/msdixon/secret-cabinet/issues/353) the mid-passage director re-consult never fires — its thresholds need ~10-14 beats, passages run ~4.3. Sequence after [#352](https://github.com/msdixon/secret-cabinet/issues/352), which moves the baseline being tuned against

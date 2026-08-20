@@ -1,0 +1,1 @@
+[#303](https://github.com/msdixon/secret-cabinet/issues/303) header redesign — the hero question is answered by [#358](https://github.com/msdixon/secret-cabinet/issues/358) (the portrait does not keep the fold); what the header *becomes* instead is still open, and belongs to #358's design pass

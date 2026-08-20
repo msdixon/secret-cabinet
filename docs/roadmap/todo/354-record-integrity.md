@@ -1,0 +1,1 @@
+[#354](https://github.com/msdixon/secret-cabinet/issues/354) record integrity — interjections never enter `rounds`/`beats`, failed turns leave no trace, player turns carry `memberId: null`. Blocks [#355](https://github.com/msdixon/secret-cabinet/issues/355)/[#356](https://github.com/msdixon/secret-cabinet/issues/356) and undercounts #352
