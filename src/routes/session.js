@@ -70,6 +70,16 @@ function registerSessionRoutes(
           };
         });
 
+      // #378: unauthenticated callers only ever see published sessions —
+      // applied before thread/tag/q so none of those can surface an
+      // unpublished session's data (entry excerpt, tags, transcript match).
+      // Currently unreachable in practice (requireAuth already blocks an
+      // unauthenticated /api/ request before it gets here whenever a
+      // passphrase is set) — this is groundwork for #379, a no-op today.
+      if (!req.authed) {
+        sessions = sessions.filter(s => s.published);
+      }
+
       if (thread) {
         sessions = sessions.filter(s => (s.threadId || '').toLowerCase() === thread);
         // For thread view, sort chronologically oldest-first
@@ -103,6 +113,9 @@ function registerSessionRoutes(
         .filter(f => f.endsWith('.json'))
         .forEach(file => {
           const d = JSON.parse(fs.readFileSync(path.join(sessionsDir, file), 'utf8'));
+          // #378: same published gate as GET /api/sessions — an unauthenticated
+          // caller shouldn't learn a thread exists solely from unpublished sessions.
+          if (!req.authed && !d.published) return;
           if (d.threadId && d.threadName) {
             if (!threads[d.threadId]) threads[d.threadId] = { id: d.threadId, name: d.threadName, count: 0 };
             threads[d.threadId].count++;
@@ -250,7 +263,10 @@ function registerSessionRoutes(
   // GET /api/sessions/:id — load full session
   app.get('/api/sessions/:id', (req, res) => {
     const session = loadSession(req.params.id);
-    if (!session) return res.status(404).json({ error: 'Session not found' });
+    // #378: 404 (not 403) for an unpublished session to an unauthenticated
+    // caller, matching /reading-room/:id's existing convention — an
+    // unpublished session's existence isn't revealed either.
+    if (!session || (!req.authed && !session.published)) return res.status(404).json({ error: 'Session not found' });
     res.json(session);
   });
 
@@ -338,7 +354,8 @@ function registerSessionRoutes(
   // Weaves stored annotations into the transcript text, same as the frontend export does.
   app.get('/api/sessions/:id/transcript', (req, res) => {
     const session = loadSession(req.params.id);
-    if (!session) return res.status(404).json({ error: 'Session not found' });
+    // #378: same 404-not-403 gate as GET /api/sessions/:id.
+    if (!session || (!req.authed && !session.published)) return res.status(404).json({ error: 'Session not found' });
 
     let transcript = session.transcriptText || '';
 
