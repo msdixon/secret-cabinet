@@ -392,9 +392,12 @@ function buildTranscriptHeader(entry, memberIds, date) {
   return transcriptFormat.buildTranscriptHeader(entry, memberIds, date, ROSTER);
 }
 
-// GET /api/config — surface environment flags to the frontend
+// GET /api/config — surface environment flags to the frontend. #379: authed
+// is what public/js/app.js reads to decide whether the convene controls
+// render live or as a sign-in prompt — req.authed is already set by
+// requireAuth (auth.js) before any route handler runs, including this one.
 app.get('/api/config', (req, res) => {
-  res.json({ isLocal: IS_LOCAL });
+  res.json({ isLocal: IS_LOCAL, authed: req.authed });
 });
 
 // ─── Routes ──────────────────────────────────────────────────────────────────

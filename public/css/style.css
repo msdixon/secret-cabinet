@@ -192,8 +192,29 @@
    here. "Around the room, not stacked above it" is satisfied by position
    (below/reachable, not gatekeeping the fold) rather than by forcing them
    into a cramped multi-column shape that fights the roster's own size. */
-.control-rail { display:flex; flex-direction:column; gap:16px; width:100%; max-width:960px; margin:0 auto; }
+.control-rail { position:relative; display:flex; flex-direction:column; gap:16px; width:100%; max-width:960px; margin:0 auto; }
 .after-panel, .status-bar { width:100%; max-width:960px; margin:0 auto; }
+
+/* #379: public read tier. control-rail-content wraps the actual provocation/
+   casting/convene controls at unchanged flex-item positions (display:contents
+   removes only its own box, not its children's) so app.js can `inert` the
+   whole group in one place for an unauthenticated visitor, rather than
+   walking every child of control-rail individually. The gate sits absolutely
+   over that content once .is-gated is set — dimmed-but-legible underneath, so
+   a visitor can see the room is convenable, per docs/PRINCIPLES.md Principle
+   6 (diegetic, not hidden) — with the sign-in prompt as the one live control. */
+.control-rail-content { display:contents; }
+.control-rail-gate { display:none; }
+.control-rail.is-gated .control-rail-gate {
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px;
+  position:absolute; inset:0; z-index:5; text-align:center; padding:24px;
+  background:rgba(10,8,5,0.78); border:1px solid var(--lodge-amber-dim); border-radius:2px;
+}
+/* display:contents has no box of its own, so the dimming has to target its
+   children directly rather than the wrapper — opacity/filter on a
+   display:contents element itself has no effect per spec. */
+.control-rail.is-gated .control-rail-content > * { opacity:.35; filter:grayscale(.4); }
+.control-rail-gate-text { font-family:'IM Fell English',serif; font-style:italic; font-size:15px; color:var(--lodge-cream); max-width:420px; line-height:1.6; }
 .panel-label { font-family:'IM Fell English',serif; font-size:13px; letter-spacing:2px; text-transform:uppercase; color:var(--lodge-muted); margin-bottom:8px; }
 .journal-panel, .member-panel, .transcript-panel, .after-panel, .panel { background:var(--lodge-surface); border:1px solid var(--lodge-border); border-radius:2px; padding:16px; }
 .card { background:var(--lodge-surface); border:1px solid var(--lodge-border); border-radius:2px; padding:10px 12px; }
