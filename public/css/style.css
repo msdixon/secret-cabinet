@@ -295,7 +295,11 @@ a.lodge-btn { display:inline-block; text-decoration:none; }
 .speech-text { font-family:'Crimson Pro',serif; font-size:18px; line-height:1.8; color:var(--lodge-parchment); }
 .action-line { font-family:'IM Fell English','Crimson Pro',serif; font-style:italic; font-size:13px; color:var(--lodge-ash); text-align:center; align-self:center; max-width:55%; margin:14px 0 16px; letter-spacing:0.03em; opacity:0.8; }
 .bubble-body .action-line { align-self:auto; max-width:none; margin:6px 0 2px; opacity:1; }
-.action-inline { font-style:italic; color:var(--lodge-muted); }
+/* #373: distinct from .action-line -- this is spoken by voice.js, not
+   silently skipped, and reads as emphasized/keyword text (foreign terms,
+   phrases inviting exploration), not a stage direction, so it shouldn't
+   look identical to one. */
+.keyword-inline { font-style:italic; color:var(--lodge-amber); border-bottom:1px dotted var(--lodge-amber-dim); }
 .after-panel { display:none; }
 .after-panel.visible { display:block; }
 .after-row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
