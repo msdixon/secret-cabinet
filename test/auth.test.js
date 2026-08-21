@@ -43,6 +43,20 @@ function fakeRes() {
   return res;
 }
 
+test('isAuthedRequest', async t => {
+  await t.test('true with no passphrase configured, even with no session.authed', () => {
+    assert.equal(auth.isAuthedRequest(fakeReq({ session: {} }), null), true);
+  });
+
+  await t.test('true with a passphrase configured and an authed session', () => {
+    assert.equal(auth.isAuthedRequest(fakeReq({ session: { authed: true } }), 'secret'), true);
+  });
+
+  await t.test('false with a passphrase configured and no authed session', () => {
+    assert.equal(auth.isAuthedRequest(fakeReq({ session: {} }), 'secret'), false);
+  });
+});
+
 test('createRequireAuth', async t => {
   await t.test('with no passphrase set, every path passes through (open mode)', () => {
     const requireAuth = auth.createRequireAuth(null);
@@ -51,6 +65,31 @@ test('createRequireAuth', async t => {
       nextCalled = true;
     });
     assert.equal(nextCalled, true);
+  });
+
+  // #378: req.authed is the one thing downstream route handlers (e.g. the
+  // four session read routes) read to decide published-filtering — it must
+  // land as true here even though session.authed itself is never set when
+  // no passphrase is configured.
+  await t.test('with no passphrase set, req.authed is true', () => {
+    const requireAuth = auth.createRequireAuth(null);
+    const req = fakeReq({ path: '/api/sessions', session: {} });
+    requireAuth(req, fakeRes(), () => {});
+    assert.equal(req.authed, true);
+  });
+
+  await t.test('with a passphrase set and an authed session, req.authed is true', () => {
+    const requireAuth = auth.createRequireAuth('secret');
+    const req = fakeReq({ path: '/api/sessions', session: { authed: true } });
+    requireAuth(req, fakeRes(), () => {});
+    assert.equal(req.authed, true);
+  });
+
+  await t.test('with a passphrase set and no authed session, req.authed is false even on a bypassed path', () => {
+    const requireAuth = auth.createRequireAuth('secret');
+    const req = fakeReq({ path: '/reading-room/abc123', session: {} });
+    requireAuth(req, fakeRes(), () => {});
+    assert.equal(req.authed, false);
   });
 
   await t.test('/api/config is always public, even unauthenticated', () => {
