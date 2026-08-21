@@ -101,6 +101,7 @@ function renderMembers() {
   populatePlayAsMemberSelect();
   if (activeMembers.size > 0) window.Sessions.buildDossier([...activeMembers]);
   window.LodgeScene?.updateSeats([...activeMembers]);
+  updateStepper();
 }
 
 function populateArtifactSelect() {
@@ -977,6 +978,7 @@ async function convene() {
       );
       s1.finalize(d1.text);
       currentSessionId = d1.sessionId;
+      updateStepper();
       segmentCount = 1;
       window.Sessions.buildDossier(members);
       if (playerTurn1) {
@@ -1344,6 +1346,7 @@ function reconveneOnCurrentSession() {
   // #356: the transcript now on the table hasn't been re-parsed into beats
   // yet, so any citation signal from before belongs to the session just left.
   window.Export.setSessionHasCitations(false);
+  updateStepper();
 
   window.scrollTo({ top: 0, behavior: 'smooth' });
   setStatus('The transcript has been placed on the table. Assemble a new room and reconvene.', false);
@@ -1574,6 +1577,7 @@ function initSceneLayer() {
 // the gating — it won't repeat for the same document, and won't fire at all
 // once the user has hand-cast.
 function autoProposeCast() {
+  updateStepper();
   // Clicking Convene blurs the textarea, which fires `change`. Casting a room
   // that is already assembling is pure waste — and the one call this feature
   // is allowed per session shouldn't be spent on it.
@@ -1587,6 +1591,63 @@ function initCastingTriggers() {
   // Paste fires before the textarea's value updates; defer a tick.
   area.addEventListener('paste', () => setTimeout(autoProposeCast, 0));
   area.addEventListener('change', autoProposeCast);
+  // Typing (as opposed to pasting/blurring) doesn't warrant a fresh casting
+  // proposal, but the stepper's "provocation brought" checkmark should still
+  // track it live rather than waiting for blur.
+  area.addEventListener('input', updateStepper);
+}
+
+// ── Pre-convene preamble + stepper (#342) ────────────────────────────────────
+// #358 put the room above this rail, above the fold -- so this is a compact
+// wayfinding strip for the controls below it, not the full-screen wizard
+// header the original mockup drew against the old form-first layout.
+const PREAMBLE_DISMISSED_KEY = 'sc-preamble-dismissed';
+
+function initPreamble() {
+  const banner = document.getElementById('preamble-banner');
+  if (!banner) return;
+  if (localStorage.getItem(PREAMBLE_DISMISSED_KEY)) return;
+  banner.hidden = false;
+  document.getElementById('preamble-dismiss-btn')?.addEventListener('click', () => {
+    banner.hidden = true;
+    localStorage.setItem(PREAMBLE_DISMISSED_KEY, '1');
+  });
+}
+
+function initStepperNav() {
+  document.querySelectorAll('#convene-stepper .step-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.getElementById(btn.dataset.target)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  });
+}
+
+// Order-independent: bringing a provocation and casting the room can happen
+// in either order (convene()'s own gating only checks both at the end, same
+// as here), so each step reads complete purely on its own condition. "Active"
+// just marks the first still-incomplete step to draw the eye to what's next
+// -- it doesn't gate or hide anything the way a strict wizard would.
+function updateStepper() {
+  if (!document.getElementById('convene-stepper')) return;
+  const hasEntry = !!window.Export.getEntry()?.trim();
+  const hasCast = activeMembers.size >= 2;
+  const inSession = currentSessionId !== null;
+
+  const steps = [
+    { id: 'provocation', complete: hasEntry },
+    { id: 'cast', complete: hasCast },
+    { id: 'convene', complete: inSession },
+  ];
+  const activeIdx = steps.findIndex(s => !s.complete);
+
+  steps.forEach((step, i) => {
+    const li = document.getElementById(`step-${step.id}`);
+    const badge = document.getElementById(`step-${step.id}-badge`);
+    if (!li || !badge) return;
+    li.classList.toggle('is-complete', step.complete);
+    li.classList.toggle('is-active', i === activeIdx);
+    badge.textContent = step.complete ? '✓' : String(i + 1);
+  });
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
@@ -1658,6 +1719,7 @@ function sessionsDeps() {
     }),
     setCurrentSessionId: id => {
       currentSessionId = id;
+      updateStepper();
     },
     setSessionDate: d => {
       sessionDate = d;
@@ -1789,6 +1851,8 @@ function applyConveneGate(config) {
 }
 
 window.Export.applyEnvConfig().then(applyConveneGate);
+initPreamble();
+initStepperNav();
 initSceneLayer();
 fetchMembers().then(() => {
   window.Casting.seatRegulars();
