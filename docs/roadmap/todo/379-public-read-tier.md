@@ -1,0 +1,1 @@
+[#379](https://github.com/msdixon/secret-cabinet/issues/379) public read tier — strangers land on the room itself, convening requires login (Rachel's decision, 2026-08-20). Blocked on [#378](https://github.com/msdixon/secret-cabinet/issues/378); best sequenced after [#358](https://github.com/msdixon/secret-cabinet/issues/358), which restructures the same landing surface

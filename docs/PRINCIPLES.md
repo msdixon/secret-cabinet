@@ -9,7 +9,7 @@ Established 2026-08-08, at Rachel's request, stress-tested against [PROJECT.md](
 
 ## How to use this file
 
-Six principles, below — plus one explicit interaction to understand before treating any of the first three as standalone: **Voice, Verifiability, and Entertainment (Principles 1–3) form a deliberate, productive triangle, not a hierarchy** — see the section right after Principle 3. Principle 4 (Accessibility) is unconditional, not gated on anything. One further principle, Security, is tracked but deliberately not yet promoted to full weight — see the closing section.
+Seven principles, below — plus one explicit interaction to understand before treating any of the first three as standalone: **Voice, Verifiability, and Entertainment (Principles 1–3) form a deliberate, productive triangle, not a hierarchy** — see the section right after Principle 3. Principle 4 (Accessibility) is unconditional, not gated on anything. Principle 7 (Security) was promoted from "tracked but not yet weighted" on 2026-08-20, on its own stated trigger — it constrains rather than trades off, and unlike the triangle it is not something to balance against how good the room feels.
 
 This is written-principles-only, for now. It does not yet include the code-level "design system" layer (tokens, component conventions) or a redesign — those are deliberately separate future work ([#236](https://github.com/msdixon/secret-cabinet/issues/236)), because Rachel isn't sold on the current UI and wants the principles settled before scaffolding is built on top of them.
 
@@ -106,7 +106,31 @@ This is written-principles-only, for now. It does not yet include the code-level
 
 ---
 
-## Considered, deliberately not yet promoted — Security
+## Principle 7 — Security
+
+**Promoted 2026-08-20, on its own stated trigger.** This entry sat below as "considered, deliberately not yet promoted" from 2026-08-08, with an explicit activation condition: *"the moment the small-audience closed demo idea, or [#24](https://github.com/msdixon/secret-cabinet/issues/24) multi-user, actually moves from consideration into scoped work."* That happened — Rachel asked for a public-readable, login-to-convene tier so the project can be linked to friends remotely, scoped as [#378](https://github.com/msdixon/secret-cabinet/issues/378)/[#379](https://github.com/msdixon/secret-cabinet/issues/379)/[#380](https://github.com/msdixon/secret-cabinet/issues/380). The old entry also said the review should happen *"before the app is shown to anyone outside this one-person context — not retrofitted after,"* which is why this is promoted alongside the scoping rather than after the feature ships. The original framing is preserved verbatim below under "How this was framed before promotion."
+
+**What it means:** as the app's surface area grows beyond one local user, it gets built securely — auth boundaries that actually hold, no exposure of Rachel's own material to people who were only invited to look at the room, and no route that lets a visitor spend money or mutate data.
+
+**The specific shape this takes here — and the thing worth encoding, because the obvious rule is wrong.** Scoping the first public tier surfaced a heuristic that felt right and isn't: *"anything that doesn't hit an API is safe for a visitor."* That covers cost and misses exposure entirely. `GET /api/sessions` costs nothing and returns every stored session — including the first 100 characters of each source document and full-text search across every transcript — while the sessions themselves are convened on Rachel's personal Day One journal. **The axis is not "does this cost money." It is "has this been explicitly published."** Three separate concerns have to be checked independently, and no single question covers all three:
+
+- **Cost** — Anthropic calls, and the ElevenLabs proxy (`POST /api/voice/speak`, see [#380](https://github.com/msdixon/secret-cabinet/issues/380)).
+- **Exposure** — Rachel's journal, and any session she has not published. The largest risk, and the one that looks harmless.
+- **Integrity** — no unauthenticated request may mutate or delete stored data.
+
+**The pattern to follow rather than reinvent:** [#38](https://github.com/msdixon/secret-cabinet/issues/38)'s reading room already does this correctly — an explicit `published` flag, gated inside the route handler, returning **404 rather than 403** so an unpublished session is indistinguishable from one that doesn't exist. New public surfaces generalize that; they don't add another one-off path bypass to `createRequireAuth`, which already carries three and won't scale to a fourth of the same kind.
+
+**What this principle does *not* yet require.** Cross-session residue and disposition are keyed per member *globally*, not per user — the 2026-08-20 review flagged this as the first thing to break with more than one user. A read-only public tier performs no visitor writes and convening stays behind one shared passphrase, so it is genuinely deferred, not quietly ignored. It activates for real the moment anyone other than Rachel can convene — which is [#24](https://github.com/msdixon/secret-cabinet/issues/24)'s territory, and is the concrete first thing #24 has to answer.
+
+**Relationship to the other principles:** this one constrains rather than trades off. It has no productive tension with Voice or Entertainment the way Principle 1 does — a security boundary is not a dial to balance against how good the room feels. Where it does interact is Principle 6: opening a surface diegetically ("strangers land on the room") still has to satisfy every check above, and the diegetic framing must never become a reason to skip one because a login prompt would spoil the atmosphere.
+
+**Portfolio modifier** (same shape as Principles 1 and 5): a demo link sent to colleagues *is* purpose #2 in play. The bar rises exactly when the app is being shown.
+
+---
+
+### How this was framed before promotion (2026-08-08 → 2026-08-20)
+
+*Retained as written, since the reasoning for keeping it un-promoted was correct at the time and is worth not re-deriving.*
 
 **Not the same as "Privacy / local-first"** (an earlier draft's framing, rejected by Rachel 2026-08-08 in favor of this). Security is the right frame here, not privacy-by-default: the concern isn't keeping the app private, it's the app being built securely as its surface area grows.
 
