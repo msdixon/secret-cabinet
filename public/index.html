@@ -132,6 +132,27 @@
       </div>
     </div>
 
+    <!-- #342: a compact wayfinding strip for the rail below, not the
+         full-screen wizard header the original mockup drew -- that shape
+         assumed the above-the-fold real estate #358 gave to the room
+         instead. Lives outside .control-rail (not .control-rail-content) so
+         it stays fully legible for an unauthenticated visitor: the gate
+         overlay is position:absolute;inset:0 against .control-rail itself,
+         so anything placed inside that box would sit underneath it. -->
+    <div class="pre-convene-guide" id="pre-convene-guide">
+      <div class="preamble-banner" id="preamble-banner" hidden>
+        <p class="preamble-text">Bring a provocation. Choose who should hear it. Convene the lodge, and the room will read and respond in turn.</p>
+        <button type="button" class="preamble-dismiss" id="preamble-dismiss-btn" aria-label="Dismiss this message">✕</button>
+      </div>
+      <ol class="convene-stepper" id="convene-stepper" aria-label="Steps to convene the lodge">
+        <li class="convene-step" id="step-provocation"><button type="button" class="step-btn" data-target="journal-panel"><span class="step-badge" id="step-provocation-badge">1</span><span class="step-label">Bring a provocation</span></button></li>
+        <li class="step-rule" aria-hidden="true"></li>
+        <li class="convene-step" id="step-cast"><button type="button" class="step-btn" data-target="member-panel"><span class="step-badge" id="step-cast-badge">2</span><span class="step-label">Choose who's in the room</span></button></li>
+        <li class="step-rule" aria-hidden="true"></li>
+        <li class="convene-step" id="step-convene"><button type="button" class="step-btn" data-target="convene-panel"><span class="step-badge" id="step-convene-badge">3</span><span class="step-label">Convene</span></button></li>
+      </ol>
+    </div>
+
     <div class="control-rail" id="control-rail" role="region" aria-label="Provocation, casting, and convene controls">
 
     <!-- #379: shown only when public/js/app.js's applyConveneGate() finds an
@@ -145,7 +166,7 @@
 
     <div class="control-rail-content" id="control-rail-content">
 
-    <div class="journal-panel">
+    <div class="journal-panel" id="journal-panel">
       <div class="panel-label">I. The Provocation</div>
       <div class="journal-controls">
         <input type="text" class="lodge-select library-search-input" id="library-search-input" placeholder="Search the Archival Library…" autocomplete="off" hidden oninput="window.Export.filterLibraryOptions(this.value)" />
@@ -188,7 +209,7 @@
       </details>
     </div>
 
-    <div class="member-panel">
+    <div class="member-panel" id="member-panel">
       <div class="panel-label member-panel-head">
         <span class="member-panel-heading">II. The Assembled <span id="member-count-badge" class="member-count-badge"></span></span>
         <span class="member-panel-controls">
@@ -285,7 +306,7 @@
       </div>
     </div>
 
-    <div class="convene-panel">
+    <div class="convene-panel" id="convene-panel">
       <div class="convene-row">
         <!-- #245/#73: nothing here sets the meeting's length any more. Per
              #194's first decision that's deliberate down to the absence of a

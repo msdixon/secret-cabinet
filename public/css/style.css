@@ -193,7 +193,37 @@
    (below/reachable, not gatekeeping the fold) rather than by forcing them
    into a cramped multi-column shape that fights the roster's own size. */
 .control-rail { position:relative; display:flex; flex-direction:column; gap:16px; width:100%; max-width:960px; margin:0 auto; }
-.after-panel, .status-bar { width:100%; max-width:960px; margin:0 auto; }
+.after-panel, .status-bar, .pre-convene-guide { width:100%; max-width:960px; margin:0 auto; }
+
+/* #342: dismissible preamble + numbered stepper for the pre-convene flow.
+   Sits above .control-rail rather than inside it -- .control-rail-gate is
+   position:absolute;inset:0 against .control-rail (see below), so anything
+   placed inside that box, gated or not, would render underneath the gate
+   overlay for an unauthenticated visitor. This is orientation content: it
+   should stay legible for everyone, per the same diegetic-not-hidden
+   reasoning the gate itself uses. */
+.pre-convene-guide { display:flex; flex-direction:column; gap:8px; margin-bottom:-4px; }
+.preamble-banner { display:flex; align-items:flex-start; gap:14px; background:var(--lodge-surface); border:1px solid var(--lodge-border); border-left:3px solid var(--lodge-amber-dim); border-radius:2px; padding:12px 16px; }
+.preamble-banner[hidden] { display:none; }
+.preamble-text { font-family:'IM Fell English',serif; font-style:italic; font-size:14px; color:var(--lodge-cream); line-height:1.6; flex:1; margin:0; }
+.preamble-dismiss { background:none; border:none; color:var(--lodge-ash); cursor:pointer; font-size:13px; line-height:1; padding:2px 4px; flex-shrink:0; }
+.preamble-dismiss:hover { color:var(--lodge-cream); }
+
+.convene-stepper { display:flex; align-items:center; list-style:none; margin:0; padding:6px 4px; }
+.convene-step { flex:0 0 auto; }
+.step-rule { flex:1; height:1px; background:var(--lodge-border); margin:0 8px; align-self:center; }
+.step-btn { display:flex; align-items:center; gap:8px; background:none; border:none; padding:4px; margin:-4px; cursor:pointer; font:inherit; }
+.step-btn:hover .step-label { color:var(--lodge-cream); }
+.step-badge { display:flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:50%; border:1px solid var(--lodge-ash); color:var(--lodge-ash); font-family:'IM Fell English',serif; font-size:12px; flex-shrink:0; transition:all 0.2s; }
+.step-label { font-family:'IM Fell English',serif; font-size:12px; letter-spacing:0.5px; color:var(--lodge-ash); white-space:nowrap; transition:color 0.2s; }
+.convene-step.is-active .step-badge { border-color:var(--lodge-amber); color:var(--lodge-amber); background:rgba(200,146,42,0.12); box-shadow:0 0 6px rgba(200,146,42,0.4); }
+.convene-step.is-active .step-label { color:var(--lodge-cream); }
+.convene-step.is-complete .step-badge { border-color:var(--lodge-amber-dim); color:var(--lodge-amber-dim); }
+.convene-step.is-complete .step-label { color:var(--lodge-muted); }
+@media (max-width: 640px) {
+  .step-label { display:none; }
+  .step-rule { margin:0 4px; }
+}
 
 /* #379: public read tier. control-rail-content wraps the actual provocation/
    casting/convene controls at unchanged flex-item positions (display:contents
