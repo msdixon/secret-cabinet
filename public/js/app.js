@@ -419,7 +419,11 @@ function portraitFallback(img, kind, glyph) {
 
 // Two passes:
 //   1. A whole line wrapped in *...* becomes a block-level action (own paragraph).
-//   2. Inline *...* becomes inline action italics.
+//   2. Inline *...* becomes an inline keyword/emphasis span -- #373: this is
+//      NOT action text (voice.js speaks it, unlike a whole-line action --
+//      see its stripForSpeech), so it gets its own class/style rather than
+//      reusing action-line's look, which reads as the same silently-skipped
+//      stage business.
 // Empty actions (** or * *) are left alone.
 function renderActions(text) {
   const safe = escapeHTML(text);
@@ -431,7 +435,7 @@ function renderActions(text) {
       if (m && !m[1].includes('*')) {
         return `<div class="action-line">${m[1]}</div>`;
       }
-      return line.replace(/\*([^*\n]+?)\*/g, '<span class="action-inline">$1</span>');
+      return line.replace(/\*([^*\n]+?)\*/g, '<span class="keyword-inline">$1</span>');
     })
     .join('<br>');
 }

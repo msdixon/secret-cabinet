@@ -255,18 +255,37 @@ window.Voice = (function () {
     return Math.min(MAX_RATE, Math.max(MIN_RATE, r));
   }
 
-  // Strip action asides (*stands and paces*) before speaking -- a listener
-  // hearing the words "stands and paces" spoken as if they were dialogue is
-  // worse than the asterisks-left-in bug this was meant to fix in the first
-  // place: this member isn't a narrator describing their own stage
-  // directions. The whole matched span is removed, not just the asterisks
-  // (an earlier version of this replaced `*text*` with `text`, keeping the
-  // action's words in the spoken output) -- then whitespace is collapsed
-  // back to single spaces, since removing "*waves warmly* " mid-sentence
-  // otherwise leaves a double space or an awkward gap around it.
+  // #373: `*text*` in this system's markdown does double duty -- a whole
+  // line that is nothing but one asterisk span is stage business (*stands
+  // and paces*), but an inline span inside a sentence is at least as often
+  // emphasized/keyword text ("the *stabilitas loci* holds") that a member
+  // actually said and is meant to invite exploration, not silent narration
+  // of their own actions. #329 (see STATUS.md 2026-08-20) widened this to
+  // drop every `*...*` span outright, words and all -- that fixed the
+  // stage-direction case but also made inline keyword text vanish from
+  // narration with no trace, which is the worse failure: it deletes real
+  // spoken content, not just a stray asterisk. So only a whole line matched
+  // entirely by one asterisk span is dropped; everything else keeps its
+  // words with just the asterisks removed. This mirrors app.js's
+  // `renderActions()` block/inline split exactly (own line -> action,
+  // anything else -> keep the text) -- keep the two in sync.
+  //
+  // A mid-sentence action aside (`Hello, *waves warmly* how are you?`) is
+  // syntactically identical to a mid-sentence keyword and will now be
+  // spoken too -- there's no way to tell the two apart from `*...*` alone.
+  // That's a known, accepted trade-off (see #373's discussion of whether a
+  // third, distinct style is warranted for one of the two uses), not an
+  // oversight.
   function stripForSpeech(text) {
     return text
-      .replace(/\*([^*]+)\*/g, '')
+      .split('\n')
+      .map(line => {
+        const trimmed = line.trim();
+        const m = trimmed.match(/^\*(.+)\*$/);
+        if (m && !m[1].includes('*')) return '';
+        return line.replace(/\*([^*\n]+?)\*/g, '$1');
+      })
+      .join(' ')
       .replace(/\s+/g, ' ')
       .trim();
   }

@@ -134,12 +134,23 @@ test('voice.js', async t => {
     assert.equal(events[1].type, 'speak');
     assert.equal(
       events[1].utterance.text,
-      'Hello, how are you?',
-      'the whole action aside is removed, not just its asterisks -- a listener should never hear "waves warmly" spoken as dialogue'
+      'Hello, waves warmly how are you?',
+      '#373: an inline aside is syntactically identical to inline keyword text (e.g. *stabilitas loci*), which must be spoken, not silently dropped -- only whole-line action blocks are stripped now'
     );
   });
 
-  await t.test('speak() is a no-op for text that is only action markup once stripped', t2 => {
+  await t.test('speak() keeps inline keyword/emphasis text, dropping only the asterisks (#373)', t2 => {
+    let events;
+    const loaded = loadPublicModule('voice.js', FIXTURE, window => {
+      events = stubSpeech(window, [{ name: 'A', lang: 'en-US' }]);
+    });
+    t2.after(loaded.cleanup);
+    loaded.window.Voice.setEnabled(true);
+    loaded.window.Voice.speak("The room falls quiet at *stabilitas loci*, then *'asabiyya'*.", 'crowley', 1);
+    assert.equal(events[1].utterance.text, "The room falls quiet at stabilitas loci, then 'asabiyya'.");
+  });
+
+  await t.test('speak() is a no-op for text that is only a whole-line action block once stripped', t2 => {
     let events;
     const loaded = loadPublicModule('voice.js', FIXTURE, window => {
       events = stubSpeech(window, [{ name: 'A', lang: 'en-US' }]);
@@ -148,6 +159,17 @@ test('voice.js', async t => {
     loaded.window.Voice.setEnabled(true);
     loaded.window.Voice.speak('*paces silently, considering*', 'crowley', 1);
     assert.deepEqual(events, []);
+  });
+
+  await t.test('speak() drops a whole-line action block but keeps other lines of the same beat', t2 => {
+    let events;
+    const loaded = loadPublicModule('voice.js', FIXTURE, window => {
+      events = stubSpeech(window, [{ name: 'A', lang: 'en-US' }]);
+    });
+    t2.after(loaded.cleanup);
+    loaded.window.Voice.setEnabled(true);
+    loaded.window.Voice.speak('*paces silently, considering*\nThe answer, I think, is no.', 'crowley', 1);
+    assert.equal(events[1].utterance.text, 'The answer, I think, is no.');
   });
 
   await t.test('speak() is a no-op for text that is only whitespace', t2 => {
@@ -161,7 +183,7 @@ test('voice.js', async t => {
     assert.deepEqual(events, []);
   });
 
-  await t.test('a mid-sentence action aside is removed entirely, leaving clean spacing behind', t2 => {
+  await t.test('a mid-sentence asterisk span keeps its words, with just the asterisks removed (#373)', t2 => {
     let events;
     const loaded = loadPublicModule('voice.js', FIXTURE, window => {
       events = stubSpeech(window, [{ name: 'A', lang: 'en-US' }]);
@@ -169,7 +191,7 @@ test('voice.js', async t => {
     t2.after(loaded.cleanup);
     loaded.window.Voice.setEnabled(true);
     loaded.window.Voice.speak('The beast *pauses thoughtfully* stirs at last.', 'crowley', 1);
-    assert.equal(events[1].utterance.text, 'The beast stirs at last.');
+    assert.equal(events[1].utterance.text, 'The beast pauses thoughtfully stirs at last.');
   });
 
   await t.test('voice/pitch/rate assignment is deterministic per member', t2 => {
@@ -422,7 +444,7 @@ test('voice.js', async t => {
 
     const speakEvent = events.find(e => e.type === 'speak-request');
     assert.ok(speakEvent, 'expected a POST to /api/voice/speak');
-    assert.deepEqual(speakEvent.body, { memberId: 'crowley', text: 'Hello, there.' });
+    assert.deepEqual(speakEvent.body, { memberId: 'crowley', text: 'Hello, waves there.' });
     assert.ok(
       events.some(e => e.type === 'audio-play'),
       'expected the resolved audio to be played'
