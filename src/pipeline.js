@@ -130,6 +130,7 @@ async function runRound({
   loadVoiceExemplar,
   loadResidue,
   loadRelationshipEdges,
+  loadLibraryCitationLookup,
   previousLullNote,
   meetingTurns: priorMeetingTurns,
 }) {
@@ -209,6 +210,34 @@ async function runRound({
     return relationshipEdgesCache;
   };
 
+  // #355: like relationshipEdgesCache above — the archival library doesn't
+  // change mid-round, so it's read (at most) once and reused across every
+  // beat's piggybacked citation extraction, rather than a fresh disk read
+  // per beat. `list` is the short "id: title — source" form the disposition
+  // prompt shows for matching; `ids` is what callDispositionUpdate validates
+  // a returned libraryMatch against, same fail-closed pattern presentIds
+  // already uses for waitingOnMemberId.
+  let libraryContextCache = null;
+  let libraryContextLoaded = false;
+  const libraryContext = () => {
+    if (!libraryContextLoaded) {
+      libraryContextLoaded = true;
+      try {
+        const lookup = loadLibraryCitationLookup?.() || {};
+        const ids = Object.keys(lookup);
+        const list = ids.map(id => `${id}: ${lookup[id].title} — ${lookup[id].source}`).join('\n');
+        libraryContextCache = { ids, list };
+      } catch (err) {
+        // A malformed or unreadable library must never cost a member their
+        // turn — fall through to no library context, same as a deployment
+        // with no library.json at all.
+        console.warn('[citations]', '—', err.message);
+        libraryContextCache = { ids: [], list: '' };
+      }
+    }
+    return libraryContextCache;
+  };
+
   // Only entries a member actually wrote to this round — most rounds this
   // stays empty (see buildDispositionToolSchema's residueNote: "most turns,
   // nothing belongs here"). The caller persists exactly what's here.
@@ -231,6 +260,12 @@ async function runRound({
   //   { memberId, text }                        a turn that was spoken
   //   { memberId, speakerName, text }            ...by someone off-roster
   //   { memberId, text: '', failed: true, error} a turn that produced nothing
+  //
+  // #355: a spoken beat may also carry `citations` — an array, present only
+  // when the piggybacked disposition call (see the try block below) both
+  // succeeded and actually found something to cite; omitted rather than an
+  // empty array on the (common) turn that cited nothing, same convention as
+  // `failed` only appearing on a beat that actually failed.
   //
   // A failed beat has no text and so contributes nothing to roundSoFar —
   // that asymmetry is the point. A member who was called on and produced
@@ -430,7 +465,11 @@ async function runRound({
       const settledText = stripInternalBlankLines(result.text);
       roundSoFar += (roundSoFar ? '\n\n' : '') + `${member.name}\n${settledText}`;
       speakerOrder.push(memberId);
-      beatsList.push({ memberId, text: settledText });
+      // #355: kept as a live reference so the disposition try block below
+      // can attach `citations` onto this same beat once its piggybacked
+      // call resolves, rather than a second pass over beatsList to find it.
+      const beatEntry = { memberId, text: settledText };
+      beatsList.push(beatEntry);
       // #352: incremented here, on the success path beside the beat that
       // will actually be persisted — deliberately *not* alongside
       // spokenCounts below, which counts failed turns too. A turn that
@@ -447,11 +486,13 @@ async function runRound({
       // that already succeeded and was already streamed to the client.
       try {
         const priorResidueText = residueFor(memberId);
+        const { list: libraryList, ids: libraryIds } = libraryContext();
         const dispositionSystem = buildDispositionSystemPrompt({
           member,
           priorDisposition: currentDisposition[memberId],
           presentMembers,
           priorResidue: priorResidueText,
+          libraryList,
         });
         const dispositionUserMessage = buildDispositionUserMessage({
           roundSoFarText: contextBeforeTurn || 'Nothing yet — you are the first to speak this round.',
@@ -463,6 +504,7 @@ async function runRound({
           text: updatedDisposition,
           waitingOnMemberId,
           residueNote,
+          citations,
           usage: dUsage,
           latencyMs: dLatencyMs,
         } = await callDispositionUpdate({
@@ -471,6 +513,7 @@ async function runRound({
           system: dispositionSystem,
           userMessage: dispositionUserMessage,
           presentIds: dispositionPresentIds,
+          libraryIds,
         });
         if (updatedDisposition) currentDisposition[memberId] = { text: updatedDisposition, waitingOnMemberId };
         // #166: only when the beat actually earned a fragment — most beats
@@ -480,6 +523,9 @@ async function runRound({
           residueCache.set(memberId, mergedResidue);
           residueUpdates[memberId] = mergedResidue;
         }
+        // #355: attached onto the same beat pushed above, omitted entirely
+        // when the turn cited nothing — see the beats-shape comment.
+        if (citations.length) beatEntry.citations = citations;
         onMetric?.(
           makeMetric('disposition', {
             round,
@@ -488,6 +534,7 @@ async function runRound({
             latencyMs: dLatencyMs,
             waitingOnMemberId,
             residueNote: residueNote || null,
+            citationCount: citations.length,
           })
         );
       } catch (err) {

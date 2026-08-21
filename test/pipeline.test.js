@@ -60,6 +60,14 @@ const {
   resolveLullNote,
 } = require('../src/pipeline.js');
 const record = require('../public/js/record.js');
+// #355 — citation-capture sizing constants live in tuning.js, not re-exported
+// through pipeline.js's flat surface (see that file's own module.exports).
+const {
+  MAX_CITATIONS_PER_BEAT,
+  CITATION_QUOTE_MAX_CHARS,
+  CITATION_WORK_MAX_CHARS,
+  CITATION_NOTE_MAX_CHARS,
+} = require('../src/tuning.js');
 
 // #352's ledger lives in lodge-prompts.js (see its own comment for why) but
 // is exercised here too — the distribution test below is the only place the
@@ -1019,6 +1027,29 @@ test('buildDispositionSystemPrompt', async t => {
     assert.match(prompt, /outlast this evening/);
     assert.match(prompt, /most turns, there is nothing here either/i);
   });
+
+  // #355 — always-on citation capture, piggybacked on this same call.
+  await t.test('always asks for citations from the turn just spoken, not this reflection', () => {
+    const prompt = buildDispositionSystemPrompt({ member, priorDisposition: null });
+    assert.match(prompt, /extract every citation/i);
+    assert.match(prompt, /not this reflection/);
+    assert.match(prompt, /most turns cite nothing/i);
+  });
+
+  await t.test('includes the library list when one is given, for libraryMatch', () => {
+    const prompt = buildDispositionSystemPrompt({
+      member,
+      priorDisposition: null,
+      libraryList: 'waite: The Pictorial Key to the Tarot — 1911 edition',
+    });
+    assert.match(prompt, /archival library entries/);
+    assert.match(prompt, /waite: The Pictorial Key to the Tarot — 1911 edition/);
+  });
+
+  await t.test('says nothing about a library list when none is given', () => {
+    const prompt = buildDispositionSystemPrompt({ member, priorDisposition: null });
+    assert.doesNotMatch(prompt, /archival library entries/);
+  });
 });
 
 test('buildDispositionUserMessage', async t => {
@@ -1176,6 +1207,170 @@ test('callDispositionUpdate', async t => {
       assert.equal(residueNote.length, RESIDUE_NOTE_MAX_CHARS);
     }
   );
+
+  // #355 — the optional citations array, sanitized the same way reflection
+  // and residueNote already are: a tool call is a request, not a guarantee,
+  // and this is written straight into the permanent record.
+  await t.test('returns an empty citations array when the model leaves the field out — the common case', async () => {
+    const fakeClient = fakeDispositionClient({ reflection: 'Nothing to add.', waitingOnMemberId: 'none' });
+    const { citations } = await callDispositionUpdate({
+      client: fakeClient,
+      model: 'test-model',
+      system: 'sys',
+      userMessage: 'msg',
+      presentIds: ['waite'],
+    });
+    assert.deepEqual(citations, []);
+  });
+
+  await t.test('passes through a well-formed citation', async () => {
+    const fakeClient = fakeDispositionClient({
+      reflection: 'ok',
+      waitingOnMemberId: 'none',
+      citations: [{ quote: 'a real quote', work: 'The Book of the Law', verdict: 'verified', note: 'It exists.' }],
+    });
+    const { citations } = await callDispositionUpdate({
+      client: fakeClient,
+      model: 'test-model',
+      system: 'sys',
+      userMessage: 'msg',
+      presentIds: ['waite'],
+    });
+    assert.equal(citations.length, 1);
+    assert.equal(citations[0].work, 'The Book of the Law');
+    assert.equal(citations[0].verdict, 'verified');
+    assert.equal(citations[0].libraryMatch, null);
+  });
+
+  await t.test('drops a citation with no usable quote or work rather than keeping it blank', async () => {
+    const fakeClient = fakeDispositionClient({
+      reflection: 'ok',
+      waitingOnMemberId: 'none',
+      citations: [
+        { quote: '', work: 'Has No Quote', verdict: 'verified', note: 'n' },
+        { quote: 'has no work', work: '', verdict: 'verified', note: 'n' },
+      ],
+    });
+    const { citations } = await callDispositionUpdate({
+      client: fakeClient,
+      model: 'test-model',
+      system: 'sys',
+      userMessage: 'msg',
+      presentIds: ['waite'],
+    });
+    assert.deepEqual(citations, []);
+  });
+
+  await t.test(
+    'downgrades an unrecognized verdict to "uncertain" rather than passing it through unchecked',
+    async () => {
+      const fakeClient = fakeDispositionClient({
+        reflection: 'ok',
+        waitingOnMemberId: 'none',
+        citations: [{ quote: 'q', work: 'W', verdict: 'definitely-true', note: 'n' }],
+      });
+      const { citations } = await callDispositionUpdate({
+        client: fakeClient,
+        model: 'test-model',
+        system: 'sys',
+        userMessage: 'msg',
+        presentIds: ['waite'],
+      });
+      assert.equal(citations[0].verdict, 'uncertain');
+    }
+  );
+
+  await t.test(
+    'nulls out a libraryMatch not present in libraryIds — a hallucinated or stale id must not silently pass through',
+    async () => {
+      const fakeClient = fakeDispositionClient({
+        reflection: 'ok',
+        waitingOnMemberId: 'none',
+        citations: [{ quote: 'q', work: 'W', verdict: 'verified', note: 'n', libraryMatch: 'not-a-real-entry' }],
+      });
+      const { citations } = await callDispositionUpdate({
+        client: fakeClient,
+        model: 'test-model',
+        system: 'sys',
+        userMessage: 'msg',
+        presentIds: ['waite'],
+        libraryIds: ['waite-tarot'],
+      });
+      assert.equal(citations[0].libraryMatch, null);
+    }
+  );
+
+  await t.test('keeps a libraryMatch that is present in libraryIds', async () => {
+    const fakeClient = fakeDispositionClient({
+      reflection: 'ok',
+      waitingOnMemberId: 'none',
+      citations: [{ quote: 'q', work: 'W', verdict: 'verified', note: 'n', libraryMatch: 'waite-tarot' }],
+    });
+    const { citations } = await callDispositionUpdate({
+      client: fakeClient,
+      model: 'test-model',
+      system: 'sys',
+      userMessage: 'msg',
+      presentIds: ['waite'],
+      libraryIds: ['waite-tarot'],
+    });
+    assert.equal(citations[0].libraryMatch, 'waite-tarot');
+  });
+
+  await t.test('caps the citations array at MAX_CITATIONS_PER_BEAT', async () => {
+    const overlong = Array.from({ length: MAX_CITATIONS_PER_BEAT + 5 }, (_, i) => ({
+      quote: `q${i}`,
+      work: `W${i}`,
+      verdict: 'verified',
+      note: 'n',
+    }));
+    const fakeClient = fakeDispositionClient({ reflection: 'ok', waitingOnMemberId: 'none', citations: overlong });
+    const { citations } = await callDispositionUpdate({
+      client: fakeClient,
+      model: 'test-model',
+      system: 'sys',
+      userMessage: 'msg',
+      presentIds: ['waite'],
+    });
+    assert.equal(citations.length, MAX_CITATIONS_PER_BEAT);
+  });
+
+  await t.test('hard-truncates quote/work/note regardless of what the model returns', async () => {
+    const fakeClient = fakeDispositionClient({
+      reflection: 'ok',
+      waitingOnMemberId: 'none',
+      citations: [
+        {
+          quote: 'q'.repeat(CITATION_QUOTE_MAX_CHARS + 50),
+          work: 'w'.repeat(CITATION_WORK_MAX_CHARS + 50),
+          verdict: 'verified',
+          note: 'n'.repeat(CITATION_NOTE_MAX_CHARS + 50),
+        },
+      ],
+    });
+    const { citations } = await callDispositionUpdate({
+      client: fakeClient,
+      model: 'test-model',
+      system: 'sys',
+      userMessage: 'msg',
+      presentIds: ['waite'],
+    });
+    assert.equal(citations[0].quote.length, CITATION_QUOTE_MAX_CHARS);
+    assert.equal(citations[0].work.length, CITATION_WORK_MAX_CHARS);
+    assert.equal(citations[0].note.length, CITATION_NOTE_MAX_CHARS);
+  });
+
+  await t.test('defaults to an empty citations array when the tool call is missing or malformed', async () => {
+    const fakeClient = { messages: { create: async () => ({ content: [], usage: null }) } };
+    const { citations } = await callDispositionUpdate({
+      client: fakeClient,
+      model: 'test-model',
+      system: 'sys',
+      userMessage: 'msg',
+      presentIds: ['waite'],
+    });
+    assert.deepEqual(citations, []);
+  });
 });
 
 test('buildDispositionToolSchema', async t => {
@@ -1192,6 +1387,25 @@ test('buildDispositionToolSchema', async t => {
     const schema = buildDispositionToolSchema(['waite']);
     assert.equal(schema.input_schema.properties.residueNote.type, 'string');
     assert.ok(!schema.input_schema.required.includes('residueNote'));
+  });
+
+  // #355 — same optionality convention as residueNote: most turns cite
+  // nothing, so citations must not be in `required`.
+  await t.test('offers a bounded citations array but does not require it', () => {
+    const schema = buildDispositionToolSchema(['waite']);
+    assert.equal(schema.input_schema.properties.citations.type, 'array');
+    assert.equal(schema.input_schema.properties.citations.maxItems, MAX_CITATIONS_PER_BEAT);
+    assert.deepEqual(schema.input_schema.properties.citations.items.required, ['quote', 'work', 'verdict', 'note']);
+    assert.ok(!schema.input_schema.required.includes('citations'));
+  });
+
+  await t.test('constrains each citation verdict to the three-way enum', () => {
+    const schema = buildDispositionToolSchema(['waite']);
+    assert.deepEqual(schema.input_schema.properties.citations.items.properties.verdict.enum, [
+      'verified',
+      'unverified',
+      'uncertain',
+    ]);
   });
 });
 
@@ -2260,5 +2474,137 @@ test('runRound — passage end-causes and beats (#244)', async t => {
     // The failed attempt contributed no text to the rolled-up passage either.
     assert.ok(result.fullRoundText.length > 0);
     assert.ok(!result.fullRoundText.includes('undefined'));
+  });
+});
+
+// #355 — always-on citation capture, piggybacked on the same disposition
+// call runRound already makes after every successful beat. A dedicated fake
+// client (rather than fakePassageClient) so the disposition tool_use input
+// is configurable per test.
+function fakeCitationPassageClient({ dispositionInput }) {
+  return {
+    messages: {
+      create: async req => {
+        const toolName = req.tools?.[0]?.name;
+        if (toolName === 'select_speakers') {
+          return {
+            content: [
+              { type: 'tool_use', input: { speakers: ['crowley'], reasoning: 'r', windingDown: true, lullNote: null } },
+            ],
+            usage: { input_tokens: 10, output_tokens: 5 },
+          };
+        }
+        return {
+          content: [{ type: 'tool_use', input: dispositionInput }],
+          usage: { input_tokens: 8, output_tokens: 4 },
+        };
+      },
+      stream: () => ({
+        [Symbol.asyncIterator]: async function* () {
+          yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'A turn.' } };
+        },
+        finalMessage: async () => ({ usage: { input_tokens: 20, output_tokens: 10 } }),
+      }),
+    },
+  };
+}
+
+test('runRound — citation capture piggybacked on the disposition call (#355)', async t => {
+  const baseArgs = {
+    model: 'test-model',
+    lodgeContext: LODGE,
+    ROSTER: SINGLE_MEMBER_ROSTER,
+    loadMemberFile,
+    presentMemberIds: ['crowley'],
+    artifact: null,
+    notes: {},
+    roundPrompt: 'Opening prompt',
+    conversationHistory: [],
+    speakerCount: 1,
+    round: 0,
+    disposition: {},
+  };
+
+  await t.test('attaches citations from the disposition call onto the beat that earned them', async () => {
+    const client = fakeCitationPassageClient({
+      dispositionInput: {
+        reflection: 'Considering.',
+        waitingOnMemberId: 'none',
+        citations: [{ quote: 'a real quote', work: 'The Book of the Law', verdict: 'verified', note: 'It exists.' }],
+      },
+    });
+    const result = await runRound({ ...baseArgs, client });
+    assert.equal(result.beats[0].citations.length, 1);
+    assert.equal(result.beats[0].citations[0].work, 'The Book of the Law');
+  });
+
+  await t.test('omits `citations` entirely from a beat that cited nothing — the common case', async () => {
+    const client = fakeCitationPassageClient({
+      dispositionInput: { reflection: 'Considering.', waitingOnMemberId: 'none' },
+    });
+    const result = await runRound({ ...baseArgs, client });
+    assert.equal('citations' in result.beats[0], false);
+  });
+
+  await t.test('validates a returned libraryMatch against loadLibraryCitationLookup, keeping a real match', async () => {
+    const client = fakeCitationPassageClient({
+      dispositionInput: {
+        reflection: 'Considering.',
+        waitingOnMemberId: 'none',
+        citations: [{ quote: 'q', work: 'W', verdict: 'verified', note: 'n', libraryMatch: 'crowley-book' }],
+      },
+    });
+    const result = await runRound({
+      ...baseArgs,
+      client,
+      loadLibraryCitationLookup: () => ({ 'crowley-book': { title: 'The Book of the Law', source: '1904' } }),
+    });
+    assert.equal(result.beats[0].citations[0].libraryMatch, 'crowley-book');
+  });
+
+  await t.test('nulls out a libraryMatch the injected library does not actually have', async () => {
+    const client = fakeCitationPassageClient({
+      dispositionInput: {
+        reflection: 'Considering.',
+        waitingOnMemberId: 'none',
+        citations: [{ quote: 'q', work: 'W', verdict: 'verified', note: 'n', libraryMatch: 'not-a-real-entry' }],
+      },
+    });
+    const result = await runRound({
+      ...baseArgs,
+      client,
+      loadLibraryCitationLookup: () => ({ 'crowley-book': { title: 'The Book of the Law', source: '1904' } }),
+    });
+    assert.equal(result.beats[0].citations[0].libraryMatch, null);
+  });
+
+  await t.test('degrades to no library context (never throws) when loadLibraryCitationLookup is not given', async () => {
+    const client = fakeCitationPassageClient({
+      dispositionInput: {
+        reflection: 'Considering.',
+        waitingOnMemberId: 'none',
+        citations: [{ quote: 'q', work: 'W', verdict: 'verified', note: 'n' }],
+      },
+    });
+    const result = await runRound({ ...baseArgs, client });
+    assert.equal(result.beats[0].citations.length, 1);
+  });
+
+  await t.test('degrades to no library context when loadLibraryCitationLookup itself throws', async () => {
+    const client = fakeCitationPassageClient({
+      dispositionInput: {
+        reflection: 'Considering.',
+        waitingOnMemberId: 'none',
+        citations: [{ quote: 'q', work: 'W', verdict: 'verified', note: 'n', libraryMatch: 'crowley-book' }],
+      },
+    });
+    const result = await runRound({
+      ...baseArgs,
+      client,
+      loadLibraryCitationLookup: () => {
+        throw new Error('library.json missing');
+      },
+    });
+    assert.equal(result.beats[0].citations[0].libraryMatch, null);
   });
 });
