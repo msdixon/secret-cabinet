@@ -585,6 +585,8 @@ a.archival-image-link:hover { border-color:var(--lodge-amber-dim); cursor:pointe
 .metrics-table th { text-align:left; color:var(--lodge-ash); font-weight:normal; letter-spacing:0.5px; padding:4px 6px; border-bottom:1px solid var(--lodge-border); }
 .metrics-table td { padding:4px 6px; color:var(--lodge-cream); border-bottom:1px solid var(--lodge-border); }
 .metrics-table td:first-child { color:var(--lodge-muted); }
+.metrics-row-silent td { color:var(--lodge-ash); font-style:italic; }
+.metrics-silent-tag { font-style:italic; font-size:10px; letter-spacing:0.5px; color:#c07070; }
 .metrics-reasoning { background:var(--lodge-surface); border:1px solid var(--lodge-border); border-radius:2px; padding:10px 12px; }
 .metrics-reasoning-tag { font-family:'IM Fell English',serif; font-size:11px; letter-spacing:1px; color:var(--lodge-amber); margin-bottom:4px; }
 .session-metrics-btn { background:transparent; border:1px solid var(--lodge-border); color:var(--lodge-ash); font-family:'IM Fell English',serif; font-size:11px; padding:4px 6px; border-radius:2px; cursor:pointer; letter-spacing:0; flex:1; min-width:0; text-align:center; }
