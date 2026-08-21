@@ -140,10 +140,32 @@ window.Sessions = (function () {
       });
       const isNestedChild = s => s.parentId && byId[s.parentId];
 
-      const renderSessionItem = (s, depth) => {
+      // #344: up to 4 overlapping portrait thumbnails per card; beyond that,
+      // a "+N" chip rather than a fifth thumbnail. memberIds/members are
+      // built pairwise on the server (see src/routes/session.js) so index i
+      // in one names index i in the other.
+      const AVATAR_STACK_MAX = 4;
+      const buildAvatarStack = s => {
+        const ids = s.memberIds || [];
+        const names = s.members || [];
+        if (!ids.length) return '<div class="avatar-stack avatar-stack-empty"></div>';
+        const shown = ids.slice(0, AVATAR_STACK_MAX);
+        const overflow = ids.length - shown.length;
+        const imgs = shown
+          .map(
+            (id, i) =>
+              `<img class="avatar-stack-img" src="/portraits/${id}.png" alt="${deps.escapeHTML(names[i] || '')}" title="${deps.escapeHTML(names[i] || '')}" loading="lazy" onerror="this.remove()">`
+          )
+          .join('');
+        const moreChip = overflow > 0
+          ? `<span class="avatar-stack-more" title="${deps.escapeHTML(names.slice(AVATAR_STACK_MAX).join(', '))}">+${overflow}</span>`
+          : '';
+        return `<div class="avatar-stack">${imgs}${moreChip}</div>`;
+      };
+
+      const renderSessionItem = s => {
         const el = document.createElement('div');
         el.className = 'session-item';
-        if (depth > 0) el.style.marginLeft = `${depth * 20}px`;
         const tagsHtml = (s.tags || [])
           .map(
             t =>
@@ -160,34 +182,37 @@ window.Sessions = (function () {
           ? `<a class="session-published-badge" href="/reading-room/${s.id}" target="_blank" rel="noopener" title="View the public reading-room page">★ Public</a>`
           : '';
         el.innerHTML = `
-          <div class="session-item-date">
-            ${s.date}
-            <span class="session-item-rounds">${s.rounds} round${s.rounds !== 1 ? 's' : ''}</span>
-            ${threadBadge}
-            ${branchBadge}
-            ${publishedBadge}
+          <div class="session-card-top">
+            ${buildAvatarStack(s)}
+            <div class="session-item-date">
+              ${s.date}
+              <span class="session-item-rounds">${s.rounds} round${s.rounds !== 1 ? 's' : ''}</span>
+            </div>
           </div>
+          <div class="session-item-badges">${threadBadge}${branchBadge}${publishedBadge}</div>
           <div class="session-item-entry">${deps.escapeHTML(s.entry || '—')}</div>
-          <div class="session-item-members">${(s.members || []).map(deps.escapeHTML).join(' · ')}</div>
           <div class="session-tags-row">${tagsHtml}<button class="add-tag-btn" onclick="window.Sessions.addTagUI('${s.id}', this)">+</button></div>
+          <div class="session-publish-hint">${publishHintText(s.published)}</div>
           <div class="session-item-actions">
             <button class="session-load-btn" onclick="window.Sessions.restoreSession('${s.id}')">Load this meeting</button>
+            <button class="session-more-btn" onclick="event.stopPropagation();this.closest('.session-item').classList.toggle('actions-open')" title="More actions">⋯</button>
+          </div>
+          <div class="session-item-more-actions">
             <button class="session-witness-btn" onclick="startWitnessFromSession('${s.id}')" title="Watch this meeting play back">◎ Watch</button>
             <button class="session-reconvene-btn" onclick="window.Sessions.reconveneOnSession('${s.id}')" title="Use this transcript as the document for a new session">↩ Reconvene</button>
-            <button class="session-thread-btn" onclick="window.Sessions.assignThreadUI('${s.id}', '${deps.escapeHTML(s.threadId || '')}', '${deps.escapeHTML(s.threadName || '')}', this)">⬡ Thread</button>
-            <button class="session-compare-btn" id="compare-btn-${s.id}" onclick="window.Sessions.toggleCompareSelect('${s.id}', this)">⊕ Compare</button>
+            <button class="session-thread-btn" onclick="window.Sessions.assignThreadUI('${s.id}', '${deps.escapeHTML(s.threadId || '')}', '${deps.escapeHTML(s.threadName || '')}', this)" title="Assign this meeting to a thread">⬡ Thread</button>
+            <button class="session-compare-btn" id="compare-btn-${s.id}" onclick="window.Sessions.toggleCompareSelect('${s.id}', this)" title="Select for side-by-side comparison">⊕ Compare</button>
             <button class="session-metrics-btn" onclick="window.Metrics.toggle('${s.id}')" title="Tokens, cost, and the director's casting rationale for this session">⚙ Metrics</button>
             <button class="session-publish-btn${s.published ? ' is-published' : ''}" onclick="window.Sessions.togglePublish('${s.id}', ${!!s.published}, this)" title="${s.published ? 'Unpublish from the public reading room' : 'Publish to the public reading room'}">${s.published ? '★ Unpublish' : '☆ Publish'}</button>
-            <button class="session-delete-btn" onclick="window.Sessions.deleteSession('${s.id}', this)">Delete</button>
-          </div>
-          <div class="session-publish-hint">${publishHintText(s.published)}</div>`;
+            <button class="session-delete-btn" onclick="window.Sessions.deleteSession('${s.id}', this)" title="Remove this meeting from the record">Delete</button>
+          </div>`;
         list.appendChild(el);
-        (childrenOf[s.id] || []).forEach(child => renderSessionItem(child, depth + 1));
+        (childrenOf[s.id] || []).forEach(child => renderSessionItem(child));
       };
 
       sessions.forEach(s => {
         if (isNestedChild(s)) return; // rendered under its parent instead
-        renderSessionItem(s, 0);
+        renderSessionItem(s);
       });
     } catch (e) {
       list.innerHTML = '<div class="sessions-empty">Could not load past meetings.</div>';
