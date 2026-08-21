@@ -54,6 +54,10 @@ window.Witness = (function () {
     deps = injectedDeps;
   }
 
+  function prefersReducedMotion() {
+    return typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  }
+
   // ── Shared speaker-side tracking ─────────────────────────────────────────────
   // Used by both live mirroring and replay. Never runs concurrently with
   // either (a session is either being watched live or replayed, never both),
@@ -528,8 +532,22 @@ window.Witness = (function () {
     if (reopen) reopenStage();
   }
 
+  // #359: a live convene opens the stage in place -- .stage-only grows it to
+  // 75vh, but the page itself never scrolls, so on a typical viewport the
+  // stage renders below the fold behind the still-visible control rail.
+  // scrollIntoView brings it into view the same way start() already does for
+  // replay (below); prefers-reduced-motion (Principle 4, docs/PRINCIPLES.md)
+  // downgrades the animated scroll to an instant jump.
+  function scrollToStage() {
+    document.getElementById('stage-pane')?.scrollIntoView({
+      behavior: prefersReducedMotion() ? 'auto' : 'smooth',
+      block: 'start',
+    });
+  }
+
   function liveReset() {
     clearStage(true);
+    scrollToStage();
   }
   function resetLiveStage() {
     clearStage(false);
@@ -1157,7 +1175,7 @@ window.Witness = (function () {
     document.getElementById('witness-exit-btn').style.display = '';
 
     reopenStage();
-    document.getElementById('stage-pane').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    scrollToStage();
     document.getElementById('witness-progress').style.width = '0%';
     document.getElementById('witness-hint').textContent = 'Space or click to advance';
 
