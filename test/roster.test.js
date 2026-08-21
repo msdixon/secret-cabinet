@@ -81,7 +81,7 @@ test('assignVoiceId', async t => {
   await t.test('#338 narrows to demeanor-matching voices from FALLBACK_VOICE_IDS when a demeanor is given', () => {
     for (const id of ['crowley', 'waite', 'yeats', 'blavatsky', 'teresa', 'yates']) {
       for (const demeanor of ['grounded', 'stately', 'intense']) {
-        const voiceId = roster.assignVoiceId(id, roster.FALLBACK_VOICE_IDS, undefined, demeanor);
+        const voiceId = roster.assignVoiceId(id, roster.FALLBACK_VOICE_IDS, undefined, undefined, demeanor);
         assert.equal(roster.FALLBACK_VOICE_DEMEANORS[voiceId], demeanor);
       }
     }
@@ -90,11 +90,11 @@ test('assignVoiceId', async t => {
   await t.test('#338 applies demeanor on top of gender, narrowing the already gender-matched set', () => {
     for (const gender of ['male', 'female']) {
       for (const demeanor of ['grounded', 'stately', 'intense']) {
-        const voiceId = roster.assignVoiceId('crowley', roster.FALLBACK_VOICE_IDS, gender, demeanor);
+        const voiceId = roster.assignVoiceId('crowley', roster.FALLBACK_VOICE_IDS, gender, undefined, demeanor);
         assert.equal(roster.FALLBACK_VOICE_GENDERS[voiceId], gender);
         // Only asserted when the pool actually has a voice matching both --
-        // the female+intense corner of the current 21-voice pool is empty,
-        // so that combination falls back to the gender-only set instead.
+        // some gender+demeanor corners of the pool are empty, so that
+        // combination falls back to the gender-only set instead.
         const both = roster.FALLBACK_VOICE_IDS.filter(
           v => roster.FALLBACK_VOICE_GENDERS[v] === gender && roster.FALLBACK_VOICE_DEMEANORS[v] === demeanor
         );
@@ -104,21 +104,67 @@ test('assignVoiceId', async t => {
   });
 
   await t.test('#338 falls back to the gender-narrowed set when nothing in it matches the given demeanor', () => {
-    // female+intense is empty in the current pool -- must still return a female voice.
-    const voiceId = roster.assignVoiceId('blavatsky', roster.FALLBACK_VOICE_IDS, 'female', 'intense');
+    // female+intense (no accent given) is empty in the current pool -- must still return a female voice.
+    const voiceId = roster.assignVoiceId('blavatsky', roster.FALLBACK_VOICE_IDS, 'female', undefined, 'intense');
     assert.equal(roster.FALLBACK_VOICE_GENDERS[voiceId], 'female');
   });
 
   await t.test('#338 falls back to the full pool when nothing in it matches the given demeanor', () => {
     const pool = ['a', 'b', 'c']; // none of these are in FALLBACK_VOICE_DEMEANORS
-    assert.ok(pool.includes(roster.assignVoiceId('crowley', pool, undefined, 'intense')));
+    assert.ok(pool.includes(roster.assignVoiceId('crowley', pool, undefined, undefined, 'intense')));
   });
 
   await t.test('#338 ignores demeanor when omitted, unchanged from pre-#338 behavior', () => {
     const pool = ['a', 'b', 'c'];
     assert.equal(
       roster.assignVoiceId('crowley', pool, 'male'),
-      roster.assignVoiceId('crowley', pool, 'male', undefined)
+      roster.assignVoiceId('crowley', pool, 'male', undefined, undefined)
+    );
+  });
+
+  await t.test('#350 narrows to accent-matching voices from FALLBACK_VOICE_IDS when an accent is given', () => {
+    for (const id of ['crowley', 'warburg', 'levi', 'bruno', 'yeats', 'blavatsky', 'teresa']) {
+      for (const accent of ['american', 'british', 'german', 'french', 'italian', 'irish', 'russian', 'spanish']) {
+        const voiceId = roster.assignVoiceId(id, roster.FALLBACK_VOICE_IDS, undefined, accent);
+        assert.equal(roster.FALLBACK_VOICE_ACCENTS[voiceId], accent);
+      }
+    }
+  });
+
+  await t.test('#350 applies accent on top of gender, narrowing the already gender-matched set', () => {
+    for (const gender of ['male', 'female']) {
+      for (const accent of ['american', 'british', 'german', 'french']) {
+        const voiceId = roster.assignVoiceId('crowley', roster.FALLBACK_VOICE_IDS, gender, accent);
+        assert.equal(roster.FALLBACK_VOICE_GENDERS[voiceId], gender);
+        const both = roster.FALLBACK_VOICE_IDS.filter(
+          v => roster.FALLBACK_VOICE_GENDERS[v] === gender && roster.FALLBACK_VOICE_ACCENTS[v] === accent
+        );
+        if (both.length) assert.equal(roster.FALLBACK_VOICE_ACCENTS[voiceId], accent);
+      }
+    }
+  });
+
+  await t.test('#350 falls back to the gender-narrowed set when nothing in it matches the given accent', () => {
+    const pool = ['a', 'b', 'c']; // none of these are in FALLBACK_VOICE_ACCENTS
+    assert.ok(pool.includes(roster.assignVoiceId('crowley', pool, undefined, 'german')));
+  });
+
+  await t.test('#350 applies accent before demeanor: accent wins the tiebreak when the pool can only satisfy one', () => {
+    // Emanuele Matte is the only italian-tagged voice in the pool, and it's
+    // tagged 'intense'. Asking for italian+grounded should keep the
+    // italian-narrowed set (accent applied first) rather than resetting to
+    // a grounded voice of some other accent.
+    const voiceId = roster.assignVoiceId('bruno', roster.FALLBACK_VOICE_IDS, 'male', 'italian', 'grounded');
+    assert.equal(roster.FALLBACK_VOICE_ACCENTS[voiceId], 'italian');
+  });
+
+  await t.test('#350 ignores accent when omitted, unchanged from pre-#350 behavior', () => {
+    // An omitted accent must apply zero narrowing -- the gender+demeanor
+    // result should be identical to passing an accent nothing in the pool
+    // matches (both leave the gender-narrowed set untouched by accent).
+    assert.equal(
+      roster.assignVoiceId('crowley', roster.FALLBACK_VOICE_IDS, 'male', undefined, 'intense'),
+      roster.assignVoiceId('crowley', roster.FALLBACK_VOICE_IDS, 'male', 'nonexistent-accent-code', 'intense')
     );
   });
 });
@@ -252,6 +298,24 @@ test('reloadRoster', async t => {
     const result = roster.reloadRoster(rosterFile, membersDir, roster.FALLBACK_VOICE_IDS);
     assert.equal(roster.FALLBACK_VOICE_GENDERS[result[0].voiceId], 'male');
     assert.equal(roster.FALLBACK_VOICE_DEMEANORS[result[0].voiceId], 'intense');
+  });
+
+  await t.test('#350 backfills a voiceId matching a hand-set voiceAccent', () => {
+    const { dir, membersDir } = makeFixtureDir();
+    t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+    writeMemberFile(membersDir, 'crowley.md');
+    const rosterFile = path.join(membersDir, 'roster.json');
+    fs.writeFileSync(
+      rosterFile,
+      JSON.stringify([
+        { id: 'crowley', name: 'Crowley', file: 'crowley.md', glyph: '☉', voiceGender: 'male', voiceAccent: 'british' },
+      ]),
+      'utf8'
+    );
+
+    const result = roster.reloadRoster(rosterFile, membersDir, roster.FALLBACK_VOICE_IDS);
+    assert.equal(roster.FALLBACK_VOICE_GENDERS[result[0].voiceId], 'male');
+    assert.equal(roster.FALLBACK_VOICE_ACCENTS[result[0].voiceId], 'british');
   });
 
   await t.test('does not overwrite a hand-set voiceId', () => {

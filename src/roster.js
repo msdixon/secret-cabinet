@@ -79,6 +79,30 @@ const FALLBACK_VOICE_IDS = [
   'pFZP5JQG7iQjIQuC4Bku', // Lily — velvety actress
   'pNInz6obpgDQGcFmaJgB', // Adam — dominant, firm
   'pqHfZKP75CvOlQylNhV4', // Bill — wise, mature, balanced
+  // #350 — the above 21 are ElevenLabs' premade-voice library (see the
+  // FALLBACK_VOICE_ACCENTS comment below for why that pool turned out to be
+  // almost entirely American/British and needed widening). These 14 are
+  // pulled from the broader searchable shared-voice library instead
+  // (GET /v1/shared-voices?accent=<x>), each verified live on 2026-08-21 by
+  // an actual /v1/text-to-speech call against this account's API key — a
+  // shared-library voice_id works there directly, with no separate
+  // "add to my voices" step required first. Picked for real gender/accent
+  // metadata plus a demeanor read off the voice's own name, same convention
+  // as the 21 above.
+  'GROMoQXjD2D16z0prfB1', // Elias — warm, smooth, natural (german)
+  'A9evEp8yGjv4c3WsIKuY', // Ralf Eisend — deep and gravely (german)
+  'zlatCM6nK59gyedHFFxn', // Christian Plasa — wise and commanding (german)
+  'BIvP0GN1cAtSRTxNHnWS', // Ellen — serious, direct and confident (german)
+  'xTZlmU8dKXdyk4XGYGFg', // Antoine — articulate, calm and bright (french)
+  'bObiIpcSB2feMOHORpee', // Antonin — warm, unsettling, elegant (french)
+  'dTmTLshIypwp08eftJH6', // Sylvie — classy (french)
+  'qQFoiN2eQXULODjD1SwL', // Emanuele Matte — clear and serious (italian)
+  'goT3UYdM9bhm0n2lmKQx', // Edward — British, dark, seductive, low (british)
+  'exsUS4vynmxd379XN4yO', // Blondie — conversational (british)
+  'qwaVDEGNsBllYcZO1ZOJ', // Patrick — engaging and warm (irish)
+  'C92s6vssSLlabgIln1iY', // Michelle — direct and natural (irish)
+  '8HSRAwEWAAa6wv9cdi5S', // Dasha — warm, serious, and smooth (russian)
+  'n3yMmKmTfVCEM13Kk2lp', // Silvara — cheerful, friendly, and light (spanish)
 ];
 
 // #333 — the gender each FALLBACK_VOICE_IDS entry is voiced as (per
@@ -110,6 +134,21 @@ const FALLBACK_VOICE_GENDERS = {
   pFZP5JQG7iQjIQuC4Bku: 'female', // Lily
   pNInz6obpgDQGcFmaJgB: 'male', // Adam
   pqHfZKP75CvOlQylNhV4: 'male', // Bill
+  // #350 additions — see FALLBACK_VOICE_IDS's own comment for where these came from.
+  GROMoQXjD2D16z0prfB1: 'male', // Elias
+  A9evEp8yGjv4c3WsIKuY: 'male', // Ralf Eisend
+  zlatCM6nK59gyedHFFxn: 'male', // Christian Plasa
+  BIvP0GN1cAtSRTxNHnWS: 'female', // Ellen
+  xTZlmU8dKXdyk4XGYGFg: 'male', // Antoine
+  bObiIpcSB2feMOHORpee: 'male', // Antonin
+  dTmTLshIypwp08eftJH6: 'female', // Sylvie
+  qQFoiN2eQXULODjD1SwL: 'male', // Emanuele Matte
+  goT3UYdM9bhm0n2lmKQx: 'male', // Edward
+  exsUS4vynmxd379XN4yO: 'female', // Blondie
+  qwaVDEGNsBllYcZO1ZOJ: 'male', // Patrick
+  C92s6vssSLlabgIln1iY: 'female', // Michelle
+  '8HSRAwEWAAa6wv9cdi5S': 'female', // Dasha
+  n3yMmKmTfVCEM13Kk2lp: 'female', // Silvara
 };
 
 // #338 — a small 3-bucket demeanor each FALLBACK_VOICE_IDS entry reads as,
@@ -140,6 +179,75 @@ const FALLBACK_VOICE_DEMEANORS = {
   pFZP5JQG7iQjIQuC4Bku: 'stately', // Lily
   pNInz6obpgDQGcFmaJgB: 'intense', // Adam
   pqHfZKP75CvOlQylNhV4: 'stately', // Bill
+  // #350 additions — read off the same name-adjective convention.
+  GROMoQXjD2D16z0prfB1: 'grounded', // Elias — warm, smooth, natural
+  A9evEp8yGjv4c3WsIKuY: 'stately', // Ralf Eisend — deep and gravely
+  zlatCM6nK59gyedHFFxn: 'intense', // Christian Plasa — wise and commanding
+  BIvP0GN1cAtSRTxNHnWS: 'stately', // Ellen — serious, direct and confident
+  xTZlmU8dKXdyk4XGYGFg: 'stately', // Antoine — articulate, calm and bright
+  bObiIpcSB2feMOHORpee: 'intense', // Antonin — warm, unsettling, elegant
+  dTmTLshIypwp08eftJH6: 'stately', // Sylvie — classy
+  qQFoiN2eQXULODjD1SwL: 'intense', // Emanuele Matte — clear and serious
+  goT3UYdM9bhm0n2lmKQx: 'intense', // Edward — dark, seductive, low
+  exsUS4vynmxd379XN4yO: 'grounded', // Blondie — conversational, casual
+  qwaVDEGNsBllYcZO1ZOJ: 'stately', // Patrick — engaging and warm
+  C92s6vssSLlabgIln1iY: 'intense', // Michelle — direct and natural
+  '8HSRAwEWAAa6wv9cdi5S': 'stately', // Dasha — warm, serious, and smooth
+  n3yMmKmTfVCEM13Kk2lp: 'grounded', // Silvara — cheerful, friendly, and light
+};
+
+// #350 — the accent each FALLBACK_VOICE_IDS entry carries, per ElevenLabs'
+// own voice metadata (the `accent` label on GET /v1/voices for the original
+// 21, and on GET /v1/shared-voices for the 14 added alongside this field —
+// verified live on 2026-08-21, not guessed). Split out from #338's demeanor:
+// Crowley (an English occultist) could land on a voice that reads as
+// generically confident-American, which is more jarring than a slightly-off
+// demeanor — so assignVoiceId below applies this filter *before* demeanor,
+// not after. Layered the same filter-then-hash way as gender and demeanor:
+// falls back to the wider candidate set when nothing narrower matches.
+//
+// The original 21-voice premade pool turned out to be 16 american, 4
+// british, 1 australian — no German/French/Italian/Irish/Russian/Spanish
+// voices at all, so a member tagged with one of those accents would have
+// silently fallen back to "no accent" every time on that pool alone. That's
+// the reason FALLBACK_VOICE_IDS grew rather than just adding this dict on
+// top of the original 21.
+const FALLBACK_VOICE_ACCENTS = {
+  CwhRBWXzGAHq8TQ4Fs17: 'american', // Roger
+  EXAVITQu4vr4xnSDxMaL: 'american', // Sarah
+  FGY2WhTYpPnrIDTdsKH5: 'american', // Laura
+  IKne3meq5aSn9XLyUdCD: 'australian', // Charlie
+  JBFqnCBsd6RMkjVDRZzb: 'british', // George
+  N2lVS1w4EtoT3dr4eOWO: 'american', // Callum
+  SAz9YHcvj6GT2YYXdXww: 'american', // River
+  SOYHLrjzK2X1ezoPC6cr: 'american', // Harry
+  TX3LPaxmHKxFdv7VOQHJ: 'american', // Liam
+  Xb7hH8MSUJpSbSDYk0k2: 'british', // Alice
+  XrExE9yKIg1WjnnlVkGX: 'american', // Matilda
+  bIHbv24MWmeRgasZH58o: 'american', // Will
+  cgSgspJ2msm6clMCkdW9: 'american', // Jessica
+  cjVigY5qzO86Huf0OWal: 'american', // Eric
+  hpp4J3VqNfWAUOO0d1Us: 'american', // Bella
+  iP95p4xoKVk53GoZ742B: 'american', // Chris
+  nPczCjzI2devNBz1zQrb: 'american', // Brian
+  onwK4e9ZLuTAKqWW03F9: 'british', // Daniel
+  pFZP5JQG7iQjIQuC4Bku: 'british', // Lily
+  pNInz6obpgDQGcFmaJgB: 'american', // Adam
+  pqHfZKP75CvOlQylNhV4: 'american', // Bill
+  GROMoQXjD2D16z0prfB1: 'german', // Elias
+  A9evEp8yGjv4c3WsIKuY: 'german', // Ralf Eisend
+  zlatCM6nK59gyedHFFxn: 'german', // Christian Plasa
+  BIvP0GN1cAtSRTxNHnWS: 'german', // Ellen
+  xTZlmU8dKXdyk4XGYGFg: 'french', // Antoine
+  bObiIpcSB2feMOHORpee: 'french', // Antonin
+  dTmTLshIypwp08eftJH6: 'french', // Sylvie
+  qQFoiN2eQXULODjD1SwL: 'italian', // Emanuele Matte
+  goT3UYdM9bhm0n2lmKQx: 'british', // Edward
+  exsUS4vynmxd379XN4yO: 'british', // Blondie
+  qwaVDEGNsBllYcZO1ZOJ: 'irish', // Patrick
+  C92s6vssSLlabgIln1iY: 'irish', // Michelle
+  '8HSRAwEWAAa6wv9cdi5S': 'russian', // Dasha
+  n3yMmKmTfVCEM13Kk2lp: 'spanish', // Silvara
 };
 
 // Hashes memberId into a pool index — same FNV-1a scheme voice.js's
@@ -168,18 +276,37 @@ function hashMemberId(id) {
 // fallback keeps assignVoiceId total: it always returns a pool member
 // rather than risking an empty-array modulo.
 //
-// #338 — `demeanor`, when given, narrows the gender-filtered candidates
+// #350 — `accent`, when given, narrows the gender-filtered candidates
+// against FALLBACK_VOICE_ACCENTS before demeanor gets a turn, same
+// filter-then-hash shape and same fallback rule as gender and demeanor:
+// nothing in the gender-narrowed set carrying that accent leaves candidates
+// at the gender-narrowed set rather than resetting wider or throwing.
+// Deliberately sequenced *before* demeanor (gender -> accent -> demeanor),
+// not after: Rachel's call is that a wrong accent reads as more jarring than
+// a slightly-off demeanor, so when the pool can't satisfy both after
+// gender-narrowing, accent should win the tiebreak. A member with no
+// voiceAccent set (ambiguous historical record — see roster.json) skips
+// this stage entirely and is narrowed by gender+demeanor only, same as
+// before #350; that means they can still hash into any accent the pool
+// happens to hold, which is unchanged from pre-#350 behavior for anyone
+// whose accent isn't hand-tagged.
+//
+// #338 — `demeanor`, when given, narrows the accent-filtered candidates
 // again against FALLBACK_VOICE_DEMEANORS, same shape and same fallback
-// rule: if nothing in the gender-narrowed set carries that demeanor (e.g.
-// no 'intense' voice happens to be tagged 'female' in the current 21-voice
-// pool), candidates stays at the gender-narrowed set rather than resetting
-// to the full 21 or throwing. Demeanor is applied *after* gender, not
-// instead of it, so a member's voice never trades a correct gender for a
-// matching demeanor.
-function assignVoiceId(memberId, pool, gender, demeanor) {
+// rule: if nothing in the narrowed set carries that demeanor (e.g. no
+// 'intense' voice happens to be tagged 'female' in the current pool),
+// candidates stays at the narrower set rather than resetting to the full
+// pool or throwing. Demeanor is applied *after* gender and accent, not
+// instead of either, so a member's voice never trades a correct gender or
+// accent for a matching demeanor.
+function assignVoiceId(memberId, pool, gender, accent, demeanor) {
   let candidates = pool;
   if (gender) {
     const matching = candidates.filter(id => FALLBACK_VOICE_GENDERS[id] === gender);
+    if (matching.length) candidates = matching;
+  }
+  if (accent) {
+    const matching = candidates.filter(id => FALLBACK_VOICE_ACCENTS[id] === accent);
     if (matching.length) candidates = matching;
   }
   if (demeanor) {
@@ -213,7 +340,7 @@ function reloadRoster(rosterFile, membersDir, voicePool) {
       backfilled = true;
     }
     if (voicePool && voicePool.length && !m.voiceId) {
-      m.voiceId = assignVoiceId(m.id, voicePool, m.voiceGender, m.voiceDemeanor);
+      m.voiceId = assignVoiceId(m.id, voicePool, m.voiceGender, m.voiceAccent, m.voiceDemeanor);
       backfilled = true;
     }
   }
@@ -274,6 +401,7 @@ module.exports = {
   FALLBACK_VOICE_IDS,
   FALLBACK_VOICE_GENDERS,
   FALLBACK_VOICE_DEMEANORS,
+  FALLBACK_VOICE_ACCENTS,
   assignVoiceId,
   reloadRoster,
   loadMemberFile,

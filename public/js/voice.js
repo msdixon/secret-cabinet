@@ -45,6 +45,21 @@
 // exists for demeanor), so ElevenLabs' voiceId, already assigned demeanor-
 // appropriately server-side (roster.js's assignVoiceId), is the only place
 // demeanor actually picks a voice; see pitchForMember/baseRateForMember below.
+//
+// #350 (accent) deliberately does *not* add a sixth argument here, unlike
+// gender and demeanor before it. ElevenLabs' voiceId is already assigned
+// accent-appropriately server-side, so the ElevenLabs path needs nothing
+// new. For the Web Speech path, the only structured signal a browser
+// exposes is SpeechSynthesisVoice.lang -- but that's locale (en-GB, en-US,
+// en-IE), not the speaker's own accent, and more importantly it's an
+// *English* locale: there's no `de-DE`/`fr-FR`/etc. voice that would speak
+// English with a German or French accent -- selecting one of those would
+// just recite the English text with that language's own pronunciation
+// rules, which reads as broken, not accented. That's strictly worse than
+// today's gender-only Web Speech pick, so this module stays deliberately
+// accent-unaware rather than attempt a partial lang-based nudge that would
+// only ever cover the 2-3 accent tags with a real English locale
+// (american/british/irish) and actively mispronounce the rest.
 window.Voice = (function () {
   const ENABLED_KEY = 'sc-witness-voice-enabled';
   const MIN_RATE = 0.5;

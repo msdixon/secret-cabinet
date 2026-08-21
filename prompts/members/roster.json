@@ -4,18 +4,20 @@
     "name": "Crowley",
     "file": "crowley.md",
     "glyph": "☿",
-    "voiceId": "TX3LPaxmHKxFdv7VOQHJ",
     "voiceGender": "male",
-    "voiceDemeanor": "intense"
+    "voiceDemeanor": "intense",
+    "voiceAccent": "british",
+    "voiceId": "goT3UYdM9bhm0n2lmKQx"
   },
   {
     "id": "waite",
     "name": "Waite",
     "file": "waite.md",
     "glyph": "✡",
-    "voiceId": "pqHfZKP75CvOlQylNhV4",
     "voiceGender": "male",
-    "voiceDemeanor": "stately"
+    "voiceDemeanor": "stately",
+    "voiceAccent": "british",
+    "voiceId": "JBFqnCBsd6RMkjVDRZzb"
   },
   {
     "id": "pixie",
@@ -35,36 +37,40 @@
     "name": "Yeats",
     "file": "yeats.md",
     "glyph": "☽",
-    "voiceId": "cjVigY5qzO86Huf0OWal",
     "voiceGender": "male",
-    "voiceDemeanor": "stately"
+    "voiceDemeanor": "stately",
+    "voiceAccent": "irish",
+    "voiceId": "qwaVDEGNsBllYcZO1ZOJ"
   },
   {
     "id": "blavatsky",
     "name": "Blavatsky",
     "file": "blavatsky.md",
     "glyph": "☸",
-    "voiceId": "hpp4J3VqNfWAUOO0d1Us",
     "voiceGender": "female",
-    "voiceDemeanor": "stately"
+    "voiceDemeanor": "stately",
+    "voiceAccent": "russian",
+    "voiceId": "8HSRAwEWAAa6wv9cdi5S"
   },
   {
     "id": "levi",
     "name": "Lévi",
     "file": "levi.md",
     "glyph": "△",
-    "voiceId": "IKne3meq5aSn9XLyUdCD",
     "voiceGender": "male",
-    "voiceDemeanor": "intense"
+    "voiceDemeanor": "intense",
+    "voiceAccent": "french",
+    "voiceId": "bObiIpcSB2feMOHORpee"
   },
   {
     "id": "teresa",
     "name": "Teresa of Ávila",
     "file": "teresa.md",
     "glyph": "✦",
-    "voiceId": "cgSgspJ2msm6clMCkdW9",
     "voiceGender": "female",
-    "voiceDemeanor": "grounded"
+    "voiceDemeanor": "grounded",
+    "voiceAccent": "spanish",
+    "voiceId": "n3yMmKmTfVCEM13Kk2lp"
   },
   {
     "id": "arabi",
@@ -80,9 +86,10 @@
     "name": "Maud Gonne",
     "file": "maud-gonne.md",
     "glyph": "✿",
-    "voiceId": "FGY2WhTYpPnrIDTdsKH5",
     "voiceGender": "female",
-    "voiceDemeanor": "intense"
+    "voiceDemeanor": "intense",
+    "voiceAccent": "irish",
+    "voiceId": "C92s6vssSLlabgIln1iY"
   },
   {
     "id": "llull",
@@ -107,36 +114,40 @@
     "name": "John Dee",
     "file": "john-dee.md",
     "glyph": "✧",
-    "voiceId": "pqHfZKP75CvOlQylNhV4",
     "voiceGender": "male",
-    "voiceDemeanor": "stately"
+    "voiceDemeanor": "stately",
+    "voiceAccent": "british",
+    "voiceId": "JBFqnCBsd6RMkjVDRZzb"
   },
   {
     "id": "warburg",
     "name": "Aby Warburg",
     "file": "warburg.md",
     "glyph": "☉",
-    "voiceId": "IKne3meq5aSn9XLyUdCD",
     "voiceGender": "male",
-    "voiceDemeanor": "intense"
+    "voiceDemeanor": "intense",
+    "voiceAccent": "german",
+    "voiceId": "zlatCM6nK59gyedHFFxn"
   },
   {
     "id": "corbin",
     "name": "Henri Corbin",
     "file": "corbin.md",
     "glyph": "♀",
-    "voiceId": "JBFqnCBsd6RMkjVDRZzb",
     "voiceGender": "male",
-    "voiceDemeanor": "stately"
+    "voiceDemeanor": "stately",
+    "voiceAccent": "french",
+    "voiceId": "xTZlmU8dKXdyk4XGYGFg"
   },
   {
     "id": "adorno",
     "name": "Theodor Adorno",
     "file": "adorno.md",
     "glyph": "♂",
-    "voiceId": "SOYHLrjzK2X1ezoPC6cr",
     "voiceGender": "male",
-    "voiceDemeanor": "intense"
+    "voiceDemeanor": "intense",
+    "voiceAccent": "german",
+    "voiceId": "zlatCM6nK59gyedHFFxn"
   },
   {
     "id": "bruno",
@@ -147,9 +158,10 @@
       "Nolan"
     ],
     "glyph": "♄",
-    "voiceId": "SOYHLrjzK2X1ezoPC6cr",
     "voiceGender": "male",
-    "voiceDemeanor": "intense"
+    "voiceDemeanor": "intense",
+    "voiceAccent": "italian",
+    "voiceId": "qQFoiN2eQXULODjD1SwL"
   },
   {
     "id": "al-hallaj",
@@ -177,27 +189,30 @@
     "name": "Lady Frieda Harris",
     "file": "frieda-harris.md",
     "glyph": "♇",
-    "voiceId": "FGY2WhTYpPnrIDTdsKH5",
     "voiceGender": "female",
-    "voiceDemeanor": "grounded"
+    "voiceDemeanor": "grounded",
+    "voiceAccent": "british",
+    "voiceId": "exsUS4vynmxd379XN4yO"
   },
   {
     "id": "dion-fortune",
     "name": "Dion Fortune",
     "file": "dion-fortune.md",
     "glyph": "☄",
-    "voiceId": "XrExE9yKIg1WjnnlVkGX",
     "voiceGender": "female",
-    "voiceDemeanor": "stately"
+    "voiceDemeanor": "stately",
+    "voiceAccent": "british",
+    "voiceId": "Xb7hH8MSUJpSbSDYk0k2"
   },
   {
     "id": "william-blake",
     "name": "William Blake",
     "file": "william-blake.md",
     "glyph": "★",
-    "voiceId": "IKne3meq5aSn9XLyUdCD",
     "voiceGender": "male",
-    "voiceDemeanor": "intense"
+    "voiceDemeanor": "intense",
+    "voiceAccent": "british",
+    "voiceId": "goT3UYdM9bhm0n2lmKQx"
   },
   {
     "id": "catherine-blake",
@@ -207,27 +222,30 @@
       "Kate"
     ],
     "glyph": "☆",
-    "voiceId": "FGY2WhTYpPnrIDTdsKH5",
     "voiceGender": "female",
-    "voiceDemeanor": "grounded"
+    "voiceDemeanor": "grounded",
+    "voiceAccent": "british",
+    "voiceId": "exsUS4vynmxd379XN4yO"
   },
   {
     "id": "yates",
     "name": "Frances Yates",
     "file": "yates.md",
     "glyph": "✪",
-    "voiceId": "hpp4J3VqNfWAUOO0d1Us",
     "voiceGender": "female",
-    "voiceDemeanor": "stately"
+    "voiceDemeanor": "stately",
+    "voiceAccent": "british",
+    "voiceId": "Xb7hH8MSUJpSbSDYk0k2"
   },
   {
     "id": "scholem",
     "name": "Gershom Scholem",
     "file": "scholem.md",
     "glyph": "✴",
-    "voiceId": "JBFqnCBsd6RMkjVDRZzb",
     "voiceGender": "male",
-    "voiceDemeanor": "stately"
+    "voiceDemeanor": "stately",
+    "voiceAccent": "german",
+    "voiceId": "A9evEp8yGjv4c3WsIKuY"
   },
   {
     "id": "moina-mathers",
@@ -243,9 +261,10 @@
     "name": "Paschal Beverly Randolph",
     "file": "randolph.md",
     "glyph": "✹",
-    "voiceId": "IKne3meq5aSn9XLyUdCD",
     "voiceGender": "male",
-    "voiceDemeanor": "intense"
+    "voiceDemeanor": "intense",
+    "voiceAccent": "american",
+    "voiceId": "SOYHLrjzK2X1ezoPC6cr"
   },
   {
     "id": "bamba",
@@ -261,63 +280,70 @@
     "name": "Sun Ra",
     "file": "sun-ra.md",
     "glyph": "❋",
-    "voiceId": "IKne3meq5aSn9XLyUdCD",
     "voiceGender": "male",
-    "voiceDemeanor": "intense"
+    "voiceDemeanor": "intense",
+    "voiceAccent": "american",
+    "voiceId": "TX3LPaxmHKxFdv7VOQHJ"
   },
   {
     "id": "porete",
     "name": "Marguerite Porete",
     "file": "porete.md",
     "glyph": "◆",
-    "voiceId": "Xb7hH8MSUJpSbSDYk0k2",
     "voiceGender": "female",
-    "voiceDemeanor": "stately"
+    "voiceDemeanor": "stately",
+    "voiceAccent": "french",
+    "voiceId": "dTmTLshIypwp08eftJH6"
   },
   {
     "id": "hildegard",
     "name": "Hildegard of Bingen",
     "file": "hildegard.md",
     "glyph": "◇",
-    "voiceId": "Xb7hH8MSUJpSbSDYk0k2",
     "voiceGender": "female",
-    "voiceDemeanor": "stately"
+    "voiceDemeanor": "stately",
+    "voiceAccent": "german",
+    "voiceId": "BIvP0GN1cAtSRTxNHnWS"
   },
   {
     "id": "julian",
     "name": "Julian of Norwich",
     "file": "julian.md",
     "glyph": "▲",
-    "voiceId": "XrExE9yKIg1WjnnlVkGX",
     "voiceGender": "female",
-    "voiceDemeanor": "stately"
+    "voiceDemeanor": "stately",
+    "voiceAccent": "british",
+    "voiceId": "Xb7hH8MSUJpSbSDYk0k2"
   },
   {
     "id": "jung",
     "name": "Carl Jung",
     "file": "jung.md",
     "glyph": "▽",
-    "voiceId": "pqHfZKP75CvOlQylNhV4",
     "voiceGender": "male",
-    "voiceDemeanor": "stately"
+    "voiceDemeanor": "stately",
+    "voiceAccent": "german",
+    "voiceId": "A9evEp8yGjv4c3WsIKuY"
   },
   {
     "id": "pauli",
     "name": "Wolfgang Pauli",
     "file": "pauli.md",
     "glyph": "⬟",
-    "voiceId": "pqHfZKP75CvOlQylNhV4",
     "voiceGender": "male",
-    "voiceDemeanor": "stately"
+    "voiceDemeanor": "stately",
+    "voiceAccent": "german",
+    "voiceId": "A9evEp8yGjv4c3WsIKuY"
   },
   {
     "id": "eckhart",
     "name": "Meister Eckhart",
     "file": "eckhart.md",
     "glyph": "●",
-    "voiceId": "cjVigY5qzO86Huf0OWal",
     "voiceGender": "male",
-    "voiceDemeanor": "stately"
+    "voiceDemeanor": "stately",
+    "voiceAccent": "german",
+    "voiceId": "A9evEp8yGjv4c3WsIKuY"
   },
   {
     "id": "bohme",
@@ -327,18 +353,20 @@
       "Behmen"
     ],
     "glyph": "🜂",
-    "voiceId": "CwhRBWXzGAHq8TQ4Fs17",
     "voiceGender": "male",
-    "voiceDemeanor": "grounded"
+    "voiceDemeanor": "grounded",
+    "voiceAccent": "german",
+    "voiceId": "GROMoQXjD2D16z0prfB1"
   },
   {
     "id": "swedenborg",
     "name": "Emanuel Swedenborg",
     "file": "swedenborg.md",
     "glyph": "⬢",
-    "voiceId": "nPczCjzI2devNBz1zQrb",
     "voiceGender": "male",
-    "voiceDemeanor": "stately"
+    "voiceDemeanor": "stately",
+    "voiceAccent": "german",
+    "voiceId": "A9evEp8yGjv4c3WsIKuY"
   },
   {
     "id": "paracelsus",
@@ -349,9 +377,10 @@
       "von Hohenheim"
     ],
     "glyph": "🜍",
-    "voiceId": "IKne3meq5aSn9XLyUdCD",
     "voiceGender": "male",
-    "voiceDemeanor": "intense"
+    "voiceDemeanor": "intense",
+    "voiceAccent": "german",
+    "voiceId": "zlatCM6nK59gyedHFFxn"
   },
   {
     "id": "gurdjieff",
