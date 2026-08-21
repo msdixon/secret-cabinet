@@ -36,6 +36,7 @@ function registerSessionRoutes(
     escalateCitationsToWeb,
     loadManifestSessions,
     buildCitationManifest,
+    buildBibliography,
   }
 ) {
   // GET /api/sessions — list recent sessions, with optional ?q=, ?tag=, ?thread= filters
@@ -139,6 +140,19 @@ function registerSessionRoutes(
       res.type('text/markdown').send(buildCitationManifest(sessions));
     } catch (err) {
       res.status(500).json({ error: 'Failed to build citation manifest' });
+    }
+  });
+
+  // GET /api/admin/bibliography — #356's project-wide bibliography, the
+  // appendix-form works-cited counterpart to the citation manifest above
+  // (see src/bibliography.js for how the two differ). Same sessions,
+  // same auth gate, same "aggregate document only" shape.
+  app.get('/api/admin/bibliography', (req, res) => {
+    try {
+      const sessions = loadManifestSessions(sessionsDir);
+      res.type('text/markdown').send(buildBibliography(sessions));
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to build bibliography' });
     }
   });
 

@@ -51,6 +51,7 @@ const citations = require('./src/citations');
 const graph = require('./src/graph');
 const sessionsStore = require('./src/sessions-store');
 const citationManifest = require('./scripts/build-citation-manifest');
+const bibliography = require('./src/bibliography');
 const auth = require('./src/auth');
 const { registerLibraryRoutes } = require('./src/routes/library');
 const { registerGraphRoutes } = require('./src/routes/graph');
@@ -334,6 +335,15 @@ function loadLibraryCitationLookup() {
   return library.loadLibraryCitationLookup(LIBRARY_DIR, LIBRARY_FILE);
 }
 
+// #356 — the bibliography's Library appendix needs each entry's
+// publication-ready `citation` string, which only loadLibraryCitationLookup
+// reads (off the .md frontmatter, not library.json's index) — merge the two
+// the same way scripts/build-bibliography.js's CLI path does.
+function loadBibliographyLibraryEntries() {
+  const lookup = loadLibraryCitationLookup();
+  return loadLibraryIndex().map(entry => ({ ...entry, ...lookup[entry.id] }));
+}
+
 // Citation verification (#153) lives in citations.js; thin wrappers here
 // supply the current client/model, same convention as the rest of this file.
 function groundAgainstLibraryText(citationsList, libraryLookup, onMetric) {
@@ -449,6 +459,7 @@ registerSessionRoutes(app, {
   escalateCitationsToWeb,
   loadManifestSessions: citationManifest.loadSessions,
   buildCitationManifest: sessions => citationManifest.buildManifest(sessions, ROSTER),
+  buildBibliography: sessions => bibliography.buildBibliography(sessions, ROSTER, loadBibliographyLibraryEntries()),
 });
 
 registerVoiceRoutes(app, {

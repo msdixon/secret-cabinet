@@ -8,4 +8,5 @@ voice-cache/*
 !voice-cache/.gitkeep
 .auth-sessions/
 CITATION-MANIFEST.md
+BIBLIOGRAPHY.md
 .DS_Store

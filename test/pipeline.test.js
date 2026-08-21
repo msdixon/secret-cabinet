@@ -67,6 +67,9 @@ const {
   CITATION_QUOTE_MAX_CHARS,
   CITATION_WORK_MAX_CHARS,
   CITATION_NOTE_MAX_CHARS,
+  MAX_INVOKED_PER_BEAT,
+  INVOKED_WORK_MAX_CHARS,
+  INVOKED_NOTE_MAX_CHARS,
 } = require('../src/tuning.js');
 
 // #352's ledger lives in lodge-prompts.js (see its own comment for why) but
@@ -1036,6 +1039,14 @@ test('buildDispositionSystemPrompt', async t => {
     assert.match(prompt, /most turns cite nothing/i);
   });
 
+  // #356 — the weaker invoked-works tier, piggybacked on the same call.
+  await t.test('always asks for texts invoked without a quote, separately from citations', () => {
+    const prompt = buildDispositionSystemPrompt({ member, priorDisposition: null });
+    assert.match(prompt, /invokedWorks tool field/);
+    assert.match(prompt, /without quoting or citing it directly/);
+    assert.match(prompt, /most turns invoke nothing/i);
+  });
+
   await t.test('includes the library list when one is given, for libraryMatch', () => {
     const prompt = buildDispositionSystemPrompt({
       member,
@@ -1371,6 +1382,100 @@ test('callDispositionUpdate', async t => {
     });
     assert.deepEqual(citations, []);
   });
+
+  // #356 — the optional invokedWorks array, sanitized the same way citations
+  // is: a weaker, unverified tier for texts/authors gestured at without a
+  // supporting quote.
+  await t.test(
+    'returns an empty invokedWorks array when the model leaves the field out — the common case',
+    async () => {
+      const fakeClient = fakeDispositionClient({ reflection: 'Nothing to add.', waitingOnMemberId: 'none' });
+      const { invokedWorks } = await callDispositionUpdate({
+        client: fakeClient,
+        model: 'test-model',
+        system: 'sys',
+        userMessage: 'msg',
+        presentIds: ['waite'],
+      });
+      assert.deepEqual(invokedWorks, []);
+    }
+  );
+
+  await t.test('passes through a well-formed invoked work', async () => {
+    const fakeClient = fakeDispositionClient({
+      reflection: 'ok',
+      waitingOnMemberId: 'none',
+      invokedWorks: [{ work: "Corbin's reading of Ibn Arabi", note: 'named in passing' }],
+    });
+    const { invokedWorks } = await callDispositionUpdate({
+      client: fakeClient,
+      model: 'test-model',
+      system: 'sys',
+      userMessage: 'msg',
+      presentIds: ['waite'],
+    });
+    assert.equal(invokedWorks.length, 1);
+    assert.equal(invokedWorks[0].work, "Corbin's reading of Ibn Arabi");
+    assert.equal(invokedWorks[0].note, 'named in passing');
+  });
+
+  await t.test('drops an invoked work with no usable `work` field', async () => {
+    const fakeClient = fakeDispositionClient({
+      reflection: 'ok',
+      waitingOnMemberId: 'none',
+      invokedWorks: [{ note: 'orphaned note, no work named' }],
+    });
+    const { invokedWorks } = await callDispositionUpdate({
+      client: fakeClient,
+      model: 'test-model',
+      system: 'sys',
+      userMessage: 'msg',
+      presentIds: ['waite'],
+    });
+    assert.deepEqual(invokedWorks, []);
+  });
+
+  await t.test('caps the invokedWorks array at MAX_INVOKED_PER_BEAT', async () => {
+    const overlong = Array.from({ length: MAX_INVOKED_PER_BEAT + 5 }, (_, i) => ({ work: `Work ${i}` }));
+    const fakeClient = fakeDispositionClient({ reflection: 'ok', waitingOnMemberId: 'none', invokedWorks: overlong });
+    const { invokedWorks } = await callDispositionUpdate({
+      client: fakeClient,
+      model: 'test-model',
+      system: 'sys',
+      userMessage: 'msg',
+      presentIds: ['waite'],
+    });
+    assert.equal(invokedWorks.length, MAX_INVOKED_PER_BEAT);
+  });
+
+  await t.test('hard-truncates invokedWorks fields to their max lengths', async () => {
+    const fakeClient = fakeDispositionClient({
+      reflection: 'ok',
+      waitingOnMemberId: 'none',
+      invokedWorks: [{ work: 'w'.repeat(INVOKED_WORK_MAX_CHARS + 50), note: 'n'.repeat(INVOKED_NOTE_MAX_CHARS + 50) }],
+    });
+    const { invokedWorks } = await callDispositionUpdate({
+      client: fakeClient,
+      model: 'test-model',
+      system: 'sys',
+      userMessage: 'msg',
+      presentIds: ['waite'],
+    });
+    assert.equal(invokedWorks[0].work.length, INVOKED_WORK_MAX_CHARS);
+    assert.equal(invokedWorks[0].note.length, INVOKED_NOTE_MAX_CHARS);
+  });
+
+  await t.test('defaults to an empty invokedWorks array when the tool call is missing or malformed', async () => {
+    const fakeClient = { messages: { create: async () => ({ content: [], usage: null }) } };
+    const { invokedWorks } = await callDispositionUpdate({
+      client: fakeClient,
+      model: 'test-model',
+      system: 'sys',
+      userMessage: 'msg',
+      presentIds: ['waite'],
+    });
+    assert.deepEqual(invokedWorks, []);
+  });
 });
 
 test('buildDispositionToolSchema', async t => {
@@ -1406,6 +1511,16 @@ test('buildDispositionToolSchema', async t => {
       'unverified',
       'uncertain',
     ]);
+  });
+
+  // #356 — same optionality convention as citations/residueNote: most turns
+  // invoke nothing beyond what's already in citations.
+  await t.test('offers a bounded invokedWorks array but does not require it, and only requires `work`', () => {
+    const schema = buildDispositionToolSchema(['waite']);
+    assert.equal(schema.input_schema.properties.invokedWorks.type, 'array');
+    assert.equal(schema.input_schema.properties.invokedWorks.maxItems, MAX_INVOKED_PER_BEAT);
+    assert.deepEqual(schema.input_schema.properties.invokedWorks.items.required, ['work']);
+    assert.ok(!schema.input_schema.required.includes('invokedWorks'));
   });
 });
 
@@ -2546,21 +2661,24 @@ test('runRound — citation capture piggybacked on the disposition call (#355)',
     assert.equal('citations' in result.beats[0], false);
   });
 
-  await t.test('validates a returned libraryMatch against loadLibraryCitationLookup, keeping a real match', async () => {
-    const client = fakeCitationPassageClient({
-      dispositionInput: {
-        reflection: 'Considering.',
-        waitingOnMemberId: 'none',
-        citations: [{ quote: 'q', work: 'W', verdict: 'verified', note: 'n', libraryMatch: 'crowley-book' }],
-      },
-    });
-    const result = await runRound({
-      ...baseArgs,
-      client,
-      loadLibraryCitationLookup: () => ({ 'crowley-book': { title: 'The Book of the Law', source: '1904' } }),
-    });
-    assert.equal(result.beats[0].citations[0].libraryMatch, 'crowley-book');
-  });
+  await t.test(
+    'validates a returned libraryMatch against loadLibraryCitationLookup, keeping a real match',
+    async () => {
+      const client = fakeCitationPassageClient({
+        dispositionInput: {
+          reflection: 'Considering.',
+          waitingOnMemberId: 'none',
+          citations: [{ quote: 'q', work: 'W', verdict: 'verified', note: 'n', libraryMatch: 'crowley-book' }],
+        },
+      });
+      const result = await runRound({
+        ...baseArgs,
+        client,
+        loadLibraryCitationLookup: () => ({ 'crowley-book': { title: 'The Book of the Law', source: '1904' } }),
+      });
+      assert.equal(result.beats[0].citations[0].libraryMatch, 'crowley-book');
+    }
+  );
 
   await t.test('nulls out a libraryMatch the injected library does not actually have', async () => {
     const client = fakeCitationPassageClient({
@@ -2578,17 +2696,20 @@ test('runRound — citation capture piggybacked on the disposition call (#355)',
     assert.equal(result.beats[0].citations[0].libraryMatch, null);
   });
 
-  await t.test('degrades to no library context (never throws) when loadLibraryCitationLookup is not given', async () => {
-    const client = fakeCitationPassageClient({
-      dispositionInput: {
-        reflection: 'Considering.',
-        waitingOnMemberId: 'none',
-        citations: [{ quote: 'q', work: 'W', verdict: 'verified', note: 'n' }],
-      },
-    });
-    const result = await runRound({ ...baseArgs, client });
-    assert.equal(result.beats[0].citations.length, 1);
-  });
+  await t.test(
+    'degrades to no library context (never throws) when loadLibraryCitationLookup is not given',
+    async () => {
+      const client = fakeCitationPassageClient({
+        dispositionInput: {
+          reflection: 'Considering.',
+          waitingOnMemberId: 'none',
+          citations: [{ quote: 'q', work: 'W', verdict: 'verified', note: 'n' }],
+        },
+      });
+      const result = await runRound({ ...baseArgs, client });
+      assert.equal(result.beats[0].citations.length, 1);
+    }
+  );
 
   await t.test('degrades to no library context when loadLibraryCitationLookup itself throws', async () => {
     const client = fakeCitationPassageClient({
@@ -2606,5 +2727,27 @@ test('runRound — citation capture piggybacked on the disposition call (#355)',
       },
     });
     assert.equal(result.beats[0].citations[0].libraryMatch, null);
+  });
+
+  // #356 — the weaker invoked-works tier, piggybacked on the same call.
+  await t.test('attaches invokedWorks from the disposition call onto the beat that earned them', async () => {
+    const client = fakeCitationPassageClient({
+      dispositionInput: {
+        reflection: 'Considering.',
+        waitingOnMemberId: 'none',
+        invokedWorks: [{ work: "Corbin's reading of Ibn Arabi", note: 'named in passing' }],
+      },
+    });
+    const result = await runRound({ ...baseArgs, client });
+    assert.equal(result.beats[0].invokedWorks.length, 1);
+    assert.equal(result.beats[0].invokedWorks[0].work, "Corbin's reading of Ibn Arabi");
+  });
+
+  await t.test('omits `invokedWorks` entirely from a beat that invoked nothing — the common case', async () => {
+    const client = fakeCitationPassageClient({
+      dispositionInput: { reflection: 'Considering.', waitingOnMemberId: 'none' },
+    });
+    const result = await runRound({ ...baseArgs, client });
+    assert.equal('invokedWorks' in result.beats[0], false);
   });
 });

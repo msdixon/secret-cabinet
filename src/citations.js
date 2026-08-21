@@ -317,6 +317,25 @@ function flattenBeatCitations(session, roster = []) {
   return flat;
 }
 
+// #356: same shape and same always-on-capture story as flattenBeatCitations,
+// for the weaker invoked-works tier (a text/author/tradition gestured at by
+// name without a supporting quote) — see pipeline-disposition.js's
+// invokedWorks tool field. Kept as its own function rather than a flag on
+// flattenBeatCitations since the two tiers are deliberately never merged —
+// the bibliography appendix (src/bibliography.js) keeps them in separate
+// sections, and blending them here would make that separation easy to lose.
+function flattenBeatInvokedWorks(session, roster = []) {
+  const flat = [];
+  (session.rounds || []).forEach(segment => {
+    (segment.beats || []).forEach(beat => {
+      if (beat.failed || !Array.isArray(beat.invokedWorks) || !beat.invokedWorks.length) return;
+      const speaker = roster.find(m => m.id === beat.memberId)?.name || beat.speakerName || beat.memberId;
+      beat.invokedWorks.forEach(w => flat.push({ ...w, speaker, memberId: beat.memberId }));
+    });
+  });
+  return flat;
+}
+
 async function escalateCitationsToWeb(citations) {
   const unmatched = citations
     .map((c, index) => ({ c, index }))
@@ -348,4 +367,5 @@ module.exports = {
   escalateCitationToWeb,
   escalateCitationsToWeb,
   flattenBeatCitations,
+  flattenBeatInvokedWorks,
 };

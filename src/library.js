@@ -26,10 +26,18 @@ function loadArchiveImageIndex(archiveImageFile) {
 // `citation`/`source_url` live only in each entry's .md frontmatter, not in
 // library.json's index — this reads them out. Shared by the internal
 // citation-grounding lookup below and GET /api/library/:id (#84).
+// #356: a citation string that itself quotes a work's title (e.g. Adorno's
+// "Types and Syndromes") is valid double-quoted YAML with backslash-escaped
+// inner quotes — `\"Types and Syndromes,\"` — which the regex capture below
+// passes through verbatim rather than as YAML. Left un-decoded, those
+// literal backslashes surfaced in every citation-bearing render (the
+// bibliography's Library appendix showed it on nearly every third entry).
+const unescapeYamlDoubleQuoted = s => (s || '').replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+
 function parseLibraryFrontmatter(raw) {
   const frontmatter = raw.match(/^---\n([\s\S]*?)\n---/)?.[1] || '';
-  const citation = frontmatter.match(/^citation:\s*"?(.*?)"?$/m)?.[1] || null;
-  const source_url = frontmatter.match(/^source_url:\s*"?(.*?)"?$/m)?.[1] || null;
+  const citation = unescapeYamlDoubleQuoted(frontmatter.match(/^citation:\s*"?(.*?)"?$/m)?.[1]) || null;
+  const source_url = unescapeYamlDoubleQuoted(frontmatter.match(/^source_url:\s*"?(.*?)"?$/m)?.[1]) || null;
   return { citation, source_url };
 }
 
