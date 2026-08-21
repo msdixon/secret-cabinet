@@ -18,6 +18,7 @@ const {
   splitIntoBeats,
   BEAT_WORD_THRESHOLD,
   countWords,
+  isPassTurn,
   lengthTendencyOf,
   PRIORITY_RANK_DECAY,
   MAX_UNDER_HEARD_DEFICIT,
@@ -830,6 +831,40 @@ test('countWords', async t => {
 
   await t.test('collapses runs of whitespace and newlines', () => {
     assert.equal(countWords('  one   two\n\nthree\tfour  '), 4);
+  });
+});
+
+// #362 — the detector for a passed turn: nothing but the room's existing
+// action-line idiom, and nothing else.
+test('isPassTurn', async t => {
+  await t.test('a bare action line, alone, is a pass', () => {
+    assert.equal(isPassTurn('*lets the silence sit.*'), true);
+  });
+
+  await t.test('surrounding whitespace does not defeat it', () => {
+    assert.equal(isPassTurn('  \n*lets the silence sit.*\n  '), true);
+  });
+
+  await t.test('an action followed by real speech is not a pass — the member spoke', () => {
+    assert.equal(isPassTurn('*leans back.*\nActually, I have quite a lot to say.'), false);
+  });
+
+  await t.test('speech with no action at all is not a pass', () => {
+    assert.equal(isPassTurn('I disagree entirely.'), false);
+  });
+
+  await t.test('two action lines are not a pass — the format is exactly one, and only one', () => {
+    assert.equal(isPassTurn('*shrugs.*\n*looks away.*'), false);
+  });
+
+  await t.test('an empty or whitespace-only turn is not a pass — that is a different, undiagnosed case', () => {
+    assert.equal(isPassTurn(''), false);
+    assert.equal(isPassTurn('   '), false);
+  });
+
+  await t.test('a bare asterisk pair with nothing inside is not a pass', () => {
+    assert.equal(isPassTurn('**'), false);
+    assert.equal(isPassTurn('* *'), false);
   });
 });
 
@@ -2589,6 +2624,56 @@ test('runRound — passage end-causes and beats (#244)', async t => {
     // The failed attempt contributed no text to the rolled-up passage either.
     assert.ok(result.fullRoundText.length > 0);
     assert.ok(!result.fullRoundText.includes('undefined'));
+  });
+
+  // #362: a member who declines the turn via the room's own action-only
+  // idiom is recorded distinctly from both a spoken turn and a failed one.
+  await t.test('records a passed turn as a distinct beat, not a failure, and keeps it in the transcript', async () => {
+    const client = fakePassageClient({ speakerText: '*lets the silence sit.*', windingDownOnConsult: [false] });
+    const result = await runRound({
+      client,
+      model: 'test-model',
+      lodgeContext: LODGE,
+      ROSTER: SINGLE_MEMBER_ROSTER,
+      loadMemberFile,
+      presentMemberIds: ['crowley'],
+      artifact: null,
+      notes: {},
+      roundPrompt: 'Opening prompt',
+      conversationHistory: [],
+      speakerCount: 1,
+      round: 0,
+      disposition: {},
+    });
+    assert.equal(result.beats[0].memberId, 'crowley');
+    assert.equal(result.beats[0].text, '*lets the silence sit.*');
+    assert.equal(result.beats[0].passed, true);
+    assert.equal(result.beats[0].failed, undefined);
+    // Still a real beat in the rolled-up passage — a pass is not a gap.
+    assert.match(result.fullRoundText, /lets the silence sit/);
+  });
+
+  await t.test('a turn with an action and real speech is not treated as a pass (#362)', async () => {
+    const client = fakePassageClient({
+      speakerText: '*leans forward.*\nI have a great deal to say about this.',
+      windingDownOnConsult: [false],
+    });
+    const result = await runRound({
+      client,
+      model: 'test-model',
+      lodgeContext: LODGE,
+      ROSTER: SINGLE_MEMBER_ROSTER,
+      loadMemberFile,
+      presentMemberIds: ['crowley'],
+      artifact: null,
+      notes: {},
+      roundPrompt: 'Opening prompt',
+      conversationHistory: [],
+      speakerCount: 1,
+      round: 0,
+      disposition: {},
+    });
+    assert.equal(result.beats[0].passed, undefined);
   });
 });
 

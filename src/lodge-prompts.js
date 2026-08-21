@@ -20,7 +20,7 @@
 // under. Required directly rather than injected: it is roster-free,
 // stateless constants and pure functions, the same category as `path`.
 const record = require('../public/js/record.js');
-const { DEFAULT_POOL_SIZE, INTERJECT_SPEAKER_COUNT, ARC_STAGE_BOUNDARIES } = require('./tuning');
+const { DEFAULT_POOL_SIZE, INTERJECT_SPEAKER_COUNT, ARC_STAGE_BOUNDARIES, PASS_TURN_CREDIT } = require('./tuning');
 
 // #194 touchpoint 2: the three-part arc (reactions -> unbound cross-talk ->
 // embers) survives as *tendency*, not boundary. The old prose's explicit
@@ -133,12 +133,18 @@ function deriveMeetingNote(session) {
 // "heard from tonight" — counting it would tell the under-heard boost and
 // the director's prompt that a member had been given the floor when the
 // room in fact never got a word from them.
+//
+// #362 added a second beat shape to special-case: `{ memberId, text,
+// passed: true }` for a member who was called on and deliberately declined
+// the turn. Unlike a failed beat, this one gets real credit — just not full
+// credit (PASS_TURN_CREDIT, below 1) — since the member was genuinely heard
+// from, even if what came back was a chosen silence rather than speech.
 function turnsSoFar(rounds) {
   const ledger = {};
   for (const round of rounds || []) {
     for (const beat of round?.beats || []) {
       if (!beat?.memberId || beat.failed) continue;
-      ledger[beat.memberId] = (ledger[beat.memberId] || 0) + 1;
+      ledger[beat.memberId] = (ledger[beat.memberId] || 0) + (beat.passed ? PASS_TURN_CREDIT : 1);
     }
   }
   return ledger;

@@ -132,6 +132,29 @@ function countWords(text) {
   return trimmed ? trimmed.split(/\s+/).length : 0;
 }
 
+// ── Passing (#362) ──────────────────────────────────────────────────────────
+//
+// lodge-context.md licenses silence three times over ("Absence is a form of
+// response," "A member who has nothing to add says nothing") but until now
+// the only way a picked member could produce nothing was to *fail* — a
+// dropped API call recorded as an error, indistinguishable in the record
+// from a member never called on at all. This gives the choice a real shape:
+// a member passes by responding with nothing but a single action in
+// *asterisks* — the room's own idiom for "someone lets a silence sit,"
+// already named in lodge-context.md's register permissions — and nothing
+// else. No dialogue, no second line.
+//
+// Deliberately the room's existing action-line idiom, not a new format
+// bolted onto the transcript — every client renderer (app.js, sessions.js,
+// reading-room.js) already knows how to typeset a turn that's nothing but
+// one action, since #354's beats shape and the room's own register already
+// allow a turn to be action-only. #362 gives that shape a name in the record
+// (`passed: true`, below) rather than inventing a new one.
+function isPassTurn(text) {
+  const match = (text || '').trim().match(/^\*([^*\n]+)\*$/);
+  return !!match && match[1].trim().length > 0;
+}
+
 // ── Voice-register exemplar (#187) ──────────────────────────────────────────
 //
 // The library (#35a) holds a verified primary-source excerpt authored by a
@@ -369,6 +392,8 @@ Write your entire turn as one continuous block — no blank line anywhere inside
 
 There is no default length for a turn — let who you are and what's just happened decide it. Some members think out loud at length once something has actually engaged them; others cut in with a single line and let it land. Both are complete turns. If you have a lot to say, say it — but the round has a shared, finite amount of room, so notice you're leaving less of it for whoever speaks after you. A one-line interjection is not a lesser contribution than a paragraph.
 
+You do not have to speak. If nothing in the room has actually moved you — someone else has already said the truer version of your point, or you are simply not there yet — you may pass instead of manufacturing a reaction. To pass, write nothing but a single action in *asterisks*, and stop: a look, a stillness, a hand gone still around a glass. No dialogue, no second line, nothing after it. This is a real choice with its own weight, not an escape from a turn that's merely hard — reach for it because the silence is the truer thing tonight, not because speaking would cost you more effort. Being called on and staying quiet is itself something that happened in the room; use it rarely enough that it still means something when you do.
+
 Actions and stage business are written in *single asterisks* and used sparingly. The default for any contribution is no action line at all — most speech should stand without physical description. An action earns its place only when it reveals something the words cannot: a gesture that contradicts the speech, a significant silence, a physical act that changes the room's temperature. Do not describe yourself looking at fires, adjusting posture, or sitting down. One action is the maximum; zero is the norm. Do not use --- as a divider.
 
 Be specific: cite real texts, real historical tensions, real scholarship (including post-period scholarship — the room is atemporal and the receipts are real). Do not invent citations. If you quote a text, that text must exist and the quotation must be substantively accurate.
@@ -466,6 +491,7 @@ module.exports = {
   underHeardDeficit,
   isPoolExhausted,
   countWords,
+  isPassTurn,
   VOICE_EXEMPLAR_WORD_BUDGET,
   trimToWordBudget,
   buildVoiceExemplarSection,

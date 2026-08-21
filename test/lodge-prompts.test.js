@@ -184,6 +184,26 @@ test('turnsSoFar', async t => {
     );
   });
 
+  // #362: a member who was called on and deliberately passed is recorded as
+  // `{ memberId, text, passed: true }` — genuinely heard from (unlike a
+  // failed turn), but not fully (PASS_TURN_CREDIT is below 1).
+  await t.test('credits a passed turn partially, not fully or not at all', () => {
+    assert.deepEqual(
+      lp.turnsSoFar([{ beats: [{ memberId: 'crowley', text: '*lets it go.*', passed: true }] }]),
+      { crowley: 0.5 }
+    );
+  });
+
+  await t.test('a passed turn and a spoken turn accumulate distinctly across passages', () => {
+    assert.deepEqual(
+      lp.turnsSoFar([
+        { beats: [{ memberId: 'crowley', text: '*lets it go.*', passed: true }] },
+        { beats: [{ memberId: 'crowley', text: 'A real turn.' }] },
+      ]),
+      { crowley: 1.5 }
+    );
+  });
+
   await t.test('sessions predating #244 have no beats at all and reduce to an empty ledger, not an error', () => {
     assert.deepEqual(lp.turnsSoFar([{ text: 'a passage from before beats were stored' }, { text: 'another' }]), {});
   });
