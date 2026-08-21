@@ -125,6 +125,8 @@ async function runRound({
   onMetric,
   onSpeakerStart,
   onSpeakerEnd,
+  onPoolUpdate,
+  onDisposition,
   precedingTurn,
   disposition: priorDisposition,
   loadVoiceExemplar,
@@ -331,6 +333,11 @@ async function runRound({
   });
 
   let pool = initialPool;
+  // #360: the director's candidate pool, surfaced to the client so present
+  // members not in it can read as "listening" rather than the generic
+  // "occupied" — same information pickNextSpeaker already draws from below,
+  // just also handed outward instead of only inward.
+  onPoolUpdate?.(pool);
   let spokenCounts = new Map();
   let lastSpeakerId = null;
   let remainingBudget = BREATH_BUDGET_WORDS;
@@ -392,6 +399,7 @@ async function runRound({
         break;
       }
       pool = freshPool;
+      onPoolUpdate?.(pool);
       spokenCounts = new Map();
       budgetAtLastConsult = remainingBudget;
       if (!pool.length) break;
@@ -516,7 +524,13 @@ async function runRound({
           presentIds: dispositionPresentIds,
           libraryIds,
         });
-        if (updatedDisposition) currentDisposition[memberId] = { text: updatedDisposition, waitingOnMemberId };
+        if (updatedDisposition) {
+          currentDisposition[memberId] = { text: updatedDisposition, waitingOnMemberId };
+          // #360: surfaces the same waitingOnMemberId pickNextSpeaker already
+          // reads (#203) — a member who wants to jump back in reads as
+          // "waiting" until their disposition next changes.
+          onDisposition?.(memberId, waitingOnMemberId);
+        }
         // #166: only when the beat actually earned a fragment — most beats
         // don't (see the tool schema's "most turns, nothing belongs here").
         if (residueNote) {
