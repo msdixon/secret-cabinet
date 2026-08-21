@@ -893,6 +893,9 @@ async function convene() {
   segmentCount = 0;
   sessionDate = new Date().toISOString().split('T')[0];
   window.LodgeScene?.setPassageCount(0);
+  // #356: a fresh room starts with nothing to cite -- clear the signal a
+  // previously-restored session may have set.
+  window.Export.setSessionHasCitations(false);
 
   // Re-enable the "Play as" controls in case the last thing shown was a
   // restored (read-only) session — restorePlayAsControlDisplay() disables them.
@@ -1322,6 +1325,9 @@ function reconveneOnCurrentSession() {
   segmentCount = 0;
   currentSessionId = null;
   transcriptText = '';
+  // #356: the transcript now on the table hasn't been re-parsed into beats
+  // yet, so any citation signal from before belongs to the session just left.
+  window.Export.setSessionHasCitations(false);
 
   window.scrollTo({ top: 0, behavior: 'smooth' });
   setStatus('The transcript has been placed on the table. Assemble a new room and reconvene.', false);
@@ -1694,6 +1700,10 @@ function sessionsDeps() {
     },
     resetLiveStage: () => window.Witness.resetLiveStage(),
     collapseStage: () => window.Witness.collapseStage(),
+    // #356: whether the just-restored session has always-on-captured
+    // citations/invoked works to show a bibliography for -- see
+    // export.js's setSessionHasCitations for why this needs its own signal.
+    setSessionHasCitations: v => window.Export.setSessionHasCitations(v),
     escapeHTML,
     resolveMember: window.Speaker.resolveMember,
     isKnownSpeakerHeader: window.Speaker.isKnownSpeakerHeader,

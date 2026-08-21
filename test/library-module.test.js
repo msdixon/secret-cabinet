@@ -80,6 +80,18 @@ test('parseLibraryFrontmatter', async t => {
   await t.test('returns nulls when there is no frontmatter block at all', () => {
     assert.deepEqual(lib.parseLibraryFrontmatter('Just body text.'), { citation: null, source_url: null });
   });
+
+  // #356: a citation quoting a work's own title is valid YAML with
+  // backslash-escaped inner quotes — decode them back to plain quotes
+  // rather than passing the literal backslashes through to every render.
+  await t.test('decodes backslash-escaped inner quotes in a citation string', () => {
+    const raw =
+      '---\ncitation: "Adorno, \\"Types and Syndromes,\\" in The Authoritarian Personality (1950)."\n---\nBody.';
+    assert.equal(
+      lib.parseLibraryFrontmatter(raw).citation,
+      'Adorno, "Types and Syndromes," in The Authoritarian Personality (1950).'
+    );
+  });
 });
 
 test('loadVoiceExemplar', async t => {

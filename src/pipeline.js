@@ -505,6 +505,7 @@ async function runRound({
           waitingOnMemberId,
           residueNote,
           citations,
+          invokedWorks,
           usage: dUsage,
           latencyMs: dLatencyMs,
         } = await callDispositionUpdate({
@@ -526,6 +527,8 @@ async function runRound({
         // #355: attached onto the same beat pushed above, omitted entirely
         // when the turn cited nothing — see the beats-shape comment.
         if (citations.length) beatEntry.citations = citations;
+        // #356: same convention, for the weaker invoked-works tier.
+        if (invokedWorks.length) beatEntry.invokedWorks = invokedWorks;
         onMetric?.(
           makeMetric('disposition', {
             round,
@@ -535,6 +538,7 @@ async function runRound({
             waitingOnMemberId,
             residueNote: residueNote || null,
             citationCount: citations.length,
+            invokedCount: invokedWorks.length,
           })
         );
       } catch (err) {

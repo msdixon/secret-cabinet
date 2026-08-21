@@ -76,6 +76,7 @@ function makeDeps(document, calls) {
     renderMembers: record('renderMembers'),
     showSessionControls: record('showSessionControls'),
     applyCitationFlags: record('applyCitationFlags'),
+    setSessionHasCitations: record('setSessionHasCitations'),
     applyPlayerTurnMarkers: record('applyPlayerTurnMarkers'),
     addBranchControl: record('addBranchControl'),
     escapeHTML: s => String(s),
@@ -319,6 +320,49 @@ test('restoreSession', async t => {
 
     assert.deepEqual(argFor(calls, 'applyCitationFlags'), session.citationFlags);
     assert.deepEqual(argFor(calls, 'applyPlayerTurnMarkers'), session.playerTurns);
+  });
+
+  // #356 — setSessionHasCitations unlocks the scholarly export for a session
+  // that has bibliographic content even when Verify Citations never ran on
+  // it (grounded citationFlags is the other, pre-existing signal, checked by
+  // applyCitationFlags above).
+  await t.test(
+    'reports no citation data for a session with neither citationFlags nor beat-level captures',
+    async t2 => {
+      const { calls, module: Sessions } = boot(t2, { fetchImpl: () => jsonOk(SESSION) });
+      await Sessions.restoreSession('sess-1');
+      assert.equal(argFor(calls, 'setSessionHasCitations'), false);
+    }
+  );
+
+  await t.test('reports citation data present from grounded citationFlags', async t2 => {
+    const session = { ...SESSION, citationFlags: [{ speaker: 'Crowley', quote: 'One.', work: 'W' }] };
+    const { calls, module: Sessions } = boot(t2, { fetchImpl: () => jsonOk(session) });
+    await Sessions.restoreSession('sess-1');
+    assert.equal(argFor(calls, 'setSessionHasCitations'), true);
+  });
+
+  await t.test(
+    'reports citation data present from an always-on beat capture never run through Verify Citations',
+    async t2 => {
+      const session = {
+        ...SESSION,
+        rounds: [{ beats: [{ memberId: 'crowley', text: 'a', citations: [{ quote: 'q', work: 'W' }] }] }],
+      };
+      const { calls, module: Sessions } = boot(t2, { fetchImpl: () => jsonOk(session) });
+      await Sessions.restoreSession('sess-1');
+      assert.equal(argFor(calls, 'setSessionHasCitations'), true);
+    }
+  );
+
+  await t.test('reports citation data present from an invoked-works-only beat capture', async t2 => {
+    const session = {
+      ...SESSION,
+      rounds: [{ beats: [{ memberId: 'crowley', text: 'a', invokedWorks: [{ work: 'W' }] }] }],
+    };
+    const { calls, module: Sessions } = boot(t2, { fetchImpl: () => jsonOk(session) });
+    await Sessions.restoreSession('sess-1');
+    assert.equal(argFor(calls, 'setSessionHasCitations'), true);
   });
 
   await t.test('reports failure through setStatus instead of throwing at app.js', async t2 => {

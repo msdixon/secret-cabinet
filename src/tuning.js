@@ -167,6 +167,16 @@ const CITATION_QUOTE_MAX_CHARS = 240; // ~25 words of transcript prose, generous
 const CITATION_WORK_MAX_CHARS = 160;
 const CITATION_NOTE_MAX_CHARS = 240;
 
+// #356: a second, weaker tier piggybacked on the same call — a text, author,
+// or tradition gestured at by name or unmistakable allusion without a
+// quote (the "adjacent referenced texts" the bibliography appendix keeps
+// separate from Works Cited). Same bounding rationale as the citations
+// fields above; no verdict/quote here since nothing is being fact-checked,
+// only recorded as invoked.
+const MAX_INVOKED_PER_BEAT = 6;
+const INVOKED_WORK_MAX_CHARS = 160;
+const INVOKED_NOTE_MAX_CHARS = 240;
+
 // ── Pool/arc sizing (lodge-prompts.js) ─────────────────────────────────────
 
 // #194 touchpoint 2: SPEAKER_COUNTS/speakerCountForRound retire — pool
@@ -208,6 +218,9 @@ module.exports = {
   CITATION_QUOTE_MAX_CHARS,
   CITATION_WORK_MAX_CHARS,
   CITATION_NOTE_MAX_CHARS,
+  MAX_INVOKED_PER_BEAT,
+  INVOKED_WORK_MAX_CHARS,
+  INVOKED_NOTE_MAX_CHARS,
   DEFAULT_POOL_SIZE,
   INTERJECT_SPEAKER_COUNT,
   ARC_STAGE_BOUNDARIES,

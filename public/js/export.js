@@ -354,12 +354,29 @@ window.Export = (function () {
   // around scholarly citation, and a fully-cited session with zero annotations is
   // still a complete-enough artifact (bibliography only). So either signal unlocks
   // the export, not just the (undiscoverable) click-to-annotate path.
+  //
+  // #356: a third signal, sessionHasCitationData -- whether the loaded
+  // session's beats carry always-on-captured citations or invoked works
+  // (#355/#356), regardless of whether anyone has ever clicked Verify
+  // Citations. Set by sessions.js's restoreSession via setSessionHasCitations
+  // below; without it, a freshly-restored session with real bibliographic
+  // content stayed locked behind the button's own "verified" DOM check, which
+  // only ever gets set by *running* Verify Citations in the current page
+  // load -- exactly the "reliably produce a record of itself" gap #356 exists
+  // to close.
+  let sessionHasCitationData = false;
+
+  function setSessionHasCitations(v) {
+    sessionHasCitationData = !!v;
+    updateScholarlyExportButton();
+  }
+
   function updateScholarlyExportButton() {
     const btn = document.getElementById('export-scholarly-btn');
     if (!btn) return;
     const hasAnnotations = getAnnotatedPassages().length > 0;
     const hasVerifiedCitations = document.querySelector('.transcript-entry.flagged-citation') != null;
-    btn.disabled = !hasAnnotations && !hasVerifiedCitations;
+    btn.disabled = !hasAnnotations && !hasVerifiedCitations && !sessionHasCitationData;
     btn.title = btn.disabled
       ? 'Verify Citations, or click a passage above to add a note, to enable'
       : 'Export a Markdown note with your annotated passages and/or citation bibliography';
@@ -372,39 +389,101 @@ window.Export = (function () {
   // between app.js and scripts/build-citation-manifest.js. Missing on
   // pre-#153 sessions — default to 'model-knowledge' there, since that was
   // the only method available at the time.
+  // #356: 'ungrounded' added for the always-on capture (#355) that's never
+  // been through Verify Citations at all -- distinct from 'model-knowledge',
+  // which means grounding *was* attempted and simply found no match. Same
+  // convention as scripts/build-citation-manifest.js's SOURCE_LABEL.
   const CITATION_SOURCE_LABEL = {
     library: 'checked against curated text',
     web: 'checked via live lookup',
-    'model-knowledge': "Claude's own knowledge",
+    'model-knowledge': "Claude's own knowledge (grounding attempted, no match)",
+    ungrounded: 'captured at write time — not yet run through Verify Citations',
   };
 
-  // Groups a session's citationFlags by cited work, same convention as
-  // scripts/build-citation-manifest.js, so the per-session bibliography reads
-  // consistently with the cumulative cross-session one.
-  function renderBibliography(citations) {
-    if (!citations.length) {
-      return '_No citations verified for this session. Run **Verify Citations ⚑** above, then re-export to include a bibliography._\n';
-    }
-    const byWork = new Map();
-    citations.forEach(c => {
-      if (!byWork.has(c.work)) byWork.set(c.work, []);
-      byWork.get(c.work).push(c);
+  // #356: reads a beat's always-on-captured citations/invoked works back out
+  // of a session -- client-side port of src/citations.js's
+  // flattenBeatCitations/flattenBeatInvokedWorks (see that file's header for
+  // why client and server keep their own small copies rather than sharing a
+  // module across the script-tag/require boundary). `speaker` resolves off
+  // the roster already in core state, the same MEMBERS array the rest of
+  // this module reads.
+  function flattenBeatEntries(session, field) {
+    const { MEMBERS } = deps.getCore();
+    const flat = [];
+    (session.rounds || []).forEach(segment => {
+      (segment.beats || []).forEach(beat => {
+        if (beat.failed || !Array.isArray(beat[field]) || !beat[field].length) return;
+        const speaker = MEMBERS.find(m => m.id === beat.memberId)?.name || beat.speakerName || beat.memberId;
+        beat[field].forEach(entry => flat.push({ ...entry, speaker, memberId: beat.memberId }));
+      });
     });
-    const lines = [];
-    [...byWork.entries()]
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .forEach(([work, occurrences]) => {
-        lines.push(`### ${work}`, '');
+    return flat;
+  }
+
+  // A session's direct citations: its grounded `citationFlags` if Verify
+  // Citations has ever run, else the always-on raw capture off its beats —
+  // same fallback src/bibliography.js's citationsForSession uses server-side,
+  // so a session that's never been through the deliberate grounding pass
+  // still shows a bibliography instead of the empty one PROJECT.md flagged
+  // (10 of 11 sessions, before #355/#356).
+  function citationsForSession(session) {
+    if (Array.isArray(session.citationFlags)) return session.citationFlags;
+    return flattenBeatEntries(session, 'citations');
+  }
+
+  function groupByWork(entries) {
+    const byWork = new Map();
+    entries.forEach(e => {
+      if (!byWork.has(e.work)) byWork.set(e.work, []);
+      byWork.get(e.work).push(e);
+    });
+    return [...byWork.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  }
+
+  // #356: appendix-form bibliography, in two honestly-separated tiers — see
+  // src/bibliography.js's header for why this shape (alphabetical, tiered by
+  // evidence) replaced the flat "no citations yet" fallback this used to be.
+  // Works Cited: direct citations, each with a quote. Works Referenced: texts/
+  // authors/traditions invoked by name or allusion without a supporting quote
+  // — weaker evidence, kept in its own section so it never reads as verified.
+  function renderBibliography(session) {
+    const citations = citationsForSession(session);
+    const invoked = flattenBeatEntries(session, 'invokedWorks');
+    const lines = ['### Works Cited', ''];
+    if (!citations.length) {
+      lines.push('_No citations captured for this session._', '');
+    } else {
+      groupByWork(citations).forEach(([work, occurrences]) => {
+        lines.push(`#### ${work}`, '');
         occurrences.forEach(o => {
           const groundedIn =
             o.libraryCitation || (o.webSourceUrl ? `[${o.webSourceTitle}](${o.webSourceUrl})` : o.webSourceTitle);
           const grounding = groundedIn ? ` — grounded in: ${groundedIn}` : '';
-          const sourceLabel = CITATION_SOURCE_LABEL[o.source || 'model-knowledge'];
+          const sourceLabel = CITATION_SOURCE_LABEL[o.source || 'ungrounded'];
           lines.push(`- **${o.verdict}** (${sourceLabel}) — ${(o.speaker || '').replace(/\s*—\s*$/, '').trim()}`);
           lines.push(`  > "${o.quote}"`);
-          lines.push(`  ${o.note}${grounding}`, '');
+          lines.push(`  ${o.note || ''}${grounding}`, '');
         });
       });
+    }
+    lines.push(
+      '### Works Referenced — Invoked, Not Quoted',
+      '',
+      'A member reaching for a reading without quoting it, or naming a tradition rather than a title — named in passing, never independently checked.'
+    );
+    lines.push('');
+    if (!invoked.length) {
+      lines.push('_None captured for this session._', '');
+    } else {
+      groupByWork(invoked).forEach(([work, occurrences]) => {
+        lines.push(`#### ${work}`, '');
+        occurrences.forEach(o => {
+          const detail = o.note ? ` — ${o.note}` : '';
+          lines.push(`- ${(o.speaker || '').replace(/\s*—\s*$/, '').trim()}${detail}`);
+        });
+        lines.push('');
+      });
+    }
     return lines.join('\n');
   }
 
@@ -447,7 +526,7 @@ window.Export = (function () {
       // that only shows up as citations quietly missing.
       const completeness = deps.recordCompletenessNote(session);
       if (!deps.recordCompleteness(session).complete) lines.push(`*${completeness}*`, '');
-      lines.push('## Bibliography', '', renderBibliography(session.citationFlags || []));
+      lines.push('## Bibliography', '', renderBibliography(session));
 
       const blob = new Blob([lines.join('\n')], { type: 'text/markdown' });
       const url = URL.createObjectURL(blob);
@@ -621,6 +700,7 @@ window.Export = (function () {
     handleFileSelect,
     buildAnnotatedTranscript,
     updateScholarlyExportButton,
+    setSessionHasCitations,
     exportScholarly,
     exportTxt,
     exportDayOne,

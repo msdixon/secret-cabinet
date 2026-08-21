@@ -366,6 +366,68 @@ test('flattenBeatCitations', async t => {
   });
 });
 
+// #356 — same always-on-capture story as flattenBeatCitations, for the
+// weaker invoked-works tier (pipeline-disposition.js's invokedWorks tool
+// field). Deliberately its own function/test suite rather than a flag on
+// flattenBeatCitations — see that function's own comment.
+test('flattenBeatInvokedWorks', async t => {
+  const roster = [{ id: 'crowley', name: 'Crowley' }];
+
+  await t.test('flattens invoked works across beats and rounds, resolving speaker from the roster', () => {
+    const session = {
+      rounds: [
+        {
+          beats: [
+            { memberId: 'crowley', text: 'a', invokedWorks: [{ work: 'W1', note: 'named in passing' }] },
+            { memberId: 'crowley', text: 'b' }, // no invoked works — most beats
+          ],
+        },
+        {
+          beats: [{ memberId: 'crowley', text: 'c', invokedWorks: [{ work: 'W2', note: '' }] }],
+        },
+      ],
+    };
+    const flat = c.flattenBeatInvokedWorks(session, roster);
+    assert.equal(flat.length, 2);
+    assert.deepEqual(
+      flat.map(w => w.work),
+      ['W1', 'W2']
+    );
+    assert.equal(flat[0].speaker, 'Crowley');
+    assert.equal(flat[0].memberId, 'crowley');
+  });
+
+  await t.test('skips a failed beat even if it somehow carries an invokedWorks array', () => {
+    const session = {
+      rounds: [{ beats: [{ memberId: 'crowley', text: '', failed: true, invokedWorks: [{ work: 'W' }] }] }],
+    };
+    assert.deepEqual(c.flattenBeatInvokedWorks(session, roster), []);
+  });
+
+  await t.test('falls back to speakerName, then memberId, for a non-roster speaker', () => {
+    const session = {
+      rounds: [
+        {
+          beats: [
+            {
+              memberId: 'presence:interjection',
+              speakerName: '— a voice from elsewhere —',
+              text: 'x',
+              invokedWorks: [{ work: 'W' }],
+            },
+          ],
+        },
+      ],
+    };
+    assert.equal(c.flattenBeatInvokedWorks(session, roster)[0].speaker, '— a voice from elsewhere —');
+  });
+
+  await t.test('returns an empty array for a session with no rounds, or rounds with no beats (pre-#354)', () => {
+    assert.deepEqual(c.flattenBeatInvokedWorks({}, roster), []);
+    assert.deepEqual(c.flattenBeatInvokedWorks({ rounds: [{ label: 'x', text: 'y' }] }, roster), []);
+  });
+});
+
 test('escalateCitationsToWeb', async t => {
   await t.test('only escalates citations with no libraryMatch, keyed by original index', async () => {
     withFetch(t, async () =>
