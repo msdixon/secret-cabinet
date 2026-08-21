@@ -35,8 +35,13 @@ function fakeApp() {
   };
 }
 
-function fakeReq({ params = {}, body = {}, query = {} } = {}) {
-  return { params, body, query };
+// #378: authed defaults true — every existing call site in this file
+// exercises the authenticated/admin path (the only one reachable today,
+// since requireAuth already gates /api/ before these handlers run whenever a
+// passphrase is set). Tests for the unauthenticated published-filter pass
+// `authed: false` explicitly.
+function fakeReq({ params = {}, body = {}, query = {}, authed = true } = {}) {
+  return { params, body, query, authed };
 }
 
 function fakeRes() {
@@ -130,6 +135,32 @@ test('GET /api/sessions', async t => {
     );
   });
 
+  await t.test('#378: an unauthenticated request only sees published sessions', () => {
+    const dir = makeFixtureDir();
+    t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+    store.saveSession(dir, baseSession('s1', { published: true }));
+    store.saveSession(dir, baseSession('s2'));
+    const app = fakeApp();
+    registerSessionRoutes(app, makeDeps(dir));
+    const res = fakeRes();
+    app.routes['GET /api/sessions'](fakeReq({ authed: false }), res);
+    assert.deepEqual(
+      res.body.map(s => s.id),
+      ['s1']
+    );
+  });
+
+  await t.test('#378: the published filter applies before ?q=, so an unauthenticated ?q= cannot match an unpublished session', () => {
+    const dir = makeFixtureDir();
+    t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+    store.saveSession(dir, baseSession('s1', { entry: 'about silence', published: false }));
+    const app = fakeApp();
+    registerSessionRoutes(app, makeDeps(dir));
+    const res = fakeRes();
+    app.routes['GET /api/sessions'](fakeReq({ query: { q: 'silence' }, authed: false }), res);
+    assert.deepEqual(res.body, []);
+  });
+
   await t.test('?thread= filters and sorts chronologically oldest-first', () => {
     const dir = makeFixtureDir();
     t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
@@ -158,6 +189,18 @@ test('GET /api/threads', async t => {
     const res = fakeRes();
     app.routes['GET /api/threads'](fakeReq(), res);
     assert.deepEqual(res.body, [{ id: 't1', name: 'Thread One', count: 2 }]);
+  });
+
+  await t.test('#378: an unauthenticated request excludes threads made up only of unpublished sessions', () => {
+    const dir = makeFixtureDir();
+    t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+    store.saveSession(dir, baseSession('s1', { threadId: 't1', threadName: 'Thread One', published: true }));
+    store.saveSession(dir, baseSession('s2', { threadId: 't2', threadName: 'Thread Two', published: false }));
+    const app = fakeApp();
+    registerSessionRoutes(app, makeDeps(dir));
+    const res = fakeRes();
+    app.routes['GET /api/threads'](fakeReq({ authed: false }), res);
+    assert.deepEqual(res.body, [{ id: 't1', name: 'Thread One', count: 1 }]);
   });
 });
 
@@ -277,6 +320,29 @@ test('GET /api/sessions/:id', async t => {
     registerSessionRoutes(app, makeDeps(dir));
     const res = fakeRes();
     app.routes['GET /api/sessions/:id'](fakeReq({ params: { id: 's1' } }), res);
+    assert.equal(res.body.id, 's1');
+  });
+
+  await t.test('#378: an unauthenticated request 404s (not 403) for an unpublished session', () => {
+    const dir = makeFixtureDir();
+    t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+    store.saveSession(dir, baseSession('s1'));
+    const app = fakeApp();
+    registerSessionRoutes(app, makeDeps(dir));
+    const res = fakeRes();
+    app.routes['GET /api/sessions/:id'](fakeReq({ params: { id: 's1' }, authed: false }), res);
+    assert.equal(res.statusCode, 404);
+    assert.equal(res.body.error, 'Session not found');
+  });
+
+  await t.test('#378: an unauthenticated request can still load a published session', () => {
+    const dir = makeFixtureDir();
+    t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+    store.saveSession(dir, baseSession('s1', { published: true }));
+    const app = fakeApp();
+    registerSessionRoutes(app, makeDeps(dir));
+    const res = fakeRes();
+    app.routes['GET /api/sessions/:id'](fakeReq({ params: { id: 's1' }, authed: false }), res);
     assert.equal(res.body.id, 's1');
   });
 });
@@ -409,6 +475,17 @@ test('GET /api/sessions/:id/transcript', async t => {
     const res = fakeRes();
     app.routes['GET /api/sessions/:id/transcript'](fakeReq({ params: { id: 's1' } }), res);
     assert.match(res.body.transcript, /played by a human participant, live/);
+  });
+
+  await t.test('#378: an unauthenticated request 404s (not 403) for an unpublished session', () => {
+    const dir = makeFixtureDir();
+    t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+    store.saveSession(dir, baseSession('s1'));
+    const app = fakeApp();
+    registerSessionRoutes(app, makeDeps(dir));
+    const res = fakeRes();
+    app.routes['GET /api/sessions/:id/transcript'](fakeReq({ params: { id: 's1' }, authed: false }), res);
+    assert.equal(res.statusCode, 404);
   });
 });
 

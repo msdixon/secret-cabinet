@@ -77,11 +77,27 @@ function registerAuthRoutes(app, passphrase) {
   });
 }
 
+// #378: whether this request should be treated as authenticated for gating
+// output by session.published — deliberately not just req.session.authed.
+// With no passphrase configured, every request already gets full access via
+// createRequireAuth's early return below, but that path never sets
+// session.authed to true. A route that checked req.session.authed directly
+// would read every no-passphrase deploy (including all of local dev) as
+// unauthenticated and start filtering by published — exactly backwards. This
+// is the one place that reconciles the two.
+function isAuthedRequest(req, passphrase) {
+  return !passphrase || !!(req.session && req.session.authed);
+}
+
 // Auth guard — applied to all routes except login/logout
 // Must run before express.static: static previously short-circuited the gate,
 // serving index.html to anyone while only the API calls it made 401'd.
 function createRequireAuth(passphrase) {
   return function requireAuth(req, res, next) {
+    // #378: set once, here, so route handlers downstream (e.g. the four
+    // session read routes gated by published) can read req.authed directly
+    // instead of each re-deriving it from passphrase/session state.
+    req.authed = isAuthedRequest(req, passphrase);
     if (!passphrase) return next(); // no passphrase set = open
     if (req.path === '/api/config') return next(); // health check — always public
     // #38: the reading room is the one intentionally public surface — gated by
@@ -104,4 +120,5 @@ module.exports = {
   loginPageHtml,
   registerAuthRoutes,
   createRequireAuth,
+  isAuthedRequest,
 };

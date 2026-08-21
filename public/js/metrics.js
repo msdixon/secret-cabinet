@@ -52,11 +52,27 @@ window.Metrics = (function () {
   // 'disposition', keyed by memberId) and per-phase rows for everything else
   // (director/casting/citation-*, memberId null) — the same split the panel
   // renders as two tables, so aggregation and rendering agree on the split.
-  function aggregate(metrics, members) {
+  // presentMemberIds (session.members) seeds a zero row for every seated
+  // member up front — #361: a member who was never picked emits no metric
+  // at all, so without this the panel silently omits them instead of
+  // showing the zero that's the actual signal.
+  function aggregate(metrics, members, presentMemberIds) {
     const totals = { calls: metrics.length, input: 0, output: 0, cacheRead: 0, skipped: 0 };
     const bySpeaker = new Map();
     const byPhase = new Map();
     const reasonings = [];
+
+    (presentMemberIds || []).forEach(id => {
+      const member = members.find(mm => mm.id === id);
+      bySpeaker.set(id, {
+        name: member?.name || id,
+        calls: 0,
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        skipped: 0,
+      });
+    });
 
     metrics.forEach(m => {
       const usage = m.usage || {};
@@ -117,7 +133,7 @@ window.Metrics = (function () {
     }
 
     const members = deps.getCore().MEMBERS || [];
-    const { totals, bySpeaker, byPhase, reasonings } = aggregate(metrics, members);
+    const { totals, bySpeaker, byPhase, reasonings } = aggregate(metrics, members, session.members);
     const cost = estimateCost(totals);
     // #190 verification: the whole point of surfacing this distinctly rather
     // than folding it into total input — a non-zero share here is the signal
@@ -146,8 +162,8 @@ window.Metrics = (function () {
         <tbody>${bySpeaker
           .map(
             s => `
-          <tr>
-            <td>${deps.escapeHTML(s.name)}</td>
+          <tr${s.calls === 0 ? ' class="metrics-row-silent"' : ''}>
+            <td>${deps.escapeHTML(s.name)}${s.calls === 0 ? ' <span class="metrics-silent-tag">sat silent</span>' : ''}</td>
             <td>${s.calls}</td>
             <td>${formatNum(s.input)}</td>
             <td>${formatNum(s.output)}</td>
