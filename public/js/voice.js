@@ -341,6 +341,12 @@ window.Voice = (function () {
   // in the session too.
   function speakViaElevenLabs(spoken, memberId, speedMultiplier, memberGender, memberDemeanor) {
     const audio = new Audio();
+    // #400: speedMultiplier used to reach speakViaWebSpeech's utterance.rate
+    // only -- an ElevenLabs <audio> element has its own, separate rate knob
+    // (playbackRate) that nothing here was ever setting, so the witness-speed
+    // control silently only ever sped up/slowed down the *text*, never the
+    // ElevenLabs audio most sessions actually hear.
+    audio.playbackRate = clampRate(speedMultiplier || 1);
     currentAudio = audio;
     // #336: resolved on the <audio> element's own 'ended'/'error', or by
     // chaining into the Web Speech fallback's promise when the request

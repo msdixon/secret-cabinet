@@ -271,6 +271,7 @@ window.Witness = (function () {
     if (events) events.innerHTML = '';
     liveTypingMemberId = null;
     stopRoomLoop();
+    resetLiveSpeechQueue(); // #400: a fresh stage shouldn't inherit a queued-but-not-yet-spoken beat from whatever came before
   }
 
   function speakerNameHtml(memberId, speaker) {
@@ -467,7 +468,7 @@ window.Witness = (function () {
     roomHoldPending.delete(memberId);
     if (!pending) return;
     if (pending.type === 'card') {
-      renderWitnessBlock(pending.block);
+      renderWitnessBlock(pending.block, { queueLiveSpeech: true });
       setRoomHold(memberId, pending.block.text);
     } else {
       renderRoomTyping(pending.name, memberId);
@@ -558,6 +559,7 @@ window.Witness = (function () {
   // meeting end at a lull -- see app.js's closeMeeting().
   function collapseStage() {
     window.Voice?.stop(); // #29: the stage that was driving speech is about to be hidden
+    resetLiveSpeechQueue(); // #400: don't let a beat still queued behind it start talking into a hidden stage
     const el = document.getElementById('stage-record');
     el?.classList.remove('stage-only');
     el?.classList.add('collapsed');
@@ -614,6 +616,50 @@ window.Witness = (function () {
     return createLullEl(note);
   }
 
+  // ── Live speech queue (#400) ─────────────────────────────────────────────
+  // liveSpeech()/flushRoomHold() render beats as fast as text actually
+  // streams in from generation, not on any reading-time schedule -- see the
+  // "Live mirroring" comment above. But Voice.speak() (voice.js) has no
+  // queue of its own: every call interrupts whatever audio is still playing,
+  // which is exactly right for replay's advance() (it never calls speak()
+  // again until the previous beat's returned promise resolved) but wrong
+  // here, where nothing gated one live beat's speak() call on the previous
+  // beat's audio actually finishing. Text streams faster than anyone can
+  // talk, so this fired on nearly every beat -- a member's audio cut off
+  // mid-sentence by the next one starting. Serialize every live speak() call
+  // through this promise chain instead, so a beat's audio only starts once
+  // the previous one is done. The visual side (renderWitnessBlock's
+  // non-speech work) stays exactly as immediate as before -- only the actual
+  // Voice.speak() call is deferred.
+  //
+  // liveSpeechGeneration guards against a beat still sitting in the queue
+  // after the live session that queued it has already ended (stage exited,
+  // a new convene started) -- resetLiveSpeechQueue() bumps it and hands out
+  // a fresh queue Promise, orphaning whatever's still chained on the old
+  // one rather than letting a stale beat start talking after the fact.
+  let liveSpeechQueue = Promise.resolve();
+  let liveSpeechGeneration = 0;
+
+  function resetLiveSpeechQueue() {
+    liveSpeechGeneration++;
+    liveSpeechQueue = Promise.resolve();
+  }
+
+  function queueLiveSpeech(block) {
+    const myGeneration = liveSpeechGeneration;
+    liveSpeechQueue = liveSpeechQueue.then(() => {
+      if (myGeneration !== liveSpeechGeneration) return undefined;
+      const spoken = window.Voice?.speak(
+        block.text,
+        block.memberId,
+        witnessSpeed,
+        memberVoiceGender(block.memberId),
+        memberVoiceDemeanor(block.memberId)
+      );
+      return spoken && typeof spoken.then === 'function' ? spoken : undefined;
+    });
+  }
+
   function liveSpeech({ speaker, text, memberId, annotation }) {
     markStageActive();
     setHint('◉ Live — the room is speaking');
@@ -623,7 +669,7 @@ window.Witness = (function () {
       roomHoldPending.set(block.memberId, { type: 'card', block });
       return;
     }
-    renderWitnessBlock(block);
+    renderWitnessBlock(block, { queueLiveSpeech: true });
     if (holdsACard) setRoomHold(block.memberId, text);
   }
 
@@ -931,7 +977,7 @@ window.Witness = (function () {
   // exactly this call's effect, which goBack() uses to step replay backward
   // without assuming every render appended a fresh, independently-removable
   // node (a room card is mutated in place across renders, not recreated).
-  function renderWitnessBlock(block) {
+  function renderWitnessBlock(block, opts) {
     if (block.type === 'header') {
       const el = createHeaderEl(block.label);
       return { delay: WITNESS_PAUSE_AFTER_HEADER / witnessSpeed, undo: () => el.remove() };
@@ -963,6 +1009,17 @@ window.Witness = (function () {
       // see voice.js's own comment for why it's a no-op unless the user has
       // opted in.
       //
+      // #400: live callers (liveSpeech/flushRoomHold) pass queueLiveSpeech
+      // so the actual Voice.speak() call is serialized behind whatever live
+      // beat is currently talking, instead of firing immediately here and
+      // interrupting it -- see queueLiveSpeech's own comment above. The
+      // returned `delay` in that case is never read (liveSpeech discards
+      // renderWitnessBlock's return value), so the WPM estimate is fine as
+      // a placeholder.
+      if (opts && opts.queueLiveSpeech) {
+        queueLiveSpeech(block);
+        return { delay: witnessReadingTime(block.text), undo };
+      }
       // #336: when something was actually spoken, Voice.speak() hands back
       // a promise that resolves once that audio/utterance really finishes --
       // pace on that instead of the WPM guess, so a line that runs long

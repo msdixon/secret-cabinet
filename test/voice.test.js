@@ -323,22 +323,25 @@ test('voice.js', async t => {
     assert.equal(first.rate, second.rate);
   });
 
-  await t.test("speak() with 'grounded' or no demeanor produce identical pitch/rate -- grounded is the pre-#338 baseline", t2 => {
-    let events;
-    const loaded = loadPublicModule('voice.js', FIXTURE, window => {
-      events = stubSpeech(window, [{ name: 'A', lang: 'en-US' }]);
-    });
-    t2.after(loaded.cleanup);
-    const { Voice } = loaded.window;
-    Voice.setEnabled(true);
+  await t.test(
+    "speak() with 'grounded' or no demeanor produce identical pitch/rate -- grounded is the pre-#338 baseline",
+    t2 => {
+      let events;
+      const loaded = loadPublicModule('voice.js', FIXTURE, window => {
+        events = stubSpeech(window, [{ name: 'A', lang: 'en-US' }]);
+      });
+      t2.after(loaded.cleanup);
+      const { Voice } = loaded.window;
+      Voice.setEnabled(true);
 
-    Voice.speak('Hello.', 'crowley', 1);
-    const withoutDemeanor = events[1].utterance;
-    Voice.speak('Hello.', 'crowley', 1, undefined, 'grounded');
-    const grounded = events[3].utterance;
-    assert.equal(withoutDemeanor.pitch, grounded.pitch);
-    assert.equal(withoutDemeanor.rate, grounded.rate);
-  });
+      Voice.speak('Hello.', 'crowley', 1);
+      const withoutDemeanor = events[1].utterance;
+      Voice.speak('Hello.', 'crowley', 1, undefined, 'grounded');
+      const grounded = events[3].utterance;
+      assert.equal(withoutDemeanor.pitch, grounded.pitch);
+      assert.equal(withoutDemeanor.rate, grounded.rate);
+    }
+  );
 
   await t.test('rate scales with the passed speed multiplier, clamped to stay intelligible', t2 => {
     let events;
@@ -405,6 +408,16 @@ test('voice.js', async t => {
     class FakeAudio {
       constructor() {
         events.push({ type: 'audio-construct' });
+      }
+      // #400: a plain field assignment (audio.playbackRate = x) can't be
+      // intercepted without an explicit accessor -- add one so tests can
+      // observe what speakViaElevenLabs sets it to.
+      set playbackRate(v) {
+        this._playbackRate = v;
+        events.push({ type: 'playbackRate-set', value: v });
+      }
+      get playbackRate() {
+        return this._playbackRate;
       }
       play() {
         events.push({ type: 'audio-play', src: this.src });
@@ -497,23 +510,26 @@ test('voice.js', async t => {
     );
   });
 
-  await t.test('#338 memberDemeanor still reaches the Web Speech fallback after a failed ElevenLabs request', async t2 => {
-    let speechEvents;
-    const loaded = loadPublicModule('voice.js', FIXTURE, window => {
-      speechEvents = stubSpeech(window, [{ name: 'A', lang: 'en-US' }]);
-      stubElevenLabs(window, { speakImpl: () => Promise.reject(new Error('network down')) });
-    });
-    t2.after(loaded.cleanup);
-    await flushMicrotasks();
+  await t.test(
+    '#338 memberDemeanor still reaches the Web Speech fallback after a failed ElevenLabs request',
+    async t2 => {
+      let speechEvents;
+      const loaded = loadPublicModule('voice.js', FIXTURE, window => {
+        speechEvents = stubSpeech(window, [{ name: 'A', lang: 'en-US' }]);
+        stubElevenLabs(window, { speakImpl: () => Promise.reject(new Error('network down')) });
+      });
+      t2.after(loaded.cleanup);
+      await flushMicrotasks();
 
-    loaded.window.Voice.setEnabled(true);
-    loaded.window.Voice.speak('Hello there.', 'crowley', 1, undefined, 'intense');
-    await flushMicrotasks();
+      loaded.window.Voice.setEnabled(true);
+      loaded.window.Voice.speak('Hello there.', 'crowley', 1, undefined, 'intense');
+      await flushMicrotasks();
 
-    const spoken = speechEvents.find(e => e.type === 'speak');
-    assert.ok(spoken, 'expected the Web Speech fallback to have spoken');
-    assert.ok(spoken.utterance.pitch > 1.0, 'expected the intense demeanor bias to still apply on the fallback path');
-  });
+      const spoken = speechEvents.find(e => e.type === 'speak');
+      assert.ok(spoken, 'expected the Web Speech fallback to have spoken');
+      assert.ok(spoken.utterance.pitch > 1.0, 'expected the intense demeanor bias to still apply on the fallback path');
+    }
+  );
 
   await t.test('stop() pauses any ElevenLabs audio in flight', async t2 => {
     let events;
@@ -534,4 +550,49 @@ test('voice.js', async t => {
       'expected stop() to pause the playing audio'
     );
   });
+
+  // #400: the witness-speed multiplier (speedMultiplier) used to reach only
+  // speakViaWebSpeech's utterance.rate -- the ElevenLabs <audio> element has
+  // its own separate playbackRate that nothing set, so the speed control
+  // silently never affected the voices most sessions actually hear.
+  await t.test(
+    '#400: playbackRate is set from the speed multiplier, so the speed control actually affects ElevenLabs audio',
+    async t2 => {
+      let events;
+      const loaded = loadPublicModule('voice.js', FIXTURE, window => {
+        stubSpeech(window, [{ name: 'A', lang: 'en-US' }]);
+        events = stubElevenLabs(window);
+      });
+      t2.after(loaded.cleanup);
+      await flushMicrotasks();
+
+      loaded.window.Voice.setEnabled(true);
+      loaded.window.Voice.speak('Hello there.', 'crowley', 1.5);
+      await flushMicrotasks();
+
+      const rateEvent = events.find(e => e.type === 'playbackRate-set');
+      assert.ok(rateEvent, 'expected audio.playbackRate to be set');
+      assert.equal(rateEvent.value, 1.5);
+    }
+  );
+
+  await t.test(
+    '#400: an absurd speed multiplier clamps ElevenLabs playbackRate, same as the Web Speech rate',
+    async t2 => {
+      let events;
+      const loaded = loadPublicModule('voice.js', FIXTURE, window => {
+        stubSpeech(window, [{ name: 'A', lang: 'en-US' }]);
+        events = stubElevenLabs(window);
+      });
+      t2.after(loaded.cleanup);
+      await flushMicrotasks();
+
+      loaded.window.Voice.setEnabled(true);
+      loaded.window.Voice.speak('Hello there.', 'crowley', 100);
+      await flushMicrotasks();
+
+      const rateEvent = events.find(e => e.type === 'playbackRate-set');
+      assert.equal(rateEvent.value, 3, 'clamped to the same sane maximum the Web Speech rate uses');
+    }
+  );
 });

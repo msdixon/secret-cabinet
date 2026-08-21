@@ -467,56 +467,56 @@ test('replay: auto-advance paces off real speech duration when Voice reports it'
     assert.equal(document.querySelector('#witness-stage .witness-end')?.textContent, 'The room falls silent.');
   });
 
-  await t.test('going back while a speech promise is still pending discards it — no phantom early advance', async t2 => {
-    t2.mock.timers.enable({ apis: ['setTimeout'] });
-    let resolveSpeech;
-    const loaded = loadPublicModule('witness.js', FIXTURE, window => {
-      window.Voice = {
-        speak: () =>
-          new Promise(resolve => {
-            resolveSpeech = resolve;
-          }),
-        stop: () => {},
-      };
-    });
-    t2.after(loaded.cleanup);
-    const { document, window, module: Witness } = loaded;
+  await t.test(
+    'going back while a speech promise is still pending discards it — no phantom early advance',
+    async t2 => {
+      t2.mock.timers.enable({ apis: ['setTimeout'] });
+      let resolveSpeech;
+      const loaded = loadPublicModule('witness.js', FIXTURE, window => {
+        window.Voice = {
+          speak: () =>
+            new Promise(resolve => {
+              resolveSpeech = resolve;
+            }),
+          stop: () => {},
+        };
+      });
+      t2.after(loaded.cleanup);
+      const { document, window, module: Witness } = loaded;
 
-    await Witness.start(
-      { rounds: [{ label: 'Round I', text: 'Crowley:\nOne.\n\nBlavatsky:\nTwo.' }] },
-      makeDeps()
-    );
-    Witness.advance(); // renders "One." (Crowley), Voice.speak() pending
-    window.document.dispatchEvent(new window.KeyboardEvent('keydown', { code: 'ArrowLeft' })); // goBack()
-    assert.equal(
-      document.querySelectorAll('#witness-stage .transcript-entry').length,
-      0,
-      'goBack() should have undone the "One." render'
-    );
+      await Witness.start({ rounds: [{ label: 'Round I', text: 'Crowley:\nOne.\n\nBlavatsky:\nTwo.' }] }, makeDeps());
+      Witness.advance(); // renders "One." (Crowley), Voice.speak() pending
+      window.document.dispatchEvent(new window.KeyboardEvent('keydown', { code: 'ArrowLeft' })); // goBack()
+      assert.equal(
+        document.querySelectorAll('#witness-stage .transcript-entry').length,
+        0,
+        'goBack() should have undone the "One." render'
+      );
 
-    // "One." 's speech promise finally resolves after the user already
-    // stepped back past it. Without the generation guard this would
-    // schedule its own setTimeout(advance, ~1200ms) alongside goBack()'s
-    // legitimate resume timer (scheduled for 2400ms) -- a phantom advance
-    // 1200ms early, re-rendering "One." well before the real resume fires.
-    resolveSpeech();
-    await flushMicrotasks();
+      // "One." 's speech promise finally resolves after the user already
+      // stepped back past it. Without the generation guard this would
+      // schedule its own setTimeout(advance, ~1200ms) alongside goBack()'s
+      // legitimate resume timer (scheduled for 2400ms) -- a phantom advance
+      // 1200ms early, re-rendering "One." well before the real resume fires.
+      resolveSpeech();
+      await flushMicrotasks();
 
-    t2.mock.timers.tick(1200);
-    assert.equal(
-      document.querySelectorAll('#witness-stage .transcript-entry').length,
-      0,
-      'the stale promise must not have scheduled an early phantom advance'
-    );
+      t2.mock.timers.tick(1200);
+      assert.equal(
+        document.querySelectorAll('#witness-stage .transcript-entry').length,
+        0,
+        'the stale promise must not have scheduled an early phantom advance'
+      );
 
-    t2.mock.timers.tick(1200); // completes goBack()'s real 2400ms resume pause
-    assert.equal(
-      document.querySelectorAll('#witness-stage .transcript-entry').length,
-      1,
-      'the legitimate resume should still fire on its own schedule'
-    );
-    assert.match(document.querySelector('#witness-stage .speaker-name').textContent, /Crowley/);
-  });
+      t2.mock.timers.tick(1200); // completes goBack()'s real 2400ms resume pause
+      assert.equal(
+        document.querySelectorAll('#witness-stage .transcript-entry').length,
+        1,
+        'the legitimate resume should still fire on its own schedule'
+      );
+      assert.match(document.querySelector('#witness-stage .speaker-name').textContent, /Crowley/);
+    }
+  );
 });
 
 test('replay: start syncs the record, exit stops playback and collapses the stage', async t => {
@@ -659,6 +659,85 @@ test('live mirroring (#184): the stage renders its own copy, independent of the 
 
       Witness.liveSpeech({ speaker: 'Crowley', text: 'The book is not the point.', memberId: 'crowley' });
       assert.equal(document.querySelectorAll('#witness-stage .transcript-entry').length, 1);
+    }
+  );
+
+  // #400: liveSpeech() used to call window.Voice.speak() synchronously and
+  // discard whatever promise it returned, so nothing gated a second beat's
+  // speak() call on the first beat's audio actually finishing -- voice.js's
+  // own speak() interrupts whatever is still playing the instant it's
+  // called again, which cut a member off mid-sentence on nearly every beat
+  // once live convene started streaming beats faster than anyone could
+  // actually talk. liveSpeech's speak() calls must now be serialized.
+  await t.test('#400: a second live beat does not speak until the first beat is done', async t2 => {
+    async function flushMicrotasks(n = 4) {
+      for (let i = 0; i < n; i++) await Promise.resolve();
+    }
+
+    const calls = [];
+    const resolvers = [];
+    const loaded = loadPublicModule('witness.js', FIXTURE, window => {
+      window.Voice = {
+        speak: text => {
+          calls.push(text);
+          return new Promise(resolve => resolvers.push(resolve));
+        },
+        stop: () => {},
+      };
+    });
+    t2.after(loaded.cleanup);
+    const { module: Witness } = loaded;
+    Witness.configure(makeDeps());
+
+    Witness.liveSpeech({ speaker: 'Crowley', text: 'One.', memberId: 'crowley' });
+    Witness.liveSpeech({ speaker: 'Blavatsky', text: 'Two.', memberId: 'blavatsky' });
+    await flushMicrotasks();
+    assert.deepEqual(calls, ['One.'], 'the second beat must not have spoken while the first is still in flight');
+
+    resolvers[0](); // "One." finishes
+    await flushMicrotasks();
+    assert.deepEqual(calls, ['One.', 'Two.'], 'once the first beat resolves, the second should start speaking');
+  });
+
+  // #400: a beat still queued behind a still-playing one must not start
+  // talking after the live session that queued it has already ended (stage
+  // reset, or the stage collapsed to show the record) -- resetLiveSpeechQueue
+  // (called from clearRoom/collapseStage) must orphan it.
+  await t.test(
+    '#400: resetting the stage discards a still-queued live beat rather than letting it speak later',
+    async t2 => {
+      async function flushMicrotasks(n = 4) {
+        for (let i = 0; i < n; i++) await Promise.resolve();
+      }
+
+      const calls = [];
+      const resolvers = [];
+      const loaded = loadPublicModule('witness.js', FIXTURE, window => {
+        window.Voice = {
+          speak: text => {
+            calls.push(text);
+            return new Promise(resolve => resolvers.push(resolve));
+          },
+          stop: () => {},
+        };
+      });
+      t2.after(loaded.cleanup);
+      const { module: Witness } = loaded;
+      Witness.configure(makeDeps());
+
+      Witness.liveSpeech({ speaker: 'Crowley', text: 'One.', memberId: 'crowley' });
+      Witness.liveSpeech({ speaker: 'Blavatsky', text: 'Two.', memberId: 'blavatsky' });
+      await flushMicrotasks();
+      assert.deepEqual(calls, ['One.']);
+
+      Witness.resetLiveStage(); // clears the stage mid-flight, orphaning the queued "Two."
+      resolvers[0](); // "One." (already superseded) finishes
+      await flushMicrotasks();
+      assert.deepEqual(
+        calls,
+        ['One.'],
+        'the queued second beat must not speak into a stage that has already been reset'
+      );
     }
   );
 
@@ -957,11 +1036,7 @@ test('the room (#257): dialogue composited onto the scene, replacing the #202 to
         1,
         'going back should remove the entry it added, not the whole card'
       );
-      assert.match(
-        latestEntryText(card),
-        /First thing/,
-        'going back should leave the card showing its prior turn'
-      );
+      assert.match(latestEntryText(card), /First thing/, 'going back should leave the card showing its prior turn');
     }
   );
 
@@ -980,7 +1055,7 @@ test('the room (#257): dialogue composited onto the scene, replacing the #202 to
   });
 });
 
-test('scrollback (#287): a member\'s card is a short-lived stack of recent beats, not just the latest', async t => {
+test("scrollback (#287): a member's card is a short-lived stack of recent beats, not just the latest", async t => {
   await t.test('consecutive beats from the same member accumulate as separate entries, oldest first', t2 => {
     t2.mock.timers.enable({ apis: ['setTimeout'] });
     const { document, window, module: Witness } = boot(t2);
