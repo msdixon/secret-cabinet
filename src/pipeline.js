@@ -41,6 +41,8 @@ const {
   WORDS_PER_BEAT_ESTIMATE,
   RECONSULT_BUDGET_FRACTION,
   MAX_TOTAL_BEATS,
+  PASS_BUDGET_COST,
+  PASS_TURN_CREDIT,
 } = require('./tuning');
 
 const { makeMetric, withOneRetry } = core;
@@ -49,6 +51,7 @@ const {
   pickNextSpeaker,
   isPoolExhausted,
   countWords,
+  isPassTurn,
   buildSpeakerSystemPrompt,
   buildSpeakerUserMessage,
   callSpeakerTurn,
@@ -255,10 +258,11 @@ async function runRound({
   // over stored sessions.
   //
   // #354: this is now the authoritative record of every turn that happened,
-  // which is strictly more than roundSoFar holds. Three shapes:
+  // which is strictly more than roundSoFar holds. Four shapes:
   //
   //   { memberId, text }                        a turn that was spoken
   //   { memberId, speakerName, text }            ...by someone off-roster
+  //   { memberId, text, passed: true }           a turn the member declined
   //   { memberId, text: '', failed: true, error} a turn that produced nothing
   //
   // #355: a spoken beat may also carry `citations` — an array, present only
@@ -274,6 +278,13 @@ async function runRound({
   // that says "they were called on and produced nothing" is honest, and
   // silence-by-omission is not. Consumers reading beats for prose must
   // therefore filter on `failed`, not assume every beat has text.
+  //
+  // #362: a passed beat is the third state that failure used to stand in
+  // for — the member was called on, produced real text (the diegetic action
+  // that is a pass, per pipeline-speaker.js's isPassTurn), and it does join
+  // roundSoFar exactly like any other beat. `passed` only ever appears
+  // alongside real text, never alongside `failed`; the two mark opposite
+  // things (a genuine choice vs. a dropped call) and a beat is never both.
   //
   // `memberId` is a roster id, or one of record.js's non-roster sentinels
   // for a speaker who has no roster entry — never null. It used to be null
@@ -450,6 +461,14 @@ async function runRound({
       const { result, attempts } = await withOneRetry(() =>
         callSpeakerTurn({ client, model, system, conversationHistory, userMessage, onChunk, lodgeContext })
       );
+      const contextBeforeTurn = roundSoFar;
+      const settledText = stripInternalBlankLines(result.text);
+      // #362: a pass is still a real, successful call — it just declined the
+      // turn via the room's own action-only idiom (see isPassTurn). Detected
+      // post-hoc on the settled text rather than as a separate response
+      // shape, so it costs nothing extra to check and can't diverge from
+      // what the transcript actually shows.
+      const passed = isPassTurn(settledText);
       onMetric?.(
         makeMetric('speaker', {
           round,
@@ -458,17 +477,16 @@ async function runRound({
           usage: result.usage,
           latencyMs: result.latencyMs,
           voiceExemplar: voiceExemplar?.id,
+          ...(passed ? { passed: true } : {}),
         })
       );
 
-      const contextBeforeTurn = roundSoFar;
-      const settledText = stripInternalBlankLines(result.text);
       roundSoFar += (roundSoFar ? '\n\n' : '') + `${member.name}\n${settledText}`;
       speakerOrder.push(memberId);
       // #355: kept as a live reference so the disposition try block below
       // can attach `citations` onto this same beat once its piggybacked
       // call resolves, rather than a second pass over beatsList to find it.
-      const beatEntry = { memberId, text: settledText };
+      const beatEntry = passed ? { memberId, text: settledText, passed: true } : { memberId, text: settledText };
       beatsList.push(beatEntry);
       // #352: incremented here, on the success path beside the beat that
       // will actually be persisted — deliberately *not* alongside
@@ -476,10 +494,20 @@ async function runRound({
       // produced no words is not one the room heard, and counting it here
       // would put the live ledger out of step with what turnsSoFar rebuilds
       // from `beats` on the next passage.
-      if (meetingTurns) meetingTurns[memberId] = (meetingTurns[memberId] || 0) + 1;
+      //
+      // #362: a passed beat earns partial credit, not full — the member was
+      // called on (so this isn't "never heard from"), but nothing was
+      // actually said (so it isn't "heard from" either). See tuning.js's
+      // PASS_TURN_CREDIT for the reasoning.
+      if (meetingTurns) meetingTurns[memberId] = (meetingTurns[memberId] || 0) + (passed ? PASS_TURN_CREDIT : 1);
       onSpeakerEnd?.(memberId, member.name, settledText);
       onChunk?.('\n\n');
-      remainingBudget -= countWords(settledText);
+      // #362: a pass's own word count is a few at most — charging only that
+      // would let passing hand the round's remaining budget to whoever
+      // speaks next as if the beat had never happened. Floored at
+      // PASS_BUDGET_COST so a pass still spends what the smallest real beat
+      // would have.
+      remainingBudget -= passed ? Math.max(countWords(settledText), PASS_BUDGET_COST) : countWords(settledText);
 
       // #188: best-effort, isolated from the speaker try/catch above — a
       // disposition failure must not get reported as a failed speaker turn

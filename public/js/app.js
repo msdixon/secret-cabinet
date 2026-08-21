@@ -521,7 +521,13 @@ function addSpeech(speaker, text, isObserver, memberId, existingAnnotation) {
     .map(l => l.trim())
     .filter(Boolean);
   const allAction = nonEmptyLines.length > 0 && nonEmptyLines.every(l => /^\*[^*]+\*$/.test(l));
-  if (allAction) {
+  // #362: a roster member's own beat being all-action is now a deliberate
+  // pass (see pipeline-speaker.js's isPassTurn), not just ambient stage
+  // business — it needs the same attribution any other turn gets, or the
+  // room's record of *who* chose the silence is lost the moment it renders.
+  // Only a beat with no memberId (the presence voice, a custom-name player)
+  // keeps the old unattributed rendering, since there's no seat to name.
+  if (allAction && !memberId) {
     nonEmptyLines.forEach(l => {
       const d = document.createElement('div');
       d.className = 'action-line';

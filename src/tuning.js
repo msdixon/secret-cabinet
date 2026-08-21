@@ -46,6 +46,27 @@ const WORDS_PER_BEAT_ESTIMATE = 220;
 const RECONSULT_BUDGET_FRACTION = 0.9;
 const MAX_TOTAL_BEATS = 16; // hard safety net — budget/pool logic should always end the round before this binds
 
+// #362: a pass (a member declining the turn — see pipeline-speaker.js's
+// isPassTurn) still occupies a beat, but its own text is a few words at
+// most. Charging only that real word count would let a passage spend the
+// same MAX_TOTAL_BEATS allowance while barely touching BREATH_BUDGET_WORDS,
+// handing whatever's left to whoever speaks next — the issue's own warning
+// against a pass reading as "free" room for the most expansive voice in the
+// pool. Floored at the same threshold a real beat already has to clear
+// (MIN_WORDS_FOR_ANOTHER_BEAT), so a pass costs what the smallest legitimate
+// spoken beat would have.
+const PASS_BUDGET_COST = MIN_WORDS_FOR_ANOTHER_BEAT;
+
+// #362: meeting-level ledger credit (lodge-prompts.js's turnsSoFar) for a
+// passed beat — more than the zero a failed turn gets (the room never heard
+// a failed attempt at all), less than the full credit a spoken turn earns.
+// A member who passed was called on and did have something to answer for,
+// which is not nothing; but they still haven't actually been heard from,
+// which is not the same as having spoken. Keeping it below 1 means the
+// under-heard boost (pipeline-speaker.js) still nudges them back toward the
+// floor faster than a member who used their turn to speak.
+const PASS_TURN_CREDIT = 0.5;
+
 // ── Speaker-order weighting (pipeline-speaker.js) ──────────────────────────
 
 // Seed data, not a researched claim about every historical figure's real
@@ -200,6 +221,8 @@ module.exports = {
   WORDS_PER_BEAT_ESTIMATE,
   RECONSULT_BUDGET_FRACTION,
   MAX_TOTAL_BEATS,
+  PASS_BUDGET_COST,
+  PASS_TURN_CREDIT,
   LENGTH_TENDENCY_OVERRIDES,
   LENGTH_WEIGHT,
   MAX_TURNS_PER_POOL_MEMBER,
