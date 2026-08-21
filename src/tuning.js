@@ -23,7 +23,27 @@
 // passage-length/lull-cadence calibration review (see #244).
 const BREATH_BUDGET_WORDS = 1000;
 const MIN_WORDS_FOR_ANOTHER_BEAT = 40; // below this, not enough room left for a meaningful beat
-const POOL_SLACK = 2; // the director's candidate pool runs a little larger than the round's target speaker count
+const POOL_SLACK = 1; // the director's candidate pool runs a little larger than the round's target speaker count
+
+// #353: was 150 — a deliberately conservative placeholder that, worked
+// backwards, sized every candidate pool (opening and mid-passage alike)
+// larger than BREATH_BUDGET_WORDS could ever actually serve: a 7-seat pool
+// (5 requested + POOL_SLACK 2) needs 14 beats to exhaust at
+// MAX_TURNS_PER_POOL_MEMBER, but real passages run ~4.3. 220 is the same
+// real-observed-turn-length figure test/pipeline.test.js's #352 simulation
+// already uses (BREATH_BUDGET_WORDS / 220 ≈ the ~4.3 beats/passage the
+// #353 issue measured) — sizing the pool against it, not the old
+// placeholder, is what makes pool exhaustion reachable at all.
+const WORDS_PER_BEAT_ESTIMATE = 220;
+
+// #353: below this fraction of BREATH_BUDGET_WORDS spent since the last
+// consult, don't bother the director again — 0.9 was chosen by simulating
+// the real pickNextSpeaker/isPoolExhausted against realistic (varying, not
+// fixed-length) beat lengths: it lands the mid-passage check-in inside the
+// last tenth of a typical passage's budget, catching passages that run
+// long without firing on every ordinary one (~29% of simulated passages;
+// see test/pipeline.test.js's '#353' suite).
+const RECONSULT_BUDGET_FRACTION = 0.9;
 const MAX_TOTAL_BEATS = 16; // hard safety net — budget/pool logic should always end the round before this binds
 
 // ── Speaker-order weighting (pipeline-speaker.js) ──────────────────────────
@@ -154,6 +174,8 @@ module.exports = {
   BREATH_BUDGET_WORDS,
   MIN_WORDS_FOR_ANOTHER_BEAT,
   POOL_SLACK,
+  WORDS_PER_BEAT_ESTIMATE,
+  RECONSULT_BUDGET_FRACTION,
   MAX_TOTAL_BEATS,
   LENGTH_TENDENCY_OVERRIDES,
   LENGTH_WEIGHT,

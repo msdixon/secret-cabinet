@@ -51,6 +51,9 @@ const {
   callSpeakerTurn,
   runRound,
   BREATH_BUDGET_WORDS,
+  POOL_SLACK,
+  WORDS_PER_BEAT_ESTIMATE,
+  RECONSULT_BUDGET_FRACTION,
   LULL_NOTE_MAX_CHARS,
   STOCK_LULL_NOTES,
   pickStockLullNote,
@@ -478,7 +481,13 @@ test('buildDirectorPrompt', async t => {
     { id: 'crowley', name: 'Aleister Crowley' },
     { id: 'blavatsky', name: 'H.P. Blavatsky' },
   ];
-  const args = { lodgeContext: 'THE LODGE', presentMembers: present, instruction: 'Discuss.', minCount: 1, maxCount: 2 };
+  const args = {
+    lodgeContext: 'THE LODGE',
+    presentMembers: present,
+    instruction: 'Discuss.',
+    minCount: 1,
+    maxCount: 2,
+  };
 
   await t.test('carries the ledger next to the roster it annotates', () => {
     const { system } = buildDirectorPrompt({ ...args, meetingTurns: { crowley: 4 } });
@@ -613,7 +622,7 @@ test('#352 whole-meeting turn distribution', async t => {
     );
   });
 
-  await t.test('it narrows the spread rather than flattening it — the director\'s ranking still counts', () => {
+  await t.test("it narrows the spread rather than flattening it — the director's ranking still counts", () => {
     const ratio = after.avgTurns[0] / after.avgTurns[6];
     assert.ok(ratio < before.avgTurns[0] / before.avgTurns[6], 'the top-to-bottom spread should narrow');
     assert.ok(ratio > 1.2, `ranking should still be visible in the outcome, ratio was ${ratio.toFixed(2)}`);
@@ -634,6 +643,145 @@ test('#352 whole-meeting turn distribution', async t => {
     assert.ok(
       Math.abs(oneAfter.silentShare[6] - oneBefore.silentShare[6]) < 0.05,
       `single-passage silence moved from ${oneBefore.silentShare[6]} to ${oneAfter.silentShare[6]}`
+    );
+  });
+});
+
+// #353 — the mid-passage re-consult, measured the same way #352 was: a
+// simulation against the real pickNextSpeaker/isPoolExhausted, this time
+// with beat length allowed to vary (a fixed 220 words/beat, as #352's
+// harness above uses, can never produce the spread that decides whether a
+// budget-spent-since-consult threshold is ever crossed — only variance
+// does that). The pre-#353 shape (7-seat pool, a 150-word/beat sizing
+// assumption, a `beats since consult >= pool.length + 3` trigger) is
+// reproduced here rather than imported, since those exact values no longer
+// exist in the source once this fix lands — pinning them inline is what
+// keeps this test meaningful as a regression guard rather than a tautology
+// that just re-reads whatever pipeline.js currently exports.
+test('#353 mid-passage re-consult reachability', async t => {
+  const MIN_WORDS_FOR_ANOTHER_BEAT = 40;
+  const MAX_TOTAL_BEATS = 16;
+
+  function seededRng(seed) {
+    let s = seed >>> 0;
+    return () => {
+      s = (s * 1664525 + 1013904223) >>> 0;
+      return s / 4294967296;
+    };
+  }
+
+  // Real beat lengths vary around a mean, not always land on it — this is
+  // the whole reason the old fixed-beat-count threshold's unreachability
+  // wasn't obvious from a back-of-envelope "1000 / 220 ≈ 4.3" calculation
+  // alone. Irwin-Hall-ish spread, roughly [0.3x, 1.7x] of the mean.
+  function beatWords(rng, mean) {
+    const u = (rng() + rng() + rng()) / 3;
+    return Math.max(30, Math.round(mean * (0.3 + u * 1.4)));
+  }
+
+  // One pool-sizing/trigger regime, parameterized so the same harness can
+  // run both the pre-#353 shape and the shipped one.
+  function runPassage(rng, { poolSize, wordsPerBeatEstimate, poolSlack, trigger }) {
+    const seatIds = Array.from({ length: poolSize }, (_, i) => `m${i}`);
+    let pool = seatIds.slice();
+    let spokenCounts = new Map();
+    let lastSpeakerId = null;
+    let remainingBudget = BREATH_BUDGET_WORDS;
+    let beats = 0;
+    let reconsults = 0;
+    const triggerState = trigger.init(remainingBudget);
+
+    while (remainingBudget >= MIN_WORDS_FOR_ANOTHER_BEAT && beats < MAX_TOTAL_BEATS) {
+      if (isPoolExhausted(pool, spokenCounts) || trigger.shouldFire(triggerState, remainingBudget, beats)) {
+        reconsults++;
+        const nextCount = Math.max(1, Math.min(poolSize, Math.ceil(remainingBudget / wordsPerBeatEstimate)));
+        pool = seatIds.slice(0, Math.min(poolSize, nextCount + poolSlack));
+        spokenCounts = new Map();
+        trigger.reset(triggerState, remainingBudget, beats);
+        if (!pool.length) break;
+      }
+      const memberId = pickNextSpeaker({ pool, spokenCounts, lastSpeakerId, remainingBudget, rng });
+      if (!memberId) break;
+      spokenCounts.set(memberId, (spokenCounts.get(memberId) || 0) + 1);
+      lastSpeakerId = memberId;
+      beats++;
+      remainingBudget -= beatWords(rng, 220); // 220: the same real-observed-length figure #352's harness uses
+    }
+    return { beats, reconsulted: reconsults > 0 };
+  }
+
+  function simulate(cfg, passages = 20000) {
+    const rng = seededRng(20260820);
+    let totalBeats = 0;
+    let reconsulted = 0;
+    for (let i = 0; i < passages; i++) {
+      const result = runPassage(rng, cfg);
+      totalBeats += result.beats;
+      if (result.reconsulted) reconsulted++;
+    }
+    return { avgBeats: totalBeats / passages, reconsultRate: reconsulted / passages };
+  }
+
+  // The pre-#353 shape: a beat-count trigger that can never fire inside a
+  // budget this small, at the old 7-seat/150-word-estimate sizing. The
+  // harness calls shouldFire once per loop iteration, before that
+  // iteration's beat happens, so beatsSinceConsult increments there —
+  // mirroring runRound's own beatsSinceConsult++ at the bottom of its loop.
+  const preFixTriggerCounting = {
+    init: () => ({ beatsSinceConsult: 0 }),
+    shouldFire(state) {
+      const fire = state.beatsSinceConsult >= 7 + 3;
+      state.beatsSinceConsult++;
+      return fire;
+    },
+    reset: state => {
+      state.beatsSinceConsult = 0;
+    },
+  };
+
+  const preFix = simulate({
+    poolSize: 7,
+    wordsPerBeatEstimate: 150,
+    poolSlack: 2,
+    trigger: preFixTriggerCounting,
+  });
+
+  const postFixTrigger = {
+    init: remainingBudget => ({ budgetAtLastConsult: remainingBudget }),
+    shouldFire: (state, remainingBudget) =>
+      state.budgetAtLastConsult - remainingBudget >= BREATH_BUDGET_WORDS * RECONSULT_BUDGET_FRACTION,
+    reset: (state, remainingBudget) => {
+      state.budgetAtLastConsult = remainingBudget;
+    },
+  };
+  const postFixPoolSize = Math.max(1, Math.ceil(BREATH_BUDGET_WORDS / WORDS_PER_BEAT_ESTIMATE)) + POOL_SLACK;
+  const postFix = simulate({
+    poolSize: postFixPoolSize,
+    wordsPerBeatEstimate: WORDS_PER_BEAT_ESTIMATE,
+    poolSlack: POOL_SLACK,
+    trigger: postFixTrigger,
+  });
+
+  await t.test('reproduces the defect: the pre-#353 trigger never fires against a realistic budget', () => {
+    assert.equal(
+      preFix.reconsultRate,
+      0,
+      `pre-#353 shape fired in ${(preFix.reconsultRate * 100).toFixed(1)}% of passages, expected 0%`
+    );
+  });
+
+  await t.test('real passages average close to the ~4.3 beats the issue measured', () => {
+    assert.ok(preFix.avgBeats > 3 && preFix.avgBeats < 6, `average beats was ${preFix.avgBeats}, expected roughly 4-5`);
+  });
+
+  await t.test('the fix makes the mechanism reachable without making it the norm', () => {
+    assert.ok(
+      postFix.reconsultRate > 0.05,
+      `shipped constants only reconsulted in ${(postFix.reconsultRate * 100).toFixed(1)}% of passages, expected >5%`
+    );
+    assert.ok(
+      postFix.reconsultRate < 0.95,
+      `shipped constants reconsulted in ${(postFix.reconsultRate * 100).toFixed(1)}% of passages — that is no longer an occasional check-in`
     );
   });
 });
@@ -1307,7 +1455,7 @@ test('buildSpeakerSystemPrompt — voice exemplar wiring', async t => {
     assert.doesNotMatch(withoutArg, /OTHERS IN THE ROOM TONIGHT/);
   });
 
-  await t.test('a present member already covered by the file\'s own prose gets no assembled line', () => {
+  await t.test("a present member already covered by the file's own prose gets no assembled line", () => {
     const prompt = buildSpeakerSystemPrompt({
       ...base,
       loadMemberFile: () =>
