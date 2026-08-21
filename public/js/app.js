@@ -1693,6 +1693,7 @@ function sessionsDeps() {
       document.getElementById('record-live-pill')?.classList.remove('visible');
     },
     resetLiveStage: () => window.Witness.resetLiveStage(),
+    collapseStage: () => window.Witness.collapseStage(),
     escapeHTML,
     resolveMember: window.Speaker.resolveMember,
     isKnownSpeakerHeader: window.Speaker.isKnownSpeakerHeader,
