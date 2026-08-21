@@ -231,9 +231,12 @@ function loadMemberFile(membersDir, filename) {
 }
 
 // Extract the first substantive paragraph after a character file's section
-// header. Shared by the dossier route (long form, for reading) and casting's
-// member briefs (short form, for the model's judgment).
-function extractSection(text, sectionName, limit = 320) {
+// header. Shared by the dossier route (long form, for reading — no limit, the
+// full paragraph) and casting's member briefs (short form, for the model's
+// judgment — callers pass an explicit limit). #374 — the dossier route used
+// to inherit this default (320), hard-slicing the reading-room bio/voice text
+// mid-sentence with no indication more existed.
+function extractSection(text, sectionName, limit = Infinity) {
   const re = new RegExp(`## ${sectionName}[\\s\\S]*?\\n\\n([^#\\n][\\s\\S]*?)(?:\\n\\n---|\n\n##|$)`);
   const m = text.match(re);
   if (!m) return null;
