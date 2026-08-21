@@ -1766,7 +1766,24 @@ window.Metrics.configure(metricsDeps());
 
 initRecordScroll();
 
-window.Export.applyEnvConfig();
+// #379: a stranger lands here unauthenticated on a deployed instance —
+// reading is open, but convening costs Anthropic money and mutates shared
+// state, so the provocation/casting/convene controls render inert with a
+// sign-in prompt on top rather than being fully interactive. `inert` (not
+// just CSS) so the disabled controls also drop out of the tab order and
+// screen-reader tree, per Principle 4 — a keyboard/AT user shouldn't be
+// able to reach a control that silently does nothing. Local dev and an
+// authenticated deployed session both get `authed: true` back and this is a
+// no-op. A failed /api/config fetch (config is null) fails closed — gated,
+// not open — same as an explicit `authed: false`.
+function applyConveneGate(config) {
+  const authed = !!(config && config.authed);
+  document.getElementById('control-rail')?.classList.toggle('is-gated', !authed);
+  const content = document.getElementById('control-rail-content');
+  if (content) content.inert = !authed;
+}
+
+window.Export.applyEnvConfig().then(applyConveneGate);
 initSceneLayer();
 fetchMembers().then(() => {
   window.Casting.seatRegulars();

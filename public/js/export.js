@@ -653,10 +653,14 @@ window.Export = (function () {
   }
 
   // ── Environment config ─────────────────────────────────────────────────────
+  // #379: returns the fetched config (isLocal, authed) rather than swallowing
+  // it — app.js's boot sequence reads `authed` off the same call to decide
+  // whether the convene controls render live or as a sign-in prompt, rather
+  // than issuing a second /api/config request for it.
   async function applyEnvConfig() {
     try {
-      const { isLocal } = await fetch('/api/config').then(r => r.json());
-      if (!isLocal) {
+      const config = await fetch('/api/config').then(r => r.json());
+      if (!config.isLocal) {
         [
           'export-ulysses-row',
           'export-ulysses-config',
@@ -666,7 +670,10 @@ window.Export = (function () {
         ].forEach(id => document.getElementById(id)?.style.setProperty('display', 'none'));
         document.getElementById('export-md-row')?.style.setProperty('display', 'inline-flex');
       }
-    } catch (_) {}
+      return config;
+    } catch (_) {
+      return null;
+    }
   }
 
   // Restores the Ulysses group/group-id and Obsidian vault path fields from

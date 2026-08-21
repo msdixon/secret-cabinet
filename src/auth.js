@@ -89,9 +89,58 @@ function isAuthedRequest(req, passphrase) {
   return !passphrase || !!(req.session && req.session.authed);
 }
 
+// #379: the public read tier. What's reachable without authentication now
+// has two shapes, checked in isPublicRoute below, rather than growing a
+// fourth ad-hoc prefix onto the three this replaces (/api/config,
+// /reading-room/, /portraits/) — see docs/PRINCIPLES.md Principle 7 for why
+// that pattern doesn't scale and what the real axis is (published, not cost).
+//
+// (a) The app shell — every GET/HEAD request outside /api/. There is no
+// authenticated-only page served outside /api/ (the reading room, the
+// lodge page, portraits, and every static asset are all meant to render for
+// a stranger), so one rule replaces the old /reading-room/ and /portraits/
+// prefix checks and additionally opens `/` and `/lodge` the same way. A
+// stranger's browser needs the whole shell — HTML, CSS, JS, the Babylon
+// vendor bundle — to render the room at all. Restricted to GET/HEAD (not
+// "any non-/api/ path") so a hypothetical future mutating route mounted
+// outside /api/ doesn't slip through by accident.
+//
+// (b) A fixed allowlist of read-only API routes — "the room and the shelf".
+// Checked by method AND exact/templated path, never a prefix, so a mutating
+// verb on the same path (e.g. DELETE /api/sessions/:id) is never swept in
+// alongside its GET sibling. GET /api/sessions, /api/sessions/:id,
+// /api/sessions/:id/transcript, and /api/threads are safe to list here
+// specifically because #378 already scopes each of them to `published`
+// sessions when req.authed is false — this table is what makes that
+// filtering reachable in production for the first time. Everything else
+// under /api/ — anything that spends Anthropic/ElevenLabs money, touches
+// Rachel's own machine (Day One, exports, the citation manifest), or can
+// mutate or delete a session — stays behind the gate by omission; nothing
+// needs to be added to keep a new route gated by default.
+const PUBLIC_API_ROUTES = [
+  ['GET', /^\/api\/config$/],
+  ['GET', /^\/api\/sessions$/],
+  ['GET', /^\/api\/sessions\/[^/]+$/],
+  ['GET', /^\/api\/sessions\/[^/]+\/transcript$/],
+  ['GET', /^\/api\/threads$/],
+  ['GET', /^\/api\/members$/],
+  ['GET', /^\/api\/members\/[^/]+\/dossier$/],
+  ['GET', /^\/api\/library$/],
+  ['GET', /^\/api\/library\/[^/]+$/],
+  ['GET', /^\/api\/graph$/],
+  ['GET', /^\/api\/voice\/config$/],
+];
+
+function isPublicRoute(req) {
+  if ((req.method === 'GET' || req.method === 'HEAD') && !req.path.startsWith('/api/')) return true;
+  return PUBLIC_API_ROUTES.some(([method, pattern]) => req.method === method && pattern.test(req.path));
+}
+
 // Auth guard — applied to all routes except login/logout
 // Must run before express.static: static previously short-circuited the gate,
-// serving index.html to anyone while only the API calls it made 401'd.
+// serving index.html to anyone while only the API calls it made 401'd — moot
+// for the app shell now that #379 opens it deliberately, but the ordering
+// still matters for keeping every /api/ path gated by default.
 function createRequireAuth(passphrase) {
   return function requireAuth(req, res, next) {
     // #378: set once, here, so route handlers downstream (e.g. the four
@@ -99,17 +148,7 @@ function createRequireAuth(passphrase) {
     // instead of each re-deriving it from passphrase/session state.
     req.authed = isAuthedRequest(req, passphrase);
     if (!passphrase) return next(); // no passphrase set = open
-    if (req.path === '/api/config') return next(); // health check — always public
-    // #38: the reading room is the one intentionally public surface — gated by
-    // session.published inside the route handler itself, not by passphrase.
-    // Authoring/publishing stays behind the passphrase; only the rendered
-    // output is reachable here. Portraits must also bypass: the reading room
-    // page embeds them directly, and on a deployed (passphrase-set) instance
-    // an unauthenticated visitor's <img> requests would otherwise 401. Static
-    // character art, not sensitive on its own — safe to open regardless of
-    // whether any session happens to be published.
-    if (req.path.startsWith('/reading-room/')) return next();
-    if (req.path.startsWith('/portraits/')) return next();
+    if (isPublicRoute(req)) return next();
     if (req.session.authed) return next();
     if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'Unauthorized' });
     res.redirect('/login');
@@ -121,4 +160,5 @@ module.exports = {
   registerAuthRoutes,
   createRequireAuth,
   isAuthedRequest,
+  isPublicRoute,
 };

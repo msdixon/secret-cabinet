@@ -134,6 +134,17 @@
 
     <div class="control-rail" id="control-rail" role="region" aria-label="Provocation, casting, and convene controls">
 
+    <!-- #379: shown only when public/js/app.js's applyConveneGate() finds an
+         unauthenticated visitor on a deployed (passphrase-gated) instance —
+         see the .control-rail.is-gated rule in style.css. The room can be
+         seen to be convenable; convening itself needs a sign-in. -->
+    <div class="control-rail-gate" id="control-rail-gate">
+      <p class="control-rail-gate-text">The room can be convened here — reading is open to everyone, but convening a meeting needs a sign-in.</p>
+      <a class="lodge-btn primary" href="/login">Sign In to Convene</a>
+    </div>
+
+    <div class="control-rail-content" id="control-rail-content">
+
     <div class="journal-panel">
       <div class="panel-label">I. The Provocation</div>
       <div class="journal-controls">
@@ -285,6 +296,8 @@
         <button class="lodge-btn" id="reveal-player-turns-btn" onclick="togglePlayerTurnReveal()">Reveal Player Turns ◆</button>
         <button class="lodge-btn sessions-btn" id="dossier-btn" onclick="window.Sessions.toggleDossier()" style="display:none;">The Assembled ↗</button>
       </div>
+    </div>
+
     </div>
     </div>
 

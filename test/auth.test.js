@@ -13,8 +13,8 @@ const assert = require('node:assert/strict');
 
 const auth = require('../src/auth.js');
 
-function fakeReq({ path, session = {}, query = {}, body = {} } = {}) {
-  return { path, session, query, body };
+function fakeReq({ path, method = 'GET', session = {}, query = {}, body = {} } = {}) {
+  return { path, method, session, query, body };
 }
 
 function fakeRes() {
@@ -128,11 +128,14 @@ test('createRequireAuth', async t => {
     assert.equal(nextCalled, true);
   });
 
-  await t.test('an unauthenticated API request is rejected with 401 JSON, not a redirect', () => {
+  await t.test('an unauthenticated request to a gated API route is rejected with 401 JSON, not a redirect', () => {
+    // #379: GET /api/sessions itself is now part of the public read tier
+    // (see the PUBLIC_API_ROUTES tests below) — POST /api/convene stays
+    // gated regardless, since convening spends Anthropic money.
     const requireAuth = auth.createRequireAuth('secret');
     const res = fakeRes();
     let nextCalled = false;
-    requireAuth(fakeReq({ path: '/api/sessions', session: {} }), res, () => {
+    requireAuth(fakeReq({ path: '/api/convene', method: 'POST', session: {} }), res, () => {
       nextCalled = true;
     });
     assert.equal(nextCalled, false);
@@ -140,11 +143,15 @@ test('createRequireAuth', async t => {
     assert.deepEqual(res.body, { error: 'Unauthorized' });
   });
 
-  await t.test('an unauthenticated non-API request is redirected to /login', () => {
+  await t.test('an unauthenticated non-GET/HEAD request to a non-API path is redirected to /login', () => {
+    // #379: every real non-API route in this app is GET (the app shell,
+    // /lodge, /reading-room/:id, /portraits/*), so this fallback is dead
+    // code for anything actually registered today — kept covered here in
+    // case a future non-API route ever needs a method other than GET.
     const requireAuth = auth.createRequireAuth('secret');
     const res = fakeRes();
     let nextCalled = false;
-    requireAuth(fakeReq({ path: '/lodge', session: {} }), res, () => {
+    requireAuth(fakeReq({ path: '/lodge', method: 'POST', session: {} }), res, () => {
       nextCalled = true;
     });
     assert.equal(nextCalled, false);
@@ -152,21 +159,107 @@ test('createRequireAuth', async t => {
   });
 
   await t.test(
-    'static assets (e.g. /app.js) are gated too, not just /api/ — the #38 static-bypass bug this guards against',
+    '#379: the app shell (e.g. /, /lodge, static assets like /app.js) is public for an unauthenticated GET — deliberately, not the #38 bug this bypass used to guard against',
     () => {
-      // This is the specific regression the guard's mounting order exists to
-      // prevent: requireAuth must run before express.static, or an
-      // unauthenticated visitor gets index.html/app.js served regardless.
+      // Before #379, this exact request was rejected — see the STATUS.md/
+      // PRINCIPLES.md history: opening the app shell to strangers, with the
+      // room as the landing surface, is the point of this issue. The
+      // ordering invariant (requireAuth before express.static) still
+      // matters for keeping every /api/ path gated by default; it just no
+      // longer needs to gate the shell itself.
       const requireAuth = auth.createRequireAuth('secret');
-      const res = fakeRes();
-      let nextCalled = false;
-      requireAuth(fakeReq({ path: '/app.js', session: {} }), res, () => {
-        nextCalled = true;
-      });
-      assert.equal(nextCalled, false);
-      assert.equal(res.redirectedTo, '/login');
+      for (const path of ['/', '/lodge', '/app.js', '/css/style.css']) {
+        const res = fakeRes();
+        let nextCalled = false;
+        requireAuth(fakeReq({ path, session: {} }), res, () => {
+          nextCalled = true;
+        });
+        assert.equal(nextCalled, true, `expected ${path} to be public`);
+      }
     }
   );
+
+  await t.test('#379: the four #378-scoped session read routes are public for an unauthenticated GET', () => {
+    const requireAuth = auth.createRequireAuth('secret');
+    for (const path of ['/api/sessions', '/api/sessions/abc123', '/api/sessions/abc123/transcript', '/api/threads']) {
+      const res = fakeRes();
+      let nextCalled = false;
+      requireAuth(fakeReq({ path, session: {} }), res, () => {
+        nextCalled = true;
+      });
+      assert.equal(nextCalled, true, `expected GET ${path} to be public`);
+    }
+  });
+
+  await t.test('#379: "the room and the shelf" read routes are public for an unauthenticated GET', () => {
+    const requireAuth = auth.createRequireAuth('secret');
+    for (const path of [
+      '/api/members',
+      '/api/members/crowley/dossier',
+      '/api/library',
+      '/api/library/some-work',
+      '/api/graph',
+      '/api/voice/config',
+    ]) {
+      const res = fakeRes();
+      let nextCalled = false;
+      requireAuth(fakeReq({ path, session: {} }), res, () => {
+        nextCalled = true;
+      });
+      assert.equal(nextCalled, true, `expected GET ${path} to be public`);
+    }
+  });
+
+  await t.test(
+    '#379: a mutating verb on an otherwise-public session path stays gated — the method check, not just the path, decides',
+    () => {
+      const requireAuth = auth.createRequireAuth('secret');
+      const cases = [
+        ['DELETE', '/api/sessions/abc123'],
+        ['PATCH', '/api/sessions/abc123/publish'],
+        ['PATCH', '/api/sessions/abc123/annotations'],
+        ['PATCH', '/api/sessions/abc123/tags'],
+        ['PATCH', '/api/sessions/abc123/thread'],
+        ['POST', '/api/sessions/abc123/branch'],
+        ['POST', '/api/sessions/abc123/close'],
+        ['POST', '/api/sessions/abc123/verify-citations'],
+      ];
+      for (const [method, path] of cases) {
+        const res = fakeRes();
+        let nextCalled = false;
+        requireAuth(fakeReq({ path, method, session: {} }), res, () => {
+          nextCalled = true;
+        });
+        assert.equal(nextCalled, false, `expected ${method} ${path} to stay gated`);
+        assert.equal(res.statusCode, 401, `expected ${method} ${path} to 401, not redirect`);
+      }
+    }
+  );
+
+  await t.test('#379: anything that costs money, touches Rachel\'s machine, or is admin-only stays gated', () => {
+    const requireAuth = auth.createRequireAuth('secret');
+    const cases = [
+      ['POST', '/api/members'], // the generator, not the GET roster list
+      ['POST', '/api/cast'],
+      ['POST', '/api/round'],
+      ['POST', '/api/interject'],
+      ['POST', '/api/voice/speak'], // #380 — separate decision, stays gated here
+      ['POST', '/api/dayone/export'],
+      ['POST', '/api/ulysses/export'],
+      ['POST', '/api/export/obsidian'],
+      ['GET', '/api/admin/citation-manifest'],
+      ['GET', '/api/admin/bibliography'],
+    ];
+    for (const [method, path] of cases) {
+      const res = fakeRes();
+      let nextCalled = false;
+      requireAuth(fakeReq({ path, method, session: {} }), res, () => {
+        nextCalled = true;
+      });
+      assert.equal(nextCalled, false, `expected ${method} ${path} to stay gated`);
+      assert.equal(res.statusCode, 401, `expected ${method} ${path} to 401`);
+    }
+  });
 });
 
 test('loginPageHtml', async t => {
