@@ -816,24 +816,84 @@ window.LodgeScene = (function () {
     }
   }
 
-  // Three states per seat: empty (no one there), occupied (present, not
-  // currently generating), speaking (#28 -- brighter glow + a slight
-  // scale-up, "leaning in"). Applied directly to each seat's own material
-  // rather than swapping between shared material instances.
-  function applySeatState(seat, state) {
-    if (state === 'empty') {
-      seat.seatMat.diffuseColor = BABYLON.Color3.FromHexString(LODGE_BORDER);
-      seat.seatMat.emissiveColor = new BABYLON.Color3(0, 0, 0);
-      seat.avatar.scaling.set(1, 1, 1);
-    } else if (state === 'occupied') {
-      seat.seatMat.diffuseColor = BABYLON.Color3.FromHexString(LODGE_AMBER);
-      seat.seatMat.emissiveColor = BABYLON.Color3.FromHexString(LODGE_AMBER).scale(0.35);
-      seat.avatar.scaling.set(1, 1, 1);
-    } else if (state === 'speaking') {
-      seat.seatMat.diffuseColor = BABYLON.Color3.FromHexString(LODGE_AMBER);
-      seat.seatMat.emissiveColor = BABYLON.Color3.FromHexString(LODGE_GOLD).scale(0.9);
-      seat.avatar.scaling.set(1.08, 1.08, 1.08);
+  // #360: six states per seat, up from three -- empty (no one there),
+  // occupied (present, but no pool/disposition signal yet -- before the
+  // first passage's director consult), listening (present, not in the
+  // director's current candidate pool), thinking (present and in the pool --
+  // a candidate to speak next, "leaning in"), waiting (their own last
+  // disposition update named someone they want to respond to -- surfaces
+  // waitingOnMemberId, #203's own signal, that the pipeline already computed
+  // and previously discarded), speaking (#28 -- the brightest glow and most
+  // pronounced scale-up). Table-driven, not an if/else cascade, so every
+  // transition -- not just speaking's original one -- runs through the same
+  // eased animation below instead of the flicker a direct material mutation
+  // would produce now that there are six states instead of three to jump
+  // between.
+  const SEAT_STATE_SPECS = {
+    empty: { diffuse: LODGE_BORDER, emissive: null, emissiveScale: 0, scale: 1 },
+    occupied: { diffuse: LODGE_AMBER, emissive: LODGE_AMBER, emissiveScale: 0.35, scale: 1 },
+    listening: { diffuse: LODGE_AMBER, emissive: LODGE_AMBER_DIM, emissiveScale: 0.3, scale: 1 },
+    thinking: { diffuse: LODGE_AMBER, emissive: LODGE_AMBER, emissiveScale: 0.55, scale: 1.03 },
+    waiting: { diffuse: LODGE_AMBER, emissive: LODGE_GOLD, emissiveScale: 0.65, scale: 1.05 },
+    speaking: { diffuse: LODGE_AMBER, emissive: LODGE_GOLD, emissiveScale: 0.9, scale: 1.08 },
+  };
+  const SEAT_STATE_MS = 500;
+  const SEAT_STATE_FPS = 60;
+
+  // Built lazily, same reason as getCameraEasing below (BABYLON isn't
+  // guaranteed loaded yet at module-init time).
+  let seatStateEasing = null;
+  function getSeatStateEasing() {
+    if (!seatStateEasing) {
+      seatStateEasing = new BABYLON.CubicEase();
+      seatStateEasing.setEasingMode(BABYLON.EasingFunction.EASINGMODE_EASEINOUT);
     }
+    return seatStateEasing;
+  }
+
+  // Same CreateAndStartAnimation + stopAnimation pattern as
+  // animateCameraProp (#232) below, generalized to whichever property/target
+  // a seat state touches (Color3 on the seat material, Vector3 scaling on
+  // the avatar plane -- CreateAndStartAnimation infers the animation type
+  // from the current value either way). Two cases fall back to setting the
+  // value directly instead of tweening: reduced motion (Principle 4,
+  // precedent #218 -- same treatment the fire's own flicker gets), and no
+  // scene yet at all -- buildTableAndSeats() calls applySeatState() to set
+  // each seat's initial 'empty' look before sceneRef is assigned (see
+  // init()), so an animation would have nothing to run against.
+  function animateSeatProp(target, property, toValue, name) {
+    if (!sceneRef || reducedMotion) {
+      target[property] = toValue;
+      return;
+    }
+    sceneRef.stopAnimation(target, name);
+    BABYLON.Animation.CreateAndStartAnimation(
+      name,
+      target,
+      property,
+      SEAT_STATE_FPS,
+      Math.round((SEAT_STATE_MS / 1000) * SEAT_STATE_FPS),
+      target[property],
+      toValue,
+      BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT,
+      getSeatStateEasing()
+    );
+  }
+
+  function applySeatState(seat, state) {
+    const spec = SEAT_STATE_SPECS[state];
+    if (!spec) return;
+    const emissiveColor = spec.emissive
+      ? BABYLON.Color3.FromHexString(spec.emissive).scale(spec.emissiveScale)
+      : new BABYLON.Color3(0, 0, 0);
+    animateSeatProp(seat.seatMat, 'diffuseColor', BABYLON.Color3.FromHexString(spec.diffuse), 'diffuseColor');
+    animateSeatProp(seat.seatMat, 'emissiveColor', emissiveColor, 'emissiveColor');
+    animateSeatProp(
+      seat.avatar,
+      'scaling',
+      new BABYLON.Vector3(spec.scale, spec.scale, spec.scale),
+      'scaling'
+    );
   }
 
   // On load failure (a member added after batch 1, with no portrait yet),
@@ -926,6 +986,32 @@ window.LodgeScene = (function () {
   }
 
   let currentSpeakingId = null;
+  // #360: the director's current candidate pool (null until the first
+  // passage's consult resolves -- distinguishes "no signal yet" from "an
+  // empty pool"), and every present member whose own last disposition update
+  // named someone they want to respond to. Both come in over SSE
+  // (app.js's setPool/setDisposition below) and drive seatStateFor()
+  // alongside currentSpeakingId.
+  let currentPoolIds = null;
+  const waitingMemberIds = new Set();
+
+  // speaking (currentSpeakingId) takes priority over waiting, which takes
+  // priority over pool membership -- a member who's actually mid-turn or who
+  // explicitly wants back in reads as more "active" than merely being a
+  // candidate the director could call on.
+  function seatStateFor(memberId) {
+    if (memberId === currentSpeakingId) return 'speaking';
+    if (waitingMemberIds.has(memberId)) return 'waiting';
+    if (currentPoolIds) return currentPoolIds.has(memberId) ? 'thinking' : 'listening';
+    return 'occupied';
+  }
+
+  function refreshSeatStates() {
+    seatMeshes.forEach(seat => {
+      if (!seat.memberId) return; // empty seats aren't affected either way
+      applySeatState(seat, seatStateFor(seat.memberId));
+    });
+  }
 
   // Assigns the given member ids to seats in order, up to SEAT_COUNT.
   // Extra members beyond the seat count are silently not seated at this
@@ -937,6 +1023,10 @@ window.LodgeScene = (function () {
     // is no longer meaningful (round ended, session switched, etc), so the
     // camera (#232) eases back to the resting shot along with the seats.
     currentSpeakingId = null;
+    // #360: same reasoning -- a stale pool/waiting signal would describe
+    // people who may no longer even be seated.
+    currentPoolIds = null;
+    waitingMemberIds.clear();
     seatMeshes.forEach((seat, i) => {
       const id = ids[i] || null;
       seat.memberId = id;
@@ -951,17 +1041,38 @@ window.LodgeScene = (function () {
     frameCamera(null);
   }
 
+  // #360: the director's candidate pool for the current (or just-refreshed)
+  // passage -- present members not in it read as "listening" rather than
+  // the generic "occupied". ids is a plain array off the wire (app.js), not
+  // yet a Set.
+  function setPool(ids) {
+    if (!sceneRef || !seatMeshes.length) return;
+    currentPoolIds = new Set(ids || []);
+    refreshSeatStates();
+  }
+
+  // #360: waitingOnMemberId from a beat's disposition update (#203's own
+  // signal) -- sticky per member until their own next disposition update
+  // says otherwise, same lifetime the server-side disposition object itself
+  // has. Empty seats can't reach this (memberId always comes from a real
+  // beat), so no seat.memberId guard is needed here the way the others have.
+  function setDisposition(memberId, waitingOnMemberId) {
+    if (!sceneRef || !seatMeshes.length || !memberId) return;
+    if (waitingOnMemberId) waitingMemberIds.add(memberId);
+    else waitingMemberIds.delete(memberId);
+    refreshSeatStates();
+  }
+
   // #28: brightens whichever seated member is currently generating a turn,
-  // returns everyone else (including the previous speaker) to neutral.
-  // memberId null/absent just clears back to neutral across the board --
-  // used both when a round finishes and when a stream errors mid-generation.
+  // returns everyone else to whatever seatStateFor() says they should read
+  // as now that speaking has been ceded (waiting/thinking/listening/
+  // occupied, not always neutral). memberId null/absent just clears back to
+  // that same non-speaking read across the board -- used both when a round
+  // finishes and when a stream errors mid-generation.
   function setSpeaking(memberId) {
     if (!sceneRef || !seatMeshes.length) return;
     currentSpeakingId = memberId || null;
-    seatMeshes.forEach(seat => {
-      if (!seat.memberId) return; // empty seats aren't affected either way
-      applySeatState(seat, seat.memberId === currentSpeakingId ? 'speaking' : 'occupied');
-    });
+    refreshSeatStates();
     frameCamera(currentSpeakingId);
   }
 
@@ -1094,5 +1205,14 @@ window.LodgeScene = (function () {
     }
   }
 
-  return { init, updateSeats, setSpeaking, getSeatScreenPosition, setPassageCount, stirFire };
+  return {
+    init,
+    updateSeats,
+    setSpeaking,
+    setPool,
+    setDisposition,
+    getSeatScreenPosition,
+    setPassageCount,
+    stirFire,
+  };
 })();

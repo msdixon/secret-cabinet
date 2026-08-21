@@ -718,6 +718,16 @@ async function streamPost(url, body, onChunk, onSpeaking, onSpeakerDone) {
           onSpeaking?.(data.speaking);
         } else if (data.speakerDone) {
           onSpeakerDone?.(data.speakerDone);
+        } else if (data.pool) {
+          // #360: the director's candidate pool, so the scene can tell a
+          // present member who might speak next ("thinking") apart from one
+          // who's present but not in contention ("listening").
+          window.LodgeScene?.setPool(data.pool);
+        } else if (data.disposition) {
+          // #360: waitingOnMemberId from the just-finished beat's disposition
+          // update (#203's own signal) — a member wanting back in reads as
+          // "waiting" until their disposition next changes.
+          window.LodgeScene?.setDisposition(data.disposition.memberId, data.disposition.waitingOnMemberId);
         }
       }
     }

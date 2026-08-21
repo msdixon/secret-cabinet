@@ -143,6 +143,12 @@ function registerConveneRoutes(
         onSpeakerStart: memberId => res.write(`data: ${JSON.stringify({ speaking: memberId })}\n\n`),
         onSpeakerEnd: (memberId, name, text) =>
           res.write(`data: ${JSON.stringify({ speakerDone: { memberId, name, text } })}\n\n`),
+        // #360: the director's candidate pool and each beat's disposition
+        // update, so the client can render listening/thinking/waiting states
+        // instead of just speaking vs. not.
+        onPoolUpdate: pool => res.write(`data: ${JSON.stringify({ pool })}\n\n`),
+        onDisposition: (memberId, waitingOnMemberId) =>
+          res.write(`data: ${JSON.stringify({ disposition: { memberId, waitingOnMemberId } })}\n\n`),
         onMetric: m => {
           generationMetrics.push(m);
           if (m.skipped) console.warn('[degraded]', m.phase, m.memberId || '', '—', m.error);
@@ -294,6 +300,10 @@ function registerConveneRoutes(
         onSpeakerStart: memberId => res.write(`data: ${JSON.stringify({ speaking: memberId })}\n\n`),
         onSpeakerEnd: (memberId, name, text) =>
           res.write(`data: ${JSON.stringify({ speakerDone: { memberId, name, text } })}\n\n`),
+        // #360: see /api/convene above.
+        onPoolUpdate: pool => res.write(`data: ${JSON.stringify({ pool })}\n\n`),
+        onDisposition: (memberId, waitingOnMemberId) =>
+          res.write(`data: ${JSON.stringify({ disposition: { memberId, waitingOnMemberId } })}\n\n`),
         onMetric: m => {
           session.generationMetrics.push(m);
           if (m.skipped) console.warn('[degraded]', m.phase, m.memberId || '', '—', m.error);
@@ -371,6 +381,10 @@ function registerConveneRoutes(
         onSpeakerStart: memberId => res.write(`data: ${JSON.stringify({ speaking: memberId })}\n\n`),
         onSpeakerEnd: (memberId, name, text) =>
           res.write(`data: ${JSON.stringify({ speakerDone: { memberId, name, text } })}\n\n`),
+        // #360: see /api/convene above.
+        onPoolUpdate: pool => res.write(`data: ${JSON.stringify({ pool })}\n\n`),
+        onDisposition: (memberId, waitingOnMemberId) =>
+          res.write(`data: ${JSON.stringify({ disposition: { memberId, waitingOnMemberId } })}\n\n`),
         onMetric: m => {
           session.generationMetrics.push(m);
           if (m.skipped) console.warn('[degraded]', m.phase, m.memberId || '', '—', m.error);
