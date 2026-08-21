@@ -1,1 +1,0 @@
-[#361](https://github.com/msdixon/secret-cabinet/issues/361) metrics panel now renders a "0 calls, sat silent" row for every seated member with no `speaker`/`disposition` metric, instead of omitting them — the verification instrument for #352/#353's turn-distribution fixes. [PR #386](https://github.com/msdixon/secret-cabinet/pull/386)
