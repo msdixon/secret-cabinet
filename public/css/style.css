@@ -34,17 +34,42 @@
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 .lodge-root { background: var(--lodge-bg); color: var(--lodge-cream); font-family: 'Crimson Pro', Georgia, serif; }
+
+/* #358 — visually hidden until focused: a keyboard/screen-reader path to
+   the provocation/casting/convene controls that doesn't require tabbing
+   through the room's witness-controls and canvas first. Principle 4
+   (Accessibility): the room becoming the primary surface at rest must not
+   make it the primary surface for keyboard/AT navigation too. */
+.skip-link {
+  position: absolute; left: -9999px; top: 0; z-index: 999;
+  background: var(--lodge-panel); color: var(--lodge-amber);
+  border: 1px solid var(--lodge-amber-dim); border-radius: 0 0 2px 0;
+  padding: 8px 16px; font-family: 'IM Fell English', serif; font-size: 13px;
+  text-decoration: none; letter-spacing: 1px;
+}
+.skip-link:focus { left: 0; }
+
+/* #358 — the masthead was a hero (portrait, title, tagline, nav, ember bar
+   each on their own row, ~380px+ tall) sized for a page whose next section
+   was itself header art (a paste box). Now that the room sits directly
+   beneath it and needs the fold, the masthead condenses to a single slim
+   identity bar -- #303's "the header portrait does not keep hero-level fold
+   real estate" is effectively resolved by this change, not answered
+   separately. The ember bar stays (setEmber() in app.js still targets its
+   ids every time setStatus() runs) but shrinks with it, via the .hearth-glow
+   height override below rather than removing any element setEmber() reaches
+   into. */
 .lodge-mantel {
   position: relative; width: 100%;
   background: linear-gradient(180deg, #0a0704 0%, var(--lodge-panel) 100%);
   border-bottom: 2px solid var(--lodge-border);
-  padding: 0 0 0 0;
-  display: flex; flex-direction: column; align-items: center;
 }
+.mantel-row { display: flex; align-items: center; justify-content: space-between; gap: 14px 20px; padding: 8px 20px; flex-wrap: wrap; }
+.mantel-identity { display: flex; align-items: center; gap: 12px; }
 .dorian-frame {
-  width: 140px; height: 170px; margin: 16px auto 8px; position: relative; cursor: pointer;
+  width: 42px; height: 51px; position: relative; cursor: pointer; flex-shrink: 0;
   border-radius: 3px;
-  box-shadow: 0 0 12px rgba(200,146,42,0.16);
+  box-shadow: 0 0 8px rgba(200,146,42,0.16);
   animation: frameGlow 6s ease-in-out infinite;
   transition: box-shadow 0.3s ease;
 }
@@ -77,24 +102,24 @@
 @media (prefers-reduced-motion: reduce) {
   .dorian-frame, .frame-sheen, .decay-crack-1, .decay-crack-2 { animation: none; }
 }
-.lodge-title-block { text-align: center; padding: 0 20px 4px; }
-.lodge-title { font-family: 'UnifrakturMaguntia', serif; font-size: 28px; color: var(--lodge-amber); letter-spacing: 2px; line-height: 1.2; text-shadow: 0 0 20px rgba(200,146,42,0.3); }
-.lodge-subtitle { font-family: 'IM Fell English', serif; font-style: italic; font-size: 12px; color: var(--lodge-muted); letter-spacing: 3px; text-transform: uppercase; margin-top: 4px; }
-.lodge-divider { width: 200px; height: 1px; background: linear-gradient(90deg, transparent, var(--lodge-amber-dim), transparent); margin: 10px auto; position: relative; }
-.lodge-divider::after {
-  content: ''; position: absolute; top: 50%; left: 50%; width: 5px; height: 5px;
-  background: var(--lodge-amber); transform: translate(-50%, -50%) rotate(45deg);
-  box-shadow: 0 0 6px rgba(200,146,42,0.55);
-}
-.mantel-tagline { font-family:'IM Fell English',serif; font-style:italic; font-size:12px; color:var(--lodge-ash); text-align:center; padding: 0 20px 8px; line-height:1.6; }
-.mantel-nav { display:flex; justify-content:center; padding:0 20px 12px; }
+.lodge-title-block { text-align: left; }
+.lodge-title { font-family: 'UnifrakturMaguntia', serif; font-size: 19px; color: var(--lodge-amber); letter-spacing: 1px; line-height: 1.15; text-shadow: 0 0 14px rgba(200,146,42,0.3); }
+.lodge-subtitle { font-family: 'IM Fell English', serif; font-style: italic; font-size: 9px; color: var(--lodge-muted); letter-spacing: 2px; text-transform: uppercase; margin-top: 1px; }
+.mantel-nav { display:flex; gap:8px; flex-wrap:wrap; }
 .mantel-sessions-btn { font-size:12px; padding:5px 16px; border-color:var(--lodge-border); color:var(--lodge-muted); }
 .mantel-sessions-btn:hover { border-color:var(--lodge-amber-dim); color:var(--lodge-cream); }
 
 /* ─── Hearth glow & embers ─────────────────────────────────────────────── */
 
+/* #358 — shrunk from 48px to 18px along with the rest of the masthead.
+   setEmber() in app.js (called from every setStatus()) still targets
+   #ember-bar/#s1-#s5 directly, so the elements and their ids stay exactly
+   as they were; only this container's height (and the proportionally
+   bottom-anchored ::before/::after glow, both already inside
+   overflow:hidden) shrinks, so the "thinking" indicator keeps working
+   without any JS change. */
 .hearth-glow {
-  width: 100%; height: 48px; position: relative; overflow: hidden;
+  width: 100%; height: 18px; position: relative; overflow: hidden;
   background: linear-gradient(180deg, #0a0704 0%, #1a0a04 40%, #0a0500 100%);
   display: flex; align-items: flex-end; justify-content: center;
 }
@@ -148,7 +173,27 @@
 
 /* ─── Convene panel — journal input & member roster ────────────────────── */
 
-.lodge-body { display:flex; flex-direction:column; flex:1; padding:20px 24px; gap:20px; max-width:960px; width:100%; margin:0 auto; }
+/* #358 — the room (#stage-record) reads as widescreen, letterboxed to the
+   room's own real proportions (see scene.js's HEARTH_ANGLE comment, which
+   already anticipated this widening the camera's effective horizontal FOV
+   further, not narrowing it) -- so it gets a wider column than the
+   provocation/casting/convene controls below it, which stay a readable
+   960px measure. .lodge-body itself widens to give the room that room;
+   .control-rail/.after-panel/.status-bar re-narrow and re-center below. */
+.lodge-body { display:flex; flex-direction:column; flex:1; padding:16px 24px 24px; gap:16px; max-width:1440px; width:100%; margin:0 auto; }
+#stage-record { width:100%; max-width:1400px; margin:0 auto; }
+/* #358 — provocation, casting, and convene used to be three full-width
+   panels stacked *above* the room (1339px of them, at the measurement that
+   opened this issue), forcing it below the fold. They live in the same
+   full-width stacked shape below the room instead -- a two-column
+   side-by-side attempt (Provocation | Cast) was tried and dropped: the
+   roster grid (up to 50 members, see roster.js) wrapping into a ~320px
+   column ran to 900+px tall, far worse than the 960px-wide grid it uses
+   here. "Around the room, not stacked above it" is satisfied by position
+   (below/reachable, not gatekeeping the fold) rather than by forcing them
+   into a cramped multi-column shape that fights the roster's own size. */
+.control-rail { display:flex; flex-direction:column; gap:16px; width:100%; max-width:960px; margin:0 auto; }
+.after-panel, .status-bar { width:100%; max-width:960px; margin:0 auto; }
 .panel-label { font-family:'IM Fell English',serif; font-size:13px; letter-spacing:2px; text-transform:uppercase; color:var(--lodge-muted); margin-bottom:8px; }
 .journal-panel, .member-panel, .transcript-panel, .after-panel, .panel { background:var(--lodge-surface); border:1px solid var(--lodge-border); border-radius:2px; padding:16px; }
 .card { background:var(--lodge-surface); border:1px solid var(--lodge-border); border-radius:2px; padding:10px 12px; }
@@ -570,10 +615,24 @@ a.archival-image-link:hover { border-color:var(--lodge-amber-dim); cursor:pointe
    Revision: only one pane is ever VISIBLE at a time (.stage-only vs
    .collapsed, toggled by witness.js) — showing the same streaming text in
    both was unreadable, not "linked." See docs/archive/DESIGN-184-STAGE-DEFAULT.md's
-   Revision section and witness.js's collapseStage()/reopenStage(). */
+   Revision section and witness.js's collapseStage()/reopenStage().
+
+   #358: the third state -- neither class present, i.e. the page at rest
+   before any convene -- used to mean "both panes visible, roughly halved"
+   (54vh/44vh below), which is exactly the layout this issue exists to fix:
+   a small room sharing space with an empty record. witness.js never reads
+   or branches on .stage-only/.collapsed (grepped: only ever set/removed),
+   so redefining what "neither class" looks like is safe -- nothing treats
+   it as a meaningful third state to preserve. The room is the resting
+   default now: big stage-pane, hidden record-pane, same shape as
+   .stage-only but sized for "the empty room, at rest" rather than "a live
+   performance," which gets the taller/more-committed 75vh below. Loading a
+   past meeting (sessions.js restoreSession) explicitly calls collapseStage()
+   so its transcript actually surfaces instead of sitting hidden behind a
+   resting room with no visible way back to it. */
 .stage-record { display:flex; flex-direction:column; background:var(--lodge-surface); border:1px solid var(--lodge-border); border-radius:2px; overflow:hidden; }
 
-.stage-pane { display:flex; flex-direction:column; height:54vh; min-height:340px; max-height:580px; border-bottom:1px solid var(--lodge-border); background:var(--lodge-bg); }
+.stage-pane { display:flex; flex-direction:column; height:64vh; min-height:420px; max-height:760px; border-bottom:1px solid var(--lodge-border); background:var(--lodge-bg); }
 .stage-record.collapsed .stage-pane { display:none; }
 .stage-record.stage-only .stage-pane { height:75vh; max-height:820px; }
 
@@ -588,10 +647,10 @@ a.archival-image-link:hover { border-color:var(--lodge-amber-dim); cursor:pointe
 /* .stage-only is .collapsed's mirror image: the record stays hidden (not
    just shorter) while the stage is showing, so the same streaming text is
    never visible in both places at once. See witness.js's revision comment
-   atop collapseStage()/reopenStage(). */
-.record-pane { display:flex; flex-direction:column; height:44vh; min-height:220px; max-height:480px; }
-.stage-record.collapsed .record-pane { height:75vh; max-height:820px; }
-.stage-record.stage-only .record-pane { display:none; }
+   atop collapseStage()/reopenStage(). Hidden by default now too (#358) —
+   see the note atop .stage-pane above. */
+.record-pane { display:none; flex-direction:column; height:44vh; min-height:220px; max-height:480px; }
+.stage-record.collapsed .record-pane { display:flex; height:75vh; max-height:820px; }
 /* .record-pane carries .transcript-panel for the shared panel background/
    border/padding rule above — reset padding here since the toolbar and
    scroll region below supply their own. */
@@ -608,11 +667,19 @@ a.archival-image-link:hover { border-color:var(--lodge-amber-dim); cursor:pointe
 
 .record-scroll { flex:1 1 auto; overflow-y:auto; min-height:0; padding:16px; }
 
+/* #358 — a narrow viewport is also a *tall* one (375x812 etc.), and a plain
+   vh-based height here turns the canvas portrait (verified live: 375x422,
+   an 0.9:1 aspect) rather than the letterboxed wide-short shape the camera
+   in scene.js was actually framed for -- HEARTH_ANGLE and the seat ring both
+   assume the horizontal FOV a wide aspect gives you, and a portrait canvas
+   under-frames the room (mostly ceiling/floor, the hearth pushed to the
+   edge or out of frame). min(vh, vw*ratio) caps the height by width too, so
+   the canvas stays wide-short on any screen shape instead of just shrinking
+   proportionally. */
 @media (max-width: 768px) {
-  .stage-pane { height:40vh; min-height:260px; max-height:none; }
-  .record-pane { height:40vh; min-height:180px; max-height:none; }
-  .stage-record.collapsed .record-pane { height:65vh; }
-  .stage-record.stage-only .stage-pane { height:65vh; }
+  .stage-pane { height:min(52vh, 58vw); min-height:240px; max-height:none; }
+  .stage-record.collapsed .record-pane { height:62vh; min-height:180px; max-height:none; }
+  .stage-record.stage-only .stage-pane { height:min(65vh, 66vw); }
 }
 
 /* ─── Witness mode — room, stage playback & keyframes ──────────────────── */

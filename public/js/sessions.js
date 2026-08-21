@@ -464,6 +464,12 @@ window.Sessions = (function () {
 
       // Show controls
       deps.showSessionControls();
+      // #358: the record pane is hidden by default now (the room is the
+      // resting view) -- restoring a past session is explicitly a record
+      // operation (see the comment above on deps.resetLiveStage()), so make
+      // sure its transcript is actually visible rather than sitting hidden
+      // behind a resting, empty room with no visible way back to it.
+      deps.collapseStage();
       deps.setStatus(`Meeting of ${session.date} restored. The embers hold.`, false);
     } catch (e) {
       deps.setStatus('Could not restore the meeting.', false);

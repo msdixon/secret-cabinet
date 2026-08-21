@@ -7,8 +7,11 @@
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
+<a class="skip-link" href="#control-rail">Skip to provocation &amp; controls</a>
 <div class="lodge-root">
   <div class="lodge-mantel">
+    <div class="mantel-row">
+    <div class="mantel-identity">
     <div class="dorian-frame" title="The portrait adjusts itself, nightly.">
       <svg viewBox="0 0 140 170" xmlns="http://www.w3.org/2000/svg">
         <defs>
@@ -45,11 +48,11 @@
       <div class="lodge-title">The Secret-Cabin-et</div>
       <div class="lodge-subtitle">A Salon Outside of Time</div>
     </div>
-    <div class="lodge-divider"></div>
-    <div class="mantel-tagline">The fire is lit. The room remembers nothing. The provocation waits.</div>
+    </div>
     <div class="mantel-nav">
       <button class="lodge-btn sessions-btn mantel-sessions-btn" onclick="window.Sessions.openSessionsDrawer()">Past Meetings <span id="sessions-count" class="sessions-count"></span></button>
       <a class="lodge-btn sessions-btn mantel-sessions-btn" href="/lodge">The Lodge ↗</a>
+    </div>
     </div>
     <div class="hearth-glow">
       <div class="ember-bar" id="ember-bar"></div>
@@ -64,6 +67,72 @@
   </div>
 
   <div class="lodge-body">
+
+    <!-- #184: the stage (Witness presentation) and the record (annotated
+         transcript) are two permanent, bounded panes rendering the same
+         conversation — never one swapped for the other. The stage plays
+         a live convene as it streams or a past session paced beat-by-beat
+         (#90 go-back); the record accumulates continuously beneath it in
+         its own scrolling window, so a long session never grows the page. -->
+    <div class="stage-record" id="stage-record" role="region" aria-label="The room — live performance and record">
+      <div class="stage-pane" id="stage-pane">
+        <div class="witness-controls">
+          <span class="witness-label">◎ The Stage</span>
+          <span class="witness-hint" id="witness-hint"></span>
+          <!-- #288: one speed control covers room-mode live pacing, replay,
+               and the old stage's typing/reveal timing -- all three already
+               funnel through witness.js's witnessReadingTime(). A cycling
+               button rather than a slider: the stage's chrome is already
+               tight (#257/#279). -->
+          <!-- #29: browser TTS (Web Speech API), off by default -- a per-member
+               voice is assigned deterministically since there's no hand-authored
+               voice profile yet, see voice.js. Hidden entirely by voice.js if the
+               browser has no SpeechSynthesis support at all. -->
+          <button class="witness-voice-btn" id="witness-voice-btn" onclick="window.Voice.toggle()" title="Voice playback (Web Speech API) — click to toggle">🔈 Voice</button>
+          <button class="witness-speed-btn" id="witness-speed-btn" onclick="window.Witness.cycleSpeed()" title="Playback speed — click to cycle">1×</button>
+          <button class="witness-exit-btn" id="witness-exit-btn" onclick="window.Witness.exitClicked()" style="display:none;">✕ Exit</button>
+        </div>
+        <div class="witness-stage" id="witness-stage" onclick="window.Witness.advance()"></div>
+        <!-- #257: the room composites dialogue directly onto the scene --
+             retires #202's wordless Text/Room toggle. witness-stage above
+             remains only as the fallback for when the 3D scene never
+             initializes (app.js's initSceneLayer never calls
+             Witness.enableRoom()); see witness.js's "The room (#257)"
+             section for the mechanism. room-speech-layer holds one DOM
+             speech card per seated member, positioned via
+             LodgeScene.getSeatScreenPosition's screen projection of their
+             portrait billboard; room-events holds round headers, lulls, and
+             unattributed action lines, which aren't anchored to any one
+             member's seat. -->
+        <div class="witness-room" id="witness-room" onclick="window.Witness.advance()">
+          <canvas id="scene-canvas"></canvas>
+          <div class="room-speech-layer" id="room-speech-layer"></div>
+          <div class="room-events" id="room-events"></div>
+        </div>
+        <div class="witness-progress" id="witness-progress" style="display:none;"></div>
+      </div>
+
+      <button class="stage-collapsed-bar" id="stage-collapsed-bar" onclick="window.Witness.reopenStage()">▲ The Stage</button>
+
+      <div class="transcript-panel record-pane" id="transcript-panel">
+        <div class="record-toolbar">
+          <span class="record-label">The Record</span>
+          <button class="record-live-pill" id="record-live-pill" onclick="jumpToLive()">↓ live</button>
+        </div>
+        <div class="record-scroll" id="record-scroll">
+          <div class="transcript-empty" id="transcript-empty">
+            The chairs are arranged.<br>
+            The fire throws its light against the panelling.<br>
+            Above the mantel, the portrait<br>
+            <em style="color:#3a2810">regards the room with practiced indifference.</em><br><br>
+            When a provocation is set before the room, the meeting begins.
+          </div>
+          <div id="transcript-content"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="control-rail" id="control-rail" role="region" aria-label="Provocation, casting, and convene controls">
 
     <div class="journal-panel">
       <div class="panel-label">I. The Provocation</div>
@@ -217,69 +286,6 @@
         <button class="lodge-btn sessions-btn" id="dossier-btn" onclick="window.Sessions.toggleDossier()" style="display:none;">The Assembled ↗</button>
       </div>
     </div>
-
-    <!-- #184: the stage (Witness presentation) and the record (annotated
-         transcript) are two permanent, bounded panes rendering the same
-         conversation — never one swapped for the other. The stage plays
-         a live convene as it streams or a past session paced beat-by-beat
-         (#90 go-back); the record accumulates continuously beneath it in
-         its own scrolling window, so a long session never grows the page. -->
-    <div class="stage-record" id="stage-record">
-      <div class="stage-pane" id="stage-pane">
-        <div class="witness-controls">
-          <span class="witness-label">◎ The Stage</span>
-          <span class="witness-hint" id="witness-hint"></span>
-          <!-- #288: one speed control covers room-mode live pacing, replay,
-               and the old stage's typing/reveal timing -- all three already
-               funnel through witness.js's witnessReadingTime(). A cycling
-               button rather than a slider: the stage's chrome is already
-               tight (#257/#279). -->
-          <!-- #29: browser TTS (Web Speech API), off by default -- a per-member
-               voice is assigned deterministically since there's no hand-authored
-               voice profile yet, see voice.js. Hidden entirely by voice.js if the
-               browser has no SpeechSynthesis support at all. -->
-          <button class="witness-voice-btn" id="witness-voice-btn" onclick="window.Voice.toggle()" title="Voice playback (Web Speech API) — click to toggle">🔈 Voice</button>
-          <button class="witness-speed-btn" id="witness-speed-btn" onclick="window.Witness.cycleSpeed()" title="Playback speed — click to cycle">1×</button>
-          <button class="witness-exit-btn" id="witness-exit-btn" onclick="window.Witness.exitClicked()" style="display:none;">✕ Exit</button>
-        </div>
-        <div class="witness-stage" id="witness-stage" onclick="window.Witness.advance()"></div>
-        <!-- #257: the room composites dialogue directly onto the scene --
-             retires #202's wordless Text/Room toggle. witness-stage above
-             remains only as the fallback for when the 3D scene never
-             initializes (app.js's initSceneLayer never calls
-             Witness.enableRoom()); see witness.js's "The room (#257)"
-             section for the mechanism. room-speech-layer holds one DOM
-             speech card per seated member, positioned via
-             LodgeScene.getSeatScreenPosition's screen projection of their
-             portrait billboard; room-events holds round headers, lulls, and
-             unattributed action lines, which aren't anchored to any one
-             member's seat. -->
-        <div class="witness-room" id="witness-room" onclick="window.Witness.advance()">
-          <canvas id="scene-canvas"></canvas>
-          <div class="room-speech-layer" id="room-speech-layer"></div>
-          <div class="room-events" id="room-events"></div>
-        </div>
-        <div class="witness-progress" id="witness-progress" style="display:none;"></div>
-      </div>
-
-      <button class="stage-collapsed-bar" id="stage-collapsed-bar" onclick="window.Witness.reopenStage()">▲ The Stage</button>
-
-      <div class="transcript-panel record-pane" id="transcript-panel">
-        <div class="record-toolbar">
-          <span class="record-label">The Record</span>
-          <button class="record-live-pill" id="record-live-pill" onclick="jumpToLive()">↓ live</button>
-        </div>
-        <div class="record-scroll" id="record-scroll">
-          <div class="transcript-empty" id="transcript-empty">
-            The chairs are arranged.<br>
-            The fire throws its light against the panelling.<br>
-            Above the mantel, the portrait<br>
-            <em style="color:#3a2810">regards the room with practiced indifference.</em><br><br>
-            When a provocation is set before the room, the meeting begins.
-          </div>
-          <div id="transcript-content"></div>
-        </div>
-      </div>
     </div>
 
     <div class="after-panel" id="after-panel">
