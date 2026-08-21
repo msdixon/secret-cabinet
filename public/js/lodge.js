@@ -914,7 +914,6 @@ async function renderDetail() {
   }
   empty.style.display = 'none';
   content.style.display = 'block';
-  content.innerHTML = '<div class="members-empty-hint">Loading…</div>';
 
   const node = graphNodeById.get(selectedId) || RAW_GRAPH.nodes.find(n => n.id === selectedId);
   if (!node) {
@@ -922,10 +921,25 @@ async function renderDetail() {
     return;
   }
 
-  if (node.type === 'member') content.innerHTML = await renderMemberDetail(selectedId);
-  else if (node.type === 'text') content.innerHTML = await renderTextDetail(selectedId);
-  else content.innerHTML = renderThemeDetail(selectedId);
+  // #374 — members render synchronously from data already loaded in boot()
+  // (roster + graph), so the name/portrait/relationships/library-text list
+  // appear instantly. Only the dossier's bio/voice prose needs a fetch, and
+  // it hydrates in afterward instead of gating the whole card behind it — the
+  // person is the interesting part, not the prose about them.
+  if (node.type === 'member') {
+    content.innerHTML = renderMemberDetail(selectedId);
+    attachDetailInteractions(content);
+    hydrateMemberDossier(selectedId);
+    return;
+  }
 
+  content.innerHTML = '<div class="members-empty-hint">Loading…</div>';
+  if (node.type === 'text') content.innerHTML = await renderTextDetail(selectedId);
+  else content.innerHTML = renderThemeDetail(selectedId);
+  attachDetailInteractions(content);
+}
+
+function attachDetailInteractions(content) {
   content.querySelectorAll('[data-goto]').forEach(el => {
     el.addEventListener('click', () => selectNode(el.dataset.goto));
     el.addEventListener('keydown', ev => {
@@ -944,6 +958,37 @@ async function renderDetail() {
     });
 }
 
+// Fetches the dossier (bio/voice, parsed from the member's character file)
+// and patches it into the already-rendered card. Guards on selectedId still
+// matching in case the user clicked to a different node while this was in
+// flight — a slow response for the previous selection must not clobber the
+// card now showing.
+async function hydrateMemberDossier(id) {
+  const dossier = await fetch(`/api/members/${id}/dossier`)
+    .then(r => (r.ok ? r.json() : null))
+    .catch(() => null);
+  if (selectedId !== id) return;
+  const content = document.getElementById('lodge-detail-content');
+  const slot = content.querySelector('[data-dossier-slot]');
+  if (!slot) return;
+
+  if (!dossier?.bio && !dossier?.voice) {
+    slot.remove();
+    return;
+  }
+  slot.innerHTML = `
+    ${dossier.bio ? `<div class="panel-label">Who they are</div><div class="dossier-text">${escapeHTML(dossier.bio)}</div>` : ''}
+    ${dossier.voice ? `<button class="dossier-toggle">▼ Voice</button><div class="dossier-voice"><div class="dossier-text">${escapeHTML(dossier.voice)}</div></div>` : ''}
+  `;
+  const voiceToggle = slot.querySelector('.dossier-toggle');
+  if (voiceToggle)
+    voiceToggle.addEventListener('click', () => {
+      const box = voiceToggle.nextElementSibling;
+      box.classList.toggle('open');
+      voiceToggle.textContent = box.classList.contains('open') ? '▲ Voice' : '▼ Voice';
+    });
+}
+
 // Relationship/stat helpers, computed from the FULL unfiltered graph (session
 // nodes included) since "times convened" etc. needs the session-derived
 // edges the visual graph deliberately hides.
@@ -951,11 +996,8 @@ function edgesTouching(id) {
   return RAW_GRAPH.edges.filter(e => e.source === id || e.target === id);
 }
 
-async function renderMemberDetail(id) {
+function renderMemberDetail(id) {
   const member = ROSTER_BY_ID.get(id);
-  const dossier = await fetch(`/api/members/${id}/dossier`)
-    .then(r => (r.ok ? r.json() : null))
-    .catch(() => null);
 
   const edges = edgesTouching(id);
   const texts = edges
@@ -978,8 +1020,7 @@ async function renderMemberDetail(id) {
         <div class="lodge-detail-kind">Member</div>
       </div>
     </div>
-    ${dossier?.bio ? `<div class="panel-label">Who they are</div><div class="dossier-text">${escapeHTML(dossier.bio)}</div>` : ''}
-    ${dossier?.voice ? `<button class="dossier-toggle">▼ Voice</button><div class="dossier-voice"><div class="dossier-text">${escapeHTML(dossier.voice)}</div></div>` : ''}
+    <div data-dossier-slot><div class="dossier-text dossier-loading">Loading…</div></div>
 
     <div class="panel-label lodge-detail-section">Session history</div>
     <div class="dossier-text">Convened <strong>${timesConvened}</strong> time${timesConvened === 1 ? '' : 's'} so far.</div>
