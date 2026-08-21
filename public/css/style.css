@@ -592,12 +592,33 @@ a.archival-image-link:hover { border-color:var(--lodge-amber-dim); cursor:pointe
 .dossier-voice { display:none; margin-top:10px; }
 .dossier-voice.open { display:block; }
 
-/* ─── Export settings drawer (#186) — per-app config for Preserve, opened on demand ─── */
-.export-settings-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:100; }
-.export-settings-overlay.open { display:block; }
-.export-settings-drawer { position:fixed; top:0; right:0; width:340px; max-width:95vw; height:100vh; background:var(--lodge-panel); border-left:1px solid var(--lodge-border); z-index:101; display:flex; flex-direction:column; transform:translateX(100%); transition:transform 0.25s ease; }
-.export-settings-drawer.open { transform:translateX(0); }
-.export-settings-body { flex:1; overflow-y:auto; padding:18px; display:flex; flex-direction:column; gap:18px; }
+/* ─── Export destination picker (#345) ─────────────────────────────────── */
+/* Preserve's menu used to list every destination as a full-width button,
+   plus a separate drawer with every destination's config fields shown at
+   once. Now the menu holds a row of small destination icons and one focused
+   panel below them for whichever destination is selected (export.js's
+   selectDestination toggles [hidden] on the rest). .settings-field and
+   .ulysses-group-input are the same field styling the old drawer used --
+   kept as-is, just relocated into the per-destination panels below. */
+.export-picker { min-width:280px; gap:10px; padding:10px; }
+.export-icon-row { display:flex; flex-wrap:wrap; gap:6px; }
+.export-icon { background:transparent; border:1px solid var(--lodge-amber-dim); color:var(--lodge-amber); font-family:'IM Fell English',serif; font-size:12px; padding:6px 9px; border-radius:2px; cursor:pointer; letter-spacing:0.5px; transition:all 0.2s; white-space:nowrap; }
+.export-icon:hover { background:rgba(200,146,42,0.1); border-color:var(--lodge-amber); }
+.export-icon:disabled { opacity:0.4; cursor:not-allowed; }
+.export-icon.active { background:rgba(200,146,42,0.18); border-color:var(--lodge-amber); }
+.export-icon.export-dayone { border-color:#5a8a5a; color:#90c890; }
+.export-icon.export-dayone:hover, .export-icon.export-dayone.active { background:rgba(90,138,90,0.15); }
+.export-icon.export-txt { border-color:#6a7a8a; color:#a0b8c8; }
+.export-icon.export-txt:hover, .export-icon.export-txt.active { background:rgba(100,130,150,0.15); }
+.export-icon.export-ulysses { border-color:#7a6a9a; color:#b8a8d8; }
+.export-icon.export-ulysses:hover, .export-icon.export-ulysses.active { background:rgba(120,100,160,0.15); }
+.export-icon.export-obsidian { border-color:#5a7a5a; color:#90c890; }
+.export-icon.export-obsidian:hover, .export-icon.export-obsidian.active { background:rgba(80,130,80,0.15); }
+.export-dest-config { display:flex; flex-direction:column; gap:10px; }
+.export-dest-hint { font-family:'IM Fell English',serif; font-style:italic; font-size:12px; color:var(--lodge-muted); margin:0; padding:2px; }
+.export-dest-panel { display:flex; flex-direction:column; gap:10px; padding-top:8px; border-top:1px solid var(--lodge-border); }
+.export-dest-panel[hidden] { display:none; }
+.export-dest-desc { font-family:'Crimson Pro',serif; font-size:13px; font-style:italic; color:var(--lodge-muted); margin:0; }
 .settings-field { display:flex; flex-direction:column; gap:6px; }
 .settings-field > span:first-child { font-family:'IM Fell English',serif; font-size:12px; font-style:italic; letter-spacing:0.5px; color:var(--lodge-muted); }
 .settings-field .ulysses-group-input { width:100%; font-size:14px; padding:8px 10px; }
@@ -605,8 +626,7 @@ a.archival-image-link:hover { border-color:var(--lodge-amber-dim); cursor:pointe
 /* ─── Metrics drawer ───────────────────────────────────────────────────── */
 
 /* Metrics drawer (#191) — reuses .sessions-drawer-header/.sessions-close-btn
-   chrome; only the overlay/drawer shell and body content are new, same split
-   as .export-settings-overlay/.export-settings-drawer above. */
+   chrome; only the overlay/drawer shell and body content are new. */
 .metrics-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:100; }
 .metrics-overlay.open { display:block; }
 .metrics-drawer { position:fixed; top:0; right:0; width:380px; max-width:96vw; height:100vh; background:var(--lodge-panel); border-left:1px solid var(--lodge-border); z-index:101; display:flex; flex-direction:column; transform:translateX(100%); transition:transform 0.25s ease; }

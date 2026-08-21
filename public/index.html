@@ -329,17 +329,67 @@
         <button class="lodge-btn" style="border-color:var(--lodge-ash);color:var(--lodge-ash);" onclick="startWitness()" title="Watch the transcript play back with reading-time pacing">◎ Watch</button>
         <button class="lodge-btn" style="border-color:var(--lodge-ash);color:var(--lodge-ash);" onclick="window.Metrics.toggle()" title="Tokens, cost, and the director's casting rationale for this session">⚙ Metrics</button>
 
+        <!-- #345: a row of small destination icons; selecting one opens a
+             single focused config below it, rather than showing every
+             destination's fields at once (the old Export Settings drawer). -->
         <div class="menu-wrap">
           <button class="lodge-btn" id="preserve-btn" onclick="toggleAfterMenu('preserve-menu')">Preserve ▾</button>
-          <div class="lodge-menu" id="preserve-menu">
-            <button class="lodge-btn export-txt" onclick="window.Export.exportTxt()">↓ .txt</button>
-            <button class="lodge-btn export-scholarly" id="export-scholarly-btn" onclick="window.Export.exportScholarly()" disabled title="Verify Citations, or click a passage above to add a note, to enable">↓ Scholarly Note (.md)</button>
-            <button class="lodge-btn export-dayone" onclick="window.Export.exportDayOne()">→ Day One</button>
-            <span id="export-ulysses-row"><button class="lodge-btn export-ulysses" onclick="window.Export.exportUlysses()">→ Ulysses</button></span>
-            <span id="export-obsidian-row"><button class="lodge-btn export-obsidian" onclick="window.Export.exportObsidian()">→ Obsidian</button></span>
-            <span id="export-md-row" style="display:none;"><button class="lodge-btn" onclick="window.Export.exportMd()">↓ .md</button></span>
-            <div class="lodge-menu-divider"></div>
-            <button class="lodge-btn" onclick="openExportSettings()">⚙ Export Settings…</button>
+          <div class="lodge-menu export-picker" id="preserve-menu">
+            <div class="export-icon-row" id="export-icon-row">
+              <button class="export-icon export-txt" data-dest="txt" title="Plain text (.txt)" onclick="window.Export.selectDestination('txt')" data-keep-menu-open>↓ txt</button>
+              <button class="export-icon export-scholarly" id="export-scholarly-btn" data-dest="scholarly" disabled title="Verify Citations, or click a passage above to add a note, to enable" onclick="window.Export.selectDestination('scholarly')" data-keep-menu-open>✎ note</button>
+              <button class="export-icon export-dayone" data-dest="dayone" title="Day One" onclick="window.Export.selectDestination('dayone')" data-keep-menu-open>→ Day One</button>
+              <span id="export-ulysses-row"><button class="export-icon export-ulysses" data-dest="ulysses" title="Ulysses" onclick="window.Export.selectDestination('ulysses')" data-keep-menu-open>→ Ulysses</button></span>
+              <span id="export-obsidian-row"><button class="export-icon export-obsidian" data-dest="obsidian" title="Obsidian" onclick="window.Export.selectDestination('obsidian')" data-keep-menu-open>→ Obsidian</button></span>
+              <span id="export-md-row" style="display:none;"><button class="export-icon export-txt" data-dest="md" title="Markdown (.md)" onclick="window.Export.selectDestination('md')" data-keep-menu-open>↓ md</button></span>
+            </div>
+
+            <div class="export-dest-config" id="export-dest-config">
+              <p class="export-dest-hint" id="export-dest-hint">Choose a destination above.</p>
+
+              <div class="export-dest-panel" id="export-panel-txt" hidden>
+                <p class="export-dest-desc">Download the annotated transcript as plain text.</p>
+                <button class="lodge-btn export-txt" onclick="window.Export.exportTxt()">↓ Download .txt</button>
+              </div>
+
+              <div class="export-dest-panel" id="export-panel-scholarly" hidden>
+                <p class="export-dest-desc">Download a scholarly note with your annotated passages and/or citation bibliography.</p>
+                <button class="lodge-btn export-scholarly" onclick="window.Export.exportScholarly()">↓ Download Note (.md)</button>
+              </div>
+
+              <div class="export-dest-panel" id="export-panel-dayone" hidden>
+                <div class="settings-field">
+                  <span>Day One journal</span>
+                  <span class="source-tag" id="export-journal-name" style="margin-left:0;">No journal selected</span>
+                </div>
+                <button class="lodge-btn export-dayone" onclick="window.Export.exportDayOne()">→ Save to Day One</button>
+              </div>
+
+              <div class="export-dest-panel" id="export-panel-ulysses" hidden>
+                <div class="settings-field">
+                  <span>Ulysses group</span>
+                  <input class="ulysses-group-input" id="ulysses-group" placeholder="e.g. The Affected" value="" oninput="localStorage.setItem('sc-ulysses-group',this.value)" data-keep-menu-open />
+                </div>
+                <div class="settings-field">
+                  <span>Group identifier (optional, subfolders)</span>
+                  <input class="ulysses-group-input" id="ulysses-group-id" placeholder="Option+right-click group → Copy Callback Identifier" value="" oninput="localStorage.setItem('sc-ulysses-group-id',this.value)" data-keep-menu-open />
+                </div>
+                <button class="lodge-btn export-ulysses" onclick="window.Export.exportUlysses()">→ Send to Ulysses</button>
+              </div>
+
+              <div class="export-dest-panel" id="export-panel-obsidian" hidden>
+                <div class="settings-field">
+                  <span>Obsidian vault</span>
+                  <input class="ulysses-group-input" id="obsidian-vault" placeholder="~/Documents/My Vault" value="" oninput="localStorage.setItem('sc-obsidian-vault',this.value)" data-keep-menu-open />
+                </div>
+                <button class="lodge-btn export-obsidian" onclick="window.Export.exportObsidian()">→ Save to Obsidian</button>
+              </div>
+
+              <div class="export-dest-panel" id="export-panel-md" hidden>
+                <p class="export-dest-desc">Download the annotated transcript as Markdown.</p>
+                <button class="lodge-btn export-txt" onclick="window.Export.exportMd()">↓ Download .md</button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -381,34 +431,6 @@
   </div>
   <div class="dossier-body" id="dossier-body">
     <div class="sessions-empty">Convene a meeting to see the assembled.</div>
-  </div>
-</div>
-
-<!-- Export settings drawer (#186): per-app config for Preserve, out of the
-     ritual space and opened on demand rather than sitting as standing fields. -->
-<div class="export-settings-overlay" id="export-settings-overlay" onclick="closeExportSettings()"></div>
-<div class="export-settings-drawer" id="export-settings-drawer">
-  <div class="sessions-drawer-header">
-    <span class="sessions-drawer-title">Export Settings</span>
-    <button class="sessions-close-btn" onclick="closeExportSettings()">✕</button>
-  </div>
-  <div class="export-settings-body">
-    <div class="settings-field">
-      <span>Day One journal</span>
-      <span class="source-tag" id="export-journal-name" style="margin-left:0;">No journal selected</span>
-    </div>
-    <div class="settings-field" id="export-ulysses-config">
-      <span>Ulysses group</span>
-      <input class="ulysses-group-input" id="ulysses-group" placeholder="e.g. The Affected" value="" oninput="localStorage.setItem('sc-ulysses-group',this.value)" />
-    </div>
-    <div class="settings-field" id="export-ulysses-id-config">
-      <span>Group identifier (optional, subfolders)</span>
-      <input class="ulysses-group-input" id="ulysses-group-id" placeholder="Option+right-click group → Copy Callback Identifier" value="" oninput="localStorage.setItem('sc-ulysses-group-id',this.value)" />
-    </div>
-    <div class="settings-field" id="export-obsidian-config">
-      <span>Obsidian vault</span>
-      <input class="ulysses-group-input" id="obsidian-vault" placeholder="~/Documents/My Vault" value="" oninput="localStorage.setItem('sc-obsidian-vault',this.value)" />
-    </div>
   </div>
 </div>
 

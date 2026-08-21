@@ -3,7 +3,7 @@
 // #191 — surfaces the per-session generation metrics `makeMetric` already
 // persists (pipeline.js) but nothing in the UI reads: tokens, latency,
 // retries, skips, and the director/casting reasoning behind tonight's cast.
-// Reuses the dossier-drawer/export-settings-drawer chrome (#186 precedent)
+// Reuses the dossier-drawer chrome (#186 precedent)
 // rather than inventing new UI — same script-tag/IIFE + configure(deps)
 // convention as export.js/sessions.js/casting.js (#142).
 window.Metrics = (function () {
