@@ -23,6 +23,26 @@ window.Export = (function () {
     deps = injectedDeps;
   }
 
+  // ── Destination picker (#345) ────────────────────────────────────────────
+  // Preserve used to list every destination's button (and a separate
+  // drawer showed every destination's config fields at once) whether or not
+  // it was the one you wanted. Now the icon row just selects a destination;
+  // this shows that one destination's panel and hides the rest. Presentation
+  // only -- exportTxt/exportDayOne/exportObsidian/exportUlysses/exportScholarly/
+  // exportMd below are unchanged.
+  const EXPORT_DESTINATIONS = ['txt', 'scholarly', 'dayone', 'ulysses', 'obsidian', 'md'];
+
+  function selectDestination(dest) {
+    const hint = document.getElementById('export-dest-hint');
+    if (hint) hint.hidden = true;
+    EXPORT_DESTINATIONS.forEach(d => {
+      const panel = document.getElementById(`export-panel-${d}`);
+      if (panel) panel.hidden = d !== dest;
+      const icon = document.querySelector(`.export-icon[data-dest="${d}"]`);
+      if (icon) icon.classList.toggle('active', d === dest);
+    });
+  }
+
   // ── Day One ────────────────────────────────────────────────────────────────
   const entryCache = new Map(); // key: "dayone:journalId:idx" → { text, date, journalId, journalName }
   let sourceOptionsLoaded = false;
@@ -661,13 +681,12 @@ window.Export = (function () {
     try {
       const config = await fetch('/api/config').then(r => r.json());
       if (!config.isLocal) {
-        [
-          'export-ulysses-row',
-          'export-ulysses-config',
-          'export-ulysses-id-config',
-          'export-obsidian-row',
-          'export-obsidian-config',
-        ].forEach(id => document.getElementById(id)?.style.setProperty('display', 'none'));
+        // Hiding the icons is enough -- their focused config panels (#345)
+        // are only ever shown via selectDestination(), which nobody can
+        // reach for a destination whose icon no longer renders.
+        ['export-ulysses-row', 'export-obsidian-row'].forEach(id =>
+          document.getElementById(id)?.style.setProperty('display', 'none')
+        );
         document.getElementById('export-md-row')?.style.setProperty('display', 'inline-flex');
       }
       return config;
@@ -699,6 +718,7 @@ window.Export = (function () {
 
   return {
     configure,
+    selectDestination,
     updateExportJournalLabel,
     loadSourceOptions,
     handleSourceChange,

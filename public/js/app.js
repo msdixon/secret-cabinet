@@ -1370,8 +1370,13 @@ function toggleAfterMenu(menuId) {
 
 // A click anywhere outside a menu-wrap closes whatever's open; a click on an
 // item inside a menu (an export, "One More Turn", etc.) closes it too, since
-// every item here is a one-shot action rather than a toggle worth leaving open.
+// every item here is a one-shot action rather than a toggle worth leaving
+// open. #345's destination icons and their focused config fields are the
+// exception -- selecting a destination or typing into its config shouldn't
+// dismiss the menu the way firing an export does, so those carry
+// data-keep-menu-open and are excluded here.
 document.addEventListener('click', e => {
+  if (e.target.closest('[data-keep-menu-open]')) return;
   if (e.target.closest('.lodge-menu')) {
     closeAllAfterMenus();
     return;
@@ -1388,22 +1393,6 @@ document.addEventListener('click', e => {
 function branchFromLatestLull() {
   if (!currentSessionId || segmentCount < 1) return;
   branchFromRound(segmentCount - 1);
-}
-
-// ── Export settings drawer ──────────────────────────────────────────────────
-// #186: Ulysses group/identifier, Obsidian vault, and the Day One journal
-// label used to sit as standing fields in the after-panel; they're config,
-// consulted rarely, not something the ritual space needs to show by default.
-
-function openExportSettings() {
-  closeAllAfterMenus();
-  document.getElementById('export-settings-overlay').classList.add('open');
-  document.getElementById('export-settings-drawer').classList.add('open');
-}
-
-function closeExportSettings() {
-  document.getElementById('export-settings-overlay').classList.remove('open');
-  document.getElementById('export-settings-drawer').classList.remove('open');
 }
 
 // ── Witness mode ──────────────────────────────────────────────────────────────
