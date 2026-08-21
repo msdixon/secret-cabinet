@@ -34,6 +34,7 @@ const casting = require('./pipeline-casting');
 const speaker = require('./pipeline-speaker');
 const disposition = require('./pipeline-disposition');
 const lull = require('./pipeline-lull');
+const { BREATH_BUDGET_WORDS, MIN_WORDS_FOR_ANOTHER_BEAT, POOL_SLACK, MAX_TOTAL_BEATS } = require('./tuning');
 
 const { makeMetric, withOneRetry } = core;
 const { selectSpeakers } = director;
@@ -52,18 +53,9 @@ const { resolveLullNote } = lull;
 
 // ── Orchestrator ──────────────────────────────────────────────────────────
 
-// #164: total words a round budgeted for itself. #244 reframes it, per
-// #194's migration sketch: not "the size of a round" any more (rounds are
-// gone) but the breath budget per passage — how long the room goes between
-// chances to draw breath. Same starting number, different meaning. Rachel's
-// original calibration: "about the length of a writer's morning pages." A
-// starting number, not a hard requirement — due for review against real
-// sessions at the 2026-08-19 follow-up, now folded into a combined
-// passage-length/lull-cadence calibration review (see #244).
-const BREATH_BUDGET_WORDS = 1000;
-const MIN_WORDS_FOR_ANOTHER_BEAT = 40; // below this, not enough room left for a meaningful beat
-const POOL_SLACK = 2; // the director's candidate pool runs a little larger than the round's target speaker count
-const MAX_TOTAL_BEATS = 16; // hard safety net — budget/pool logic should always end the round before this binds
+// #364: BREATH_BUDGET_WORDS, MIN_WORDS_FOR_ANOTHER_BEAT, POOL_SLACK, and
+// MAX_TOTAL_BEATS moved to tuning.js, alongside the rest of the pacing
+// constants (imported above) — see that file for values and rationale.
 
 // #244: a passage's stored `endedBy`. 'budget' — the breath budget ran out
 // (including the MAX_TOTAL_BEATS safety net, which should never actually

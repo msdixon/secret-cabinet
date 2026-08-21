@@ -20,6 +20,7 @@
 // under. Required directly rather than injected: it is roster-free,
 // stateless constants and pure functions, the same category as `path`.
 const record = require('../public/js/record.js');
+const { DEFAULT_POOL_SIZE, INTERJECT_SPEAKER_COUNT, ARC_STAGE_BOUNDARIES } = require('./tuning');
 
 // #194 touchpoint 2: the three-part arc (reactions -> unbound cross-talk ->
 // embers) survives as *tendency*, not boundary. The old prose's explicit
@@ -37,12 +38,8 @@ const ARC_NOTES = {
     'A thread unresolved, a silence wanting breaking, a late arrival to the argument, a member who passed earlier returning with something they have just thought of.',
 };
 
-// Multiples of the breath budget (pipeline.js's BREATH_BUDGET_WORDS) at
-// which the arc note advances to the next stage. Starting calibration, not
-// tuned — due for review alongside the breath budget itself at the
-// 2026-08-19 pacing follow-up, now folded into #244's combined
-// passage-length/lull-cadence review.
-const ARC_STAGE_BOUNDARIES = { crosstalk: 1, embers: 3, extended: 5 };
+// #364: ARC_STAGE_BOUNDARIES moved to tuning.js (imported above) — see that
+// file for the value and rationale.
 
 // Replaces DEFAULT_ROUND_INSTRUCTIONS[index] lookups: continuous instead of
 // switched at round boundaries, keyed on words spent so far this meeting
@@ -56,12 +53,8 @@ function arcNoteForProgress({ wordsSpent = 0, breathBudget } = {}) {
   return ARC_NOTES.extended;
 }
 
-// #194 touchpoint 2: SPEAKER_COUNTS/speakerCountForRound retire — pool
-// sizing beyond the opening consult is already dynamic on re-consult
-// (pipeline.js's selectSpeakers mid-passage re-ask). The opening consult of
-// any passage just needs one flat default now, not a per-round taper.
-const DEFAULT_POOL_SIZE = 5;
-const INTERJECT_SPEAKER_COUNT = 3; // today's prose only ever suggested "2-3", never enforced — a new explicit assumption
+// #364: DEFAULT_POOL_SIZE and INTERJECT_SPEAKER_COUNT moved to tuning.js
+// (imported above) — see that file for the values and rationale.
 
 // Replaces buildRoundPrompt. `isFirst` replaces the old `index === 0` check
 // (the only place round position mattered structurally — the document-read
