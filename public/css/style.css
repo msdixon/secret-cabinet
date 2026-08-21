@@ -614,7 +614,7 @@ a.archival-image-link:hover { border-color:var(--lodge-amber-dim); cursor:pointe
 .session-metrics-btn:hover { border-color:var(--lodge-amber-dim); color:var(--lodge-muted); }
 
 /* ─── Add member modal ─────────────────────────────────────────────────── */
-.add-member-btn { border-color:var(--lodge-ash); color:var(--lodge-muted); font-size:12px; padding:5px 14px; }
+.add-member-btn { border-style:dashed; border-color:var(--lodge-ash); color:var(--lodge-muted); font-size:12px; padding:5px 14px; }
 .add-member-btn:hover { border-color:var(--lodge-amber-dim); color:var(--lodge-cream); }
 .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:100; }
 .modal-overlay.open { display:block; }
