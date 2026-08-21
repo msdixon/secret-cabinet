@@ -1,1 +1,0 @@
-[#361](https://github.com/msdixon/secret-cabinet/issues/361) metrics panel hides zero-turn members — the instrument needed to verify [#352](https://github.com/msdixon/secret-cabinet/issues/352)/[#353](https://github.com/msdixon/secret-cabinet/issues/353)
