@@ -304,6 +304,68 @@ test('escalateCitationToWeb', async t => {
   });
 });
 
+// #355 — flattenBeatCitations reads the always-on per-beat capture
+// (pipeline-disposition.js's piggyback on the disposition call) back out of
+// a session, in the flat shape /verify-citations and the cumulative
+// manifest both expect.
+test('flattenBeatCitations', async t => {
+  const roster = [{ id: 'crowley', name: 'Crowley' }];
+
+  await t.test('flattens citations across beats and rounds, resolving speaker from the roster', () => {
+    const session = {
+      rounds: [
+        {
+          beats: [
+            { memberId: 'crowley', text: 'a', citations: [{ quote: 'q1', work: 'W1' }] },
+            { memberId: 'crowley', text: 'b' }, // no citations — most beats
+          ],
+        },
+        {
+          beats: [{ memberId: 'crowley', text: 'c', citations: [{ quote: 'q2', work: 'W2' }] }],
+        },
+      ],
+    };
+    const flat = c.flattenBeatCitations(session, roster);
+    assert.equal(flat.length, 2);
+    assert.deepEqual(
+      flat.map(c => c.work),
+      ['W1', 'W2']
+    );
+    assert.equal(flat[0].speaker, 'Crowley');
+    assert.equal(flat[0].memberId, 'crowley');
+  });
+
+  await t.test('skips a failed beat even if it somehow carries a citations array', () => {
+    const session = {
+      rounds: [{ beats: [{ memberId: 'crowley', text: '', failed: true, citations: [{ quote: 'q', work: 'W' }] }] }],
+    };
+    assert.deepEqual(c.flattenBeatCitations(session, roster), []);
+  });
+
+  await t.test('falls back to speakerName, then memberId, for a non-roster speaker', () => {
+    const session = {
+      rounds: [
+        {
+          beats: [
+            {
+              memberId: 'presence:interjection',
+              speakerName: '— a voice from elsewhere —',
+              text: 'x',
+              citations: [{ quote: 'q', work: 'W' }],
+            },
+          ],
+        },
+      ],
+    };
+    assert.equal(c.flattenBeatCitations(session, roster)[0].speaker, '— a voice from elsewhere —');
+  });
+
+  await t.test('returns an empty array for a session with no rounds, or rounds with no beats (pre-#354)', () => {
+    assert.deepEqual(c.flattenBeatCitations({}, roster), []);
+    assert.deepEqual(c.flattenBeatCitations({ rounds: [{ label: 'x', text: 'y' }] }, roster), []);
+  });
+});
+
 test('escalateCitationsToWeb', async t => {
   await t.test('only escalates citations with no libraryMatch, keyed by original index', async () => {
     withFetch(t, async () =>

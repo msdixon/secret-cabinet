@@ -14,6 +14,10 @@ const fs = require('fs');
 const path = require('path');
 // #354: the record's shared segment vocabulary — see record.js's own header.
 const record = require('../../public/js/record.js');
+// #355: flattenBeatCitations reads the always-on per-beat extraction back
+// out of a session — see citations.js's own header for the rest of the
+// module, which this route still uses for the deliberate grounding pass.
+const { flattenBeatCitations } = require('../citations');
 
 function registerSessionRoutes(
   app,
@@ -26,9 +30,6 @@ function registerSessionRoutes(
     buildTranscriptHeader,
     composeSegmentText,
     renderReadingRoomPage,
-    client,
-    model,
-    makeMetric,
     loadLibraryCitationLookup,
     loadArchiveImageIndex,
     groundAgainstLibraryText,
@@ -159,79 +160,29 @@ function registerSessionRoutes(
     res.json({ count: annotations.length });
   });
 
-  // POST /api/sessions/:id/verify-citations — extract & judge citations across the whole session
+  // POST /api/sessions/:id/verify-citations — ground & judge the citations
+  // already captured on this session's beats.
+  //
+  // #355: extraction used to happen here, in one whole-transcript call —
+  // this route now does no extraction of its own at all. Every AI speaker
+  // turn already carries its own citations (if any), captured always-on at
+  // write time by pipeline-disposition.js's piggyback on the per-beat
+  // disposition call, with memberId already known from the beat rather than
+  // string-matched out of formatted prose. What's left here is the
+  // deliberate, heavier pass (#153): re-check library-matched citations
+  // against the entry's actual excerpt text, and attempt a real web lookup
+  // for whatever didn't match — both of which hit rate-limited resources
+  // and so stay an explicit, re-runnable action rather than something that
+  // happens on every beat.
   app.post('/api/sessions/:id/verify-citations', async (req, res) => {
     const session = loadSession(req.params.id);
     if (!session) return res.status(404).json({ error: 'Session not found' });
     session.generationMetrics = session.generationMetrics || [];
 
     try {
-      const fullText = session.transcriptText || '';
-      const dividerIndex = fullText.indexOf('\n— ');
-      const roundsText = dividerIndex >= 0 ? fullText.slice(dividerIndex + 1) : fullText;
-
       const libraryLookup = loadLibraryCitationLookup();
-      const libraryList = Object.entries(libraryLookup)
-        .map(([id, e]) => `${id}: ${e.title} — ${e.source}`)
-        .join('\n');
-
-      const system = `You are reviewing a transcript from a salon conversation among historical figures for citation accuracy. Members cite real texts, authors, and historical claims in free-form prose.
-
-Extract every citation of a real (or purportedly real) text, author, or historical/scholarly claim from the transcript below. For each one, judge from your own knowledge whether it refers to a real work/claim and whether it's represented accurately:
-- "verified": you're confident this is a real work/claim, accurately represented
-- "unverified": this appears to be invented, or is represented inaccurately
-- "uncertain": you can't confidently judge either way
-
-Also check this list of archival library entries; if a citation clearly refers to one of them, set libraryMatch to that entry's id, else null:
-${libraryList}
-
-The "quote" field must be a verbatim excerpt (~10-25 words) copied exactly from the transcript text below, so it can be located in the original.`;
-
-      const extractStart = Date.now();
-      const response = await client.messages.create({
-        model,
-        max_tokens: 4000,
-        system,
-        messages: [{ role: 'user', content: roundsText }],
-        tools: [
-          {
-            name: 'report_citations',
-            description: 'Report every citation found in the transcript, with a verdict for each.',
-            input_schema: {
-              type: 'object',
-              properties: {
-                citations: {
-                  type: 'array',
-                  items: {
-                    type: 'object',
-                    properties: {
-                      speaker: { type: 'string', description: 'As written in the transcript\'s "Name —" line.' },
-                      quote: {
-                        type: 'string',
-                        description: 'Verbatim ~10-25 word excerpt from the transcript containing the citation.',
-                      },
-                      work: { type: 'string', description: 'The cited work, author, or claim as named.' },
-                      verdict: { type: 'string', enum: ['verified', 'unverified', 'uncertain'] },
-                      note: { type: 'string', description: 'One-sentence reasoning for the verdict.' },
-                      libraryMatch: { type: ['string', 'null'], description: 'Matching library entry id, or null.' },
-                    },
-                    required: ['speaker', 'quote', 'work', 'verdict', 'note'],
-                  },
-                },
-              },
-              required: ['citations'],
-            },
-          },
-        ],
-        tool_choice: { type: 'tool', name: 'report_citations' },
-      });
-      session.generationMetrics.push(
-        makeMetric('citation-extraction', { usage: response.usage, latencyMs: Date.now() - extractStart })
-      );
-
       const archiveImages = loadArchiveImageIndex();
-      const block = response.content.find(b => b.type === 'tool_use');
-      const rawCitations = block?.input?.citations || [];
+      const rawCitations = flattenBeatCitations(session, roster);
       // #153 part 1 — re-check library-matched citations against the entry's
       // actual text, rather than trusting the extraction pass's title/source
       // match. Skipped (no extra call) when nothing matched this round.

@@ -443,15 +443,12 @@ registerSessionRoutes(app, {
   buildTranscriptHeader,
   composeSegmentText,
   renderReadingRoomPage,
-  client,
-  model: MODEL,
-  makeMetric,
   loadLibraryCitationLookup,
   loadArchiveImageIndex,
   groundAgainstLibraryText,
   escalateCitationsToWeb,
   loadManifestSessions: citationManifest.loadSessions,
-  buildCitationManifest: citationManifest.buildManifest,
+  buildCitationManifest: sessions => citationManifest.buildManifest(sessions, ROSTER),
 });
 
 registerVoiceRoutes(app, {
@@ -470,6 +467,7 @@ registerConveneRoutes(app, {
   loadVoiceExemplar,
   loadResidue,
   loadRelationshipEdges,
+  loadLibraryCitationLookup,
   castingRoster,
   buildPassagePrompt,
   wordsSpentSoFar,

@@ -27,15 +27,27 @@
 // pipeline-speaker.js's pickNextSpeaker for the consumer.
 
 const { RESIDUE_NOTE_MAX_CHARS } = require('./pipeline-speaker');
+const {
+  MAX_CITATIONS_PER_BEAT,
+  CITATION_QUOTE_MAX_CHARS,
+  CITATION_WORK_MAX_CHARS,
+  CITATION_NOTE_MAX_CHARS,
+} = require('./tuning');
 
 const DISPOSITION_MAX_CHARS = 400; // a few sentences — hard cap so this can't balloon a speaker prompt over a long session
-const DISPOSITION_MAX_TOKENS = 280; // reflection prose plus the tool-call JSON wrapper, target field, and #166's optional residue field
+// #355: raised from 280 to make room for the optional citations array (up
+// to MAX_CITATIONS_PER_BEAT items, each with a quote/work/note) on top of
+// the reflection prose, target field, and #166's optional residue field.
+// This is a ceiling, not a cost floor — billing follows tokens the model
+// actually emits, and the ordinary no-citation turn's output shape (and
+// cost) is unchanged.
+const DISPOSITION_MAX_TOKENS = 900;
 
-function buildDispositionToolSchema(presentIds) {
+function buildDispositionToolSchema(presentIds, libraryIds = []) {
   return {
     name: 'update_disposition',
     description:
-      "Record this member's private interior state after speaking, including whether they have unspent business with anyone present.",
+      "Record this member's private interior state after speaking, including whether they have unspent business with anyone present, and any citations they just made.",
     input_schema: {
       type: 'object',
       properties: {
@@ -58,13 +70,56 @@ function buildDispositionToolSchema(presentIds) {
           type: 'string',
           description: `Optional, and rare. Only when this beat genuinely shifted or confirmed something that should outlast tonight — a durable turn in stance, a new alliance or grudge, a tendency proven true. One short sentence, written in your own private register, under ${RESIDUE_NOTE_MAX_CHARS} characters. Leave this out entirely on ordinary turns — most turns, nothing belongs here.`,
         },
+        // #355: always-on citation capture, piggybacked here rather than a
+        // separate whole-transcript pass (the old /verify-citations flow) —
+        // bounded to this one turn's own text, with memberId already known
+        // from the beat rather than string-matched out of formatted prose.
+        // Left out of `required` for the same reason residueNote is: most
+        // turns cite nothing, and an omitted/empty array says exactly that.
+        citations: {
+          type: 'array',
+          maxItems: MAX_CITATIONS_PER_BEAT,
+          description:
+            'Every citation of a real (or purportedly real) text, author, or historical/scholarly claim made in the turn you just spoke — not this reflection. Most turns cite nothing; leave this empty then.',
+          items: {
+            type: 'object',
+            properties: {
+              quote: {
+                type: 'string',
+                description: `Verbatim ~10-25 word excerpt from your own turn's text containing the citation, copied exactly. Under ${CITATION_QUOTE_MAX_CHARS} characters.`,
+              },
+              work: {
+                type: 'string',
+                description: `The cited work, author, or claim as named. Under ${CITATION_WORK_MAX_CHARS} characters.`,
+              },
+              verdict: {
+                type: 'string',
+                enum: ['verified', 'unverified', 'uncertain'],
+                description:
+                  "Your own honest judgment from what you know: 'verified' if this is confidently a real work/claim, accurately represented; 'unverified' if it appears invented or misrepresented; 'uncertain' if you can't confidently judge either way.",
+              },
+              note: {
+                type: 'string',
+                description: `One-sentence reasoning for the verdict. Under ${CITATION_NOTE_MAX_CHARS} characters.`,
+              },
+              libraryMatch: {
+                type: ['string', 'null'],
+                description:
+                  libraryIds.length
+                    ? 'The matching archival library entry id if this citation clearly refers to one of the entries listed below, else null.'
+                    : 'Always null — no archival library entries are available to match against.',
+              },
+            },
+            required: ['quote', 'work', 'verdict', 'note'],
+          },
+        },
       },
       required: ['reflection', 'waitingOnMemberId'],
     },
   };
 }
 
-function buildDispositionSystemPrompt({ member, priorDisposition, presentMembers = [], priorResidue }) {
+function buildDispositionSystemPrompt({ member, priorDisposition, presentMembers = [], priorResidue, libraryList }) {
   const priorText = priorDisposition?.text?.trim();
   const priorTarget = priorDisposition?.waitingOnMemberId
     ? presentMembers.find(m => m.id === priorDisposition.waitingOnMemberId)?.name
@@ -82,6 +137,15 @@ function buildDispositionSystemPrompt({ member, priorDisposition, presentMembers
     ? `\n\nResidue already carried from other evenings, beneath this member's own conscious recall: "${priorResidueText}" Only add to it below if tonight genuinely shifted or confirmed something beyond what's already there — most turns, it didn't.`
     : '';
 
+  // #355: the archival library list, shown only so the model can flag a
+  // clear match — the same short "id: title — source" form
+  // /verify-citations used to build fresh from the whole transcript, now
+  // computed once per round (pipeline.js's libraryContext) and reused
+  // across every beat's piggybacked extraction.
+  const libraryBlock = libraryList
+    ? ` Check this list of archival library entries; if a citation clearly refers to one of them, set libraryMatch to that entry's id, else null:\n${libraryList}\n`
+    : '';
+
   return `You are privately reflecting as ${member.name}, immediately after speaking your turn in tonight's salon. This reflection is never shown to anyone — not the other members, not the transcript, not the researcher who convened the evening. It is your own unspoken interior state, carried forward to color how you show up for the rest of the evening.
 
 ${priorBlock}${residueContextBlock}
@@ -90,7 +154,9 @@ Write 1-3 sentences, as private thought rather than speech: your current stance 
 
 Separately, name whether there is one present person you have real unspent business with — something you'd want to answer or press if they spoke again. This is the exception, not the default: most turns, there is no one.
 
-Separately again, and rarer still: name whether tonight left something that should genuinely outlast this evening — not tonight's mood, a durable turn. Most turns, there is nothing here either.`;
+Separately again, and rarer still: name whether tonight left something that should genuinely outlast this evening — not tonight's mood, a durable turn. Most turns, there is nothing here either.
+
+Separately from all of the above, and using the citations tool field rather than any of this private prose: extract every citation of a real (or purportedly real) text, author, or historical/scholarly claim from the turn you just spoke aloud (not this reflection). For each one, judge from your own knowledge whether it's a real work/claim and whether it's represented accurately — "verified", "unverified", or "uncertain".${libraryBlock} Most turns cite nothing; leave the citations field empty then.`;
 }
 
 function buildDispositionUserMessage({ roundSoFarText, turnText, member }) {
@@ -102,9 +168,38 @@ function buildDispositionUserMessage({ roundSoFarText, turnText, member }) {
 // move this beat; the caller keeps the prior value. `presentIds` excludes
 // the reflecting member themself — waiting on yourself isn't a real state,
 // and pickNextSpeaker's back-to-back weighting already covers that case.
-async function callDispositionUpdate({ client, model, system, userMessage, presentIds = [] }) {
+const CITATION_VERDICTS = new Set(['verified', 'unverified', 'uncertain']);
+
+// #355: sanitizes the raw citations array off the tool call the same way
+// the rest of this function already hard-caps reflection/residueNote — a
+// tool call is a request, not a guarantee, and this is written straight to
+// the permanent record (beatsList) rather than shown once and discarded.
+// A citation with no usable quote or work is dropped rather than kept with
+// blanks; an unrecognized verdict downgrades to "uncertain" rather than
+// silently passing through, per this room's own honesty requirement for
+// citation verdicts (#153/#157) — quietly trusting an unparseable verdict
+// would be worse than flagging it as unconfirmed. `libraryMatch` must
+// resolve against the library ids actually offered this call, same
+// fail-closed pattern as waitingOnMemberId above.
+function sanitizeCitations(rawCitations, libraryIds) {
+  if (!Array.isArray(rawCitations)) return [];
+  return rawCitations
+    .slice(0, MAX_CITATIONS_PER_BEAT)
+    .map(c => {
+      const quote = (c?.quote || '').trim().slice(0, CITATION_QUOTE_MAX_CHARS);
+      const work = (c?.work || '').trim().slice(0, CITATION_WORK_MAX_CHARS);
+      if (!quote || !work) return null;
+      const verdict = CITATION_VERDICTS.has(c?.verdict) ? c.verdict : 'uncertain';
+      const note = (c?.note || '').trim().slice(0, CITATION_NOTE_MAX_CHARS);
+      const libraryMatch = c?.libraryMatch && libraryIds.includes(c.libraryMatch) ? c.libraryMatch : null;
+      return { quote, work, verdict, note, libraryMatch };
+    })
+    .filter(Boolean);
+}
+
+async function callDispositionUpdate({ client, model, system, userMessage, presentIds = [], libraryIds = [] }) {
   const start = Date.now();
-  const tool = buildDispositionToolSchema(presentIds);
+  const tool = buildDispositionToolSchema(presentIds, libraryIds);
   const response = await client.messages.create({
     model,
     max_tokens: DISPOSITION_MAX_TOKENS,
@@ -115,7 +210,7 @@ async function callDispositionUpdate({ client, model, system, userMessage, prese
   });
   const latencyMs = Date.now() - start;
   const block = response.content.find(b => b.type === 'tool_use');
-  const { reflection, waitingOnMemberId, residueNote } = block?.input || {};
+  const { reflection, waitingOnMemberId, residueNote, citations } = block?.input || {};
   const text = (reflection || '').trim().slice(0, DISPOSITION_MAX_CHARS);
   const target =
     waitingOnMemberId && waitingOnMemberId !== 'none' && presentIds.includes(waitingOnMemberId)
@@ -124,7 +219,14 @@ async function callDispositionUpdate({ client, model, system, userMessage, prese
   // #166: '' rather than undefined when absent, so callers can treat "no
   // residue this beat" uniformly without an extra undefined check.
   const residue = (residueNote || '').trim().slice(0, RESIDUE_NOTE_MAX_CHARS);
-  return { text, waitingOnMemberId: target, residueNote: residue, usage: response.usage, latencyMs };
+  return {
+    text,
+    waitingOnMemberId: target,
+    residueNote: residue,
+    citations: sanitizeCitations(citations, libraryIds),
+    usage: response.usage,
+    latencyMs,
+  };
 }
 
 module.exports = {

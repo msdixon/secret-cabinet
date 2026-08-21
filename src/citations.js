@@ -4,11 +4,19 @@ const { makeMetric } = require('./pipeline');
 
 // #193 seam-map, module 5 of 8 — citation verification (#153).
 //
-// ~250 lines with a single caller (POST /api/sessions/:id/verify-citations),
-// already reading like an independent module that happened to live inline.
-// client/model are passed in explicitly (pipeline.js's convention) rather
-// than read from server.js's module-level singletons; the web-escalation
-// tiers need nothing from server.js at all beyond the citation data itself.
+// Originally ~250 lines with a single caller (POST
+// /api/sessions/:id/verify-citations), already reading like an independent
+// module that happened to live inline. client/model are passed in explicitly
+// (pipeline.js's convention) rather than read from server.js's module-level
+// singletons; the web-escalation tiers need nothing from server.js at all
+// beyond the citation data itself.
+//
+// #355: extraction moved out of this route entirely, to pipeline-disposition.js's
+// always-on per-beat piggyback — this file now owns only the deliberate,
+// heavier grounding/verdict passes (groundAgainstLibraryText,
+// escalateCitationsToWeb) plus flattenBeatCitations, which reads the
+// piggyback's accumulated result back out of a session in the flat shape
+// those passes (and the cumulative manifest) expect.
 
 // #153 part 1 — for citations the extraction pass matched to a library entry,
 // re-judge the verdict against that entry's actual excerpt text instead of
@@ -286,6 +294,29 @@ async function escalateCitationToWeb(citation) {
   return null;
 }
 
+// #355: citations are now captured always-on, per beat, at write time
+// (pipeline-disposition.js's piggyback on the existing disposition call) —
+// this reads that accumulated result back out for a session, in the same
+// flat shape /verify-citations used to build fresh with its own
+// whole-transcript extraction call. `roster` resolves memberId to a display
+// name; a beat from a non-roster speaker (the player, the interjecting
+// presence) falls back to its own `speakerName`, though neither currently
+// earns citations — the piggyback only fires on the AI speaker-turn path.
+// Shared by /verify-citations (src/routes/session.js) and the cumulative
+// manifest (scripts/build-citation-manifest.js) so both read the same
+// accumulated data instead of each re-deriving their own view of it.
+function flattenBeatCitations(session, roster = []) {
+  const flat = [];
+  (session.rounds || []).forEach(segment => {
+    (segment.beats || []).forEach(beat => {
+      if (beat.failed || !Array.isArray(beat.citations) || !beat.citations.length) return;
+      const speaker = roster.find(m => m.id === beat.memberId)?.name || beat.speakerName || beat.memberId;
+      beat.citations.forEach(c => flat.push({ ...c, speaker, memberId: beat.memberId }));
+    });
+  });
+  return flat;
+}
+
 async function escalateCitationsToWeb(citations) {
   const unmatched = citations
     .map((c, index) => ({ c, index }))
@@ -316,4 +347,5 @@ module.exports = {
   tryWikidata,
   escalateCitationToWeb,
   escalateCitationsToWeb,
+  flattenBeatCitations,
 };

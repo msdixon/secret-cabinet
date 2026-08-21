@@ -78,11 +78,6 @@ function makeDeps(dir, overrides = {}) {
     composeSegmentText: segment =>
       segment.endedBy ? `\n${segment.text}\n\n— ${segment.label} —\n` : `\n— ${segment.label} —\n\n${segment.text}\n`,
     renderReadingRoomPage: session => `<html>${session.id}</html>`,
-    client: {
-      messages: { create: async () => ({ content: [{ type: 'tool_use', input: { citations: [] } }], usage: {} }) },
-    },
-    model: 'test-model',
-    makeMetric: (phase, data) => ({ phase, ...data }),
     loadLibraryCitationLookup: () => ({}),
     loadArchiveImageIndex: () => ({}),
     groundAgainstLibraryText: async () => new Map(),
@@ -470,39 +465,64 @@ test('POST /api/sessions/:id/verify-citations', async t => {
     assert.equal(res.statusCode, 404);
   });
 
-  await t.test('extracts, grounds, and web-escalates citations, then stores citationFlags on the session', async () => {
+  // #355: extraction no longer happens in this route — it reads the
+  // always-on citations already captured on session.rounds[].beats
+  // (pipeline-disposition.js's piggyback) and runs only the grounding pass.
+  await t.test('grounds and web-escalates citations already captured on beats, then stores citationFlags', async () => {
     const dir = makeFixtureDir();
     t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
-    store.saveSession(dir, baseSession('s1'));
+    store.saveSession(
+      dir,
+      baseSession('s1', {
+        rounds: [
+          {
+            label: 'First Movement',
+            text: 'Crowley\nHello.',
+            historyLength: 2,
+            beats: [
+              {
+                memberId: 'crowley',
+                text: 'Hello.',
+                citations: [{ quote: 'a quote', work: 'A Work', verdict: 'uncertain', note: 'n', libraryMatch: null }],
+              },
+            ],
+          },
+        ],
+      })
+    );
     const app = fakeApp();
-    const rawCitation = {
-      speaker: 'Crowley',
-      quote: 'a quote',
-      work: 'A Work',
-      verdict: 'uncertain',
-      note: 'n',
-      libraryMatch: null,
-    };
     registerSessionRoutes(
       app,
       makeDeps(dir, {
-        client: {
-          messages: {
-            create: async () => ({ content: [{ type: 'tool_use', input: { citations: [rawCitation] } }], usage: {} }),
-          },
-        },
         groundAgainstLibraryText: async () => new Map([[0, { verdict: 'verified', note: 'grounded' }]]),
       })
     );
     const res = fakeRes();
     await app.routes['POST /api/sessions/:id/verify-citations'](fakeReq({ params: { id: 's1' } }), res);
     assert.equal(res.body.citations.length, 1);
+    assert.equal(res.body.citations[0].speaker, 'Crowley');
     assert.equal(res.body.citations[0].verdict, 'verified');
     assert.equal(res.body.citations[0].source, 'library');
     assert.equal(store.loadSession(dir, 's1').citationFlags.length, 1);
   });
 
-  await t.test('a thrown error mid-verification is caught and returns 500', async () => {
+  await t.test('a session with no captured citations grounds an empty list rather than erroring', async () => {
+    const dir = makeFixtureDir();
+    t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+    // baseSession's default rounds shape carries no `beats` at all — the
+    // pre-#354/#355 case this route must degrade gracefully on, per
+    // record.js's "readers degrade to the empty case" convention.
+    store.saveSession(dir, baseSession('s1'));
+    const app = fakeApp();
+    registerSessionRoutes(app, makeDeps(dir));
+    const res = fakeRes();
+    await app.routes['POST /api/sessions/:id/verify-citations'](fakeReq({ params: { id: 's1' } }), res);
+    assert.equal(res.statusCode, null);
+    assert.deepEqual(res.body.citations, []);
+    assert.deepEqual(store.loadSession(dir, 's1').citationFlags, []);
+  });
+
+  await t.test('a thrown error mid-verification (the grounding pass) is caught and returns 500', async () => {
     const dir = makeFixtureDir();
     t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
     store.saveSession(dir, baseSession('s1'));
@@ -510,12 +530,8 @@ test('POST /api/sessions/:id/verify-citations', async t => {
     registerSessionRoutes(
       app,
       makeDeps(dir, {
-        client: {
-          messages: {
-            create: async () => {
-              throw new Error('API error');
-            },
-          },
+        groundAgainstLibraryText: async () => {
+          throw new Error('API error');
         },
       })
     );

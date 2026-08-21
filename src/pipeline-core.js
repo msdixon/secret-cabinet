@@ -27,10 +27,11 @@ function makeMetric(
     voiceExemplar,
     waitingOnMemberId,
     residueNote,
+    citationCount,
   } = {}
 ) {
   return {
-    phase, // 'director' | 'speaker' | 'casting' | 'disposition' | 'citation-extraction' | 'citation-grounding'
+    phase, // 'director' | 'speaker' | 'casting' | 'disposition' | 'citation-grounding'
     round: round ?? null,
     memberId: memberId || null,
     attempts: attempts ?? 1,
@@ -65,6 +66,11 @@ function makeMetric(
     // actually accrues without re-reading the residue store by hand.
     // Always null off the 'disposition' phase.
     residueNote: residueNote || null,
+    // #355: how many citations this beat's piggybacked extraction found —
+    // 0 is the ordinary case, not an absence; distinct from `null` so a
+    // real session can be checked for extraction volume without re-reading
+    // beats[].citations by hand. Always null off every phase but 'disposition'.
+    citationCount: citationCount ?? null,
     timestamp: new Date().toISOString(),
   };
 }

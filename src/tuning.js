@@ -154,6 +154,19 @@ const VOICE_EXEMPLAR_WORD_BUDGET = 300;
 
 const RESIDUE_MAX_CHARS = 480; // same order of magnitude as disposition's 400, deliberately not larger — smaller and more conservative was the explicit mandate
 
+// #355: always-on per-beat citation capture, piggybacked on the existing
+// disposition call (#166's residueNote already established the pattern —
+// a cheap optional field on a call that fires after every beat anyway,
+// rather than a whole new call). Bounded to one turn's own text, so there's
+// no analogue of the old whole-transcript truncation risk; these are a
+// defensive ceiling on one beat's citation count/field sizes, not a cost
+// lever — a turn citing more than a handful of works in ~a paragraph would
+// be unusual on its own terms.
+const MAX_CITATIONS_PER_BEAT = 6;
+const CITATION_QUOTE_MAX_CHARS = 240; // ~25 words of transcript prose, generous over the "~10-25 word" ask
+const CITATION_WORK_MAX_CHARS = 160;
+const CITATION_NOTE_MAX_CHARS = 240;
+
 // ── Pool/arc sizing (lodge-prompts.js) ─────────────────────────────────────
 
 // #194 touchpoint 2: SPEAKER_COUNTS/speakerCountForRound retire — pool
@@ -191,6 +204,10 @@ module.exports = {
   SPEAKER_MAX_TOKENS,
   VOICE_EXEMPLAR_WORD_BUDGET,
   RESIDUE_MAX_CHARS,
+  MAX_CITATIONS_PER_BEAT,
+  CITATION_QUOTE_MAX_CHARS,
+  CITATION_WORK_MAX_CHARS,
+  CITATION_NOTE_MAX_CHARS,
   DEFAULT_POOL_SIZE,
   INTERJECT_SPEAKER_COUNT,
   ARC_STAGE_BOUNDARIES,
