@@ -53,12 +53,18 @@ function registerSessionRoutes(
         .slice(0, 200)
         .map(({ file }) => {
           const d = JSON.parse(fs.readFileSync(path.join(sessionsDir, file), 'utf8'));
-          const memberNames = (d.members || []).map(id => roster.find(m => m.id === id)?.name).filter(Boolean);
+          // #344: id/name kept aligned pairwise (both filtered together) so
+          // the avatar-stack can look up a portrait by memberIds[i] for the
+          // name at members[i] — a stale/removed roster id drops from both.
+          const memberEntries = (d.members || [])
+            .map(id => ({ id, name: roster.find(m => m.id === id)?.name }))
+            .filter(e => e.name);
           return {
             id: d.id,
             date: d.date,
             entry: d.entry?.slice(0, 100),
-            members: memberNames,
+            members: memberEntries.map(e => e.name),
+            memberIds: memberEntries.map(e => e.id),
             rounds: d.rounds?.length || 0,
             tags: d.tags || [],
             threadId: d.threadId || null,
