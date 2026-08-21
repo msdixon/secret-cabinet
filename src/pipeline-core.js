@@ -28,6 +28,7 @@ function makeMetric(
     waitingOnMemberId,
     residueNote,
     citationCount,
+    invokedCount,
   } = {}
 ) {
   return {
@@ -71,6 +72,10 @@ function makeMetric(
     // real session can be checked for extraction volume without re-reading
     // beats[].citations by hand. Always null off every phase but 'disposition'.
     citationCount: citationCount ?? null,
+    // #356: same observability as citationCount, for the weaker invoked-works
+    // tier piggybacked on the same call. Always null off every phase but
+    // 'disposition'.
+    invokedCount: invokedCount ?? null,
     timestamp: new Date().toISOString(),
   };
 }

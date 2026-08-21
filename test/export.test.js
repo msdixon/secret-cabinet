@@ -193,6 +193,23 @@ test('updateScholarlyExportButton', async t => {
     Export.updateScholarlyExportButton();
     assert.equal(document.getElementById('export-scholarly-btn').disabled, false);
   });
+
+  // #356 — a third, independent unlock signal: the loaded session has
+  // always-on-captured citations/invoked works, whether or not anyone ran
+  // Verify Citations or annotated anything. Set by sessions.js's
+  // restoreSession via setSessionHasCitations.
+  await t.test('enables once setSessionHasCitations(true) is called, with nothing annotated', t2 => {
+    const { document, module: Export } = boot(t2);
+    Export.setSessionHasCitations(true);
+    assert.equal(document.getElementById('export-scholarly-btn').disabled, false);
+  });
+
+  await t.test('setSessionHasCitations(false) re-disables a button with no other signal', t2 => {
+    const { document, module: Export } = boot(t2);
+    Export.setSessionHasCitations(true);
+    Export.setSessionHasCitations(false);
+    assert.equal(document.getElementById('export-scholarly-btn').disabled, true);
+  });
 });
 
 // #354 item 4: pre-#244 sessions have no `beats` at all, and this export is
@@ -214,12 +231,15 @@ test('exportScholarly', async t => {
   }
 
   await t.test('a fully post-#244 session (beats on every segment) prints no completeness caveat', async t2 => {
-    const { window, document, module: Export } = boot(t2, {
+    const {
+      window,
+      document,
+      module: Export,
+    } = boot(t2, {
       fetchImpl: () =>
         Promise.resolve({
           ok: true,
-          json: () =>
-            Promise.resolve({ rounds: [{ beats: [{ memberId: 'crowley', text: 'a' }] }], citationFlags: [] }),
+          json: () => Promise.resolve({ rounds: [{ beats: [{ memberId: 'crowley', text: 'a' }] }], citationFlags: [] }),
         }),
     });
     captureDownload(window, document);
@@ -228,22 +248,126 @@ test('exportScholarly', async t => {
     assert.doesNotMatch(text, /Turn-level record/);
   });
 
-  await t.test('a session with any pre-#244 segment (no beats array) prints the caveat before the Bibliography', async t2 => {
-    const { window, document, module: Export } = boot(t2, {
+  await t.test(
+    'a session with any pre-#244 segment (no beats array) prints the caveat before the Bibliography',
+    async t2 => {
+      const {
+        window,
+        document,
+        module: Export,
+      } = boot(t2, {
+        fetchImpl: () =>
+          Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ rounds: [{ label: 'First Movement', text: 'x' }], citationFlags: [] }),
+          }),
+      });
+      captureDownload(window, document);
+      await Export.exportScholarly();
+      const text = await window.__capturedBlob.text();
+      assert.match(text, /Turn-level record: incomplete/);
+      assert.ok(
+        text.indexOf('Turn-level record') < text.indexOf('## Bibliography'),
+        'the caveat reads before the Bibliography it qualifies'
+      );
+    }
+  );
+
+  // #356 — the appendix-form bibliography: Works Cited (direct citations)
+  // kept separate from Works Referenced (invoked, not quoted), and falling
+  // back to always-on beat capture when the session was never run through
+  // Verify Citations (the exact PROJECT.md-flagged bug: 10 of 11 sessions
+  // showed an empty Bibliography because only citationFlags was ever read).
+  await t.test('falls back to always-on beat citations when a session has no citationFlags at all', async t2 => {
+    const {
+      window,
+      document,
+      module: Export,
+    } = boot(t2, {
       fetchImpl: () =>
         Promise.resolve({
           ok: true,
-          json: () => Promise.resolve({ rounds: [{ label: 'First Movement', text: 'x' }], citationFlags: [] }),
+          json: () =>
+            // No `citationFlags` key at all -- Verify Citations has never run
+            // on this session, only #355's always-on capture has anything.
+            Promise.resolve({
+              rounds: [
+                {
+                  beats: [
+                    {
+                      memberId: 'crowley',
+                      text: 'a',
+                      citations: [
+                        { quote: 'a real quote', work: 'The Book of the Law', verdict: 'verified', note: 'It exists.' },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            }),
         }),
     });
     captureDownload(window, document);
     await Export.exportScholarly();
     const text = await window.__capturedBlob.text();
-    assert.match(text, /Turn-level record: incomplete/);
-    assert.ok(
-      text.indexOf('Turn-level record') < text.indexOf('## Bibliography'),
-      'the caveat reads before the Bibliography it qualifies'
-    );
+    assert.match(text, /### Works Cited/);
+    assert.match(text, /#### The Book of the Law/);
+    assert.match(text, /> "a real quote"/);
+    assert.match(text, /captured at write time — not yet run through Verify Citations/);
+  });
+
+  await t.test('lists invoked-not-quoted works in their own section, separate from Works Cited', async t2 => {
+    const {
+      window,
+      document,
+      module: Export,
+    } = boot(t2, {
+      fetchImpl: () =>
+        Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              rounds: [
+                {
+                  beats: [
+                    {
+                      memberId: 'crowley',
+                      text: 'a',
+                      invokedWorks: [{ work: "Corbin's reading of Ibn Arabi", note: 'named in passing' }],
+                    },
+                  ],
+                },
+              ],
+              citationFlags: [],
+            }),
+        }),
+    });
+    captureDownload(window, document);
+    await Export.exportScholarly();
+    const text = await window.__capturedBlob.text();
+    assert.match(text, /### Works Referenced/);
+    assert.match(text, /#### Corbin's reading of Ibn Arabi/);
+    const worksReferenced = text.slice(text.indexOf('### Works Referenced'));
+    assert.doesNotMatch(worksReferenced, /> "/, 'the invoked tier never carries a quote block');
+  });
+
+  await t.test('honestly says so when a session has cited and invoked nothing', async t2 => {
+    const {
+      window,
+      document,
+      module: Export,
+    } = boot(t2, {
+      fetchImpl: () =>
+        Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ rounds: [{ beats: [{ memberId: 'crowley', text: 'a' }] }], citationFlags: [] }),
+        }),
+    });
+    captureDownload(window, document);
+    await Export.exportScholarly();
+    const text = await window.__capturedBlob.text();
+    assert.match(text, /No citations captured for this session/);
+    assert.match(text, /None captured for this session/);
   });
 });
 

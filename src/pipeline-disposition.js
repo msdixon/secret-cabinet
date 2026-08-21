@@ -32,6 +32,9 @@ const {
   CITATION_QUOTE_MAX_CHARS,
   CITATION_WORK_MAX_CHARS,
   CITATION_NOTE_MAX_CHARS,
+  MAX_INVOKED_PER_BEAT,
+  INVOKED_WORK_MAX_CHARS,
+  INVOKED_NOTE_MAX_CHARS,
 } = require('./tuning');
 
 const DISPOSITION_MAX_CHARS = 400; // a few sentences — hard cap so this can't balloon a speaker prompt over a long session
@@ -41,7 +44,9 @@ const DISPOSITION_MAX_CHARS = 400; // a few sentences — hard cap so this can't
 // This is a ceiling, not a cost floor — billing follows tokens the model
 // actually emits, and the ordinary no-citation turn's output shape (and
 // cost) is unchanged.
-const DISPOSITION_MAX_TOKENS = 900;
+// #356: raised again for the optional invokedWorks array alongside
+// citations — same ceiling-not-floor reasoning.
+const DISPOSITION_MAX_TOKENS = 1100;
 
 function buildDispositionToolSchema(presentIds, libraryIds = []) {
   return {
@@ -104,13 +109,38 @@ function buildDispositionToolSchema(presentIds, libraryIds = []) {
               },
               libraryMatch: {
                 type: ['string', 'null'],
-                description:
-                  libraryIds.length
-                    ? 'The matching archival library entry id if this citation clearly refers to one of the entries listed below, else null.'
-                    : 'Always null — no archival library entries are available to match against.',
+                description: libraryIds.length
+                  ? 'The matching archival library entry id if this citation clearly refers to one of the entries listed below, else null.'
+                  : 'Always null — no archival library entries are available to match against.',
               },
             },
             required: ['quote', 'work', 'verdict', 'note'],
+          },
+        },
+        // #356: a second, weaker tier — texts/authors/traditions gestured at
+        // by name or unmistakable allusion, with no supporting quote. The
+        // bibliography appendix keeps this separate from citations rather
+        // than blending "quoted and checked" with "merely invoked" — see
+        // src/bibliography.js. Optional for the same reason citations is:
+        // most turns invoke nothing, and an omitted/empty array says so.
+        invokedWorks: {
+          type: 'array',
+          maxItems: MAX_INVOKED_PER_BEAT,
+          description:
+            'Every text, author, or tradition you named or clearly gestured at in the turn you just spoke — without directly quoting or citing it (that belongs in citations instead). Most turns invoke nothing; leave this empty then.',
+          items: {
+            type: 'object',
+            properties: {
+              work: {
+                type: 'string',
+                description: `The text, author, or tradition as named or gestured at. Under ${INVOKED_WORK_MAX_CHARS} characters.`,
+              },
+              note: {
+                type: 'string',
+                description: `One short phrase on how it was invoked (e.g. "named in passing", "alluded to without naming the text"). Under ${INVOKED_NOTE_MAX_CHARS} characters.`,
+              },
+            },
+            required: ['work'],
           },
         },
       },
@@ -156,7 +186,9 @@ Separately, name whether there is one present person you have real unspent busin
 
 Separately again, and rarer still: name whether tonight left something that should genuinely outlast this evening — not tonight's mood, a durable turn. Most turns, there is nothing here either.
 
-Separately from all of the above, and using the citations tool field rather than any of this private prose: extract every citation of a real (or purportedly real) text, author, or historical/scholarly claim from the turn you just spoke aloud (not this reflection). For each one, judge from your own knowledge whether it's a real work/claim and whether it's represented accurately — "verified", "unverified", or "uncertain".${libraryBlock} Most turns cite nothing; leave the citations field empty then.`;
+Separately from all of the above, and using the citations tool field rather than any of this private prose: extract every citation of a real (or purportedly real) text, author, or historical/scholarly claim from the turn you just spoke aloud (not this reflection). For each one, judge from your own knowledge whether it's a real work/claim and whether it's represented accurately — "verified", "unverified", or "uncertain".${libraryBlock} Most turns cite nothing; leave the citations field empty then.
+
+One more thing, separately again, using the invokedWorks tool field: name any text, author, or tradition you gestured at by name or unmistakable allusion in that same turn without quoting or citing it directly — reaching for a reading without quoting it, or naming a tradition rather than a title. Most turns invoke nothing beyond what's already in citations; leave invokedWorks empty then.`;
 }
 
 function buildDispositionUserMessage({ roundSoFarText, turnText, member }) {
@@ -197,6 +229,22 @@ function sanitizeCitations(rawCitations, libraryIds) {
     .filter(Boolean);
 }
 
+// #356: same sanitation discipline as sanitizeCitations, for the weaker
+// invoked-works tier — only `work` is required (there is no quote or
+// verdict to validate here, since nothing is being fact-checked).
+function sanitizeInvokedWorks(rawInvoked) {
+  if (!Array.isArray(rawInvoked)) return [];
+  return rawInvoked
+    .slice(0, MAX_INVOKED_PER_BEAT)
+    .map(w => {
+      const work = (w?.work || '').trim().slice(0, INVOKED_WORK_MAX_CHARS);
+      if (!work) return null;
+      const note = (w?.note || '').trim().slice(0, INVOKED_NOTE_MAX_CHARS);
+      return { work, note };
+    })
+    .filter(Boolean);
+}
+
 async function callDispositionUpdate({ client, model, system, userMessage, presentIds = [], libraryIds = [] }) {
   const start = Date.now();
   const tool = buildDispositionToolSchema(presentIds, libraryIds);
@@ -210,7 +258,7 @@ async function callDispositionUpdate({ client, model, system, userMessage, prese
   });
   const latencyMs = Date.now() - start;
   const block = response.content.find(b => b.type === 'tool_use');
-  const { reflection, waitingOnMemberId, residueNote, citations } = block?.input || {};
+  const { reflection, waitingOnMemberId, residueNote, citations, invokedWorks } = block?.input || {};
   const text = (reflection || '').trim().slice(0, DISPOSITION_MAX_CHARS);
   const target =
     waitingOnMemberId && waitingOnMemberId !== 'none' && presentIds.includes(waitingOnMemberId)
@@ -224,6 +272,7 @@ async function callDispositionUpdate({ client, model, system, userMessage, prese
     waitingOnMemberId: target,
     residueNote: residue,
     citations: sanitizeCitations(citations, libraryIds),
+    invokedWorks: sanitizeInvokedWorks(invokedWorks),
     usage: response.usage,
     latencyMs,
   };

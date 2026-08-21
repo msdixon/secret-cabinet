@@ -358,6 +358,17 @@ window.Sessions = (function () {
       if (!res.ok) throw new Error('Not found');
       const session = await res.json();
 
+      // #356: whether this session has anything to build a bibliography
+      // from -- checked citationFlags first (Verify Citations has run),
+      // else the always-on capture on its beats (#355/#356), so a session
+      // that's never been verified still unlocks the scholarly export.
+      const hasCitationData =
+        (Array.isArray(session.citationFlags) && session.citationFlags.length > 0) ||
+        (session.rounds || []).some(seg =>
+          (seg.beats || []).some(b => (b.citations && b.citations.length) || (b.invokedWorks && b.invokedWorks.length))
+        );
+      deps.setSessionHasCitations(hasCitationData);
+
       // #184: stage and record are permanent panes, but the stage's content
       // still belongs to whichever session was live or being replayed before
       // this one -- clear it so a restored (read-only) session doesn't sit
