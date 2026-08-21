@@ -112,7 +112,12 @@ function isAuthedRequest(req, passphrase) {
 // /api/sessions/:id/transcript, and /api/threads are safe to list here
 // specifically because #378 already scopes each of them to `published`
 // sessions when req.authed is false — this table is what makes that
-// filtering reachable in production for the first time. Everything else
+// filtering reachable in production for the first time. POST
+// /api/voice/speak (#380) is the one exception to "opening a route means
+// it's free": routes/voice.js itself refuses to synthesize anything for a
+// request where req.authed is false, serving only a cache hit or the same
+// 503 an unconfigured server would return — so listing it here opens replay
+// of already-cached voice, not new billable synthesis. Everything else
 // under /api/ — anything that spends Anthropic/ElevenLabs money, touches
 // Rachel's own machine (Day One, exports, the citation manifest), or can
 // mutate or delete a session — stays behind the gate by omission; nothing
@@ -129,6 +134,7 @@ const PUBLIC_API_ROUTES = [
   ['GET', /^\/api\/library\/[^/]+$/],
   ['GET', /^\/api\/graph$/],
   ['GET', /^\/api\/voice\/config$/],
+  ['POST', /^\/api\/voice\/speak$/],
 ];
 
 function isPublicRoute(req) {

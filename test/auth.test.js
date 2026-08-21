@@ -211,6 +211,19 @@ test('createRequireAuth', async t => {
   });
 
   await t.test(
+    '#380: POST /api/voice/speak is public at the auth layer — routes/voice.js itself refuses to synthesize for an unauthenticated request, so opening it here only opens cache-hit replay',
+    () => {
+      const requireAuth = auth.createRequireAuth('secret');
+      const res = fakeRes();
+      let nextCalled = false;
+      requireAuth(fakeReq({ path: '/api/voice/speak', method: 'POST', session: {} }), res, () => {
+        nextCalled = true;
+      });
+      assert.equal(nextCalled, true, 'expected POST /api/voice/speak to reach the route handler unauthenticated');
+    }
+  );
+
+  await t.test(
     '#379: a mutating verb on an otherwise-public session path stays gated — the method check, not just the path, decides',
     () => {
       const requireAuth = auth.createRequireAuth('secret');
@@ -243,7 +256,6 @@ test('createRequireAuth', async t => {
       ['POST', '/api/cast'],
       ['POST', '/api/round'],
       ['POST', '/api/interject'],
-      ['POST', '/api/voice/speak'], // #380 — separate decision, stays gated here
       ['POST', '/api/dayone/export'],
       ['POST', '/api/ulysses/export'],
       ['POST', '/api/export/obsidian'],
