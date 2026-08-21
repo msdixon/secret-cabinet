@@ -62,7 +62,27 @@ const { resolveLullNote } = lull;
 // passage-length/lull-cadence calibration review (see #244).
 const BREATH_BUDGET_WORDS = 1000;
 const MIN_WORDS_FOR_ANOTHER_BEAT = 40; // below this, not enough room left for a meaningful beat
-const POOL_SLACK = 2; // the director's candidate pool runs a little larger than the round's target speaker count
+const POOL_SLACK = 1; // the director's candidate pool runs a little larger than the round's target speaker count
+
+// #353: was 150 — a deliberately conservative placeholder that, worked
+// backwards, sized every candidate pool (opening and mid-passage alike)
+// larger than BREATH_BUDGET_WORDS could ever actually serve: a 7-seat pool
+// (5 requested + POOL_SLACK 2) needs 14 beats to exhaust at
+// MAX_TURNS_PER_POOL_MEMBER, but real passages run ~4.3. 220 is the same
+// real-observed-turn-length figure test/pipeline.test.js's #352 simulation
+// already uses (BREATH_BUDGET_WORDS / 220 ≈ the ~4.3 beats/passage the
+// #353 issue measured) — sizing the pool against it, not the old
+// placeholder, is what makes pool exhaustion reachable at all.
+const WORDS_PER_BEAT_ESTIMATE = 220;
+
+// #353: below this fraction of BREATH_BUDGET_WORDS spent since the last
+// consult, don't bother the director again — 0.9 was chosen by simulating
+// the real pickNextSpeaker/isPoolExhausted against realistic (varying, not
+// fixed-length) beat lengths: it lands the mid-passage check-in inside the
+// last tenth of a typical passage's budget, catching passages that run
+// long without firing on every ordinary one (~29% of simulated passages;
+// see test/pipeline.test.js's '#353' suite).
+const RECONSULT_BUDGET_FRACTION = 0.9;
 const MAX_TOTAL_BEATS = 16; // hard safety net — budget/pool logic should always end the round before this binds
 
 // #244: a passage's stored `endedBy`. 'budget' — the breath budget ran out
@@ -268,7 +288,19 @@ async function runRound({
     });
   }
 
-  const initialPoolTarget = Math.min(presentMembers.length, effectiveCount + POOL_SLACK);
+  // #353: was `effectiveCount + POOL_SLACK` alone — slack sized off the
+  // round's requested speaker count with no reference to what the passage's
+  // budget could actually serve, which is how the pool ended up
+  // structurally larger than BREATH_BUDGET_WORDS could ever spend down. Cap
+  // it at the budget's own realistic capacity (min(effectiveCount+slack,
+  // capacity), floored at effectiveCount since selectSpeakers requires
+  // maxCount >= minCount) — the same arithmetic the mid-passage re-consult
+  // below already used, just applied to the opening consult too.
+  const budgetCapacity = Math.max(1, Math.ceil(BREATH_BUDGET_WORDS / WORDS_PER_BEAT_ESTIMATE));
+  const initialPoolTarget = Math.min(
+    presentMembers.length,
+    Math.max(effectiveCount, Math.min(effectiveCount + POOL_SLACK, budgetCapacity))
+  );
   const { speakers: initialPool } = await selectSpeakers({
     client,
     model,
@@ -286,8 +318,12 @@ async function runRound({
   let pool = initialPool;
   let spokenCounts = new Map();
   let lastSpeakerId = null;
-  let beatsSinceConsult = 0;
   let remainingBudget = BREATH_BUDGET_WORDS;
+  // #353: replaces beatsSinceConsult. Words spent, not beats counted, since
+  // a beat-count threshold has no way to track how much of the passage's
+  // actual budget has gone by — see RECONSULT_BUDGET_FRACTION above for why
+  // that mattered.
+  let budgetAtLastConsult = remainingBudget;
   let beats = 0;
   // #244: why the passage ended. Defaults to 'budget' — every exit from
   // this loop other than the director's explicit wind-down judgment below
@@ -300,11 +336,18 @@ async function runRound({
   const speakerOrder = [];
 
   while (remainingBudget >= MIN_WORDS_FOR_ANOTHER_BEAT && beats < MAX_TOTAL_BEATS) {
-    if (isPoolExhausted(pool, spokenCounts) || beatsSinceConsult >= pool.length + 3) {
+    const budgetSpentSinceConsult = budgetAtLastConsult - remainingBudget;
+    if (
+      isPoolExhausted(pool, spokenCounts) ||
+      budgetSpentSinceConsult >= BREATH_BUDGET_WORDS * RECONSULT_BUDGET_FRACTION
+    ) {
       // Fresh director judgment: estimate how many more speakers the
-      // remaining budget realistically holds (a rough 150 words/beat
-      // assumption), rather than re-asking for the round's original count.
-      const nextCount = Math.max(1, Math.min(presentMembers.length, Math.ceil(remainingBudget / 150)));
+      // remaining budget realistically holds, rather than re-asking for the
+      // round's original count.
+      const nextCount = Math.max(
+        1,
+        Math.min(presentMembers.length, Math.ceil(remainingBudget / WORDS_PER_BEAT_ESTIMATE))
+      );
       const nextPoolTarget = Math.min(presentMembers.length, nextCount + POOL_SLACK);
       const {
         speakers: freshPool,
@@ -335,7 +378,7 @@ async function runRound({
       }
       pool = freshPool;
       spokenCounts = new Map();
-      beatsSinceConsult = 0;
+      budgetAtLastConsult = remainingBudget;
       if (!pool.length) break;
     }
 
@@ -495,7 +538,6 @@ async function runRound({
     // the same broken speaker until the round's beat safety net kicks in.
     spokenCounts.set(memberId, (spokenCounts.get(memberId) || 0) + 1);
     lastSpeakerId = memberId;
-    beatsSinceConsult++;
     beats++;
   }
 
@@ -532,4 +574,7 @@ module.exports = {
   runRound,
   BREATH_BUDGET_WORDS,
   PASSAGE_END_CAUSES,
+  POOL_SLACK,
+  WORDS_PER_BEAT_ESTIMATE,
+  RECONSULT_BUDGET_FRACTION,
 };
