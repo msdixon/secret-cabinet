@@ -13,6 +13,15 @@
 // all — the browser has no other way to know an API key exists server-side,
 // and voice.js needs that up front to decide whether to attempt the
 // ElevenLabs path or fall back straight to the Web Speech API.
+//
+// #380: POST /api/voice/speak is public (src/auth.js's PUBLIC_API_ROUTES),
+// but only ever serves a cache hit to an unauthenticated request — req.authed
+// (set by createRequireAuth for every request, gated or not) is checked
+// below, after the cache lookup, so an authenticated request always keeps
+// today's behaviour and a cache hit is served to anyone regardless of
+// req.authed. A cache miss for an unauthenticated request never reaches the
+// ElevenLabs fetch; it gets the same 503 shape as "not configured", which
+// public/js/voice.js already falls through to the Web Speech API on.
 
 const fs = require('fs');
 const path = require('path');
@@ -40,9 +49,16 @@ function registerVoiceRoutes(app, { roster, voiceCacheDir, apiKey, modelId }) {
     // case, not an edge case — worth the disk write.
     const cacheKey = crypto.createHash('sha256').update(`${voiceId}::${text}`).digest('hex');
     const cachePath = path.join(voiceCacheDir, `${cacheKey}.mp3`);
+    const cached = fs.existsSync(cachePath);
+
+    // #380: an unauthenticated visitor can only ever be served a clip that's
+    // already on disk — never one that requires a billable ElevenLabs call.
+    if (!cached && !req.authed) {
+      return res.status(503).json({ error: 'ElevenLabs is not configured on this server' });
+    }
 
     try {
-      if (!fs.existsSync(cachePath)) {
+      if (!cached) {
         const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
           method: 'POST',
           headers: {

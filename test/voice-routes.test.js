@@ -29,8 +29,12 @@ function fakeApp() {
   };
 }
 
-function fakeReq({ body = {} } = {}) {
-  return { body };
+// #380: req.authed mirrors what createRequireAuth sets on every request in
+// server.js before this route ever runs. Defaults to true here so the
+// pre-#380 tests below (which predate the concept and exercise the
+// authenticated/synthesize-freely path) don't need to change.
+function fakeReq({ body = {}, authed = true } = {}) {
+  return { body, authed };
 }
 
 function fakeRes() {
@@ -222,5 +226,62 @@ test('POST /api/voice/speak', async t => {
     const res = fakeRes();
     await app.routes['POST /api/voice/speak'](fakeReq({ body: { memberId: 'crowley', text: 'Hello.' } }), res);
     assert.equal(res.statusCode, 502);
+  });
+
+  // #380: an unauthenticated (public-replay) request may only ever be served
+  // a clip that's already cached on disk -- never trigger a fresh, billable
+  // ElevenLabs synthesis.
+  await t.test('unauthenticated + cache miss: 503s without ever calling ElevenLabs', async t2 => {
+    const stub = stubFetch(async () => {
+      throw new Error('should never be called');
+    });
+    t2.after(stub.restore);
+    const cacheDir = makeCacheDir();
+    t2.after(() => fs.rmSync(cacheDir, { recursive: true, force: true }));
+    const app = fakeApp();
+    registerVoiceRoutes(app, { roster: ROSTER, voiceCacheDir: cacheDir, apiKey: 'sk-test', modelId: 'model' });
+    const res = fakeRes();
+    await app.routes['POST /api/voice/speak'](
+      fakeReq({ body: { memberId: 'crowley', text: 'Never synthesized.' }, authed: false }),
+      res
+    );
+    assert.equal(res.statusCode, 503);
+    assert.equal(stub.calls.length, 0, 'an unauthenticated cache miss must never reach the ElevenLabs fetch');
+    assert.equal(fs.readdirSync(cacheDir).length, 0);
+  });
+
+  await t.test('unauthenticated + cache hit: serves the cached clip, no ElevenLabs call', async t2 => {
+    const stub = stubFetch(async () => ({
+      ok: true,
+      arrayBuffer: async () => Buffer.from('fake-mp3-bytes'),
+    }));
+    t2.after(stub.restore);
+    const cacheDir = makeCacheDir();
+    t2.after(() => fs.rmSync(cacheDir, { recursive: true, force: true }));
+    const app = fakeApp();
+    registerVoiceRoutes(app, { roster: ROSTER, voiceCacheDir: cacheDir, apiKey: 'sk-test', modelId: 'model' });
+
+    // Prime the cache as an authenticated request (e.g. Rachel watching the
+    // meeting once before publishing it).
+    const res1 = fakeRes();
+    await app.routes['POST /api/voice/speak'](
+      fakeReq({ body: { memberId: 'crowley', text: 'Already cached.' }, authed: true }),
+      res1
+    );
+    await waitForFinish(res1);
+    assert.equal(stub.calls.length, 1);
+
+    // A later unauthenticated visitor replaying the same line gets the
+    // cached clip, and ElevenLabs is not called again.
+    const res2 = fakeRes();
+    await app.routes['POST /api/voice/speak'](
+      fakeReq({ body: { memberId: 'crowley', text: 'Already cached.' }, authed: false }),
+      res2
+    );
+    await waitForFinish(res2);
+
+    assert.equal(res2.statusCode, 200);
+    assert.equal(stub.calls.length, 1, 'the unauthenticated cache hit should not call ElevenLabs');
+    assert.equal(res2.buffer().toString(), 'fake-mp3-bytes');
   });
 });
