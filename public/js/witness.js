@@ -263,7 +263,6 @@ window.Witness = (function () {
 
   function clearRoom() {
     roomCardFadeTimers.forEach((_, memberId) => cancelCardFade(memberId));
-    clearRoomHolds();
     roomCards.clear();
     const layer = roomLayer();
     if (layer) layer.innerHTML = '';
@@ -271,6 +270,7 @@ window.Witness = (function () {
     if (events) events.innerHTML = '';
     liveTypingMemberId = null;
     stopRoomLoop();
+    resetLiveTurnQueue(); // #400: a fresh stage shouldn't inherit a queued-but-not-yet-spoken turn from whatever came before
   }
 
   function speakerNameHtml(memberId, speaker) {
@@ -411,82 +411,9 @@ window.Witness = (function () {
     if (card) scrollCardToLatest(card);
   }
 
-  // ── Room-mode live pacing (#279) ─────────────────────────────────────────
-  // Live delivery is deliberately unpaced overall -- see the comment above
-  // liveSpeech -- but that left a single member's card with no minimum time
-  // on screen: app.js's startStreamEntry opens a fresh typing placeholder in
-  // the very same synchronous call that just closed a beat, immediately
-  // overwriting the settled card a reader hadn't had time to read yet, and a
-  // burst of beats closing in one chunk could do the same beat-to-beat.
-  // scheduleCardFade above doesn't touch this -- it only governs how long a
-  // *settled* card lingers once nothing is updating it, not the instant,
-  // synchronous overwrite on arrival.
-  //
-  // Gate the two room mutations that can clobber a card mid-read -- a
-  // settled render and the typing-start that follows one -- behind a
-  // per-member hold, keyed to the same witnessReadingTime() replay already
-  // paces full playback on. This only wraps the live entry points below,
-  // never renderRoomCard/renderRoomTyping themselves, so replay (which
-  // already paces itself, one block at a time, via renderWitnessBlock's own
-  // returned delay) is untouched. liveTypingSet -- the typing text growing
-  // character by character within an already-open typing card -- is exempt:
-  // it isn't replacing anything a reader hasn't seen yet, just filling in
-  // what's already visibly "being typed."
-  //
-  // Only the latest deferred mutation per member is kept, not a full queue:
-  // a fresher settled card always supersedes a stale queued typing
-  // placeholder (there's no reason to flash a placeholder for content
-  // that's already fully known), and a second settled card arriving before
-  // the first was ever shown supersedes it too -- an intermediate beat can
-  // go unseen on the rare burst where several close in one chunk, same
-  // trade-off the record (which always has everything) already makes for
-  // stage mode's own scroll-and-miss-one case.
-  const roomHoldUntil = new Map(); // memberId -> epoch ms the card may next change
-  const roomHoldTimers = new Map(); // memberId -> pending flush timeout
-  const roomHoldPending = new Map(); // memberId -> deferred { type: 'card', block } | { type: 'typingStart', name, text }
-
-  function roomHoldActive(memberId) {
-    const until = roomHoldUntil.get(memberId);
-    return !!until && until > Date.now();
-  }
-
-  function setRoomHold(memberId, text) {
-    const ms = witnessReadingTime(text);
-    roomHoldUntil.set(memberId, Date.now() + ms);
-    clearTimeout(roomHoldTimers.get(memberId));
-    roomHoldTimers.set(
-      memberId,
-      setTimeout(() => flushRoomHold(memberId), ms)
-    );
-  }
-
-  function flushRoomHold(memberId) {
-    roomHoldTimers.delete(memberId);
-    roomHoldUntil.delete(memberId);
-    const pending = roomHoldPending.get(memberId);
-    roomHoldPending.delete(memberId);
-    if (!pending) return;
-    if (pending.type === 'card') {
-      renderWitnessBlock(pending.block);
-      setRoomHold(memberId, pending.block.text);
-    } else {
-      renderRoomTyping(pending.name, memberId);
-      if (pending.text) setRoomTypingText(pending.text);
-    }
-  }
-
-  function clearRoomHolds() {
-    roomHoldTimers.forEach(timer => clearTimeout(timer));
-    roomHoldTimers.clear();
-    roomHoldUntil.clear();
-    roomHoldPending.clear();
-  }
-
   // A speech block reading as pure action lines (e.g. "*stands and paces*")
   // renders into the room event strip, not the speaker's own card -- see
-  // renderWitnessBlock's speech branch below, which this mirrors so the live
-  // gating above can tell upfront whether a given block will actually touch
-  // a per-member card before deciding to hold it.
+  // renderWitnessBlock's speech branch below.
   function isAllActionText(text) {
     const nonEmptyLines = text
       .trim()
@@ -558,6 +485,7 @@ window.Witness = (function () {
   // meeting end at a lull -- see app.js's closeMeeting().
   function collapseStage() {
     window.Voice?.stop(); // #29: the stage that was driving speech is about to be hidden
+    resetLiveTurnQueue(); // #400: don't let a turn still queued behind it start talking into a hidden stage
     const el = document.getElementById('stage-record');
     el?.classList.remove('stage-only');
     el?.classList.add('collapsed');
@@ -614,47 +542,152 @@ window.Witness = (function () {
     return createLullEl(note);
   }
 
-  function liveSpeech({ speaker, text, memberId, annotation }) {
-    markStageActive();
-    setHint('◉ Live — the room is speaking');
-    const block = { type: 'speech', speaker, text, memberId: memberId || null, annotation: annotation || null };
-    const holdsACard = sceneAvailable && block.memberId && !isAllActionText(text);
-    if (holdsACard && roomHoldActive(block.memberId)) {
-      roomHoldPending.set(block.memberId, { type: 'card', block });
-      return;
-    }
-    renderWitnessBlock(block);
-    if (holdsACard) setRoomHold(block.memberId, text);
+  // ── Live turn queue (#400) ───────────────────────────────────────────────
+  // liveTypingStart/liveTypingSet/liveSpeech get called synchronously and
+  // immediately by app.js as text streams in, paced by generation speed, not
+  // speech -- see the "Live mirroring" comment above. An earlier pass at
+  // #400 serialized just the Voice.speak() calls (voice.js has no queue of
+  // its own -- every call interrupts whatever audio is still playing) so
+  // audio no longer cut itself off. That fixed the literal cutoff, but nothing
+  // gated the *visual* side on that same real-world pace: typing indicators
+  // kept opening and cards kept settling as fast as generation produced text,
+  // while the now-fully-serialized audio could only catch up at real
+  // speaking speed. In a lively multi-member round the room would race many
+  // turns ahead of what was actually playing -- a member's next turn, or a
+  // different member's entirely, already on screen (sometimes already
+  // superseded again) before the audio for their previous line had even
+  // started. The old #279 room-hold this replaces made it worse in that
+  // state: it held one member's card back from clobbering *itself* too fast
+  // (WPM-estimated, not real-audio-paced) but explicitly let different
+  // members race independently ("different members are never held back by
+  // each other"), and it coalesced a burst down to only the latest pending
+  // mutation -- a member's actual last turn could be silently dropped if a
+  // fresher one (or a round transition) arrived before its hold's timer
+  // ever flushed it.
+  //
+  // Replacement: liveTypingStart/liveTypingSet/liveSpeech together describe
+  // one member's "turn" on the shared spotlight. Every turn is pushed onto
+  // one global FIFO in the order it was generated; only the turn at the
+  // front is ever rendered. A turn's typing preview (if any) shows the
+  // instant it reaches the front -- generation usually outruns speech, so by
+  // then it's often already fully known -- and once it's settled (liveSpeech
+  // has been called for it), it renders for real and starts Voice.speak();
+  // the next turn in line only becomes visible once that resolves (or,
+  // nothing spoken, WITNESS_MIN_PAUSE later -- the same floor #279 used,
+  // just global and gapless instead of per-member and lossy). Nothing is
+  // ever dropped: every turn gets its moment, in order, exactly as replay's
+  // advance() already guarantees for a fixed session array -- this is the
+  // same one-thing-at-a-time backbone, just fed by a live stream.
+  let liveTurnQueue = [];
+  let liveTurnGeneration = 0;
+
+  function resetLiveTurnQueue() {
+    liveTurnGeneration++;
+    liveTurnQueue = [];
   }
 
-  // Mirrors the record's "typing" placeholder (#115) so the active surface
-  // keeps its theatrical, someone-is-speaking-right-now feel rather than
-  // going dark between beats. Growing raw text, not a real block -- swapped
-  // for the settled bubble by the next liveSpeech() call, same lifecycle as
-  // the record's own typing element in app.js's startStreamEntry(). In room
-  // mode this reuses (and is later overwritten by) the speaking member's own
-  // card, per renderRoomTyping/renderRoomCard's shared getOrCreateCard.
-  let liveTypingEl = null;
+  // typingSet/liveSpeech always target the turn most recently opened by
+  // typingStart -- app.js streams exactly one speaker's turn at a time (see
+  // startStreamEntry), so there is never more than one turn still being
+  // typed. A turn already settled (its `block` set) before its own typing
+  // ever started -- app.js's onSpeakerDone flushes any beats that hadn't
+  // already closed live, with no typingStart between them -- has no "most
+  // recently opened" turn to attach to, so liveSpeech pushes a fresh,
+  // already-settled one instead (see liveSpeech below).
+  function openLiveTurn() {
+    return liveTurnQueue.length ? liveTurnQueue[liveTurnQueue.length - 1] : null;
+  }
 
-  function liveTypingStart(name, memberId) {
-    markStageActive();
-    setHint('◉ Live — the room is speaking');
-    liveTypingMemberId = memberId || null;
+  // Renders whatever's known so far for the turn now at the front of the
+  // queue -- a typing preview if its text isn't fully settled yet, or (far
+  // more often in practice, since generation outruns speech) straight to
+  // its final render + Voice.speak() if it is. Called every time a turn is
+  // pushed, settled, or the previous front turn's pacing delay resolves.
+  function advanceLiveTurnQueue() {
+    const turn = liveTurnQueue[0];
+    if (!turn || turn.settling) return;
+    if (!turn.started) {
+      turn.started = true;
+      markStageActive();
+      setHint('◉ Live — the room is speaking');
+      if (!turn.block) openLiveTurnTyping(turn);
+    }
+    if (!turn.block) return; // still being typed -- liveTypingSet/liveSpeech will call back in
+    turn.settling = true;
+    const myGeneration = liveTurnGeneration;
+    const { delay } = renderWitnessBlock(turn.block);
+    // Same two-step as replay's advance(): Promise.resolve(delay) is
+    // already-resolved for the plain-ms-number case (voice off/unsupported),
+    // so the .then() below fires on the next microtask either way -- the
+    // *real* wait for that case is the setTimeout scheduled with the
+    // resolved value, not the promise settling itself.
+    Promise.resolve(delay).then(resolvedDelay => {
+      if (myGeneration !== liveTurnGeneration) return; // stage reset mid-flight -- this queue is abandoned
+      setTimeout(() => {
+        if (myGeneration !== liveTurnGeneration) return;
+        liveTurnQueue.shift();
+        advanceLiveTurnQueue();
+      }, resolvedDelay);
+    });
+  }
+
+  function openLiveTurnTyping(turn) {
+    liveTypingMemberId = turn.memberId;
     if (sceneAvailable) {
-      if (liveTypingMemberId && roomHoldActive(liveTypingMemberId)) {
-        roomHoldPending.set(liveTypingMemberId, { type: 'typingStart', name, text: '' });
-        return;
-      }
-      renderRoomTyping(name, liveTypingMemberId);
+      renderRoomTyping(turn.name, turn.memberId);
+      if (turn.typedText) setRoomTypingText(turn.typedText);
       return;
     }
     const stage = document.getElementById('witness-stage');
     if (!stage) return;
     liveTypingEl = document.createElement('div');
     liveTypingEl.className = 'transcript-typing';
-    liveTypingEl.innerHTML = `<div class="speaker-name">${deps.escapeHTML(name)}</div><div class="typing-text transcript-stream-live"></div>`;
+    liveTypingEl.innerHTML = `<div class="speaker-name">${deps.escapeHTML(turn.name)}</div><div class="typing-text transcript-stream-live"></div>`;
     stage.appendChild(liveTypingEl);
     stage.scrollTop = stage.scrollHeight;
+    if (turn.typedText) {
+      liveTypingEl.querySelector('.typing-text').textContent = turn.typedText;
+    }
+  }
+
+  function liveSpeech({ speaker, text, memberId, annotation }) {
+    const block = { type: 'speech', speaker, text, memberId: memberId || null, annotation: annotation || null };
+    const turn = openLiveTurn();
+    if (turn && !turn.block) {
+      turn.block = block;
+    } else {
+      liveTurnQueue.push({
+        name: speaker,
+        memberId: memberId || null,
+        typedText: text,
+        block,
+        started: false,
+        settling: false,
+      });
+    }
+    advanceLiveTurnQueue();
+  }
+
+  // Mirrors the record's "typing" placeholder (#115) so the active surface
+  // keeps its theatrical, someone-is-speaking-right-now feel rather than
+  // going dark between beats. Growing raw text, not a real block -- swapped
+  // for the settled bubble once liveSpeech() settles this same turn, same
+  // lifecycle as the record's own typing element in app.js's
+  // startStreamEntry(). In room mode this reuses (and is later overwritten
+  // by) the speaking member's own card, per
+  // renderRoomTyping/renderRoomCard's shared getOrCreateCard.
+  let liveTypingEl = null;
+
+  function liveTypingStart(name, memberId) {
+    liveTurnQueue.push({
+      name,
+      memberId: memberId || null,
+      typedText: '',
+      block: null,
+      started: false,
+      settling: false,
+    });
+    advanceLiveTurnQueue();
   }
 
   // #219: replaces (not appends) the typing text with the current beat's
@@ -662,12 +695,11 @@ window.Witness = (function () {
   // splitIntoBeats on every chunk rather than tracking a raw delta, and
   // hands that over here -- see startStreamEntry's append().
   function liveTypingSet(text) {
+    const turn = openLiveTurn();
+    if (!turn) return;
+    turn.typedText = text;
+    if (turn !== liveTurnQueue[0] || !turn.started || turn.block) return; // not yet on screen, or already settled
     if (sceneAvailable) {
-      const pending = liveTypingMemberId && roomHoldPending.get(liveTypingMemberId);
-      if (pending && pending.type === 'typingStart') {
-        pending.text = text;
-        return;
-      }
       setRoomTypingText(text);
       return;
     }
@@ -961,7 +993,10 @@ window.Witness = (function () {
       // #29: speak what's now on screen. This is the one seam every
       // rendering path (stage/room, live/replay) already funnels through --
       // see voice.js's own comment for why it's a no-op unless the user has
-      // opted in.
+      // opted in. Live mode reaches this via advanceLiveTurnQueue above,
+      // which only calls in once it's this turn's moment at the front of
+      // the queue -- so the immediate call here is already correctly
+      // serialized, same as replay's advance() always was.
       //
       // #336: when something was actually spoken, Voice.speak() hands back
       // a promise that resolves once that audio/utterance really finishes --

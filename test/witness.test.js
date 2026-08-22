@@ -130,6 +130,25 @@ function playToEnd(Witness, document) {
   throw new Error('playback did not reach the end after 200 advances');
 }
 
+// #400: the live turn queue schedules its own next step via
+// Promise.resolve(delay).then(resolvedDelay => setTimeout(...)) -- same
+// two-hop shape replay's advance() already used. A microtask flush is
+// needed between triggering a turn and ticking fake timers, or the
+// setTimeout that tick() is meant to fast-forward hasn't been registered yet.
+async function flushMicrotasks(n = 4) {
+  for (let i = 0; i < n; i++) await Promise.resolve();
+}
+
+// Advances the live turn queue past one WPM-paced turn (voice off/unmocked,
+// so its delay is the plain WITNESS_MIN_PAUSE floor at 1x speed) -- flush,
+// tick, flush again so both the scheduling microtask and the timer callback
+// have actually run before the next assertion or liveSpeech() call.
+async function advancePastLiveTurn(t2) {
+  await flushMicrotasks();
+  t2.mock.timers.tick(1200); // WITNESS_MIN_PAUSE at 1x speed
+  await flushMicrotasks();
+}
+
 test('the Witness fixture matches the ids index.html actually ships', () => {
   assertIdsExistInIndexHtml(WITNESS_IDS);
 });
@@ -467,56 +486,56 @@ test('replay: auto-advance paces off real speech duration when Voice reports it'
     assert.equal(document.querySelector('#witness-stage .witness-end')?.textContent, 'The room falls silent.');
   });
 
-  await t.test('going back while a speech promise is still pending discards it — no phantom early advance', async t2 => {
-    t2.mock.timers.enable({ apis: ['setTimeout'] });
-    let resolveSpeech;
-    const loaded = loadPublicModule('witness.js', FIXTURE, window => {
-      window.Voice = {
-        speak: () =>
-          new Promise(resolve => {
-            resolveSpeech = resolve;
-          }),
-        stop: () => {},
-      };
-    });
-    t2.after(loaded.cleanup);
-    const { document, window, module: Witness } = loaded;
+  await t.test(
+    'going back while a speech promise is still pending discards it — no phantom early advance',
+    async t2 => {
+      t2.mock.timers.enable({ apis: ['setTimeout'] });
+      let resolveSpeech;
+      const loaded = loadPublicModule('witness.js', FIXTURE, window => {
+        window.Voice = {
+          speak: () =>
+            new Promise(resolve => {
+              resolveSpeech = resolve;
+            }),
+          stop: () => {},
+        };
+      });
+      t2.after(loaded.cleanup);
+      const { document, window, module: Witness } = loaded;
 
-    await Witness.start(
-      { rounds: [{ label: 'Round I', text: 'Crowley:\nOne.\n\nBlavatsky:\nTwo.' }] },
-      makeDeps()
-    );
-    Witness.advance(); // renders "One." (Crowley), Voice.speak() pending
-    window.document.dispatchEvent(new window.KeyboardEvent('keydown', { code: 'ArrowLeft' })); // goBack()
-    assert.equal(
-      document.querySelectorAll('#witness-stage .transcript-entry').length,
-      0,
-      'goBack() should have undone the "One." render'
-    );
+      await Witness.start({ rounds: [{ label: 'Round I', text: 'Crowley:\nOne.\n\nBlavatsky:\nTwo.' }] }, makeDeps());
+      Witness.advance(); // renders "One." (Crowley), Voice.speak() pending
+      window.document.dispatchEvent(new window.KeyboardEvent('keydown', { code: 'ArrowLeft' })); // goBack()
+      assert.equal(
+        document.querySelectorAll('#witness-stage .transcript-entry').length,
+        0,
+        'goBack() should have undone the "One." render'
+      );
 
-    // "One." 's speech promise finally resolves after the user already
-    // stepped back past it. Without the generation guard this would
-    // schedule its own setTimeout(advance, ~1200ms) alongside goBack()'s
-    // legitimate resume timer (scheduled for 2400ms) -- a phantom advance
-    // 1200ms early, re-rendering "One." well before the real resume fires.
-    resolveSpeech();
-    await flushMicrotasks();
+      // "One." 's speech promise finally resolves after the user already
+      // stepped back past it. Without the generation guard this would
+      // schedule its own setTimeout(advance, ~1200ms) alongside goBack()'s
+      // legitimate resume timer (scheduled for 2400ms) -- a phantom advance
+      // 1200ms early, re-rendering "One." well before the real resume fires.
+      resolveSpeech();
+      await flushMicrotasks();
 
-    t2.mock.timers.tick(1200);
-    assert.equal(
-      document.querySelectorAll('#witness-stage .transcript-entry').length,
-      0,
-      'the stale promise must not have scheduled an early phantom advance'
-    );
+      t2.mock.timers.tick(1200);
+      assert.equal(
+        document.querySelectorAll('#witness-stage .transcript-entry').length,
+        0,
+        'the stale promise must not have scheduled an early phantom advance'
+      );
 
-    t2.mock.timers.tick(1200); // completes goBack()'s real 2400ms resume pause
-    assert.equal(
-      document.querySelectorAll('#witness-stage .transcript-entry').length,
-      1,
-      'the legitimate resume should still fire on its own schedule'
-    );
-    assert.match(document.querySelector('#witness-stage .speaker-name').textContent, /Crowley/);
-  });
+      t2.mock.timers.tick(1200); // completes goBack()'s real 2400ms resume pause
+      assert.equal(
+        document.querySelectorAll('#witness-stage .transcript-entry').length,
+        1,
+        'the legitimate resume should still fire on its own schedule'
+      );
+      assert.match(document.querySelector('#witness-stage .speaker-name').textContent, /Crowley/);
+    }
+  );
 });
 
 test('replay: start syncs the record, exit stops playback and collapses the stage', async t => {
@@ -659,6 +678,110 @@ test('live mirroring (#184): the stage renders its own copy, independent of the 
 
       Witness.liveSpeech({ speaker: 'Crowley', text: 'The book is not the point.', memberId: 'crowley' });
       assert.equal(document.querySelectorAll('#witness-stage .transcript-entry').length, 1);
+    }
+  );
+
+  // #400: liveSpeech() used to call window.Voice.speak() synchronously and
+  // discard whatever promise it returned, so nothing gated a second beat's
+  // speak() call on the first beat's audio actually finishing -- voice.js's
+  // own speak() interrupts whatever is still playing the instant it's
+  // called again, which cut a member off mid-sentence on nearly every beat
+  // once live convene started streaming beats faster than anyone could
+  // actually talk. A first pass serialized just the Voice.speak() calls;
+  // real-world testing showed that wasn't enough on its own -- the *visual*
+  // side (typing indicators, settled cards) kept advancing unpaced, so the
+  // room still raced far ahead of what was actually playing. The live turn
+  // queue below gates both together: a second beat doesn't even become
+  // visible until the first beat's full turn -- speech plus the same
+  // WITNESS_MIN_PAUSE breathing pause replay's advance() uses -- is done.
+  await t.test(
+    '#400: a second live beat does not speak (or become visible) until the first beat is fully done',
+    async t2 => {
+      t2.mock.timers.enable({ apis: ['setTimeout'] });
+      async function flushMicrotasks(n = 4) {
+        for (let i = 0; i < n; i++) await Promise.resolve();
+      }
+
+      const calls = [];
+      const resolvers = [];
+      const loaded = loadPublicModule('witness.js', FIXTURE, window => {
+        window.Voice = {
+          speak: text => {
+            calls.push(text);
+            return new Promise(resolve => resolvers.push(resolve));
+          },
+          stop: () => {},
+        };
+      });
+      t2.after(loaded.cleanup);
+      const { document, module: Witness } = loaded;
+      Witness.configure(makeDeps());
+
+      Witness.liveSpeech({ speaker: 'Crowley', text: 'One.', memberId: 'crowley' });
+      Witness.liveSpeech({ speaker: 'Blavatsky', text: 'Two.', memberId: 'blavatsky' });
+      await flushMicrotasks();
+      assert.deepEqual(calls, ['One.'], 'the second beat must not have spoken while the first is still in flight');
+      assert.equal(
+        document.querySelectorAll('#witness-stage .transcript-entry').length,
+        1,
+        "Blavatsky's turn must not be visible yet either -- it is queued, not just its audio"
+      );
+
+      resolvers[0](); // "One." finishes
+      await flushMicrotasks();
+      assert.deepEqual(
+        calls,
+        ['One.'],
+        'a short breathing pause (WITNESS_MIN_PAUSE) still separates beats, same as replay'
+      );
+      assert.equal(document.querySelectorAll('#witness-stage .transcript-entry').length, 1);
+
+      t2.mock.timers.tick(1200); // WITNESS_MIN_PAUSE at 1x speed
+      await flushMicrotasks();
+      assert.deepEqual(calls, ['One.', 'Two.'], 'once the pause elapses, the second beat should start speaking');
+      assert.equal(document.querySelectorAll('#witness-stage .transcript-entry').length, 2);
+    }
+  );
+
+  // #400: a beat still queued behind a still-playing one must not start
+  // talking after the live session that queued it has already ended (stage
+  // reset, or the stage collapsed to show the record) -- resetLiveSpeechQueue
+  // (called from clearRoom/collapseStage) must orphan it.
+  await t.test(
+    '#400: resetting the stage discards a still-queued live beat rather than letting it speak later',
+    async t2 => {
+      async function flushMicrotasks(n = 4) {
+        for (let i = 0; i < n; i++) await Promise.resolve();
+      }
+
+      const calls = [];
+      const resolvers = [];
+      const loaded = loadPublicModule('witness.js', FIXTURE, window => {
+        window.Voice = {
+          speak: text => {
+            calls.push(text);
+            return new Promise(resolve => resolvers.push(resolve));
+          },
+          stop: () => {},
+        };
+      });
+      t2.after(loaded.cleanup);
+      const { module: Witness } = loaded;
+      Witness.configure(makeDeps());
+
+      Witness.liveSpeech({ speaker: 'Crowley', text: 'One.', memberId: 'crowley' });
+      Witness.liveSpeech({ speaker: 'Blavatsky', text: 'Two.', memberId: 'blavatsky' });
+      await flushMicrotasks();
+      assert.deepEqual(calls, ['One.']);
+
+      Witness.resetLiveStage(); // clears the stage mid-flight, orphaning the queued "Two."
+      resolvers[0](); // "One." (already superseded) finishes
+      await flushMicrotasks();
+      assert.deepEqual(
+        calls,
+        ['One.'],
+        'the queued second beat must not speak into a stage that has already been reset'
+      );
     }
   );
 
@@ -872,7 +995,8 @@ test('the room (#257): dialogue composited onto the scene, replacing the #202 to
     assert.match(latestEntryText(card), /not the point/);
   });
 
-  await t.test('two seats close together on screen get stacked instead of overlapping', t2 => {
+  await t.test('two seats close together on screen get stacked instead of overlapping', async t2 => {
+    t2.mock.timers.enable({ apis: ['setTimeout'] });
     const { document, window, module: Witness } = boot(t2);
     stubScene(window, {
       crowley: { x: 100, y: 50, visible: true },
@@ -881,7 +1005,10 @@ test('the room (#257): dialogue composited onto the scene, replacing the #202 to
     Witness.configure(makeDeps());
     Witness.enableRoom();
 
+    // #400: only one turn is ever live at a time now -- Blavatsky's card
+    // doesn't exist until Crowley's turn has fully played out.
     Witness.liveSpeech({ speaker: 'Crowley', text: 'One.', memberId: 'crowley' });
+    await advancePastLiveTurn(t2);
     Witness.liveSpeech({ speaker: 'Blavatsky', text: 'Two.', memberId: 'blavatsky' });
 
     const tops = [...document.querySelectorAll('#room-speech-layer .room-speech-card')].map(c =>
@@ -957,11 +1084,7 @@ test('the room (#257): dialogue composited onto the scene, replacing the #202 to
         1,
         'going back should remove the entry it added, not the whole card'
       );
-      assert.match(
-        latestEntryText(card),
-        /First thing/,
-        'going back should leave the card showing its prior turn'
-      );
+      assert.match(latestEntryText(card), /First thing/, 'going back should leave the card showing its prior turn');
     }
   );
 
@@ -980,8 +1103,8 @@ test('the room (#257): dialogue composited onto the scene, replacing the #202 to
   });
 });
 
-test('scrollback (#287): a member\'s card is a short-lived stack of recent beats, not just the latest', async t => {
-  await t.test('consecutive beats from the same member accumulate as separate entries, oldest first', t2 => {
+test("scrollback (#287): a member's card is a short-lived stack of recent beats, not just the latest", async t => {
+  await t.test('consecutive beats from the same member accumulate as separate entries, oldest first', async t2 => {
     t2.mock.timers.enable({ apis: ['setTimeout'] });
     const { document, window, module: Witness } = boot(t2);
     stubScene(window, { crowley: { x: 10, y: 10, visible: true } });
@@ -989,9 +1112,9 @@ test('scrollback (#287): a member\'s card is a short-lived stack of recent beats
     Witness.enableRoom();
 
     Witness.liveSpeech({ speaker: 'Crowley', text: 'One.', memberId: 'crowley' });
-    t2.mock.timers.tick(1200); // clear #279's per-member reading-time hold between beats
+    await advancePastLiveTurn(t2); // clear #400's live turn queue between beats
     Witness.liveSpeech({ speaker: 'Crowley', text: 'Two.', memberId: 'crowley' });
-    t2.mock.timers.tick(1200);
+    await advancePastLiveTurn(t2);
     Witness.liveSpeech({ speaker: 'Crowley', text: 'Three.', memberId: 'crowley' });
 
     assert.equal(
@@ -1014,7 +1137,7 @@ test('scrollback (#287): a member\'s card is a short-lived stack of recent beats
     );
   });
 
-  await t.test('a typing placeholder settles into a new entry, not a rewrite of the whole stack', t2 => {
+  await t.test('a typing placeholder settles into a new entry, not a rewrite of the whole stack', async t2 => {
     t2.mock.timers.enable({ apis: ['setTimeout'] });
     const { document, window, module: Witness } = boot(t2);
     stubScene(window, { crowley: { x: 10, y: 10, visible: true } });
@@ -1022,7 +1145,7 @@ test('scrollback (#287): a member\'s card is a short-lived stack of recent beats
     Witness.enableRoom();
 
     Witness.liveSpeech({ speaker: 'Crowley', text: 'One.', memberId: 'crowley' });
-    t2.mock.timers.tick(1200);
+    await advancePastLiveTurn(t2);
     Witness.liveTypingStart('Crowley', 'crowley');
     Witness.liveTypingSet('Two');
     Witness.liveClearTyping();
@@ -1034,7 +1157,7 @@ test('scrollback (#287): a member\'s card is a short-lived stack of recent beats
     assert.equal(entries[1].querySelector('.speech-text').textContent, 'Two.');
   });
 
-  await t.test('the whole stack fades together once the newest entry has had its reading time', t2 => {
+  await t.test('the whole stack fades together once the newest entry has had its reading time', async t2 => {
     t2.mock.timers.enable({ apis: ['setTimeout'] });
     const { document, window, module: Witness } = boot(t2);
     stubScene(window, { crowley: { x: 10, y: 10, visible: true } });
@@ -1042,7 +1165,7 @@ test('scrollback (#287): a member\'s card is a short-lived stack of recent beats
     Witness.enableRoom();
 
     Witness.liveSpeech({ speaker: 'Crowley', text: 'One.', memberId: 'crowley' });
-    t2.mock.timers.tick(1200);
+    await advancePastLiveTurn(t2);
     Witness.liveSpeech({ speaker: 'Crowley', text: 'Two.', memberId: 'crowley' });
 
     // Fading resets on every new beat (scheduleCardFade), so the two-entry
@@ -1068,7 +1191,7 @@ test('scrollback (#287): a member\'s card is a short-lived stack of recent beats
 
   await t.test(
     "a nearby card's stacking offset clears its own rendered height, not a flat guess (regression: two members' stacks bled into each other on screen)",
-    t2 => {
+    async t2 => {
       t2.mock.timers.enable({ apis: ['setTimeout'] });
       const { document, window, module: Witness } = boot(t2);
       stubScene(window, {
@@ -1079,6 +1202,7 @@ test('scrollback (#287): a member\'s card is a short-lived stack of recent beats
       Witness.enableRoom();
 
       Witness.liveSpeech({ speaker: 'Crowley', text: 'One.', memberId: 'crowley' });
+      await advancePastLiveTurn(t2); // #400: Blavatsky's turn can't render until Crowley's has fully played
       Witness.liveSpeech({ speaker: 'Blavatsky', text: 'Two.', memberId: 'blavatsky' });
 
       const [crowleyCard, blavatskyCard] = document.querySelectorAll('#room-speech-layer .room-speech-card');
@@ -1098,9 +1222,12 @@ test('scrollback (#287): a member\'s card is a short-lived stack of recent beats
       });
 
       // Trigger another reposition pass now that the stub is in place --
-      // Crowley's own second beat, clear of its #279 hold, does it for both
-      // cards (repositionRoomCards always repositions everything at once).
-      t2.mock.timers.tick(1200);
+      // Crowley's own third beat, clear of the live turn queue, does it for
+      // both cards (repositionRoomCards always repositions everything at
+      // once). Blavatsky's fade timer (scheduleCardFade) has well over a
+      // second left at this point, so her card is still on screen to offset
+      // against.
+      await advancePastLiveTurn(t2);
       Witness.liveSpeech({ speaker: 'Crowley', text: 'Three.', memberId: 'crowley' });
 
       const crowleyTop = parseInt(crowleyCard.style.top, 10);
@@ -1114,10 +1241,24 @@ test('scrollback (#287): a member\'s card is a short-lived stack of recent beats
   );
 });
 
-test("room-mode live pacing (#279): a member's card holds long enough to read before the next mutation lands", async t => {
+// #279's original per-member, WPM-only room hold is gone -- superseded by
+// #400's global live turn queue (see that section's own comment in
+// witness.js). #279 held one member's card back from clobbering *itself*
+// too fast but explicitly let different members race independently, and it
+// coalesced a burst down to only the latest pending mutation, silently
+// dropping an intermediate beat if a fresher one (or a round transition)
+// arrived first. Real-world testing after #400's first pass showed that
+// wasn't enough on its own -- serializing only the audio, not the visuals,
+// let the room race many turns ahead of what was actually playing. This
+// suite now exercises the replacement: everything is global (any member can
+// hold anyone else back), real-audio-paced when voice is on and WPM-paced
+// otherwise (exactly replay's own model), extends to stage mode (previously
+// entirely unpaced live), and never drops a turn -- every one gets its
+// moment, in order.
+test("live turn queue (#400): only one member's turn is ever on screen at a time, in order, nothing dropped", async t => {
   await t.test(
     'a second beat from the same member is held, not shown, until the first has had its reading time',
-    t2 => {
+    async t2 => {
       t2.mock.timers.enable({ apis: ['setTimeout'] });
       const { document, window, module: Witness } = boot(t2);
       stubScene(window, { crowley: { x: 10, y: 10, visible: true } });
@@ -1138,23 +1279,23 @@ test("room-mode live pacing (#279): a member's card holds long enough to read be
       assert.equal(
         document.querySelectorAll('#room-speech-layer .room-card-entry').length,
         1,
-        'still one entry, the second beat is held, not appended'
+        'still one entry, the second beat is queued, not appended'
       );
 
       // WITNESS_MIN_PAUSE -- the reading-time floor for a beat this short.
-      t2.mock.timers.tick(1200);
+      await advancePastLiveTurn(t2);
       card = document.querySelector('#room-speech-layer .room-speech-card');
       assert.match(
         latestEntryText(card),
         /Two\./,
-        'once the hold elapses, the deferred beat is added as the next entry'
+        'once the first turn is done, the queued beat takes its place as the next entry'
       );
     }
   );
 
   await t.test(
-    'a typing indicator opened right after a beat closes does not clobber the just-shown card mid-hold',
-    t2 => {
+    'a typing indicator opened right after a beat closes does not clobber the just-shown card mid-turn',
+    async t2 => {
       t2.mock.timers.enable({ apis: ['setTimeout'] });
       const { document, window, module: Witness } = boot(t2);
       stubScene(window, { crowley: { x: 10, y: 10, visible: true } });
@@ -1169,70 +1310,89 @@ test("room-mode live pacing (#279): a member's card holds long enough to read be
       assert.equal(
         document.querySelectorAll('#room-speech-layer .room-card-entry-typing').length,
         0,
-        'typing must not overwrite the settled entry before its hold clears'
+        'typing must not overwrite the settled entry before the previous turn is done'
       );
       assert.match(latestEntryText(card), /One\./);
 
-      // Chunks keep streaming in while the hold is still up -- only the
-      // latest text queued behind the deferred typing-start should survive.
+      // Chunks keep streaming in while the previous turn still holds the
+      // floor -- every one is buffered on the queued turn, not lost.
       Witness.liveTypingSet('T');
       Witness.liveTypingSet('Two');
 
-      t2.mock.timers.tick(1200);
+      await advancePastLiveTurn(t2);
       card = document.querySelector('#room-speech-layer .room-speech-card');
       assert.equal(
         document.querySelectorAll('#room-speech-layer .room-card-entry-typing').length,
         1,
-        'once the hold clears, the deferred typing indicator takes over as the next entry'
+        'once the previous turn is done, the queued typing indicator takes over as the next entry'
       );
       assert.equal(
         latestEntryText(card, '.typing-text'),
         'Two',
-        'the latest typing text queued during the hold is applied once it flushes'
+        'the latest typing text buffered while queued is shown the instant it takes the floor'
       );
     }
   );
 
-  await t.test('a fresher settled beat supersedes a still-queued typing placeholder for the same member', t2 => {
+  await t.test(
+    'a beat that settles before its own typing indicator ever became visible still renders — nothing is dropped',
+    async t2 => {
+      t2.mock.timers.enable({ apis: ['setTimeout'] });
+      const { document, window, module: Witness } = boot(t2);
+      stubScene(window, { crowley: { x: 10, y: 10, visible: true } });
+      Witness.configure(makeDeps());
+      Witness.enableRoom();
+
+      Witness.liveSpeech({ speaker: 'Crowley', text: 'One.', memberId: 'crowley' });
+      Witness.liveTypingStart('Crowley', 'crowley'); // queued behind "One."
+      Witness.liveSpeech({ speaker: 'Crowley', text: 'Two.', memberId: 'crowley' }); // settles that same queued turn
+
+      await advancePastLiveTurn(t2);
+      const card = document.querySelector('#room-speech-layer .room-speech-card');
+      assert.equal(
+        document.querySelectorAll('#room-speech-layer .room-card-entry-typing').length,
+        0,
+        'the turn was already fully settled by the time it took the floor -- no stray typing entry left behind'
+      );
+      assert.equal(
+        document.querySelectorAll('#room-speech-layer .room-card-entry').length,
+        2,
+        '#279 used to coalesce/drop a beat in this exact shape -- #400 keeps both'
+      );
+      assert.match(latestEntryText(card), /Two\./);
+    }
+  );
+
+  await t.test(
+    'a different member is held back exactly like the same member would be -- the floor is shared',
+    async t2 => {
+      t2.mock.timers.enable({ apis: ['setTimeout'] });
+      const { document, window, module: Witness } = boot(t2);
+      stubScene(window, {
+        crowley: { x: 10, y: 10, visible: true },
+        blavatsky: { x: 200, y: 10, visible: true },
+      });
+      Witness.configure(makeDeps());
+      Witness.enableRoom();
+
+      Witness.liveSpeech({ speaker: 'Crowley', text: 'One.', memberId: 'crowley' });
+      Witness.liveSpeech({ speaker: 'Blavatsky', text: 'Two.', memberId: 'blavatsky' });
+
+      assert.equal(
+        document.querySelectorAll('#room-speech-layer .room-speech-card').length,
+        1,
+        "#400: Blavatsky's card must not appear until Crowley's turn is done -- a different member is not a loophole"
+      );
+
+      await advancePastLiveTurn(t2);
+      const cards = [...document.querySelectorAll('#room-speech-layer .room-speech-card')];
+      assert.equal(cards.length, 2, "Blavatsky's turn takes the floor once Crowley's is done");
+      assert.match(cards[1].querySelector('.speech-text').textContent, /Two\./);
+    }
+  );
+
+  await t.test('stage mode (no scene) is paced too -- #400 extended the floor beyond the room', async t2 => {
     t2.mock.timers.enable({ apis: ['setTimeout'] });
-    const { document, window, module: Witness } = boot(t2);
-    stubScene(window, { crowley: { x: 10, y: 10, visible: true } });
-    Witness.configure(makeDeps());
-    Witness.enableRoom();
-
-    Witness.liveSpeech({ speaker: 'Crowley', text: 'One.', memberId: 'crowley' });
-    Witness.liveTypingStart('Crowley', 'crowley'); // queued behind the hold
-    Witness.liveSpeech({ speaker: 'Crowley', text: 'Two.', memberId: 'crowley' }); // supersedes it
-
-    t2.mock.timers.tick(1200);
-    const card = document.querySelector('#room-speech-layer .room-speech-card');
-    assert.equal(
-      document.querySelectorAll('#room-speech-layer .room-card-entry-typing').length,
-      0,
-      'the settled beat wins over the stale typing placeholder queued before it'
-    );
-    assert.match(latestEntryText(card), /Two\./);
-  });
-
-  await t.test('different members are never held back by each other', t2 => {
-    const { document, window, module: Witness } = boot(t2);
-    stubScene(window, {
-      crowley: { x: 10, y: 10, visible: true },
-      blavatsky: { x: 200, y: 10, visible: true },
-    });
-    Witness.configure(makeDeps());
-    Witness.enableRoom();
-
-    Witness.liveSpeech({ speaker: 'Crowley', text: 'One.', memberId: 'crowley' });
-    Witness.liveSpeech({ speaker: 'Blavatsky', text: 'Two.', memberId: 'blavatsky' });
-
-    const cards = [...document.querySelectorAll('#room-speech-layer .room-speech-card')];
-    assert.equal(cards.length, 2, "a hold on one member must not delay another member's own card");
-    assert.match(cards[0].querySelector('.speech-text').textContent, /One\./);
-    assert.match(cards[1].querySelector('.speech-text').textContent, /Two\./);
-  });
-
-  await t.test('stage mode (no scene) is unpaced -- it already has scrollback, unlike the room', t2 => {
     const { document, module: Witness } = boot(t2);
     Witness.configure(makeDeps());
 
@@ -1241,9 +1401,12 @@ test("room-mode live pacing (#279): a member's card holds long enough to read be
 
     assert.equal(
       document.querySelectorAll('#witness-stage .transcript-entry').length,
-      2,
-      'both beats append immediately in the stage fallback'
+      1,
+      'the second beat must wait, same as the room -- #279 left stage mode entirely unpaced, which #400 fixes too'
     );
+
+    await advancePastLiveTurn(t2);
+    assert.equal(document.querySelectorAll('#witness-stage .transcript-entry').length, 2);
   });
 });
 
@@ -1284,7 +1447,7 @@ test('playback speed (#288): one multiplier reaches room-mode holds, replay, and
     return loaded;
   }
 
-  await t.test("2x halves a room card's #279 reading hold", t2 => {
+  await t.test("2x halves a room card's #400 live-turn-queue floor", async t2 => {
     t2.mock.timers.enable({ apis: ['setTimeout'] });
     const { document, window, module: Witness } = boot(t2);
     stubScene(window, { crowley: { x: 10, y: 10, visible: true } });
@@ -1296,11 +1459,12 @@ test('playback speed (#288): one multiplier reaches room-mode holds, replay, and
     Witness.liveSpeech({ speaker: 'Crowley', text: 'One.', memberId: 'crowley' });
     Witness.liveSpeech({ speaker: 'Crowley', text: 'Two.', memberId: 'crowley' });
 
-    // At 1x this hold is WITNESS_MIN_PAUSE (1200ms, see the #279 tests above);
-    // at 2x it should flush at half that.
+    // At 1x this floor is WITNESS_MIN_PAUSE (1200ms, see the #400 tests
+    // above); at 2x it should flush at half that.
+    await Promise.resolve();
     t2.mock.timers.tick(600);
     const card = document.querySelector('#room-speech-layer .room-speech-card');
-    assert.match(latestEntryText(card), /Two\./, 'the hold should already have cleared at twice the speed');
+    assert.match(latestEntryText(card), /Two\./, 'the queued turn should already have taken over at twice the speed');
   });
 
   await t.test("0.75x slows replay's header pause proportionally", async t2 => {
