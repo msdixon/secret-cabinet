@@ -150,6 +150,68 @@ test('loadVoiceExemplar', async t => {
   });
 });
 
+test('loadSecondaryVoiceExemplars', async t => {
+  await t.test('returns every author match after the first, in file order', () => {
+    const dir = makeFixtureDir();
+    t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+    const libraryFile = path.join(dir, 'library.json');
+    fs.writeFileSync(
+      libraryFile,
+      JSON.stringify([
+        { id: 'first', title: 'T1', source: 'S1', date: '1911', translated: false, file: 'first.md', author: 'crowley' },
+        { id: 'second', title: 'T2', source: 'S2', date: '1912', translated: true, file: 'second.md', author: 'crowley' },
+      ]),
+      'utf8'
+    );
+    writeEntry(dir, 'first.md', { body: 'First text.' });
+    writeEntry(dir, 'second.md', { body: 'Second text.' });
+
+    const secondary = lib.loadSecondaryVoiceExemplars(dir, libraryFile, 'crowley');
+    assert.equal(secondary.length, 1);
+    assert.equal(secondary[0].id, 'second');
+    assert.equal(secondary[0].text, 'Second text.');
+    assert.equal(secondary[0].translated, true);
+  });
+
+  await t.test('does not include the entry loadVoiceExemplar already returns as primary', () => {
+    const dir = makeFixtureDir();
+    t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+    const libraryFile = path.join(dir, 'library.json');
+    fs.writeFileSync(
+      libraryFile,
+      JSON.stringify([
+        { id: 'first', file: 'first.md', author: 'crowley' },
+        { id: 'second', file: 'second.md', author: 'crowley' },
+      ]),
+      'utf8'
+    );
+    writeEntry(dir, 'first.md', { body: 'First text.' });
+    writeEntry(dir, 'second.md', { body: 'Second text.' });
+
+    const primary = lib.loadVoiceExemplar(dir, libraryFile, 'crowley');
+    const secondary = lib.loadSecondaryVoiceExemplars(dir, libraryFile, 'crowley');
+    assert.equal(primary.id, 'first');
+    assert.deepEqual(secondary.map(e => e.id), ['second']);
+  });
+
+  await t.test('returns an empty array for a member with only one entry', () => {
+    const dir = makeFixtureDir();
+    t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+    const libraryFile = path.join(dir, 'library.json');
+    fs.writeFileSync(libraryFile, JSON.stringify([{ id: 'e1', file: 'e1.md', author: 'crowley' }]), 'utf8');
+    writeEntry(dir, 'e1.md');
+    assert.deepEqual(lib.loadSecondaryVoiceExemplars(dir, libraryFile, 'crowley'), []);
+  });
+
+  await t.test('returns an empty array when no memberId is given', () => {
+    const dir = makeFixtureDir();
+    t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+    const libraryFile = path.join(dir, 'library.json');
+    fs.writeFileSync(libraryFile, JSON.stringify([]), 'utf8');
+    assert.deepEqual(lib.loadSecondaryVoiceExemplars(dir, libraryFile, null), []);
+  });
+});
+
 test('loadLibraryCitationLookup', async t => {
   await t.test('builds a lookup keyed by entry id with citation/source_url/text', () => {
     const dir = makeFixtureDir();

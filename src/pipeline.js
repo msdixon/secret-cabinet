@@ -133,6 +133,7 @@ async function runRound({
   precedingTurn,
   disposition: priorDisposition,
   loadVoiceExemplar,
+  loadSecondaryVoiceExemplars,
   loadResidue,
   loadRelationshipEdges,
   loadLibraryCitationLookup,
@@ -171,6 +172,25 @@ async function runRound({
       exemplarCache.set(memberId, entry);
     }
     return exemplarCache.get(memberId);
+  };
+
+  // #370 wave 2: a member's secondary (non-exemplar) authored entries — see
+  // library.js's loadSecondaryVoiceExemplars — read once per round for the
+  // same reason as exemplarCache above.
+  const secondaryExemplarCache = new Map();
+  const secondaryExemplarsFor = memberId => {
+    if (!secondaryExemplarCache.has(memberId)) {
+      let entries = [];
+      try {
+        entries = loadSecondaryVoiceExemplars?.(memberId) || [];
+      } catch (err) {
+        // Same failure mode as exemplarFor above: never cost a member their
+        // turn over a malformed secondary entry — fall through to none.
+        console.warn('[voice-exemplar-secondary]', memberId, '—', err.message);
+      }
+      secondaryExemplarCache.set(memberId, entries);
+    }
+    return secondaryExemplarCache.get(memberId);
   };
 
   // #166: like exemplarCache, but mutated in place through the round (same
@@ -441,6 +461,7 @@ async function runRound({
 
     const unheardCount = pool.filter(id => id !== memberId && !(spokenCounts.get(id) > 0)).length;
     const voiceExemplar = exemplarFor(memberId);
+    const secondaryVoiceExemplars = secondaryExemplarsFor(memberId);
     const residue = residueFor(memberId);
     const system = buildSpeakerSystemPrompt({
       lodgeContext,
@@ -450,6 +471,7 @@ async function runRound({
       loadMemberFile,
       disposition: currentDisposition[memberId],
       voiceExemplar,
+      secondaryVoiceExemplars,
       residue,
       otherPresentMembers: presentMembers.filter(m => m.id !== memberId),
       relationshipEdges: relationshipEdges(),
@@ -485,6 +507,7 @@ async function runRound({
           usage: result.usage,
           latencyMs: result.latencyMs,
           voiceExemplar: voiceExemplar?.id,
+          voiceExemplarSecondary: secondaryVoiceExemplars?.map(e => e.id),
           ...(passed ? { passed: true } : {}),
         })
       );
@@ -596,6 +619,7 @@ async function runRound({
           skipped: true,
           error: err.message,
           voiceExemplar: voiceExemplar?.id,
+          voiceExemplarSecondary: secondaryVoiceExemplars?.map(e => e.id),
         })
       );
       // #354: the round goes on with fewer voices, but the attempt is not

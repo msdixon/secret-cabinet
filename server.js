@@ -322,6 +322,10 @@ function loadVoiceExemplar(memberId) {
   return library.loadVoiceExemplar(LIBRARY_DIR, LIBRARY_FILE, memberId);
 }
 
+function loadSecondaryVoiceExemplars(memberId) {
+  return library.loadSecondaryVoiceExemplars(LIBRARY_DIR, LIBRARY_FILE, memberId);
+}
+
 // #268 — relationship-as-data layer. Reads the same knowledge graph (#22/
 // #84) the /api/graph route builds, at query time, same as that route —
 // runRound (pipeline.js) caches the result for the life of one round via
@@ -479,6 +483,7 @@ registerConveneRoutes(app, {
   roster: ROSTER,
   loadMemberFile,
   loadVoiceExemplar,
+  loadSecondaryVoiceExemplars,
   loadResidue,
   loadRelationshipEdges,
   loadLibraryCitationLookup,

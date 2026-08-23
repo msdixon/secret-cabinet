@@ -46,14 +46,18 @@ test('library.json — author field (#187)', async t => {
     assert.deepEqual(orphans, [], `author missing from members: ${orphans.join(', ')}`);
   });
 
-  await t.test('no member is credited as author of two entries', () => {
-    // Not forbidden in principle, but loadVoiceExemplar takes the first
-    // match in file order — if this ever fires, the pick is silently
-    // order-dependent and wants a deliberate decision, not a default.
+  await t.test('no author has more than two entries yet', () => {
+    // #370 wave 2 made a second authored entry per member deliberate (a
+    // different-genre "tone-tuning" text alongside the original exemplar) —
+    // loadVoiceExemplar takes the *first* library.json match as the primary
+    // exemplar, and loadSecondaryVoiceExemplars reads any others. Two per
+    // author is this round's actual scope; a third would be a real escalation
+    // (a bigger secondary-exemplar prompt cost, a fresh curation judgment
+    // call) and wants a deliberate look rather than silently sliding in.
     const seen = new Map();
     for (const entry of library) seen.set(entry.author, (seen.get(entry.author) || 0) + 1);
-    const doubled = [...seen].filter(([, n]) => n > 1).map(([id]) => id);
-    assert.deepEqual(doubled, [], `authors with more than one entry: ${doubled.join(', ')}`);
+    const overTwo = [...seen].filter(([, n]) => n > 2).map(([author, n]) => `${author} (${n})`);
+    assert.deepEqual(overTwo, [], `authors with more than two entries: ${overTwo.join(', ')}`);
   });
 });
 

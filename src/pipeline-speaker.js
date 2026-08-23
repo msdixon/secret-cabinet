@@ -20,6 +20,7 @@ const {
   CROWDED_WORDS_PER_VOICE,
   SPEAKER_MAX_TOKENS,
   VOICE_EXEMPLAR_WORD_BUDGET,
+  SECONDARY_VOICE_EXEMPLAR_WORD_BUDGET,
   RESIDUE_MAX_CHARS,
 } = require('./tuning');
 
@@ -225,29 +226,61 @@ function trimToWordBudget(text, maxWords) {
   return `${trimmed.split(/\s+/).slice(0, maxWords).join(' ')} […]`;
 }
 
-// `exemplar` is { title, source, date, text, translated } — see server.js's
-// loadVoiceExemplar. Returns '' for a member with no entry, which is what
-// makes the degradation invisible rather than a hole in the prompt.
-function buildVoiceExemplarSection(exemplar) {
-  const text = trimToWordBudget(exemplar?.text, VOICE_EXEMPLAR_WORD_BUDGET);
-  if (!text) return '';
-
-  // Half the corpus's titles already name the work they're drawn from
-  // ("The Voice of the Devil — The Marriage of Heaven and Hell", source "The
-  // Marriage of Heaven and Hell"), so a naive join prints it twice. Drop the
-  // redundant half rather than hand the model a line that reads like a
-  // stutter — this is the one place in the prompt claiming to be evidence.
+// Half the corpus's titles already name the work they're drawn from ("The
+// Voice of the Devil — The Marriage of Heaven and Hell", source "The
+// Marriage of Heaven and Hell"), so a naive join prints it twice. Drop the
+// redundant half rather than hand the model a line that reads like a
+// stutter — this is the one place in the prompt claiming to be evidence.
+function exemplarProvenance(exemplar) {
   const parts = [exemplar.title];
   if (exemplar.source && !exemplar.title?.includes(exemplar.source)) parts.push(exemplar.source);
   parts.push(exemplar.date);
-  const provenance = parts.filter(Boolean).join(' — ');
-  // Most of the corpus (21 of 36) is in translation, so for over half these
-  // members the specific English words are a translator's choice, not
-  // theirs. Naming that keeps the model from adopting Rosenthal's or Peers's
-  // vocabulary as Ibn Khaldun's or Teresa's own.
-  const translationNote = exemplar.translated
+  return parts.filter(Boolean).join(' — ');
+}
+
+// Most of the corpus is in translation, so for many members the specific
+// English words are a translator's choice, not theirs. Naming that keeps
+// the model from adopting Rosenthal's or Peers's vocabulary as Ibn
+// Khaldun's or Teresa's own.
+function exemplarTranslationNote(exemplar) {
+  return exemplar.translated
     ? " The English here is a translator's, not yours: take the cadence, the shape of the argument, and the habits of attention as your own — not the particular vocabulary."
     : '';
+}
+
+// #370 wave 2: a member's *other* authored entries, in a different genre
+// from the primary exemplar above — see library.js's
+// loadSecondaryVoiceExemplars. Rendered smaller and explicitly framed as
+// supplementary, not a second competing exemplar: it exists to sharpen or
+// correct the read the primary passage gives, the way a second data point
+// narrows an estimate rather than replacing the first. '' for a member with
+// none, which is still most of the roster.
+function buildSecondaryExemplarBlock(secondaryExemplars) {
+  const blocks = (secondaryExemplars || [])
+    .map(exemplar => {
+      const text = trimToWordBudget(exemplar?.text, SECONDARY_VOICE_EXEMPLAR_WORD_BUDGET);
+      if (!text) return '';
+      return `\n\n${exemplarProvenance(exemplar)}\n\n${text}${exemplarTranslationNote(exemplar)}`;
+    })
+    .filter(Boolean);
+  if (!blocks.length) return '';
+
+  return `\n\n---\n\nBelow is a shorter, second page of your own writing — a different genre, a different room, sometimes a different moment of your life. It doesn't replace the passage above; it sharpens or corrects it, the way a second sighting narrows an estimate the first alone couldn't. Weight it lighter than the passage above, but let both shape *how* you speak. Same rule as above: do not quote, cite, allude to, or steer toward either text's subject.${blocks.join('')}`;
+}
+
+// `exemplar` is { title, source, date, text, translated } — see server.js's
+// loadVoiceExemplar. `secondaryExemplars` is an array of the same shape —
+// see loadSecondaryVoiceExemplars — empty or absent for the ordinary case
+// of a member with just one authored entry. Returns '' for a member with no
+// primary entry, which is what makes the degradation invisible rather than
+// a hole in the prompt.
+function buildVoiceExemplarSection(exemplar, secondaryExemplars = []) {
+  const text = trimToWordBudget(exemplar?.text, VOICE_EXEMPLAR_WORD_BUDGET);
+  if (!text) return '';
+
+  const provenance = exemplarProvenance(exemplar);
+  const translationNote = exemplarTranslationNote(exemplar);
+  const secondarySection = buildSecondaryExemplarBlock(secondaryExemplars);
 
   return `\n\n---\n\n## HOW YOU ACTUALLY WRITE — A PAGE IN YOUR OWN HAND
 
@@ -257,7 +290,7 @@ ${provenance}
 
 ${text}
 
-Let this govern *how* you speak tonight, never *what* you speak about. Do not quote it, cite it, allude to it, or steer the room toward its subject — no one here is discussing this text, and producing it would read as a non sequitur. It is also written prose, and you are speaking aloud in a room: what carries over is the mind and the movement, not the punctuation of the page.${translationNote}`;
+Let this govern *how* you speak tonight, never *what* you speak about. Do not quote it, cite it, allude to it, or steer the room toward its subject — no one here is discussing this text, and producing it would read as a non sequitur. It is also written prose, and you are speaking aloud in a room: what carries over is the mind and the movement, not the punctuation of the page.${translationNote}${secondarySection}`;
 }
 
 // ── Cross-session residue (#166) ───────────────────────────────────────────
@@ -345,6 +378,7 @@ function buildSpeakerSystemPrompt({
   loadMemberFile,
   disposition,
   voiceExemplar,
+  secondaryVoiceExemplars,
   residue,
   otherPresentMembers,
   relationshipEdges,
@@ -360,7 +394,7 @@ function buildSpeakerSystemPrompt({
   // #187: sits directly after the character file, since it's evidence for
   // the same thing that file describes — and before the disposition, which
   // is about tonight specifically and wants to be the last thing read.
-  const exemplarSection = buildVoiceExemplarSection(voiceExemplar);
+  const exemplarSection = buildVoiceExemplarSection(voiceExemplar, secondaryVoiceExemplars);
   // #166: slower-moving than disposition (spans sessions, not just tonight)
   // so it sits between the exemplar and the disposition — evidence of
   // register, then accumulated drift, then tonight specifically, in that
@@ -493,6 +527,7 @@ module.exports = {
   countWords,
   isPassTurn,
   VOICE_EXEMPLAR_WORD_BUDGET,
+  SECONDARY_VOICE_EXEMPLAR_WORD_BUDGET,
   trimToWordBudget,
   buildVoiceExemplarSection,
   RESIDUE_MAX_CHARS,

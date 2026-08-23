@@ -454,5 +454,77 @@
     "members": ["sun-ra"],
     "themes": ["philosophy-of-language", "hidden-meaning", "etymology", "scripture", "myth", "afrofuturism"],
     "file": "sun-ra-the-flesh-broadsheet-1950s-1972.md"
+  },
+  {
+    "id": "blake-letter-to-butts-1803",
+    "title": "Corporeal Friends Are Spiritual Enemies — Letter to Thomas Butts",
+    "source": "The Letters of William Blake, together with a Life by Frederick Tatham",
+    "date": "1803",
+    "author": "william-blake",
+    "translated": false,
+    "license": "public-domain",
+    "members": ["william-blake"],
+    "themes": ["correspondence", "felpham", "contraries", "visionary-life", "doubt"],
+    "file": "blake-letter-to-butts-1803.md"
+  },
+  {
+    "id": "dee-diary-1596",
+    "title": "A Vision of Many Books — Private Diary",
+    "source": "The Private Diary of Dr. John Dee",
+    "date": "1596",
+    "author": "dee",
+    "translated": false,
+    "license": "public-domain",
+    "members": ["dee"],
+    "themes": ["vision", "hieroglyph", "books", "dream", "diary"],
+    "file": "dee-diary-1596.md"
+  },
+  {
+    "id": "teresa-letter-lorenzo-cepeda-1576",
+    "title": "The Master of the Ceremonies — Letter to Don Lorenzo de Cepeda",
+    "source": "The Letters of Saint Teresa",
+    "date": "1576",
+    "author": "teresa",
+    "translated": true,
+    "license": "public-domain",
+    "members": ["teresa"],
+    "themes": ["correspondence", "domestic-life", "humor", "health", "consolations"],
+    "file": "teresa-letter-lorenzo-cepeda-1576.md"
+  },
+  {
+    "id": "swedenborg-journal-of-dreams-1744",
+    "title": "Journal of Dreams, 1–2 April 1744",
+    "source": "Emanuel Swedenborg's Journal of Dreams and Spiritual Experiences in the Year Seventeen Hundred and Forty-Four",
+    "date": "1744",
+    "author": "swedenborg",
+    "translated": true,
+    "license": "public-domain",
+    "members": ["swedenborg"],
+    "themes": ["dream-symbolism", "interpretation", "self-examination", "doubt", "daily-life"],
+    "file": "swedenborg-journal-of-dreams-1744.md"
+  },
+  {
+    "id": "bohme-third-epistle-1620",
+    "title": "Only a Memorial to Himself — The Third Epistle",
+    "source": "The Epistles of Jacob Boehme",
+    "date": "1620",
+    "author": "bohme",
+    "translated": true,
+    "license": "public-domain",
+    "members": ["bohme"],
+    "themes": ["hidden-knowledge", "correspondence", "self-mythology", "persecution", "authorship"],
+    "file": "bohme-third-epistle-1620.md"
+  },
+  {
+    "id": "blavatsky-letter-sinnett-1882",
+    "title": "I Am a She Job! — Letter to A. P. Sinnett",
+    "source": "The Letters of H. P. Blavatsky to A. P. Sinnett, and Other Miscellaneous Letters",
+    "date": "1882",
+    "author": "blavatsky",
+    "translated": false,
+    "license": "public-domain",
+    "members": ["blavatsky"],
+    "themes": ["correspondence", "humor", "occult-science", "secrecy", "illness"],
+    "file": "blavatsky-letter-sinnett-1882.md"
   }
 ]
