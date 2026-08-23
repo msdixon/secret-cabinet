@@ -53,13 +53,18 @@ function parseLibraryFrontmatter(raw) {
 // one member whose hand the text is in. A member with no authored entry
 // returns null and their prompt is built exactly as it was before #187.
 //
-// One entry per author today. If an author ever gains a second, the first in
-// library.json order wins — deterministic, and a curator wanting a specific
-// one as the exemplar should order the file accordingly.
+// If an author has more than one entry, the first in library.json order is
+// the primary exemplar — deterministic, and a curator wanting a specific one
+// as primary should order the file accordingly. Any others are read by
+// loadSecondaryVoiceExemplars below, not by this function.
 function loadVoiceExemplar(libraryDir, libraryFile, memberId) {
   if (!memberId) return null;
   const entry = loadLibraryIndex(libraryFile).find(e => e.author === memberId);
   if (!entry) return null;
+  return entryToExemplar(libraryDir, entry);
+}
+
+function entryToExemplar(libraryDir, entry) {
   const filePath = path.join(libraryDir, entry.file);
   if (!fs.existsSync(filePath)) return null;
   const raw = fs.readFileSync(filePath, 'utf8');
@@ -73,6 +78,26 @@ function loadVoiceExemplar(libraryDir, libraryFile, memberId) {
     translated: !!entry.translated,
     text,
   };
+}
+
+// #370 wave 2 — once #35a's depth round gave some members a second authored
+// entry (a different-genre text: a letter, a diary, an epistle, alongside
+// the original formal preface/treatise), the single-exemplar model above
+// stopped being able to show it: loadVoiceExemplar only ever surfaces the
+// first author match. This reads every *other* entry authored by memberId,
+// in library.json order, so the speaker prompt (see pipeline-speaker.js's
+// buildVoiceExemplarSection) can inject them as smaller, supplementary
+// "tone-tuning" passages alongside the primary exemplar — evidence in a
+// different register, weighted lighter, not a replacement for it. Empty
+// array for a member with zero or one authored entries, which is still most
+// of the roster; nothing about loadVoiceExemplar's contract changes.
+function loadSecondaryVoiceExemplars(libraryDir, libraryFile, memberId) {
+  if (!memberId) return [];
+  const matches = loadLibraryIndex(libraryFile).filter(e => e.author === memberId);
+  return matches
+    .slice(1)
+    .map(entry => entryToExemplar(libraryDir, entry))
+    .filter(Boolean);
 }
 
 // Internal-only: read the `citation`/`source_url` frontmatter fields (plus
@@ -97,5 +122,6 @@ module.exports = {
   loadArchiveImageIndex,
   parseLibraryFrontmatter,
   loadVoiceExemplar,
+  loadSecondaryVoiceExemplars,
   loadLibraryCitationLookup,
 };

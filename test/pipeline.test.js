@@ -34,6 +34,7 @@ const {
   buildCastingPrompt,
   proposeCast,
   VOICE_EXEMPLAR_WORD_BUDGET,
+  SECONDARY_VOICE_EXEMPLAR_WORD_BUDGET,
   trimToWordBudget,
   buildVoiceExemplarSection,
   RESIDUE_MAX_CHARS,
@@ -1658,6 +1659,67 @@ test('buildVoiceExemplarSection', async t => {
     assert.match(section, /\[…\]/);
     assert.ok(countWords(section) < VOICE_EXEMPLAR_WORD_BUDGET + 200);
   });
+
+  // #370 wave 2 — a member can now have a secondary, "tone-tuning" entry
+  // (a different-genre text) alongside the primary exemplar above.
+  const secondaryExemplar = {
+    id: 'blake-letter-to-butts-1803',
+    title: 'Corporeal Friends Are Spiritual Enemies',
+    source: 'The Letters of William Blake',
+    date: '1803',
+    translated: false,
+    text: 'There is no medium or middle state.',
+  };
+
+  await t.test('omits the secondary block entirely when there are no secondary entries', () => {
+    assert.equal(buildVoiceExemplarSection(exemplar), buildVoiceExemplarSection(exemplar, []));
+    assert.doesNotMatch(buildVoiceExemplarSection(exemplar, []), /second page/);
+    assert.doesNotMatch(buildVoiceExemplarSection(exemplar, undefined), /second page/);
+  });
+
+  await t.test('a member with no primary entry gets nothing, even with secondary entries present', () => {
+    // Never fabricate a primary out of a secondary — see loadVoiceExemplar's
+    // own contract, unchanged by this addition.
+    assert.equal(buildVoiceExemplarSection(null, [secondaryExemplar]), '');
+  });
+
+  await t.test('appends the secondary excerpt and its provenance after the primary section', () => {
+    const section = buildVoiceExemplarSection(exemplar, [secondaryExemplar]);
+    assert.match(section, /Energy is the only life and is from the Body\./);
+    assert.match(section, /There is no medium or middle state\./);
+    assert.match(section, /Corporeal Friends Are Spiritual Enemies — The Letters of William Blake — 1803/);
+    assert.ok(section.indexOf('Energy is the only life') < section.indexOf('There is no medium'));
+  });
+
+  await t.test('frames the secondary text as supplementary, not a competing exemplar', () => {
+    const section = buildVoiceExemplarSection(exemplar, [secondaryExemplar]);
+    assert.match(section, /doesn't replace the passage above/);
+    assert.match(section, /Weight it lighter than the passage above/);
+  });
+
+  await t.test('trims each secondary excerpt to its own, smaller budget', () => {
+    const section = buildVoiceExemplarSection(exemplar, [
+      { ...secondaryExemplar, text: words(SECONDARY_VOICE_EXEMPLAR_WORD_BUDGET + 200) },
+    ]);
+    assert.match(section, /\[…\]/);
+    assert.ok(SECONDARY_VOICE_EXEMPLAR_WORD_BUDGET < VOICE_EXEMPLAR_WORD_BUDGET);
+  });
+
+  await t.test('adds its own translator caveat, independent of the primary entry', () => {
+    const untranslatedPrimary = buildVoiceExemplarSection(exemplar, [{ ...secondaryExemplar, translated: true }]);
+    assert.doesNotMatch(untranslatedPrimary.split('second page')[0], /translator's/);
+    assert.match(untranslatedPrimary, /The English here is a translator's, not yours/);
+  });
+
+  await t.test('renders more than one secondary entry, each with its own provenance', () => {
+    const section = buildVoiceExemplarSection(exemplar, [
+      secondaryExemplar,
+      { ...secondaryExemplar, id: 'other', title: 'Another Page', text: 'A second secondary passage.' },
+    ]);
+    assert.match(section, /Corporeal Friends Are Spiritual Enemies/);
+    assert.match(section, /Another Page/);
+    assert.match(section, /A second secondary passage\./);
+  });
 });
 
 // #166 — cross-session residue. mergeResidue is the load-bearing piece: it's
@@ -1770,6 +1832,40 @@ test('buildSpeakerSystemPrompt — voice exemplar wiring', async t => {
     assert.match(prompt, /Energy is Eternal Delight\./);
   });
 
+  // #370 wave 2 — secondaryVoiceExemplars wiring, threaded straight through
+  // to buildVoiceExemplarSection (see that function's own tests for the
+  // rendering behavior).
+  await t.test('omitting secondaryVoiceExemplars gets the exact pre-#370-wave-2 prompt', () => {
+    const withoutArg = buildSpeakerSystemPrompt({ ...base, voiceExemplar: exemplar });
+    assert.equal(
+      buildSpeakerSystemPrompt({ ...base, voiceExemplar: exemplar, secondaryVoiceExemplars: [] }),
+      withoutArg
+    );
+    assert.equal(
+      buildSpeakerSystemPrompt({ ...base, voiceExemplar: exemplar, secondaryVoiceExemplars: undefined }),
+      withoutArg
+    );
+  });
+
+  await t.test('a member with a secondary entry gets it appended inside the exemplar section', () => {
+    const prompt = buildSpeakerSystemPrompt({
+      ...base,
+      voiceExemplar: exemplar,
+      secondaryVoiceExemplars: [
+        {
+          id: 'blake-letter-to-butts-1803',
+          title: 'Corporeal Friends Are Spiritual Enemies',
+          source: 'The Letters of William Blake',
+          date: '1803',
+          translated: false,
+          text: 'There is no medium or middle state.',
+        },
+      ],
+    });
+    assert.match(prompt, /Energy is Eternal Delight\./);
+    assert.match(prompt, /There is no medium or middle state\./);
+  });
+
   await t.test("the exemplar sits after the character file and before tonight's disposition", () => {
     const prompt = buildSpeakerSystemPrompt({
       ...base,
@@ -1865,6 +1961,22 @@ test('makeMetric — voiceExemplar attribution', async t => {
   await t.test('is null when no exemplar was injected and on non-speaker phases', () => {
     assert.equal(makeMetric('speaker', { memberId: 'scholem' }).voiceExemplar, null);
     assert.equal(makeMetric('director', { round: 0 }).voiceExemplar, null);
+  });
+
+  // #370 wave 2 — same attribution need for secondary "tone-tuning" entries.
+  await t.test('records secondary entry ids on a speaker metric', () => {
+    const metric = makeMetric('speaker', {
+      round: 0,
+      memberId: 'william-blake',
+      voiceExemplar: 'blake-voice-of-the-devil-1790',
+      voiceExemplarSecondary: ['blake-letter-to-butts-1803'],
+    });
+    assert.deepEqual(metric.voiceExemplarSecondary, ['blake-letter-to-butts-1803']);
+  });
+
+  await t.test('is null when there were no secondary entries, not an empty array', () => {
+    assert.equal(makeMetric('speaker', { memberId: 'scholem', voiceExemplarSecondary: [] }).voiceExemplarSecondary, null);
+    assert.equal(makeMetric('speaker', { memberId: 'scholem' }).voiceExemplarSecondary, null);
   });
 });
 

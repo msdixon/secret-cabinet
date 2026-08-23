@@ -173,6 +173,15 @@ const SPEAKER_MAX_TOKENS = 1100;
 // tokens per beat when present.
 const VOICE_EXEMPLAR_WORD_BUDGET = 300;
 
+// #370 wave 2: a member's secondary (non-exemplar) authored entries — see
+// library.js's loadSecondaryVoiceExemplars — are supplementary evidence, not
+// the main register. Deliberately smaller than VOICE_EXEMPLAR_WORD_BUDGET so
+// the primary passage stays the dominant signal and the secondary one reads
+// as tone-tuning against it, not a second, competing exemplar. Applies per
+// secondary entry — round 1 gives every covered member at most one, but the
+// budget doesn't assume that stays true.
+const SECONDARY_VOICE_EXEMPLAR_WORD_BUDGET = 120;
+
 const RESIDUE_MAX_CHARS = 480; // same order of magnitude as disposition's 400, deliberately not larger — smaller and more conservative was the explicit mandate
 
 // #355: always-on per-beat citation capture, piggybacked on the existing
@@ -236,6 +245,7 @@ module.exports = {
   CROWDED_WORDS_PER_VOICE,
   SPEAKER_MAX_TOKENS,
   VOICE_EXEMPLAR_WORD_BUDGET,
+  SECONDARY_VOICE_EXEMPLAR_WORD_BUDGET,
   RESIDUE_MAX_CHARS,
   MAX_CITATIONS_PER_BEAT,
   CITATION_QUOTE_MAX_CHARS,

@@ -25,6 +25,7 @@ function makeMetric(
     error,
     reasoning,
     voiceExemplar,
+    voiceExemplarSecondary,
     waitingOnMemberId,
     residueNote,
     citationCount,
@@ -57,6 +58,11 @@ function makeMetric(
     // indistinguishable in the persisted metrics. Always null off the
     // speaker phase.
     voiceExemplar: voiceExemplar || null,
+    // #370 wave 2: ids of any supplementary "tone-tuning" entries injected
+    // alongside the primary exemplar above — see library.js's
+    // loadSecondaryVoiceExemplars. null when there were none (still most of
+    // the roster) or off the speaker phase, same convention as voiceExemplar.
+    voiceExemplarSecondary: voiceExemplarSecondary?.length ? voiceExemplarSecondary : null,
     // #203: the structured "unspent business" target a disposition update
     // resolved, if any — lets real sessions be checked for how often the
     // signal actually fires without re-parsing prose. Always null off
