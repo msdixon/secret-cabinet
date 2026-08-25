@@ -397,7 +397,11 @@ a.lodge-btn { display:inline-block; text-decoration:none; }
    look identical to one. */
 .keyword-inline { font-style:italic; color:var(--lodge-amber); border-bottom:1px dotted var(--lodge-amber-dim); }
 .after-panel { display:none; }
-.after-panel.visible { display:block; }
+/* #343: now toggled on every lull (runLullLoop), not just once at a
+   meeting's true end -- the same fadeIn every other transcript/lull element
+   already gets on arrival, so it reads as the room settling rather than a
+   panel snapping in and out under repeated toggling. */
+.after-panel.visible { display:block; animation:fadeIn 0.4s ease; }
 .after-row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
 .after-row + .after-row { margin-top:10px; padding-top:10px; border-top:1px solid var(--lodge-border); }
 .interject-form { display:flex; gap:10px; }

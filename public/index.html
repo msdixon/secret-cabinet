@@ -132,6 +132,127 @@
       </div>
     </div>
 
+    <!-- #343: post-meeting actions used to live in an .after-panel stacked
+         below .control-rail -- reachable only once you scrolled past every
+         provocation/casting/convene control, exactly the "gatekeeping the
+         fold" shape #358 already fixed for the room itself. This is the same
+         fix applied to these actions: the panel moves to sit directly under
+         the Stage instead, and app.js's showSessionControls()/
+         hideSessionControls() now toggle it in step with the room's own
+         lull state (runLullLoop) rather than revealing it once and leaving
+         it up. That's deliberate, not cosmetic -- a bar visible at all times
+         regardless of what the room is doing would be exactly the
+         control-panel resting state docs/PRINCIPLES.md's Principle 6 warns
+         against (see #186/#245, which arrived at the two-verb Continue/
+         Preserve grouping below for the same reason). Keying visibility off
+         the lull instead reuses a state the room already performs for
+         itself -- "the room falls quiet" is #245's own name for this
+         moment -- so the bar's resting state stays diegetic: present when
+         there's something to act on, gone the instant the room is speaking
+         again. -->
+    <div class="after-panel" id="after-panel">
+      <div class="panel-label" style="margin-bottom:10px;">The Room Falls Quiet</div>
+
+      <!-- #186: the panel reads as two verbs, not a control board. Continue
+           folds four ways of extending the meeting behind one menu; Preserve
+           folds every export and its per-app config behind another. Verify
+           Citations and Watch stay top-level: they're how you read the meeting
+           that already happened, not machinery for continuing or preserving it.
+
+           #245: this Continue is the *container*, and its first item is now
+           "Stir the room again" -- re-stirring a meeting that already closed.
+           The in-stream Continue, at a lull, is the different and now-primary
+           verb: going on with a meeting that never ended. -->
+      <div class="after-row">
+        <div class="menu-wrap">
+          <button class="lodge-btn" id="continue-btn" onclick="toggleAfterMenu('continue-menu')">Continue ▾</button>
+          <div class="lodge-menu" id="continue-menu">
+            <button class="lodge-btn" id="stir-room-btn" onclick="stirRoom()" title="Draw one more passage out of a meeting that already closed">Stir the room again ↻</button>
+            <button class="lodge-btn" id="interject-toggle-btn" style="border-color:#a0c8a0;color:#a0c8a0;" onclick="toggleInterjectForm()">Interject</button>
+            <button class="lodge-btn" onclick="reconveneOnCurrentSession()" title="Use this transcript as the provocation for a new session">↩ Reconvene</button>
+            <button class="lodge-btn" onclick="branchFromLatestLull()" title="Branch from here — explore an alternate path from this point, original stays untouched">⑂ Branch</button>
+          </div>
+        </div>
+
+        <button class="lodge-btn" id="verify-citations-btn" onclick="verifyCitations()">Verify Citations ⚑</button>
+        <button class="lodge-btn" style="border-color:var(--lodge-ash);color:var(--lodge-ash);" onclick="startWitness()" title="Watch the transcript play back with reading-time pacing">◎ Watch</button>
+        <button class="lodge-btn" style="border-color:var(--lodge-ash);color:var(--lodge-ash);" onclick="window.Metrics.toggle()" title="Tokens, cost, and the director's casting rationale for this session">⚙ Metrics</button>
+
+        <!-- #345: a row of small destination icons; selecting one opens a
+             single focused config below it, rather than showing every
+             destination's fields at once (the old Export Settings drawer). -->
+        <div class="menu-wrap">
+          <button class="lodge-btn" id="preserve-btn" onclick="toggleAfterMenu('preserve-menu')">Preserve ▾</button>
+          <div class="lodge-menu export-picker" id="preserve-menu">
+            <div class="export-icon-row" id="export-icon-row">
+              <button class="export-icon export-txt" data-dest="txt" title="Plain text (.txt)" onclick="window.Export.selectDestination('txt')" data-keep-menu-open>↓ txt</button>
+              <button class="export-icon export-scholarly" id="export-scholarly-btn" data-dest="scholarly" disabled title="Verify Citations, or click a passage above to add a note, to enable" onclick="window.Export.selectDestination('scholarly')" data-keep-menu-open>✎ note</button>
+              <button class="export-icon export-dayone" data-dest="dayone" title="Day One" onclick="window.Export.selectDestination('dayone')" data-keep-menu-open>→ Day One</button>
+              <span id="export-ulysses-row"><button class="export-icon export-ulysses" data-dest="ulysses" title="Ulysses" onclick="window.Export.selectDestination('ulysses')" data-keep-menu-open>→ Ulysses</button></span>
+              <span id="export-obsidian-row"><button class="export-icon export-obsidian" data-dest="obsidian" title="Obsidian" onclick="window.Export.selectDestination('obsidian')" data-keep-menu-open>→ Obsidian</button></span>
+              <span id="export-md-row" style="display:none;"><button class="export-icon export-txt" data-dest="md" title="Markdown (.md)" onclick="window.Export.selectDestination('md')" data-keep-menu-open>↓ md</button></span>
+            </div>
+
+            <div class="export-dest-config" id="export-dest-config">
+              <p class="export-dest-hint" id="export-dest-hint">Choose a destination above.</p>
+
+              <div class="export-dest-panel" id="export-panel-txt" hidden>
+                <p class="export-dest-desc">Download the annotated transcript as plain text.</p>
+                <button class="lodge-btn export-txt" onclick="window.Export.exportTxt()">↓ Download .txt</button>
+              </div>
+
+              <div class="export-dest-panel" id="export-panel-scholarly" hidden>
+                <p class="export-dest-desc">Download a scholarly note with your annotated passages and/or citation bibliography.</p>
+                <button class="lodge-btn export-scholarly" onclick="window.Export.exportScholarly()">↓ Download Note (.md)</button>
+              </div>
+
+              <div class="export-dest-panel" id="export-panel-dayone" hidden>
+                <div class="settings-field">
+                  <span>Day One journal</span>
+                  <span class="source-tag" id="export-journal-name" style="margin-left:0;">No journal selected</span>
+                </div>
+                <button class="lodge-btn export-dayone" onclick="window.Export.exportDayOne()">→ Save to Day One</button>
+              </div>
+
+              <div class="export-dest-panel" id="export-panel-ulysses" hidden>
+                <div class="settings-field">
+                  <span>Ulysses group</span>
+                  <input class="ulysses-group-input" id="ulysses-group" placeholder="e.g. The Affected" value="" oninput="localStorage.setItem('sc-ulysses-group',this.value)" data-keep-menu-open />
+                </div>
+                <div class="settings-field">
+                  <span>Group identifier (optional, subfolders)</span>
+                  <input class="ulysses-group-input" id="ulysses-group-id" placeholder="Option+right-click group → Copy Callback Identifier" value="" oninput="localStorage.setItem('sc-ulysses-group-id',this.value)" data-keep-menu-open />
+                </div>
+                <button class="lodge-btn export-ulysses" onclick="window.Export.exportUlysses()">→ Send to Ulysses</button>
+              </div>
+
+              <div class="export-dest-panel" id="export-panel-obsidian" hidden>
+                <div class="settings-field">
+                  <span>Obsidian vault</span>
+                  <input class="ulysses-group-input" id="obsidian-vault" placeholder="~/Documents/My Vault" value="" oninput="localStorage.setItem('sc-obsidian-vault',this.value)" data-keep-menu-open />
+                </div>
+                <button class="lodge-btn export-obsidian" onclick="window.Export.exportObsidian()">→ Save to Obsidian</button>
+              </div>
+
+              <div class="export-dest-panel" id="export-panel-md" hidden>
+                <p class="export-dest-desc">Download the annotated transcript as Markdown.</p>
+                <button class="lodge-btn export-txt" onclick="window.Export.exportMd()">↓ Download .md</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="after-row interject-form" id="interject-form" style="display:none;">
+        <input type="text" class="interject-input" id="interject-input" placeholder="A presence moves through the room. It has something to say..." onkeydown="if(event.key==='Enter') interject();" />
+        <button class="lodge-btn" style="border-color:#a0c8a0;color:#a0c8a0;" onclick="interject()">Send</button>
+      </div>
+
+      <div class="after-row">
+        <span class="source-tag" id="export-status"></span>
+      </div>
+    </div>
+
     <!-- #342: a compact wayfinding strip for the rail below, not the
          full-screen wizard header the original mockup drew -- that shape
          assumed the above-the-fold real estate #358 gave to the room
@@ -320,109 +441,6 @@
     </div>
 
     </div>
-    </div>
-
-    <div class="after-panel" id="after-panel">
-      <div class="panel-label" style="margin-bottom:10px;">III. After the Meeting</div>
-
-      <!-- #186: the panel reads as two verbs, not a control board. Continue
-           folds four ways of extending the meeting behind one menu; Preserve
-           folds every export and its per-app config behind another. Verify
-           Citations and Watch stay top-level: they're how you read the meeting
-           that already happened, not machinery for continuing or preserving it.
-
-           #245: this Continue is the *container*, and its first item is now
-           "Stir the room again" -- re-stirring a meeting that already closed.
-           The in-stream Continue, at a lull, is the different and now-primary
-           verb: going on with a meeting that never ended. -->
-      <div class="after-row">
-        <div class="menu-wrap">
-          <button class="lodge-btn" id="continue-btn" onclick="toggleAfterMenu('continue-menu')">Continue ▾</button>
-          <div class="lodge-menu" id="continue-menu">
-            <button class="lodge-btn" id="stir-room-btn" onclick="stirRoom()" title="Draw one more passage out of a meeting that already closed">Stir the room again ↻</button>
-            <button class="lodge-btn" id="interject-toggle-btn" style="border-color:#a0c8a0;color:#a0c8a0;" onclick="toggleInterjectForm()">Interject</button>
-            <button class="lodge-btn" onclick="reconveneOnCurrentSession()" title="Use this transcript as the provocation for a new session">↩ Reconvene</button>
-            <button class="lodge-btn" onclick="branchFromLatestLull()" title="Branch from here — explore an alternate path from this point, original stays untouched">⑂ Branch</button>
-          </div>
-        </div>
-
-        <button class="lodge-btn" id="verify-citations-btn" onclick="verifyCitations()">Verify Citations ⚑</button>
-        <button class="lodge-btn" style="border-color:var(--lodge-ash);color:var(--lodge-ash);" onclick="startWitness()" title="Watch the transcript play back with reading-time pacing">◎ Watch</button>
-        <button class="lodge-btn" style="border-color:var(--lodge-ash);color:var(--lodge-ash);" onclick="window.Metrics.toggle()" title="Tokens, cost, and the director's casting rationale for this session">⚙ Metrics</button>
-
-        <!-- #345: a row of small destination icons; selecting one opens a
-             single focused config below it, rather than showing every
-             destination's fields at once (the old Export Settings drawer). -->
-        <div class="menu-wrap">
-          <button class="lodge-btn" id="preserve-btn" onclick="toggleAfterMenu('preserve-menu')">Preserve ▾</button>
-          <div class="lodge-menu export-picker" id="preserve-menu">
-            <div class="export-icon-row" id="export-icon-row">
-              <button class="export-icon export-txt" data-dest="txt" title="Plain text (.txt)" onclick="window.Export.selectDestination('txt')" data-keep-menu-open>↓ txt</button>
-              <button class="export-icon export-scholarly" id="export-scholarly-btn" data-dest="scholarly" disabled title="Verify Citations, or click a passage above to add a note, to enable" onclick="window.Export.selectDestination('scholarly')" data-keep-menu-open>✎ note</button>
-              <button class="export-icon export-dayone" data-dest="dayone" title="Day One" onclick="window.Export.selectDestination('dayone')" data-keep-menu-open>→ Day One</button>
-              <span id="export-ulysses-row"><button class="export-icon export-ulysses" data-dest="ulysses" title="Ulysses" onclick="window.Export.selectDestination('ulysses')" data-keep-menu-open>→ Ulysses</button></span>
-              <span id="export-obsidian-row"><button class="export-icon export-obsidian" data-dest="obsidian" title="Obsidian" onclick="window.Export.selectDestination('obsidian')" data-keep-menu-open>→ Obsidian</button></span>
-              <span id="export-md-row" style="display:none;"><button class="export-icon export-txt" data-dest="md" title="Markdown (.md)" onclick="window.Export.selectDestination('md')" data-keep-menu-open>↓ md</button></span>
-            </div>
-
-            <div class="export-dest-config" id="export-dest-config">
-              <p class="export-dest-hint" id="export-dest-hint">Choose a destination above.</p>
-
-              <div class="export-dest-panel" id="export-panel-txt" hidden>
-                <p class="export-dest-desc">Download the annotated transcript as plain text.</p>
-                <button class="lodge-btn export-txt" onclick="window.Export.exportTxt()">↓ Download .txt</button>
-              </div>
-
-              <div class="export-dest-panel" id="export-panel-scholarly" hidden>
-                <p class="export-dest-desc">Download a scholarly note with your annotated passages and/or citation bibliography.</p>
-                <button class="lodge-btn export-scholarly" onclick="window.Export.exportScholarly()">↓ Download Note (.md)</button>
-              </div>
-
-              <div class="export-dest-panel" id="export-panel-dayone" hidden>
-                <div class="settings-field">
-                  <span>Day One journal</span>
-                  <span class="source-tag" id="export-journal-name" style="margin-left:0;">No journal selected</span>
-                </div>
-                <button class="lodge-btn export-dayone" onclick="window.Export.exportDayOne()">→ Save to Day One</button>
-              </div>
-
-              <div class="export-dest-panel" id="export-panel-ulysses" hidden>
-                <div class="settings-field">
-                  <span>Ulysses group</span>
-                  <input class="ulysses-group-input" id="ulysses-group" placeholder="e.g. The Affected" value="" oninput="localStorage.setItem('sc-ulysses-group',this.value)" data-keep-menu-open />
-                </div>
-                <div class="settings-field">
-                  <span>Group identifier (optional, subfolders)</span>
-                  <input class="ulysses-group-input" id="ulysses-group-id" placeholder="Option+right-click group → Copy Callback Identifier" value="" oninput="localStorage.setItem('sc-ulysses-group-id',this.value)" data-keep-menu-open />
-                </div>
-                <button class="lodge-btn export-ulysses" onclick="window.Export.exportUlysses()">→ Send to Ulysses</button>
-              </div>
-
-              <div class="export-dest-panel" id="export-panel-obsidian" hidden>
-                <div class="settings-field">
-                  <span>Obsidian vault</span>
-                  <input class="ulysses-group-input" id="obsidian-vault" placeholder="~/Documents/My Vault" value="" oninput="localStorage.setItem('sc-obsidian-vault',this.value)" data-keep-menu-open />
-                </div>
-                <button class="lodge-btn export-obsidian" onclick="window.Export.exportObsidian()">→ Save to Obsidian</button>
-              </div>
-
-              <div class="export-dest-panel" id="export-panel-md" hidden>
-                <p class="export-dest-desc">Download the annotated transcript as Markdown.</p>
-                <button class="lodge-btn export-txt" onclick="window.Export.exportMd()">↓ Download .md</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="after-row interject-form" id="interject-form" style="display:none;">
-        <input type="text" class="interject-input" id="interject-input" placeholder="A presence moves through the room. It has something to say..." onkeydown="if(event.key==='Enter') interject();" />
-        <button class="lodge-btn" style="border-color:#a0c8a0;color:#a0c8a0;" onclick="interject()">Send</button>
-      </div>
-
-      <div class="after-row">
-        <span class="source-tag" id="export-status"></span>
-      </div>
     </div>
 
     <div class="status-bar" id="status-bar">The room waits.</div>
