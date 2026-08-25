@@ -56,7 +56,6 @@ Current Todo-status backlog (no ranking implied — pick next tranche with Rache
 
 <!-- TODO-FRAGMENTS:START -->
 - [#35](https://github.com/msdixon/secret-cabinet/issues/35) archival ingestion pipeline (35b — bulk OCR tooling), deferred; 35a hand-curated growth split out to [#316](https://github.com/msdixon/secret-cabinet/issues/316)
-- [#141](https://github.com/msdixon/secret-cabinet/issues/141) evaluation harness (unscoped — what "conversation quality" means is the decision, not the code)
 - [#195](https://github.com/msdixon/secret-cabinet/issues/195) amnesia spike — rungs (b)/(c), deliberately deferred (see "Other open decisions" above); Todo on the board but not being actively picked up
 - [#306](https://github.com/msdixon/secret-cabinet/issues/306) scope the GitHub wiki's role — documentation for collaborators + grant/grad-funding narrative
 <!-- TODO-FRAGMENTS:END -->
