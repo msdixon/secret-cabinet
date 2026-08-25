@@ -203,6 +203,14 @@ reloadLodgeRoster();
 const lodgeContext = fs.readFileSync(path.join(PROMPTS_DIR, 'lodge-context.md'), 'utf8');
 const axesDoc = fs.readFileSync(path.join(__dirname, 'docs', 'AXES.md'), 'utf8');
 
+// #259 — portrait-prompt drafting reuses the same exemplar-based pattern as
+// the character-file drafting below: STYLE_GUIDE.md is the rule set, a prior
+// wave's prompt sheet is the format exemplar.
+const PORTRAITS_DIR = path.join(__dirname, 'public', 'portraits');
+const portraitStyleGuide = fs.readFileSync(path.join(PORTRAITS_DIR, 'STYLE_GUIDE.md'), 'utf8');
+const portraitPromptExemplar = fs.readFileSync(path.join(PORTRAITS_DIR, 'WAVE-4-PROMPTS.md'), 'utf8');
+const PENDING_PORTRAIT_PROMPTS_FILE = path.join(PORTRAITS_DIR, 'PENDING-PROMPTS.md');
+
 function loadMemberFile(filename) {
   return roster.loadMemberFile(MEMBERS_DIR, filename);
 }
@@ -447,6 +455,9 @@ registerMemberRoutes(app, {
   model: MODEL,
   lodgeContext,
   axesDoc,
+  portraitStyleGuide,
+  portraitPromptExemplar,
+  pendingPortraitPromptsFile: PENDING_PORTRAIT_PROMPTS_FILE,
 });
 
 registerExportRoutes(app, {

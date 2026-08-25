@@ -58,6 +58,9 @@ function makeDeps(overrides = {}) {
     model: 'test-model',
     lodgeContext: '## REGISTER PERMISSIONS\nsome text\n## FORMAT — ACTIONS AND SPEECH\n',
     axesDoc: 'axes doc text',
+    portraitStyleGuide: 'style guide text',
+    portraitPromptExemplar: 'exemplar text',
+    pendingPortraitPromptsFile: '/nonexistent/PENDING-PROMPTS.md',
     ...overrides,
   };
 }
@@ -134,8 +137,9 @@ test('POST /api/members', async t => {
   await t.test('drafts a character file, writes it, and pushes the new member into the live roster', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'member-routes-test-'));
     const rosterFile = path.join(dir, 'roster.json');
+    const pendingPortraitPromptsFile = path.join(dir, 'PENDING-PROMPTS.md');
     const app = fakeApp();
-    const deps = makeDeps({ membersDir: dir, rosterFile });
+    const deps = makeDeps({ membersDir: dir, rosterFile, pendingPortraitPromptsFile });
     registerMemberRoutes(app, deps);
     const res = fakeRes();
     await app.routes['POST /api/members'](fakeReq({ body: { name: 'New Member', bio: 'A biography.' } }), res);
@@ -147,6 +151,46 @@ test('POST /api/members', async t => {
     assert.equal(fs.readFileSync(path.join(dir, 'new-member.md'), 'utf8'), 'GENERATED FILE');
     assert.ok(deps.roster.some(m => m.id === 'new-member'));
     assert.ok(fs.existsSync(rosterFile));
+
+    // #259: portrait-prompt drafting reuses the same mocked client, appends
+    // to the pending-prompts file, and comes back in the response.
+    assert.equal(res.body.portraitPrompt, 'GENERATED FILE');
+    assert.ok(fs.existsSync(pendingPortraitPromptsFile));
+    const pendingContents = fs.readFileSync(pendingPortraitPromptsFile, 'utf8');
+    assert.ok(pendingContents.includes('# Pending Portrait Prompts'));
+    assert.ok(pendingContents.includes('GENERATED FILE'));
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  await t.test('member creation still succeeds when portrait-prompt drafting fails', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'member-routes-test-'));
+    const rosterFile = path.join(dir, 'roster.json');
+    const pendingPortraitPromptsFile = path.join(dir, 'PENDING-PROMPTS.md');
+    let calls = 0;
+    const app = fakeApp();
+    const deps = makeDeps({
+      membersDir: dir,
+      rosterFile,
+      pendingPortraitPromptsFile,
+      client: {
+        messages: {
+          create: async () => {
+            calls += 1;
+            if (calls === 1) return { content: [{ type: 'text', text: 'GENERATED FILE' }] };
+            throw new Error('portrait API down');
+          },
+        },
+      },
+    });
+    registerMemberRoutes(app, deps);
+    const res = fakeRes();
+    await app.routes['POST /api/members'](fakeReq({ body: { name: 'Resilient Member', bio: 'A biography.' } }), res);
+
+    assert.equal(res.body.member.id, 'resilient-member');
+    assert.equal(res.body.characterFile, 'GENERATED FILE');
+    assert.equal(res.body.portraitPrompt, null);
+    assert.equal(fs.existsSync(pendingPortraitPromptsFile), false);
 
     fs.rmSync(dir, { recursive: true, force: true });
   });

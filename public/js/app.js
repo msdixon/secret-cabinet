@@ -1574,8 +1574,12 @@ async function submitNewMember() {
     });
 
     statusEl.style.color = 'var(--lodge-muted)';
-    statusEl.textContent = `${data.member.name} has joined the lodge.`;
-    setTimeout(closeAddMemberModal, 1400);
+    // #259: portrait-prompt drafting is best-effort and non-blocking server-side
+    // (see src/routes/member.js) -- data.portraitPrompt is null if it failed.
+    statusEl.textContent = data.portraitPrompt
+      ? `${data.member.name} has joined the lodge. Portrait prompt drafted -- see public/portraits/PENDING-PROMPTS.md.`
+      : `${data.member.name} has joined the lodge.`;
+    setTimeout(closeAddMemberModal, data.portraitPrompt ? 3200 : 1400);
   } catch (e) {
     statusEl.style.color = '#a06060';
     statusEl.textContent = e.message || 'The invitation could not be sent.';
