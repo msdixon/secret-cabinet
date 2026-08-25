@@ -916,9 +916,7 @@ async function convene() {
   lastSpeakerId = null;
   currentSpeakerSide = 'right';
   document.getElementById('convene-btn').disabled = true;
-  document.getElementById('after-panel').className = 'after-panel';
-  document.getElementById('interject-form').style.display = 'none';
-  closeAllAfterMenus();
+  hideSessionControls();
 
   currentSessionId = null;
   segmentCount = 0;
@@ -1026,12 +1024,20 @@ async function runLullLoop(lullNote) {
     const lull = addLullDivider(note, segmentCount - 1);
     const stageLull = window.Witness.liveLull(note);
     setStatus(note, false);
+    // #343: a lull is the room falling quiet, in this app's own vocabulary
+    // (see addLullDivider's comment) -- so it's also when the after-panel's
+    // bar of secondary actions (Verify Citations, Watch, Metrics, Preserve,
+    // Continue's other items) has something to act on. It goes back down the
+    // moment the room picks back up below, rather than staying up through a
+    // passage that's actively streaming.
+    showSessionControls();
     const choice = await awaitLull([lull, stageLull]);
     if (choice === 'abandoned') return;
     if (choice === 'end') {
       await closeMeeting();
       return;
     }
+    hideSessionControls();
     const next = await runPassage(note);
     if (next === null) return; // the error is on screen with its own retry
     note = next;
@@ -1106,6 +1112,20 @@ function showSessionControls() {
   document.getElementById('reveal-player-turns-btn').className =
     'lodge-btn' + (sessionPlayerTurns.length ? ' visible' : '');
   window.Export.updateScholarlyExportButton();
+}
+
+// #343: the inverse of showSessionControls(), and the other half of what
+// makes the after-panel a bar that tracks the room's own quiet/speaking
+// state rather than a one-way reveal. runLullLoop calls this the instant the
+// user picks Continue -- the room is no longer quiet, so the bar shouldn't
+// still be up while the next passage streams in. Also reused by convene()
+// and reconveneOnCurrentSession() to reset the panel for a fresh session,
+// which is the same "nothing to act on yet" state this function already
+// produces.
+function hideSessionControls() {
+  document.getElementById('after-panel').className = 'after-panel';
+  document.getElementById('interject-form').style.display = 'none';
+  closeAllAfterMenus();
 }
 
 // ── Citation verification ────────────────────────────────────────────────────
@@ -1351,9 +1371,7 @@ function reconveneOnCurrentSession() {
   // Clear transcript view so user starts fresh
   releasePendingLull();
   document.getElementById('transcript-content').innerHTML = '';
-  document.getElementById('after-panel').className = 'after-panel';
-  document.getElementById('interject-form').style.display = 'none';
-  closeAllAfterMenus();
+  hideSessionControls();
   segmentCount = 0;
   currentSessionId = null;
   transcriptText = '';
@@ -1462,9 +1480,9 @@ function witnessDeps() {
   };
 }
 
-// "◎ Watch" button in the after-panel -- replays the session currently on
-// screen. sessionData is only ever passed when called internally (never from
-// the button, which always calls this with no arguments).
+// "◎ Watch Again" button in the after-panel -- replays the session currently
+// on screen. sessionData is only ever passed when called internally (never
+// from the button, which always calls this with no arguments).
 async function startWitness(sessionData) {
   let session = sessionData;
   if (!session) {
