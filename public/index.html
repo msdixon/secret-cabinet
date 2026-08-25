@@ -151,23 +151,32 @@
          there's something to act on, gone the instant the room is speaking
          again. -->
     <div class="after-panel" id="after-panel">
-      <div class="panel-label" style="margin-bottom:10px;">The Room Falls Quiet</div>
+      <div class="panel-label" style="margin-bottom:10px;">The Room Falls Quiet: Observe or Continue</div>
 
       <!-- #186: the panel reads as two verbs, not a control board. Continue
            folds four ways of extending the meeting behind one menu; Preserve
            folds every export and its per-app config behind another. Verify
-           Citations and Watch stay top-level: they're how you read the meeting
-           that already happened, not machinery for continuing or preserving it.
+           Citations and Watch Again stay top-level: they're how you read the
+           meeting that already happened, not machinery for continuing or
+           preserving it.
 
-           #245: this Continue is the *container*, and its first item is now
-           "Stir the room again" -- re-stirring a meeting that already closed.
-           The in-stream Continue, at a lull, is the different and now-primary
-           verb: going on with a meeting that never ended. -->
+           #245: this Continue is the *container*, and its first item
+           re-opens a meeting that already closed for one more passage. The
+           in-stream Continue, at a lull, is the different and now-primary
+           verb: going on with a meeting that never ended.
+
+           #343: "Stir the room again" and bare "Watch" read fine against the
+           old flat-transcript mockup this panel was drawn from, but not once
+           the room composites dialogue live by default (#257) -- "Watch" on
+           its own reads as "isn't that already happening?" rather than
+           "replay this from the start," and "stir" is a metaphor nothing
+           else in the app uses. Plain verbs instead: "Continue this
+           meeting," "Watch Again." -->
       <div class="after-row">
         <div class="menu-wrap">
           <button class="lodge-btn" id="continue-btn" onclick="toggleAfterMenu('continue-menu')">Continue ▾</button>
           <div class="lodge-menu" id="continue-menu">
-            <button class="lodge-btn" id="stir-room-btn" onclick="stirRoom()" title="Draw one more passage out of a meeting that already closed">Stir the room again ↻</button>
+            <button class="lodge-btn" id="stir-room-btn" onclick="stirRoom()" title="Draw one more passage out of a meeting that already closed">Continue this meeting ↻</button>
             <button class="lodge-btn" id="interject-toggle-btn" style="border-color:#a0c8a0;color:#a0c8a0;" onclick="toggleInterjectForm()">Interject</button>
             <button class="lodge-btn" onclick="reconveneOnCurrentSession()" title="Use this transcript as the provocation for a new session">↩ Reconvene</button>
             <button class="lodge-btn" onclick="branchFromLatestLull()" title="Branch from here — explore an alternate path from this point, original stays untouched">⑂ Branch</button>
@@ -175,7 +184,7 @@
         </div>
 
         <button class="lodge-btn" id="verify-citations-btn" onclick="verifyCitations()">Verify Citations ⚑</button>
-        <button class="lodge-btn" style="border-color:var(--lodge-ash);color:var(--lodge-ash);" onclick="startWitness()" title="Watch the transcript play back with reading-time pacing">◎ Watch</button>
+        <button class="lodge-btn" style="border-color:var(--lodge-ash);color:var(--lodge-ash);" onclick="startWitness()" title="Replay this meeting again from the start, paced by reading time">◎ Watch Again</button>
         <button class="lodge-btn" style="border-color:var(--lodge-ash);color:var(--lodge-ash);" onclick="window.Metrics.toggle()" title="Tokens, cost, and the director's casting rationale for this session">⚙ Metrics</button>
 
         <!-- #345: a row of small destination icons; selecting one opens a

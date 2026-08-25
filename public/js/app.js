@@ -1466,9 +1466,9 @@ function witnessDeps() {
   };
 }
 
-// "◎ Watch" button in the after-panel -- replays the session currently on
-// screen. sessionData is only ever passed when called internally (never from
-// the button, which always calls this with no arguments).
+// "◎ Watch Again" button in the after-panel -- replays the session currently
+// on screen. sessionData is only ever passed when called internally (never
+// from the button, which always calls this with no arguments).
 async function startWitness(sessionData) {
   let session = sessionData;
   if (!session) {
