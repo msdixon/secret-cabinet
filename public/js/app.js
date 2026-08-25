@@ -686,8 +686,15 @@ function parseAndRenderTranscript(response) {
 
 // Opens a streaming POST, yields chunks to onChunk, returns the done payload.
 // onSpeaking/onSpeakerDone are optional (#115) -- the transcript panel's
-// per-speaker live rendering; the 3D scene's own reaction to `speaking` is
-// unconditional below, independent of whether a caller passes onSpeaking.
+// per-speaker live rendering. #413: the 3D scene's camera/glow reaction to
+// `speaking` is NOT driven directly from here anymore -- this SSE event
+// fires the instant the backend starts generating a turn, which routinely
+// races ahead of the paced, one-turn-at-a-time reveal witness.js's
+// liveTurnQueue built for exactly this reason (#400's own comment). Camera
+// framing now rides that same paced queue (see witness.js's
+// advanceLiveTurnQueue) via the liveTypingStart/liveSpeech calls onSpeaking
+// below already triggers, so it only moves once a turn is actually the one
+// on screen.
 async function streamPost(url, body, onChunk, onSpeaking, onSpeakerDone) {
   const res = await fetch(url, {
     method: 'POST',
@@ -702,8 +709,10 @@ async function streamPost(url, body, onChunk, onSpeaking, onSpeakerDone) {
   let donePayload = null;
 
   // finally, not just the data.done branch -- a thrown mid-stream error
-  // (data.error, or the reader itself failing) must not leave a seat stuck
-  // glowing as "speaking" with no generation actually in flight.
+  // (data.error, or the reader itself failing) must not leave the room
+  // permanently mid-round. #413: the actual seat-glow/camera reset for that
+  // case is resetLiveTurnQueue()'s job now, triggered by the next clearRoom()
+  // (a fresh convene starting) -- there is no direct scene call to undo here.
   try {
     while (true) {
       const { done, value } = await reader.read();
@@ -721,7 +730,6 @@ async function streamPost(url, body, onChunk, onSpeaking, onSpeakerDone) {
         } else if (data.text) {
           onChunk(data.text);
         } else if (data.speaking) {
-          window.LodgeScene?.setSpeaking(data.speaking);
           onSpeaking?.(data.speaking);
         } else if (data.speakerDone) {
           onSpeakerDone?.(data.speakerDone);
@@ -852,6 +860,12 @@ function startStreamEntry() {
     },
     abort() {
       removeTyping();
+      // #413: a thrown mid-stream error means this turn never reaches
+      // liveSpeech, so the paced queue that now drives the camera (see
+      // witness.js's advanceLiveTurnQueue) would otherwise leave the seat
+      // frozen mid-frame indefinitely -- there's no later "turn settled"
+      // event coming to ease it back.
+      window.LodgeScene?.setSpeaking(null);
     },
   };
 }

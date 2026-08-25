@@ -70,8 +70,12 @@ const FIXTURE = `
 // room's card positioning reads. `positions` maps memberId -> { x, y,
 // visible } (see scene.js's own getSeatScreenPosition for the real shape);
 // an omitted memberId resolves to null, same as a member who isn't seated.
+// #413: also stubs setSpeaking, now called by advanceLiveTurnQueue to drive
+// camera framing off the same paced front-of-queue signal as everything
+// else in this file -- a no-op here since these tests assert on rendered
+// markup, not scene.js's camera/glow state.
 function stubScene(window, positions = {}) {
-  window.LodgeScene = { getSeatScreenPosition: memberId => positions[memberId] || null };
+  window.LodgeScene = { getSeatScreenPosition: memberId => positions[memberId] || null, setSpeaking: () => {} };
 }
 
 // #287: a member's card is a short-lived stack of .room-card-entry nodes,
