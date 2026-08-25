@@ -45,6 +45,7 @@ const sessionsStore = require('./src/sessions-store');
 const citationManifest = require('./scripts/build-citation-manifest');
 const bibliography = require('./src/bibliography');
 const auth = require('./src/auth');
+const visits = require('./src/visits');
 const { registerLibraryRoutes } = require('./src/routes/library');
 const { registerGraphRoutes } = require('./src/routes/graph');
 const { registerUploadRoutes } = require('./src/routes/upload');
@@ -102,6 +103,11 @@ const MEMBERS_DIR = path.join(PROMPTS_DIR, 'members');
 // reason: on Railway this needs to survive redeploys or every restart
 // re-spends ElevenLabs credits re-synthesizing lines already paid for.
 const VOICE_CACHE_DIR = path.join(DATA_DIR, 'voice-cache');
+// #422 — visitation counts for the public read tier. A single JSON file,
+// not a directory, since this is one small aggregate rather than one record
+// per session/member; still lives on DATA_DIR so it survives a redeploy on
+// a Railway instance with a volume attached, same reasoning as the dirs above.
+const VISITS_FILE = path.join(DATA_DIR, 'visits.json');
 
 if (!fs.existsSync(SESSIONS_DIR)) fs.mkdirSync(SESSIONS_DIR, { recursive: true });
 if (!fs.existsSync(RESIDUE_DIR)) fs.mkdirSync(RESIDUE_DIR, { recursive: true });
@@ -148,6 +154,19 @@ app.use(
 
 auth.registerAuthRoutes(app, PASSPHRASE);
 app.use(auth.createRequireAuth(PASSPHRASE));
+
+// #422 — count/log visits to the public read tier. Mounted right after the
+// auth guard so req.authed is already set; before express.static so it
+// still sees the app-shell paths static ends up serving. Only counts
+// `!req.authed` requests — see visits.js's header for why.
+const visitStore = visits.loadStore(VISITS_FILE);
+app.use((req, res, next) => {
+  if (!req.authed) {
+    const label = visits.recordVisit(VISITS_FILE, visitStore, req);
+    if (label) console.log(`[visit] ${label}`);
+  }
+  next();
+});
 
 // #84 — member page + knowledge-graph visualization, a clean URL for the
 // meta-level research view (not tucked in a drawer, per the issue).
@@ -380,6 +399,15 @@ function buildTranscriptHeader(entry, memberIds, date) {
 // requireAuth (auth.js) before any route handler runs, including this one.
 app.get('/api/config', (req, res) => {
   res.json({ isLocal: IS_LOCAL, authed: req.authed });
+});
+
+// GET /api/admin/visits — #422: unauthenticated-visitor traffic to the
+// public read tier (#379/#380), so the invite-only pool can be watched
+// instead of assumed. Same requireAuth gate as the rest of /api/* — no
+// separate admin auth layer, matching the two existing /api/admin/* routes
+// in routes/session.js.
+app.get('/api/admin/visits', (req, res) => {
+  res.type('text/markdown').send(visits.buildReport(visitStore));
 });
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
