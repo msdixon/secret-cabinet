@@ -1975,7 +1975,10 @@ test('makeMetric — voiceExemplar attribution', async t => {
   });
 
   await t.test('is null when there were no secondary entries, not an empty array', () => {
-    assert.equal(makeMetric('speaker', { memberId: 'scholem', voiceExemplarSecondary: [] }).voiceExemplarSecondary, null);
+    assert.equal(
+      makeMetric('speaker', { memberId: 'scholem', voiceExemplarSecondary: [] }).voiceExemplarSecondary,
+      null
+    );
     assert.equal(makeMetric('speaker', { memberId: 'scholem' }).voiceExemplarSecondary, null);
   });
 });
@@ -2697,9 +2700,11 @@ test('runRound — passage end-causes and beats (#244)', async t => {
       streamCalls++;
       if (streamCalls <= 2) {
         return {
-          [Symbol.asyncIterator]: async function* () {
-            throw new Error('network blip');
-          },
+          [Symbol.asyncIterator]: () => ({
+            next: async () => {
+              throw new Error('network blip');
+            },
+          }),
           finalMessage: async () => {
             throw new Error('network blip');
           },

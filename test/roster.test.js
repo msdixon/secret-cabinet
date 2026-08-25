@@ -149,14 +149,17 @@ test('assignVoiceId', async t => {
     assert.ok(pool.includes(roster.assignVoiceId('crowley', pool, undefined, 'german')));
   });
 
-  await t.test('#350 applies accent before demeanor: accent wins the tiebreak when the pool can only satisfy one', () => {
-    // Emanuele Matte is the only italian-tagged voice in the pool, and it's
-    // tagged 'intense'. Asking for italian+grounded should keep the
-    // italian-narrowed set (accent applied first) rather than resetting to
-    // a grounded voice of some other accent.
-    const voiceId = roster.assignVoiceId('bruno', roster.FALLBACK_VOICE_IDS, 'male', 'italian', 'grounded');
-    assert.equal(roster.FALLBACK_VOICE_ACCENTS[voiceId], 'italian');
-  });
+  await t.test(
+    '#350 applies accent before demeanor: accent wins the tiebreak when the pool can only satisfy one',
+    () => {
+      // Emanuele Matte is the only italian-tagged voice in the pool, and it's
+      // tagged 'intense'. Asking for italian+grounded should keep the
+      // italian-narrowed set (accent applied first) rather than resetting to
+      // a grounded voice of some other accent.
+      const voiceId = roster.assignVoiceId('bruno', roster.FALLBACK_VOICE_IDS, 'male', 'italian', 'grounded');
+      assert.equal(roster.FALLBACK_VOICE_ACCENTS[voiceId], 'italian');
+    }
+  );
 
   await t.test('#350 ignores accent when omitted, unchanged from pre-#350 behavior', () => {
     // An omitted accent must apply zero narrowing -- the gender+demeanor
@@ -290,7 +293,14 @@ test('reloadRoster', async t => {
     fs.writeFileSync(
       rosterFile,
       JSON.stringify([
-        { id: 'crowley', name: 'Crowley', file: 'crowley.md', glyph: '☉', voiceGender: 'male', voiceDemeanor: 'intense' },
+        {
+          id: 'crowley',
+          name: 'Crowley',
+          file: 'crowley.md',
+          glyph: '☉',
+          voiceGender: 'male',
+          voiceDemeanor: 'intense',
+        },
       ]),
       'utf8'
     );

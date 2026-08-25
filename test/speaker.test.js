@@ -46,12 +46,15 @@ test('resolveMember', async t => {
     assert.equal(Speaker.resolveMember('Beast', ROSTER)?.id, 'crowley');
   });
 
-  await t.test('leaves an ambiguous shared token unresolved via the alias index, but still catches the full name', () => {
-    // "Ibn" alone collides between Ibn Arabi and Ibn Khaldun and drops out of
-    // the index; the full names stay distinct and still resolve.
-    assert.equal(Speaker.resolveMember('Ibn Arabi', ROSTER)?.id, 'ibn-arabi');
-    assert.equal(Speaker.resolveMember('Ibn Khaldun', ROSTER)?.id, 'ibn-khaldun');
-  });
+  await t.test(
+    'leaves an ambiguous shared token unresolved via the alias index, but still catches the full name',
+    () => {
+      // "Ibn" alone collides between Ibn Arabi and Ibn Khaldun and drops out of
+      // the index; the full names stay distinct and still resolve.
+      assert.equal(Speaker.resolveMember('Ibn Arabi', ROSTER)?.id, 'ibn-arabi');
+      assert.equal(Speaker.resolveMember('Ibn Khaldun', ROSTER)?.id, 'ibn-khaldun');
+    }
+  );
 
   await t.test('returns undefined for no match', () => {
     assert.equal(Speaker.resolveMember('A Stranger', ROSTER), undefined);

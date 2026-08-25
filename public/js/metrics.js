@@ -14,9 +14,11 @@ window.Metrics = (function () {
   }
 
   // Per-1M-token rates for the app's default model (MODEL in server.js,
-  // 'claude-sonnet-4-6'). A deployment overriding MODEL via env var will see
-  // a slightly-off estimate — acceptable for a labeled "estimated cost", and
-  // cheaper than threading the actual model name through every stored metric.
+  // 'claude-sonnet-5' as of #406 — same $3/$15 standard rate as the prior
+  // 'claude-sonnet-4-6' default, so these numbers didn't need to change).
+  // A deployment overriding MODEL via env var will see a slightly-off
+  // estimate — acceptable for a labeled "estimated cost", and cheaper than
+  // threading the actual model name through every stored metric.
   const PRICE_PER_MILLION = { input: 3.0, output: 15.0, cacheRead: 0.3 };
 
   const PHASE_LABELS = {

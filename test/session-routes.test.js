@@ -150,16 +150,19 @@ test('GET /api/sessions', async t => {
     );
   });
 
-  await t.test('#378: the published filter applies before ?q=, so an unauthenticated ?q= cannot match an unpublished session', () => {
-    const dir = makeFixtureDir();
-    t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
-    store.saveSession(dir, baseSession('s1', { entry: 'about silence', published: false }));
-    const app = fakeApp();
-    registerSessionRoutes(app, makeDeps(dir));
-    const res = fakeRes();
-    app.routes['GET /api/sessions'](fakeReq({ query: { q: 'silence' }, authed: false }), res);
-    assert.deepEqual(res.body, []);
-  });
+  await t.test(
+    '#378: the published filter applies before ?q=, so an unauthenticated ?q= cannot match an unpublished session',
+    () => {
+      const dir = makeFixtureDir();
+      t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+      store.saveSession(dir, baseSession('s1', { entry: 'about silence', published: false }));
+      const app = fakeApp();
+      registerSessionRoutes(app, makeDeps(dir));
+      const res = fakeRes();
+      app.routes['GET /api/sessions'](fakeReq({ query: { q: 'silence' }, authed: false }), res);
+      assert.deepEqual(res.body, []);
+    }
+  );
 
   await t.test('?thread= filters and sorts chronologically oldest-first', () => {
     const dir = makeFixtureDir();

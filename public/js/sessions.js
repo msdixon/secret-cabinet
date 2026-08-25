@@ -157,9 +157,10 @@ window.Sessions = (function () {
               `<img class="avatar-stack-img" src="/portraits/${id}.png" alt="${deps.escapeHTML(names[i] || '')}" title="${deps.escapeHTML(names[i] || '')}" loading="lazy" onerror="this.remove()">`
           )
           .join('');
-        const moreChip = overflow > 0
-          ? `<span class="avatar-stack-more" title="${deps.escapeHTML(names.slice(AVATAR_STACK_MAX).join(', '))}">+${overflow}</span>`
-          : '';
+        const moreChip =
+          overflow > 0
+            ? `<span class="avatar-stack-more" title="${deps.escapeHTML(names.slice(AVATAR_STACK_MAX).join(', '))}">+${overflow}</span>`
+            : '';
         return `<div class="avatar-stack">${imgs}${moreChip}</div>`;
       };
 
@@ -173,7 +174,7 @@ window.Sessions = (function () {
           )
           .join('');
         const threadBadge = s.threadId
-          ? `<span class="session-thread-badge" onclick="window.Sessions.filterByThread('${deps.escapeHTML(s.threadId)}','${deps.escapeHTML(s.threadName || '')}')" title="View thread: ${deps.escapeHTML(s.threadName || '')}">⬡ ${deps.escapeHTML(s.threadName || s.threadId)}</span>`
+          ? `<span class="session-thread-badge" onclick="window.Sessions.filterByThread('${deps.escapeHTML(s.threadId)}')" title="View thread: ${deps.escapeHTML(s.threadName || '')}">⬡ ${deps.escapeHTML(s.threadName || s.threadId)}</span>`
           : '';
         const branchBadge = s.parentId
           ? `<span class="session-branch-badge" title="Branched at pause ${(s.branchRound ?? 0) + 1} of another meeting">⑂ branch</span>`
@@ -219,7 +220,7 @@ window.Sessions = (function () {
     }
   }
 
-  function filterByThread(threadId, threadName) {
+  function filterByThread(threadId) {
     const input = document.getElementById('sessions-search');
     if (input) input.value = '';
     loadSessionsList('', '', threadId);
@@ -345,7 +346,7 @@ window.Sessions = (function () {
     await saveTags(sessionId, newTags, row, addBtn);
   }
 
-  function makeTagChip(sessionId, tag, addBtn) {
+  function makeTagChip(sessionId, tag) {
     const chip = document.createElement('span');
     chip.className = 'session-tag';
     chip.appendChild(document.createTextNode(tag));
@@ -369,7 +370,7 @@ window.Sessions = (function () {
         body: JSON.stringify({ tags }),
       });
       row.querySelectorAll('.session-tag').forEach(c => c.remove());
-      tags.forEach(t => row.insertBefore(makeTagChip(sessionId, t, addBtn), addBtn));
+      tags.forEach(t => row.insertBefore(makeTagChip(sessionId, t), addBtn));
     } catch (e) {
       /* silent */
     }

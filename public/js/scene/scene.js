@@ -246,7 +246,9 @@ window.LodgeScene = (function () {
 
     const t = performance.now() / 1000;
     flameMeshes.forEach(f => {
-      const flicker = reducedMotion ? 1 : 0.82 + 0.14 * Math.sin(t * 6.3 + f.phase) + 0.06 * Math.sin(t * 13.1 + f.phase * 2);
+      const flicker = reducedMotion
+        ? 1
+        : 0.82 + 0.14 * Math.sin(t * 6.3 + f.phase) + 0.06 * Math.sin(t * 13.1 + f.phase * 2);
       const h = Math.max(0.05, f.baseHeight * (0.5 + 0.5 * fireLevel) * flicker);
       f.mesh.scaling.y = h / f.baseHeight;
       f.mesh.position.y = f.baseY + h / 2;
@@ -888,12 +890,7 @@ window.LodgeScene = (function () {
       : new BABYLON.Color3(0, 0, 0);
     animateSeatProp(seat.seatMat, 'diffuseColor', BABYLON.Color3.FromHexString(spec.diffuse), 'diffuseColor');
     animateSeatProp(seat.seatMat, 'emissiveColor', emissiveColor, 'emissiveColor');
-    animateSeatProp(
-      seat.avatar,
-      'scaling',
-      new BABYLON.Vector3(spec.scale, spec.scale, spec.scale),
-      'scaling'
-    );
+    animateSeatProp(seat.avatar, 'scaling', new BABYLON.Vector3(spec.scale, spec.scale, spec.scale), 'scaling');
   }
 
   // On load failure (a member added after batch 1, with no portrait yet),

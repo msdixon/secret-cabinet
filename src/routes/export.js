@@ -113,7 +113,7 @@ function registerExportRoutes(app, { dayOne, isLocal, buildSpeakerHeaderSet, nor
   // POST /api/export/obsidian — write transcript as Markdown to an Obsidian vault (local only)
   app.post('/api/export/obsidian', (req, res) => {
     if (!isLocal) return res.status(404).json({ error: 'Not available in deployed mode' });
-    const { vaultPath, transcriptText, sessionDate, members, tags, sourceExcerpt, sessionId } = req.body;
+    const { vaultPath, transcriptText, sessionDate, members, tags, sourceExcerpt } = req.body;
     if (!vaultPath?.trim()) return res.status(400).json({ error: 'vaultPath required' });
     if (!transcriptText) return res.status(400).json({ error: 'transcriptText required' });
 

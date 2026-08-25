@@ -120,9 +120,7 @@ test('renderEdge', async t => {
 });
 
 test('buildRelationshipLines', async t => {
-  const edges = [
-    { source: 'crowley', target: 'sun-ra', type: 'influence', label: 'A direct line of descent' },
-  ];
+  const edges = [{ source: 'crowley', target: 'sun-ra', type: 'influence', label: 'A direct line of descent' }];
 
   await t.test('skips a present member already covered by hand-authored prose', () => {
     const lines = buildRelationshipLines(CROWLEY_FILE, CROWLEY, [WAITE], edges);
