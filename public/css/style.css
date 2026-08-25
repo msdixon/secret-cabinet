@@ -436,6 +436,7 @@ a.lodge-btn { display:inline-block; text-decoration:none; }
 
 /* Convene panel — convene button is primary; arc config sits below, demoted */
 .convene-panel { background:var(--lodge-surface); border:1px solid var(--lodge-border); border-radius:2px; display:flex; flex-direction:column; }
+.convene-panel-label { padding:14px 14px 0; margin-bottom:0; }
 .convene-row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; padding:12px 14px; }
 
 /* Shared arc-field styles (used by .artifact-panel's "Bring an artifact" and .playeras-panel's "Play as" details) */
