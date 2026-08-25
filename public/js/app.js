@@ -866,6 +866,11 @@ function startStreamEntry() {
       // frozen mid-frame indefinitely -- there's no later "turn settled"
       // event coming to ease it back.
       window.LodgeScene?.setSpeaking(null);
+      // #423: also evict the stuck turn from witness.js's own live-turn
+      // queue -- its `block` will never be set now, and
+      // advanceLiveTurnQueue's guard means nothing after it (not even a
+      // successful retry) would ever render again otherwise.
+      window.Witness.liveAbortTurn();
     },
   };
 }

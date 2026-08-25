@@ -735,6 +735,43 @@ window.Witness = (function () {
     }
   }
 
+  // #423: a thrown mid-stream error (streamPost failing before onSpeakerDone
+  // fires) means the turn app.js opened via liveTypingStart never reaches
+  // liveSpeech -- its `block` stays null forever. advanceLiveTurnQueue's
+  // guard (`if (!turn.block) return`) means nothing after it in the queue,
+  // not even a successful retry, would ever get its moment again -- the
+  // stage/camera would stay frozen on that turn until a full
+  // resetLiveTurnQueue() (fresh convene or collapseStage). Called from
+  // app.js's abort() on the error path: if the turn at the front of the
+  // queue is still unsettled, evict it and let the next one (typically the
+  // retry) advance. A no-op if the front turn already settled (or there is
+  // no front turn) -- advanceLiveTurnQueue already owns that case.
+  function liveAbortTurn() {
+    const turn = liveTurnQueue[0];
+    if (!turn || turn.block) return;
+    liveTurnQueue.shift();
+    // Room mode's own typing entry for this turn was never settled or
+    // reused (liveClearTyping() is deliberately a no-op there, since it
+    // assumes this same turn's liveSpeech() will reuse the entry -- an
+    // assumption that doesn't hold for a turn being evicted instead). Left
+    // alone, it would sit orphaned in the card, and openTypingEntry's
+    // querySelector would hand the retry's settled text to this stale entry
+    // instead of the fresh one the retry actually opens.
+    if (sceneAvailable && turn.memberId) {
+      const card = roomCards.get(turn.memberId);
+      const typing = card && openTypingEntry(card);
+      if (typing) {
+        typing.remove();
+        if (!cardEntries(card).children.length) {
+          card.remove();
+          roomCards.delete(turn.memberId);
+        }
+      }
+    }
+    if (!liveTurnQueue.length && sceneAvailable) window.LodgeScene?.setSpeaking(null);
+    advanceLiveTurnQueue();
+  }
+
   // The shared panel's Exit button serves both live and replay -- dispatch to
   // whichever is actually active. Live: collapse only, the convene (and the
   // record) keep going underneath. Replay: stop the paced playback, then
@@ -1294,6 +1331,7 @@ window.Witness = (function () {
     liveTypingStart,
     liveTypingSet,
     liveClearTyping,
+    liveAbortTurn,
     collapseStage,
     reopenStage,
     exitClicked,
