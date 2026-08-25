@@ -538,5 +538,17 @@
     "members": ["yeats"],
     "themes": ["symbolism", "thought-transmission", "occult-practice", "wit"],
     "file": "yeats-york-powell-1922.md"
+  },
+  {
+    "id": "crowley-john-st-john-1909",
+    "title": "Beast! Beast! — John St. John",
+    "source": "The Equinox, Vol. I, No. 1",
+    "date": "1909",
+    "author": "crowley",
+    "translated": false,
+    "license": "public-domain",
+    "members": ["crowley"],
+    "themes": ["diary", "magical-retirement", "discipline", "self-mockery", "humor"],
+    "file": "crowley-john-st-john-1909.md"
   }
 ]
