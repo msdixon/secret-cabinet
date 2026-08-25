@@ -9,4 +9,5 @@ voice-cache/*
 .auth-sessions/
 CITATION-MANIFEST.md
 BIBLIOGRAPHY.md
+METRICS-ROLLUP.md
 .DS_Store
