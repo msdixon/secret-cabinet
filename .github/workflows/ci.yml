@@ -25,6 +25,25 @@ jobs:
       - name: npm audit
         run: npm audit --audit-level=high
 
+      # #407 — gated on path, not run unconditionally: it makes real network
+      # calls (archive.org, crossref) to catch fabricated source_urls (#157),
+      # so it should only ever block a PR that's actually touching library
+      # entries, never an unrelated change. Hard gate (no continue-on-error)
+      # since the current 38 entries are already clean — see #35's tracked
+      # coverage — so there's no pre-existing backlog to report-only around,
+      # unlike lint/format below.
+      - name: Filter changed paths
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            library:
+              - 'prompts/library/**'
+
+      - name: Verify library sources
+        if: steps.filter.outputs.library == 'true'
+        run: node scripts/verify-library-sources.js
+
       # Report-only on purpose: the first real `npm run lint` pass found 13
       # pre-existing findings (dead exports, unused params, one already-known
       # bug in public/export.js flagged in a code comment). continue-on-error
