@@ -13,6 +13,7 @@
     "update": "git pull origin main && npm install && lsof -ti :${PORT:-3132} | xargs kill -9 2>/dev/null; npm run dev",
     "citations": "node scripts/build-citation-manifest.js",
     "metrics-rollup": "node scripts/rollup-metrics.js",
+    "eval-harness": "node scripts/eval-harness.js",
     "test": "node --test test/*.test.js",
     "test:watch": "node --test --watch test/*.test.js",
     "lint": "eslint .",
