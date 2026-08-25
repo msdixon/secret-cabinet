@@ -8,6 +8,16 @@ on:
 jobs:
   ci:
     runs-on: ubuntu-latest
+    # #407 follow-up: dorny/paths-filter calls the GitHub API to list a PR's
+    # changed files, which needs pull-requests: read on GITHUB_TOKEN — the
+    # repo's default token permissions don't include it, so the very first
+    # run failed with "Resource not accessible by integration" before any
+    # of this job's own steps ran. contents: read is the default checkout
+    # needs anyway; stated explicitly here since granting any permissions
+    # block turns off the broader repo-wide default grant.
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v4
 
