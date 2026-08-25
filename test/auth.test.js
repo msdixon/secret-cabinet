@@ -249,7 +249,7 @@ test('createRequireAuth', async t => {
     }
   );
 
-  await t.test('#379: anything that costs money, touches Rachel\'s machine, or is admin-only stays gated', () => {
+  await t.test("#379: anything that costs money, touches Rachel's machine, or is admin-only stays gated", () => {
     const requireAuth = auth.createRequireAuth('secret');
     const cases = [
       ['POST', '/api/members'], // the generator, not the GET roster list

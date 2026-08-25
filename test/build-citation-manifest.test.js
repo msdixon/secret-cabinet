@@ -36,9 +36,7 @@ test('buildManifest', async t => {
   });
 
   await t.test('a fallback citation with no explicit source is labeled "ungrounded", not "model-knowledge"', () => {
-    const session = sessionWithBeatCitations('s1', [
-      { quote: 'q', work: 'A Work', verdict: 'uncertain', note: 'n' },
-    ]);
+    const session = sessionWithBeatCitations('s1', [{ quote: 'q', work: 'A Work', verdict: 'uncertain', note: 'n' }]);
     const manifest = buildManifest([session], roster);
     assert.match(manifest, /captured at write time — not yet run through Verify Citations/);
   });
@@ -47,7 +45,9 @@ test('buildManifest', async t => {
     const session = {
       id: 's1',
       date: '2026-08-20',
-      citationFlags: [{ speaker: 'Crowley', quote: 'q', work: 'A Work', verdict: 'verified', note: 'n', source: 'library' }],
+      citationFlags: [
+        { speaker: 'Crowley', quote: 'q', work: 'A Work', verdict: 'verified', note: 'n', source: 'library' },
+      ],
     };
     const manifest = buildManifest([session], roster);
     assert.match(manifest, /checked against curated text/);
@@ -67,7 +67,11 @@ test('buildManifest', async t => {
   });
 
   await t.test('a session with no captured citations at all is counted but not rendered as a work', () => {
-    const session = { id: 's1', date: '2026-08-20', rounds: [{ beats: [{ memberId: 'crowley', text: 'nothing cited' }] }] };
+    const session = {
+      id: 's1',
+      date: '2026-08-20',
+      rounds: [{ beats: [{ memberId: 'crowley', text: 'nothing cited' }] }],
+    };
     const manifest = buildManifest([session], roster);
     assert.match(manifest, /1 session\(s\) on disk cite nothing/);
   });
@@ -77,10 +81,15 @@ test('buildManifest', async t => {
     const grounded = {
       id: 's2',
       date: '2026-08-20',
-      citationFlags: [{ speaker: 'Crowley', quote: 'q2', work: 'W2', verdict: 'verified', note: 'n', source: 'library' }],
+      citationFlags: [
+        { speaker: 'Crowley', quote: 'q2', work: 'W2', verdict: 'verified', note: 'n', source: 'library' },
+      ],
     };
     const manifest = buildManifest([captured, grounded], roster);
-    assert.match(manifest, /Generated from 2 session\(s\) on disk, 2 with captured citations\. 1 have been run through Verify Citations' grounding pass\./);
+    assert.match(
+      manifest,
+      /Generated from 2 session\(s\) on disk, 2 with captured citations\. 1 have been run through Verify Citations' grounding pass\./
+    );
   });
 
   await t.test('still groups by normalized work and sorts unverified/uncertain into "Needs review"', () => {

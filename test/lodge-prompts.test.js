@@ -188,10 +188,9 @@ test('turnsSoFar', async t => {
   // `{ memberId, text, passed: true }` — genuinely heard from (unlike a
   // failed turn), but not fully (PASS_TURN_CREDIT is below 1).
   await t.test('credits a passed turn partially, not fully or not at all', () => {
-    assert.deepEqual(
-      lp.turnsSoFar([{ beats: [{ memberId: 'crowley', text: '*lets it go.*', passed: true }] }]),
-      { crowley: 0.5 }
-    );
+    assert.deepEqual(lp.turnsSoFar([{ beats: [{ memberId: 'crowley', text: '*lets it go.*', passed: true }] }]), {
+      crowley: 0.5,
+    });
   });
 
   await t.test('a passed turn and a spoken turn accumulate distinctly across passages', () => {

@@ -155,9 +155,6 @@ function onRosterFilter(e) {
 // ── Graph data prep ────────────────────────────────────────────────────────
 
 function buildGraphData() {
-  const memberSet = new Set(ROSTER.map(m => m.id));
-  const textSet = new Set(LIBRARY.map(e => e.id));
-
   graphNodes = RAW_GRAPH.nodes
     .filter(n => n.type === 'member' || n.type === 'text' || n.type === 'theme')
     .map(n => ({
@@ -509,7 +506,6 @@ function computeLabelDecisions(highlight, scale) {
 
 function renderGraph() {
   if (!svgEl) return;
-  const anyFilterActive = searchTerm || visibleTypes.size < 3;
   const focusId = selectedId || hoveredId;
   const highlight = focusId ? connectedIds(focusId) : null;
   // #235 — nodes live in a square sim-space (see simToRenderScale); stretch

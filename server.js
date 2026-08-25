@@ -33,15 +33,7 @@ const session = require('express-session');
 const FileStore = require('session-file-store')(session);
 
 const dayOne = require('./src/dayone');
-const {
-  buildMemberSection,
-  runRound,
-  stripInternalBlankLines,
-  proposeCast,
-  makeMetric,
-  countWords,
-  BREATH_BUDGET_WORDS,
-} = require('./src/pipeline');
+const { runRound, stripInternalBlankLines, proposeCast, countWords, BREATH_BUDGET_WORDS } = require('./src/pipeline');
 const roster = require('./src/roster');
 const transcriptFormat = require('./src/transcript-format');
 const readingRoom = require('./src/reading-room');
@@ -64,7 +56,7 @@ const { registerVoiceRoutes } = require('./src/routes/voice');
 
 // ─── Environment flags ────────────────────────────────────────────────────────
 const IS_LOCAL = process.env.LOCAL === 'true' || process.env.NODE_ENV !== 'production';
-const MODEL = process.env.MODEL || 'claude-sonnet-4-6';
+const MODEL = process.env.MODEL || 'claude-sonnet-5';
 // #29 (ElevenLabs pass) — unset by default, which is what keeps the feature
 // entirely off (routes/voice.js's /api/voice/config reports `available:
 // false` and voice.js falls back to the Web Speech API, same as before this
@@ -196,10 +188,6 @@ function loadMemberFile(filename) {
   return roster.loadMemberFile(MEMBERS_DIR, filename);
 }
 
-function memberBrief(member) {
-  return roster.memberBrief(MEMBERS_DIR, briefCache, member);
-}
-
 function castingRoster() {
   return roster.castingRoster(MEMBERS_DIR, briefCache, ROSTER);
 }
@@ -221,16 +209,6 @@ function saveSession(session) {
 
 function loadSession(id) {
   return sessionsStore.loadSession(SESSIONS_DIR, id);
-}
-
-// ─── Anthropic call helpers ───────────────────────────────────────────────────
-
-function openSSE(res) {
-  res.writeHead(200, {
-    'Content-Type': 'text/event-stream',
-    'Cache-Control': 'no-cache',
-    Connection: 'keep-alive',
-  });
 }
 
 // ─── Reading room (public, read-only) — #38 ───────────────────────────────────

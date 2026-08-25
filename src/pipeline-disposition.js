@@ -251,6 +251,10 @@ async function callDispositionUpdate({ client, model, system, userMessage, prese
   const response = await client.messages.create({
     model,
     max_tokens: DISPOSITION_MAX_TOKENS,
+    // #406: disabled explicitly, same reasoning as callDirector — this call's
+    // tool-only output has no use for adaptive thinking, and disabling it
+    // removes any risk of the reasoning budget eating into max_tokens.
+    thinking: { type: 'disabled' },
     system,
     messages: [{ role: 'user', content: userMessage }],
     tools: [tool],

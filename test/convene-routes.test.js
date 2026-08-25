@@ -439,26 +439,29 @@ test('POST /api/interject', async t => {
   // `session.rounds`/`beats` path a passage's turns always have. This is the
   // scope-note callout in the PR body made concrete: the thing it flagged as
   // a future fix already happened by the time this merged.
-  await t.test("a prior interjection's own beats count toward the ledger the next time it's built (#354 round-trip)", () => {
-    const priorRounds = [
-      {
-        kind: record.SEGMENT_KIND_INTERJECTION,
-        text: 'r0',
-        beats: [
-          { memberId: record.PRESENCE_SPEAKER_ID, speakerName: record.PRESENCE_SPEAKER_NAME, text: 'a question' },
-          { memberId: 'crowley', text: 'an answer' },
-        ],
-        endedBy: 'budget',
-      },
-    ];
-    // The presence gets a key too — turnsSoFar counts every beat with a
-    // memberId, sentinel or roster — but it is inert everywhere downstream:
-    // record.PRESENCE_SPEAKER_ID never appears in a director's candidate
-    // pool, so neither pickNextSpeaker's under-heard boost nor the
-    // director's "TURNS TAKEN TONIGHT" block (which looks up by present
-    // members' own roster ids) ever reads that key.
-    assert.deepEqual(turnsSoFar(priorRounds), { [record.PRESENCE_SPEAKER_ID]: 1, crowley: 1 });
-  });
+  await t.test(
+    "a prior interjection's own beats count toward the ledger the next time it's built (#354 round-trip)",
+    () => {
+      const priorRounds = [
+        {
+          kind: record.SEGMENT_KIND_INTERJECTION,
+          text: 'r0',
+          beats: [
+            { memberId: record.PRESENCE_SPEAKER_ID, speakerName: record.PRESENCE_SPEAKER_NAME, text: 'a question' },
+            { memberId: 'crowley', text: 'an answer' },
+          ],
+          endedBy: 'budget',
+        },
+      ];
+      // The presence gets a key too — turnsSoFar counts every beat with a
+      // memberId, sentinel or roster — but it is inert everywhere downstream:
+      // record.PRESENCE_SPEAKER_ID never appears in a director's candidate
+      // pool, so neither pickNextSpeaker's under-heard boost nor the
+      // director's "TURNS TAKEN TONIGHT" block (which looks up by present
+      // members' own roster ids) ever reads that key.
+      assert.deepEqual(turnsSoFar(priorRounds), { [record.PRESENCE_SPEAKER_ID]: 1, crowley: 1 });
+    }
+  );
 });
 
 test('POST /api/prototype/round', async t => {

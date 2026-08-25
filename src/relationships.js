@@ -63,9 +63,7 @@ function mentionsMember(sectionText, otherMember) {
 }
 
 function edgesForPair(allEdges, aId, bId) {
-  return (allEdges || []).filter(
-    e => (e.source === aId && e.target === bId) || (e.source === bId && e.target === aId)
-  );
+  return (allEdges || []).filter(e => (e.source === aId && e.target === bId) || (e.source === bId && e.target === aId));
 }
 
 function renderEdge(edge, otherName) {

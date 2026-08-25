@@ -17,10 +17,7 @@ test('segmentKind / isInterjectionSegment', async t => {
   });
 
   await t.test('an explicit kind is respected', () => {
-    assert.equal(
-      record.segmentKind({ kind: record.SEGMENT_KIND_INTERJECTION }),
-      record.SEGMENT_KIND_INTERJECTION
-    );
+    assert.equal(record.segmentKind({ kind: record.SEGMENT_KIND_INTERJECTION }), record.SEGMENT_KIND_INTERJECTION);
     assert.equal(record.isInterjectionSegment({ kind: record.SEGMENT_KIND_INTERJECTION }), true);
   });
 });

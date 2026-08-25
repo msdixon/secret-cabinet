@@ -136,6 +136,10 @@ async function callDirector({
   const response = await client.messages.create({
     model,
     max_tokens: 500,
+    // #406: adaptive thinking (on by default for claude-sonnet-5 when
+    // `thinking` is omitted) needs headroom this call's 500-token budget
+    // doesn't have to spare.
+    thinking: { type: 'disabled' },
     system: buildCachedSystem(system, lodgeContext),
     messages,
     tools: [schema],

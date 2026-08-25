@@ -158,8 +158,24 @@ test('loadSecondaryVoiceExemplars', async t => {
     fs.writeFileSync(
       libraryFile,
       JSON.stringify([
-        { id: 'first', title: 'T1', source: 'S1', date: '1911', translated: false, file: 'first.md', author: 'crowley' },
-        { id: 'second', title: 'T2', source: 'S2', date: '1912', translated: true, file: 'second.md', author: 'crowley' },
+        {
+          id: 'first',
+          title: 'T1',
+          source: 'S1',
+          date: '1911',
+          translated: false,
+          file: 'first.md',
+          author: 'crowley',
+        },
+        {
+          id: 'second',
+          title: 'T2',
+          source: 'S2',
+          date: '1912',
+          translated: true,
+          file: 'second.md',
+          author: 'crowley',
+        },
       ]),
       'utf8'
     );
@@ -191,7 +207,10 @@ test('loadSecondaryVoiceExemplars', async t => {
     const primary = lib.loadVoiceExemplar(dir, libraryFile, 'crowley');
     const secondary = lib.loadSecondaryVoiceExemplars(dir, libraryFile, 'crowley');
     assert.equal(primary.id, 'first');
-    assert.deepEqual(secondary.map(e => e.id), ['second']);
+    assert.deepEqual(
+      secondary.map(e => e.id),
+      ['second']
+    );
   });
 
   await t.test('returns an empty array for a member with only one entry', () => {
