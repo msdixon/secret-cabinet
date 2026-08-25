@@ -526,5 +526,17 @@
     "members": ["blavatsky"],
     "themes": ["correspondence", "humor", "occult-science", "secrecy", "illness"],
     "file": "blavatsky-letter-sinnett-1882.md"
+  },
+  {
+    "id": "yeats-york-powell-1922",
+    "title": "The York Powell Experiment — The Trembling of the Veil",
+    "source": "The Trembling of the Veil",
+    "date": "1922",
+    "author": "yeats",
+    "translated": false,
+    "license": "public-domain",
+    "members": ["yeats"],
+    "themes": ["symbolism", "thought-transmission", "occult-practice", "wit"],
+    "file": "yeats-york-powell-1922.md"
   }
 ]
