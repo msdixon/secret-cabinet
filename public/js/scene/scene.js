@@ -56,9 +56,26 @@ window.LodgeScene = (function () {
   const WALL_RADIUS = CAMERA_DEFAULT_RADIUS + 1;
   const WALL_HEIGHT = 6;
   const FLOOR_SIZE = WALL_RADIUS * 2 + 2; // past the wall footprint, no bare-void gap at the seam
-  const SCONCE_RADIUS = WALL_RADIUS - 1.5;
-  const SCONCE_HEIGHT = 2.4;
-  const SCONCE_COUNT = 3;
+  // #424: sconces up from 3 to 6, given real backplate+cup fixture geometry
+  // (previously just a bare 0.2-diameter marker sphere, easy to read as a
+  // stray glow rather than a wall fixture), and brighter/wider-reaching --
+  // Rachel's own framing was "the room is too dark, even during a session,"
+  // i.e. with the hearth banked partway down (see FIRE_LEVEL_MIN) rather
+  // than fresh-lit. SCONCE_RADIUS now sits flush against the wall like the
+  // rest of the #304 dressing (wallSpot() convention) instead of floating
+  // 1.5 units inside it; SCONCE_BULB_RADIUS is where the cup/light actually
+  // sits, protruding into the room off that backplate.
+  const SCONCE_RADIUS = WALL_RADIUS - 0.15;
+  const SCONCE_BULB_RADIUS = WALL_RADIUS - 0.45;
+  const SCONCE_HEIGHT = 2.6;
+  const SCONCE_COUNT = 6;
+  // Same range-vs-intensity trade the hearth comment above describes, just
+  // scaled down: range wide enough that six fixtures' pools of light
+  // visibly overlap and lift the room rather than reading as six isolated
+  // dots, intensity raised enough to be felt at that range without any
+  // single sconce blowing out its own stretch of wall (verified live).
+  const SCONCE_INTENSITY = 2.6;
+  const SCONCE_RANGE = 8.5;
 
   // #304: trim/molding + furnishings, the dressing pass #294 deliberately
   // deferred. Everything below is placed by the same polar convention as
@@ -310,32 +327,48 @@ window.LodgeScene = (function () {
     ceilingMat.twoSidedLighting = true;
     ceiling.material = ceilingMat;
 
-    // A handful of warm point-light sconces around the wall, breaking up
-    // the single-hearth flatness -- lower intensity than the hearth (32)
-    // since these are ambient fill, not the room's one named light source.
-    // Angles start offset from the hearth's own so they don't double up.
+    // A ring of warm point-light sconces around the wall, breaking up the
+    // single-hearth flatness -- lower intensity than the hearth (32) since
+    // these are ambient fill, not the room's one named light source. Angles
+    // start offset from the hearth's own so they don't double up. Each gets
+    // a small wall-mounted backplate + cup (#424) rather than a bare marker
+    // sphere, so it reads as a fixture rather than a floating glow -- same
+    // wallSpot() flush-mount convention as the rest of the #304 dressing.
     for (let i = 0; i < SCONCE_COUNT; i++) {
       const angle = (i / SCONCE_COUNT) * Math.PI * 2 + Math.PI / SCONCE_COUNT;
-      const pos = new BABYLON.Vector3(Math.cos(angle) * SCONCE_RADIUS, SCONCE_HEIGHT, Math.sin(angle) * SCONCE_RADIUS);
-      const sconce = new BABYLON.PointLight(`sconce-${i}`, pos, scene);
+      const backSpot = wallSpot(angle, SCONCE_RADIUS);
+      const bulbSpot = wallSpot(angle, SCONCE_BULB_RADIUS);
+
+      const backplate = BABYLON.MeshBuilder.CreateBox(
+        `sconceBack-${i}`,
+        { width: 0.3, height: 0.5, depth: 0.06 },
+        scene
+      );
+      backplate.position.set(backSpot.x, SCONCE_HEIGHT, backSpot.z);
+      backplate.rotation.y = backSpot.rotationY;
+      const backMat = new BABYLON.StandardMaterial(`sconceBackMat-${i}`, scene);
+      backMat.diffuseColor = BABYLON.Color3.FromHexString(LODGE_AMBER_DIM);
+      backMat.emissiveColor = BABYLON.Color3.FromHexString(LODGE_AMBER_DIM).scale(0.1);
+      backMat.specularColor = new BABYLON.Color3(0.05, 0.04, 0.02);
+      backplate.material = backMat;
+
+      const cup = BABYLON.MeshBuilder.CreateSphere(`sconceCup-${i}`, { diameter: 0.24 }, scene);
+      cup.position.set(bulbSpot.x, SCONCE_HEIGHT, bulbSpot.z);
+      const cupMat = new BABYLON.StandardMaterial(`sconceCupMat-${i}`, scene);
+      cupMat.emissiveColor = BABYLON.Color3.FromHexString(LODGE_GOLD);
+      cupMat.disableLighting = true;
+      cup.material = cupMat;
+
+      const sconce = new BABYLON.PointLight(`sconce-${i}`, new BABYLON.Vector3(bulbSpot.x, SCONCE_HEIGHT, bulbSpot.z), scene);
       sconce.diffuse = BABYLON.Color3.FromHexString(LODGE_AMBER);
       sconce.specular = BABYLON.Color3.FromHexString(LODGE_GOLD);
-      sconce.intensity = 1.5;
+      sconce.intensity = SCONCE_INTENSITY;
       // Babylon point lights only fall off with distance once `range` is
       // set -- left unset, a light applies its full intensity regardless
-      // of distance, which is fine in an open scene with nothing far away
-      // to expose, but blows the new enclosing wall out to solid white at
-      // any intensity worth calling a light (verified live: intensity 6
-      // with no range turned the whole wall near-white). Six units keeps
-      // the glow local to the sconce itself rather than washing the wall.
-      sconce.range = 6;
-
-      const marker = BABYLON.MeshBuilder.CreateSphere(`sconce-marker-${i}`, { diameter: 0.2 }, scene);
-      marker.position = pos;
-      const markerMat = new BABYLON.StandardMaterial(`sconceMarkerMat-${i}`, scene);
-      markerMat.emissiveColor = BABYLON.Color3.FromHexString(LODGE_GOLD);
-      markerMat.disableLighting = true;
-      marker.material = markerMat;
+      // of distance, which blows the enclosing wall out to solid white at
+      // any intensity worth calling a light (verified live pre-#424:
+      // intensity 6 with no range turned the whole wall near-white).
+      sconce.range = SCONCE_RANGE;
     }
   }
 
@@ -762,6 +795,41 @@ window.LodgeScene = (function () {
     table.material = tableMat;
     tableMesh = table;
 
+    // #424 stretch: a single candle at the table's center. Static, not
+    // wired into fireLevel/updateFire() -- a hand-lit candle on the table
+    // isn't the hearth banking down over the course of a meeting, it just
+    // sits there lit. Short PointLight range so it reads as an intimate
+    // accent at the table itself rather than competing with the sconces/
+    // hearth as a fourth room-scale source.
+    const candleBody = BABYLON.MeshBuilder.CreateCylinder(
+      'candleBody',
+      { diameterTop: 0.09, diameterBottom: 0.1, height: 0.35, tessellation: 12 },
+      scene
+    );
+    candleBody.position.set(0, 0.4 + 0.175, 0);
+    const candleBodyMat = new BABYLON.StandardMaterial('candleBodyMat', scene);
+    candleBodyMat.diffuseColor = BABYLON.Color3.FromHexString('#d9cba8');
+    candleBodyMat.specularColor = new BABYLON.Color3(0.05, 0.05, 0.04);
+    candleBody.material = candleBodyMat;
+
+    const candleFlame = BABYLON.MeshBuilder.CreateCylinder(
+      'candleFlame',
+      { diameterTop: 0.01, diameterBottom: 0.06, height: 0.14, tessellation: 8 },
+      scene
+    );
+    candleFlame.position.set(0, 0.4 + 0.35 + 0.07, 0);
+    const candleFlameMat = new BABYLON.StandardMaterial('candleFlameMat', scene);
+    candleFlameMat.emissiveColor = BABYLON.Color3.FromHexString(FLAME_HOT);
+    candleFlameMat.disableLighting = true;
+    candleFlameMat.backFaceCulling = false;
+    candleFlame.material = candleFlameMat;
+
+    const candleLight = new BABYLON.PointLight('candleLight', new BABYLON.Vector3(0, 0.9, 0), scene);
+    candleLight.diffuse = BABYLON.Color3.FromHexString(LODGE_GOLD);
+    candleLight.specular = BABYLON.Color3.FromHexString(LODGE_GOLD);
+    candleLight.intensity = 1.4;
+    candleLight.range = 4.5;
+
     seatMeshes = [];
     for (let i = 0; i < SEAT_COUNT; i++) {
       const angle = (i / SEAT_COUNT) * Math.PI * 2;
@@ -1136,7 +1204,12 @@ window.LodgeScene = (function () {
       // tokens — those describe surface/background hues, not illumination.
       const ambient = new BABYLON.HemisphericLight('ambient', new BABYLON.Vector3(0, 1, 0), scene);
       ambient.diffuse = new BABYLON.Color3(0.55, 0.46, 0.36);
-      ambient.intensity = 0.5;
+      // #424: 0.5 -> 0.62. Point lights (sconces/hearth) are the room's
+      // real light sources and stay untouched here; this is only the
+      // shadowless base fill everything else sits on, so a modest bump
+      // lifts the room generally (Rachel: "too dark, even during a
+      // session") without competing with either.
+      ambient.intensity = 0.62;
 
       const floor = BABYLON.MeshBuilder.CreateGround('floor', { width: FLOOR_SIZE, height: FLOOR_SIZE }, scene);
       const floorMat = new BABYLON.StandardMaterial('floorMat', scene);
