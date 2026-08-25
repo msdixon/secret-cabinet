@@ -584,6 +584,7 @@ window.Witness = (function () {
   function resetLiveTurnQueue() {
     liveTurnGeneration++;
     liveTurnQueue = [];
+    if (sceneAvailable) window.LodgeScene?.setSpeaking(null);
   }
 
   // typingSet/liveSpeech always target the turn most recently opened by
@@ -610,6 +611,13 @@ window.Witness = (function () {
       turn.started = true;
       markStageActive();
       setHint('◉ Live — the room is speaking');
+      // #413: camera framing rides the same paced front-of-queue signal as
+      // everything else here, not the raw SSE arrival (app.js's onSpeaking
+      // fires the instant generation starts, which -- per the #400 comment
+      // above -- routinely races ahead of what's actually on screen for a
+      // long or multi-beat turn). Framing it here means the camera only
+      // moves once this turn is actually the one being shown.
+      if (sceneAvailable) window.LodgeScene?.setSpeaking(turn.memberId);
       if (!turn.block) openLiveTurnTyping(turn);
     }
     if (!turn.block) return; // still being typed -- liveTypingSet/liveSpeech will call back in
@@ -626,6 +634,12 @@ window.Witness = (function () {
       setTimeout(() => {
         if (myGeneration !== liveTurnGeneration) return;
         liveTurnQueue.shift();
+        // #413: only ease the camera back to the resting shot if nothing is
+        // queued up behind this turn -- if the next speaker's already
+        // waiting, advanceLiveTurnQueue below reframes straight to them, so
+        // this avoids a needless resting-shot flicker between back-to-back
+        // turns.
+        if (!liveTurnQueue.length && sceneAvailable) window.LodgeScene?.setSpeaking(null);
         advanceLiveTurnQueue();
       }, resolvedDelay);
     });
