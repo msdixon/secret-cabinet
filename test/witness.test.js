@@ -1412,6 +1412,86 @@ test("live turn queue (#400): only one member's turn is ever on screen at a time
     await advancePastLiveTurn(t2);
     assert.equal(document.querySelectorAll('#witness-stage .transcript-entry').length, 2);
   });
+
+  await t.test(
+    '#423: a mid-turn generation error must not wedge the queue -- liveAbortTurn evicts the stuck turn so a retry renders',
+    async t2 => {
+      t2.mock.timers.enable({ apis: ['setTimeout'] });
+      const { document, window, module: Witness } = boot(t2);
+      stubScene(window, { crowley: { x: 10, y: 10, visible: true } });
+      Witness.configure(makeDeps());
+      Witness.enableRoom();
+
+      // app.js's onSpeaking -> liveTypingStart opens a turn, then generation
+      // throws before onSpeakerDone/liveSpeech ever settles it -- the turn
+      // sits at the front of the queue with block: null. app.js's abort()
+      // calls liveClearTyping() (a no-op in room mode) and, as of #423,
+      // liveAbortTurn().
+      Witness.liveTypingStart('Crowley', 'crowley');
+      Witness.liveClearTyping();
+      Witness.liveAbortTurn();
+
+      assert.equal(
+        document.querySelectorAll('#room-speech-layer .room-speech-card').length,
+        0,
+        "the stuck turn's orphaned typing entry must be cleaned up, not left behind for the retry to collide with"
+      );
+
+      // Retry: a fresh streamPost succeeds.
+      Witness.liveTypingStart('Crowley', 'crowley');
+      Witness.liveSpeech({ speaker: 'Crowley', text: 'Retried line.', memberId: 'crowley' });
+
+      const card = document.querySelector('#room-speech-layer .room-speech-card');
+      assert.match(
+        latestEntryText(card),
+        /Retried line\./,
+        "without evicting the stuck turn, advanceLiveTurnQueue's guard would block the retry forever"
+      );
+      assert.equal(
+        document.querySelectorAll('#room-speech-layer .room-card-entry-typing').length,
+        0,
+        'no stray typing entry left over from the aborted turn'
+      );
+    }
+  );
+
+  await t.test('#423: liveAbortTurn also unwedges stage mode (no scene)', async t2 => {
+    t2.mock.timers.enable({ apis: ['setTimeout'] });
+    const { document, module: Witness } = boot(t2);
+    Witness.configure(makeDeps());
+
+    Witness.liveTypingStart('Crowley', 'crowley');
+    Witness.liveClearTyping();
+    Witness.liveAbortTurn();
+
+    Witness.liveTypingStart('Crowley', 'crowley');
+    Witness.liveSpeech({ speaker: 'Crowley', text: 'Retried line.', memberId: 'crowley' });
+
+    assert.match(
+      document.querySelector('#witness-stage .transcript-entry .speech-text')?.textContent || '',
+      /Retried line\./
+    );
+  });
+
+  await t.test('#423: liveAbortTurn is a no-op once the front turn has already settled', async t2 => {
+    t2.mock.timers.enable({ apis: ['setTimeout'] });
+    const { document, window, module: Witness } = boot(t2);
+    stubScene(window, { crowley: { x: 10, y: 10, visible: true } });
+    Witness.configure(makeDeps());
+    Witness.enableRoom();
+
+    Witness.liveSpeech({ speaker: 'Crowley', text: 'One.', memberId: 'crowley' });
+    // Nothing stuck -- an abort firing after the turn already settled (e.g.
+    // a race with a later, unrelated error) must not touch the queue.
+    Witness.liveAbortTurn();
+
+    const card = document.querySelector('#room-speech-layer .room-speech-card');
+    assert.match(
+      latestEntryText(card),
+      /One\./,
+      'the settled turn must survive an abort that arrives too late to matter'
+    );
+  });
 });
 
 test('playback speed (#288): one multiplier reaches room-mode holds, replay, and the old stage alike', async t => {
