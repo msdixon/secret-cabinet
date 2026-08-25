@@ -141,10 +141,13 @@ ${relationships || '(not specified — infer from historical record)'}`;
 
       // #259 — draft a portrait-generation prompt at the same time the member
       // is added, per STYLE_GUIDE.md's Process step 4. This only drafts the
-      // prompt text (no image-gen API is wired up); generating the image,
-      // resizing it, and placing it in public/portraits/ stays a manual step,
-      // same as every prior wave. A failure here shouldn't take down member
-      // creation, which is the primary thing this endpoint does.
+      // prompt text -- this server process has no way to call an image-gen
+      // tool itself (a general one does exist for a live Claude Code agent
+      // session, but not for this always-on unattended process); generating
+      // the image, resizing it, and placing it in public/portraits/ stays a
+      // manual (or future session-driven) step. A failure here shouldn't
+      // take down member creation, which is the primary thing this endpoint
+      // does.
       let portraitPrompt = null;
       try {
         portraitPrompt = await draftPortraitPrompt({
