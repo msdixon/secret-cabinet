@@ -49,6 +49,11 @@ For each numbered item, judge whether its "Transcript quote" is genuinely consis
   const response = await client.messages.create({
     model,
     max_tokens: 2000,
+    // #436: same reasoning as callDirector/callDispositionUpdate (#406) --
+    // tool-only output has no use for adaptive thinking, and disabling it
+    // removes any risk of the reasoning budget eating into max_tokens.
+    // Flagged as a likely sibling gap in #436, not itself reproduced live.
+    thinking: { type: 'disabled' },
     system,
     messages: [{ role: 'user', content: itemsText }],
     tools: [

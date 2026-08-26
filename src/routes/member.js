@@ -129,6 +129,17 @@ ${relationships || '(not specified — infer from historical record)'}`;
       const response = await client.messages.create({
         model,
         max_tokens: 7000,
+        // #436: adaptive thinking (on by default for claude-sonnet-5 when
+        // `thinking` is omitted) can consume nearly this entire budget
+        // against the real production system prompt (~42K chars of
+        // exemplars + AXES.md + lodge-context.md) and never emit a text
+        // block at all -- confirmed by direct reproduction. Disabled
+        // outright, same fix #406 applied to the two tool-only calls in
+        // pipeline-director.js/pipeline-disposition.js; a second
+        // reproduction with a short paraphrased prompt produced a full text
+        // response using under 10% of the budget, so there's no evidence
+        // this drafting task's quality depends on adaptive reasoning.
+        thinking: { type: 'disabled' },
         system: systemPrompt,
         messages: [{ role: 'user', content: userMessage }],
       });
@@ -136,6 +147,16 @@ ${relationships || '(not specified — infer from historical record)'}`;
         .filter(b => b.type === 'text')
         .map(b => b.text)
         .join('');
+
+      // #436: defense in depth even with thinking disabled -- treat empty
+      // generation as a failure rather than silently writing a 0-byte
+      // character file and pushing a broken member into the roster.
+      if (!characterFile.trim()) {
+        console.error('Member creation error: character-file generation produced no text content', {
+          stopReason: response.stop_reason,
+        });
+        return res.status(500).json({ error: 'Failed to draft character file' });
+      }
 
       fs.writeFileSync(filePath, characterFile, 'utf8');
 
