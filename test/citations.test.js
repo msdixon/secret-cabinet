@@ -83,6 +83,25 @@ test('groundAgainstLibraryText', async t => {
     assert.equal(result.size, 0);
   });
 
+  // #436: sibling gap flagged alongside the member.js fix -- this call is
+  // tool-only output, same shape as pipeline-disposition.js's, and should
+  // disable adaptive thinking for the same reason.
+  await t.test('sends thinking: disabled on the grounding call', async () => {
+    let capturedParams = null;
+    const fakeClient = {
+      messages: {
+        create: async params => {
+          capturedParams = params;
+          return { content: [{ type: 'tool_use', input: { verdicts: [] } }] };
+        },
+      },
+    };
+    const citationsList = [{ libraryMatch: 'e1', work: 'Some Work', quote: 'a quote' }];
+    const lookup = { e1: { title: 'T', source: 'S', text: 'The excerpt text.' } };
+    await c.groundAgainstLibraryText(fakeClient, 'test-model', citationsList, lookup);
+    assert.deepEqual(capturedParams.thinking, { type: 'disabled' });
+  });
+
   // #225 — generationMetrics didn't cover this call at all; onMetric is how
   // the caller (server.js) gets usage back to persist onto the session.
   await t.test('reports a citation-grounding metric when a call is made', async () => {

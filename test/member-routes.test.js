@@ -238,10 +238,7 @@ test('POST /api/members', async t => {
     });
     registerMemberRoutes(app, deps);
     const res = fakeRes();
-    await app.routes['POST /api/members'](
-      fakeReq({ body: { name: 'Pictured Member', bio: 'A biography.' } }),
-      res
-    );
+    await app.routes['POST /api/members'](fakeReq({ body: { name: 'Pictured Member', bio: 'A biography.' } }), res);
 
     assert.equal(res.body.portraitCandidatePath, 'public/portraits/candidates/pictured-member.png');
     const candidateFile = path.join(portraitCandidatesDir, 'pictured-member.png');
@@ -252,36 +249,36 @@ test('POST /api/members', async t => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  await t.test('#435: a failed image-generation call is caught -- member creation and prompt drafting still succeed', async () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'member-routes-test-'));
-    const rosterFile = path.join(dir, 'roster.json');
-    const pendingPortraitPromptsFile = path.join(dir, 'PENDING-PROMPTS.md');
-    const portraitCandidatesDir = path.join(dir, 'candidates');
-    const app = fakeApp();
-    const deps = makeDeps({
-      membersDir: dir,
-      rosterFile,
-      pendingPortraitPromptsFile,
-      portraitCandidatesDir,
-      geminiApiKey: 'test-gemini-key',
-      generatePortraitImage: async () => {
-        throw new Error('Gemini API down');
-      },
-    });
-    registerMemberRoutes(app, deps);
-    const res = fakeRes();
-    await app.routes['POST /api/members'](
-      fakeReq({ body: { name: 'Unlucky Member', bio: 'A biography.' } }),
-      res
-    );
+  await t.test(
+    '#435: a failed image-generation call is caught -- member creation and prompt drafting still succeed',
+    async () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'member-routes-test-'));
+      const rosterFile = path.join(dir, 'roster.json');
+      const pendingPortraitPromptsFile = path.join(dir, 'PENDING-PROMPTS.md');
+      const portraitCandidatesDir = path.join(dir, 'candidates');
+      const app = fakeApp();
+      const deps = makeDeps({
+        membersDir: dir,
+        rosterFile,
+        pendingPortraitPromptsFile,
+        portraitCandidatesDir,
+        geminiApiKey: 'test-gemini-key',
+        generatePortraitImage: async () => {
+          throw new Error('Gemini API down');
+        },
+      });
+      registerMemberRoutes(app, deps);
+      const res = fakeRes();
+      await app.routes['POST /api/members'](fakeReq({ body: { name: 'Unlucky Member', bio: 'A biography.' } }), res);
 
-    assert.equal(res.body.member.id, 'unlucky-member');
-    assert.ok(res.body.portraitPrompt);
-    assert.equal(res.body.portraitCandidatePath, null);
-    assert.equal(fs.existsSync(portraitCandidatesDir), false);
+      assert.equal(res.body.member.id, 'unlucky-member');
+      assert.ok(res.body.portraitPrompt);
+      assert.equal(res.body.portraitCandidatePath, null);
+      assert.equal(fs.existsSync(portraitCandidatesDir), false);
 
-    fs.rmSync(dir, { recursive: true, force: true });
-  });
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  );
 
   await t.test('a failed generation call is caught and returns 500 without writing anything', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'member-routes-test-'));
@@ -303,6 +300,86 @@ test('POST /api/members', async t => {
     await app.routes['POST /api/members'](fakeReq({ body: { name: 'Doomed Member', bio: 'bio' } }), res);
     assert.equal(res.statusCode, 500);
     assert.equal(fs.existsSync(path.join(dir, 'doomed-member.md')), false);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  await t.test('#436: sends thinking: disabled on the character-file drafting call', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'member-routes-test-'));
+    const app = fakeApp();
+    let capturedParams = null;
+    registerMemberRoutes(
+      app,
+      makeDeps({
+        membersDir: dir,
+        client: {
+          messages: {
+            create: async params => {
+              capturedParams = capturedParams || params;
+              return { content: [{ type: 'text', text: 'GENERATED FILE' }] };
+            },
+          },
+        },
+      })
+    );
+    const res = fakeRes();
+    await app.routes['POST /api/members'](fakeReq({ body: { name: 'Thoughtful Member', bio: 'bio' } }), res);
+    assert.deepEqual(capturedParams.thinking, { type: 'disabled' });
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  await t.test(
+    '#436: a response with only thinking blocks and no text (adaptive-thinking budget exhaustion) ' +
+      'is treated as a failure, not written to disk, and does not update the roster',
+    async () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'member-routes-test-'));
+      const rosterFile = path.join(dir, 'roster.json');
+      const app = fakeApp();
+      const deps = makeDeps({
+        membersDir: dir,
+        rosterFile,
+        client: {
+          messages: {
+            create: async () => ({
+              stop_reason: 'max_tokens',
+              content: [{ type: 'thinking', thinking: 'reasoning that never resolved into a text block' }],
+            }),
+          },
+        },
+      });
+      registerMemberRoutes(app, deps);
+      const res = fakeRes();
+      await app.routes['POST /api/members'](fakeReq({ body: { name: 'Empty Member', bio: 'bio' } }), res);
+
+      assert.equal(res.statusCode, 500);
+      assert.equal(fs.existsSync(path.join(dir, 'empty-member.md')), false);
+      assert.equal(fs.existsSync(rosterFile), false);
+      assert.equal(
+        deps.roster.some(m => m.id === 'empty-member'),
+        false
+      );
+
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  );
+
+  await t.test('#436: a response with only whitespace text content is also treated as a failure', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'member-routes-test-'));
+    const app = fakeApp();
+    const deps = makeDeps({
+      membersDir: dir,
+      client: {
+        messages: {
+          create: async () => ({ stop_reason: 'max_tokens', content: [{ type: 'text', text: '   \n  ' }] }),
+        },
+      },
+    });
+    registerMemberRoutes(app, deps);
+    const res = fakeRes();
+    await app.routes['POST /api/members'](fakeReq({ body: { name: 'Whitespace Member', bio: 'bio' } }), res);
+
+    assert.equal(res.statusCode, 500);
+    assert.equal(fs.existsSync(path.join(dir, 'whitespace-member.md')), false);
+
     fs.rmSync(dir, { recursive: true, force: true });
   });
 });
