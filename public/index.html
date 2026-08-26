@@ -404,6 +404,23 @@
       </div>
     </div>
 
+    <!-- Publish curation modal (#178) -->
+    <div class="modal-overlay" id="publish-curate-overlay" onclick="window.Sessions.closePublishModal()"></div>
+    <div class="modal-drawer" id="publish-curate-modal">
+      <div class="modal-header">
+        <span class="modal-title">Curate for the Reading Room</span>
+        <button class="sessions-close-btn" onclick="window.Sessions.closePublishModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="panel-label" style="margin-bottom:8px;text-transform:none;letter-spacing:0;">Choose which passages appear at the public URL. Unchecked passages stay private.</div>
+        <div id="publish-curate-list"></div>
+        <div style="display:flex;gap:10px;margin-top:16px;">
+          <button class="lodge-btn primary" id="publish-curate-submit-btn">Publish Selected</button>
+          <button class="lodge-btn" onclick="window.Sessions.closePublishModal()">Cancel</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Add member modal -->
     <div class="modal-overlay" id="add-member-overlay" onclick="closeAddMemberModal()"></div>
     <div class="modal-drawer" id="add-member-modal">
