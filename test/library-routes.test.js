@@ -168,4 +168,21 @@ test('GET /api/library/:id', async t => {
     assert.equal(res.body.citation, 'A Citation');
     fs.rmSync(dir, { recursive: true, force: true });
   });
+
+  await t.test('a failure after the file is found (e.g. frontmatter parsing) is caught, returns 500', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'library-routes-test-'));
+    fs.writeFileSync(path.join(dir, 'crowley-liber-al.md'), '---\ncitation: "A Citation"\n---\nThe excerpt text.');
+    const deps = makeDeps();
+    deps.libraryDir = dir;
+    deps.parseLibraryFrontmatter = () => {
+      throw new Error('malformed frontmatter');
+    };
+    const app = fakeApp();
+    registerLibraryRoutes(app, deps);
+    const res = fakeRes();
+    app.routes['GET /api/library/:id'](fakeReq({ params: { id: 'crowley-liber-al' } }), res);
+    assert.equal(res.statusCode, 500);
+    assert.deepEqual(res.body, { error: 'Failed to load entry' });
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
 });
