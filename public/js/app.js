@@ -42,7 +42,11 @@ let playerTurnsRevealed = false;
 // ── Render member tokens ──────────────────────────────────────────────────────
 
 function renderMembers() {
-  document.getElementById('members-grid').innerHTML = '';
+  // The "You" chip (#you-token) is a static sibling inside #members-grid, not
+  // one of the rebuilt roster tokens -- rebuild only #members-grid-real
+  // (display:contents, so its children still lay out as members-grid's own
+  // flex items) so it survives every re-render untouched.
+  document.getElementById('members-grid-real').innerHTML = '';
 
   // No core/guest distinction — one sorted, filterable roster. An already-active
   // member stays visible even when the filter no longer matches them, so casting
@@ -58,7 +62,7 @@ function renderMembers() {
     if (ra !== rb) return ra ? -1 : 1;
     return a.name.localeCompare(b.name);
   });
-  const grid = document.getElementById('members-grid');
+  const grid = document.getElementById('members-grid-real');
   let visibleCount = 0;
 
   roster.forEach(m => {
@@ -159,37 +163,37 @@ function handlePlayAsModeChange() {
   updateConvenePlayerStatus();
 }
 
-// #348: mirrors the "Play as" panel's current selection next to Convene the
-// Lodge, so #31 (player-as-member) is visible at the point of convening
-// instead of only inside a collapsed details panel up in II. The Assembled.
+// #348/#440: mirrors the "Play as" panel's current selection onto the "You"
+// card's own label (member-panel's members-grid), instead of a separate
+// button down in III. Convene that only ever repeated this same state.
 // Reads the live select/input rather than the playerMode/playerName globals
 // -- those are snapshots taken at convene() start and only mean anything
-// once a session is running, whereas this button always describes what the
-// *next* convene would use.
+// once a session is running, whereas this always describes what the *next*
+// convene would use. Untouched "observe only" renders identically to a
+// deliberate choice of it -- that distinction was never load-bearing, so the
+// note stays blank for the default case rather than spelling it out.
 function updateConvenePlayerStatus() {
-  const btn = document.getElementById('convene-player-status');
-  if (!btn) return;
+  const you = document.getElementById('you-token');
+  const note = document.getElementById('you-token-note');
+  if (!you || !note) return;
   const mode = document.getElementById('play-as-mode-select')?.value || 'none';
-  let label = '◆ Observing only';
+  let text = '';
   if (mode === 'member') {
     const sel = document.getElementById('play-as-member-select');
     const name = sel?.options[sel.selectedIndex]?.textContent;
-    label = name && sel.value ? `◆ Playing as ${name}` : '◆ Play as…';
+    text = name && sel.value ? ` — Playing as ${name}` : ' — Play as…';
   } else if (mode === 'custom') {
     const name = document.getElementById('play-as-custom-name')?.value.trim();
-    label = name ? `◆ Playing as ${name}` : '◆ Play as…';
+    text = name ? ` — Playing as ${name}` : ' — Play as…';
   }
-  btn.textContent = label;
-  btn.classList.toggle('is-active', mode !== 'none');
+  note.textContent = text;
+  you.classList.toggle('active', mode !== 'none');
 }
 
-// Jumps to and opens the "Play as" details panel, same scrollIntoView
-// pattern initStepperNav() uses for the numbered steps above.
-function focusPlayAsPanel() {
-  const panel = document.getElementById('playeras-panel');
-  if (!panel) return;
-  panel.open = true;
-  panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+// Toggles the inline mode-choice fields open/closed under the "You" card,
+// replacing the old collapsed <details> panel's disclosure.
+function togglePlayAsCard() {
+  document.getElementById('playeras-panel')?.classList.toggle('expanded');
 }
 
 function isPlayerActive() {
@@ -224,6 +228,10 @@ function restorePlayAsControlDisplay() {
   } else if (customInput) {
     customInput.disabled = false;
   }
+  // A restored session's played identity is worth seeing without an extra
+  // click to reveal it -- unlike a live click-to-toggle, this only ever runs
+  // once per restored session, so it can't fight a manual collapse.
+  document.getElementById('playeras-panel')?.classList.toggle('expanded', playerMode !== 'none');
   updateConvenePlayerStatus();
 }
 
