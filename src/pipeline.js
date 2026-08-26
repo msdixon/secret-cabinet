@@ -34,6 +34,7 @@ const casting = require('./pipeline-casting');
 const speaker = require('./pipeline-speaker');
 const disposition = require('./pipeline-disposition');
 const lull = require('./pipeline-lull');
+const splinter = require('./pipeline-splinter');
 const {
   BREATH_BUDGET_WORDS,
   MIN_WORDS_FOR_ANOTHER_BEAT,
@@ -60,6 +61,7 @@ const {
 } = speaker;
 const { buildDispositionSystemPrompt, buildDispositionUserMessage, callDispositionUpdate } = disposition;
 const { resolveLullNote } = lull;
+const { shouldSplinter, buildSplinterUserMessage, formatSplinterBlock } = splinter;
 
 // ── Orchestrator ──────────────────────────────────────────────────────────
 
@@ -312,6 +314,17 @@ async function runRound({
   // for a speaker who has no roster entry — never null. It used to be null
   // for the player's own turn, which left that turn attributable only by
   // display-name string match.
+  //
+  // #196: a spoken (or failed) beat may also carry `thread: { id,
+  // participants }` — present only on the two beats that make up a splinter
+  // exchange (see pipeline-splinter.js), absent on every ordinary
+  // main-thread beat. `participants` is always the two members' roster ids,
+  // in speaking order. A splinter's own beats are folded into `roundSoFar`
+  // as one bracketed block (formatSplinterBlock) rather than one `\n\n`
+  // append each, which is why they're recognizable in the record even
+  // without the `thread` tag — but the tag is what lets a consumer identify
+  // and single out a splinter's beats without re-parsing bracket syntax out
+  // of prose.
   const beatsList = [];
   if (precedingTurn) {
     const seed = `${precedingTurn.speakerName}\n${precedingTurn.text}`;
@@ -385,8 +398,208 @@ async function runRound({
   // them all without a switch per exit point.
   let endedBy = 'budget';
   let directorLullNote = null;
+  // #196: how many splinter exchanges this passage has already run — gates
+  // shouldSplinter's MAX_SPLINTERS_PER_PASSAGE, same spirit as spokenCounts
+  // gating MAX_TURNS_PER_POOL_MEMBER above.
+  let splinterCount = 0;
+  // #196: the last thing said *in front of the room* — deliberately never
+  // updated by a splinter's own text, since a splinter is by definition
+  // unheard by everyone but its two participants. This is what a splinter's
+  // opening line answers (see buildSplinterUserMessage's triggeringText),
+  // kept separate from roundSoFar because roundSoFar does end up holding a
+  // resolved splinter's bracketed block too, once it's folded in below.
+  let lastMainBeatText = precedingTurn?.text || '';
 
   const speakerOrder = [];
+
+  // Generates one beat — a member's speaker turn plus its piggybacked
+  // disposition update — with the same bookkeeping (metrics, beatsList,
+  // meetingTurns, spokenCounts/lastSpeakerId, beats, remainingBudget)
+  // regardless of whether it's an ordinary main-thread beat or one half of
+  // a #196 splinter exchange. The two paths differ only in which
+  // userMessage and dispositionContext they hand this — never in how a
+  // beat gets recorded once it happens. `dispositionContext` is what "just
+  // happened in the room" means for this beat's own private reflection —
+  // the main thread's roundSoFar for an ordinary beat, the splinter's own
+  // private exchange for a splinter beat (see pipeline-splinter.js's header
+  // for why those must differ). `thread`, when given, is stamped onto the
+  // pushed beat verbatim — see the beatsList comment above for its shape.
+  async function generateBeat({ memberId, member, userMessage, dispositionContext, thread }) {
+    const voiceExemplar = exemplarFor(memberId);
+    const secondaryVoiceExemplars = secondaryExemplarsFor(memberId);
+    const residue = residueFor(memberId);
+    const system = buildSpeakerSystemPrompt({
+      lodgeContext,
+      member,
+      artifact,
+      notes,
+      loadMemberFile,
+      disposition: currentDisposition[memberId],
+      voiceExemplar,
+      secondaryVoiceExemplars,
+      residue,
+      otherPresentMembers: presentMembers.filter(m => m.id !== memberId),
+      relationshipEdges: relationshipEdges(),
+    });
+
+    onChunk?.(`${member.name}\n`);
+    onSpeakerStart?.(memberId);
+    let outcome;
+    try {
+      const { result, attempts } = await withOneRetry(() =>
+        callSpeakerTurn({ client, model, system, conversationHistory, userMessage, onChunk, lodgeContext })
+      );
+      const settledText = stripInternalBlankLines(result.text);
+      // #362: a pass is still a real, successful call — it just declined the
+      // turn via the room's own action-only idiom (see isPassTurn). Detected
+      // post-hoc on the settled text rather than as a separate response
+      // shape, so it costs nothing extra to check and can't diverge from
+      // what the transcript actually shows.
+      const passed = isPassTurn(settledText);
+      onMetric?.(
+        makeMetric('speaker', {
+          round,
+          memberId,
+          attempts,
+          usage: result.usage,
+          latencyMs: result.latencyMs,
+          voiceExemplar: voiceExemplar?.id,
+          voiceExemplarSecondary: secondaryVoiceExemplars?.map(e => e.id),
+          ...(passed ? { passed: true } : {}),
+        })
+      );
+
+      // #355: kept as a live reference so the disposition try block below
+      // can attach `citations` onto this same beat once its piggybacked
+      // call resolves, rather than a second pass over beatsList to find it.
+      const beatEntry = {
+        memberId,
+        text: settledText,
+        ...(passed ? { passed: true } : {}),
+        ...(thread ? { thread } : {}),
+      };
+      beatsList.push(beatEntry);
+      // #352: incremented here, on the success path beside the beat that
+      // will actually be persisted — deliberately *not* alongside
+      // spokenCounts below, which counts failed turns too. A turn that
+      // produced no words is not one the room heard, and counting it here
+      // would put the live ledger out of step with what turnsSoFar rebuilds
+      // from `beats` on the next passage.
+      //
+      // #362: a passed beat earns partial credit, not full — the member was
+      // called on (so this isn't "never heard from"), but nothing was
+      // actually said (so it isn't "heard from" either). See tuning.js's
+      // PASS_TURN_CREDIT for the reasoning.
+      if (meetingTurns) meetingTurns[memberId] = (meetingTurns[memberId] || 0) + (passed ? PASS_TURN_CREDIT : 1);
+      onSpeakerEnd?.(memberId, member.name, settledText);
+      onChunk?.('\n\n');
+      // #362: a pass's own word count is a few at most — charging only that
+      // would let passing hand the round's remaining budget to whoever
+      // speaks next as if the beat had never happened. Floored at
+      // PASS_BUDGET_COST so a pass still spends what the smallest real beat
+      // would have.
+      remainingBudget -= passed ? Math.max(countWords(settledText), PASS_BUDGET_COST) : countWords(settledText);
+
+      // #188: best-effort, isolated from the speaker try/catch above — a
+      // disposition failure must not get reported as a failed speaker turn
+      // that already succeeded and was already streamed to the client.
+      try {
+        const priorResidueText = residueFor(memberId);
+        const { list: libraryList, ids: libraryIds } = libraryContext();
+        const dispositionSystem = buildDispositionSystemPrompt({
+          member,
+          priorDisposition: currentDisposition[memberId],
+          presentMembers,
+          priorResidue: priorResidueText,
+          libraryList,
+        });
+        const dispositionUserMessage = buildDispositionUserMessage({
+          roundSoFarText: dispositionContext || 'Nothing yet — you are the first to speak this round.',
+          turnText: settledText,
+          member,
+        });
+        const dispositionPresentIds = presentMembers.filter(m => m.id !== memberId).map(m => m.id);
+        const {
+          text: updatedDisposition,
+          waitingOnMemberId,
+          residueNote,
+          citations,
+          invokedWorks,
+          usage: dUsage,
+          latencyMs: dLatencyMs,
+        } = await callDispositionUpdate({
+          client,
+          model,
+          system: dispositionSystem,
+          userMessage: dispositionUserMessage,
+          presentIds: dispositionPresentIds,
+          libraryIds,
+        });
+        if (updatedDisposition) {
+          currentDisposition[memberId] = { text: updatedDisposition, waitingOnMemberId };
+          // #360: surfaces the same waitingOnMemberId pickNextSpeaker already
+          // reads (#203) — a member who wants to jump back in reads as
+          // "waiting" until their disposition next changes.
+          onDisposition?.(memberId, waitingOnMemberId);
+        }
+        // #166: only when the beat actually earned a fragment — most beats
+        // don't (see the tool schema's "most turns, nothing belongs here").
+        if (residueNote) {
+          const mergedResidue = mergeResidue(priorResidueText, residueNote);
+          residueCache.set(memberId, mergedResidue);
+          residueUpdates[memberId] = mergedResidue;
+        }
+        // #355: attached onto the same beat pushed above, omitted entirely
+        // when the turn cited nothing — see the beats-shape comment.
+        if (citations.length) beatEntry.citations = citations;
+        // #356: same convention, for the weaker invoked-works tier.
+        if (invokedWorks.length) beatEntry.invokedWorks = invokedWorks;
+        onMetric?.(
+          makeMetric('disposition', {
+            round,
+            memberId,
+            usage: dUsage,
+            latencyMs: dLatencyMs,
+            waitingOnMemberId,
+            residueNote: residueNote || null,
+            citationCount: citations.length,
+            invokedCount: invokedWorks.length,
+          })
+        );
+      } catch (err) {
+        onMetric?.(makeMetric('disposition', { round, memberId, skipped: true, error: err.message }));
+        // Best-effort — the member simply carries their prior disposition forward.
+      }
+      outcome = { failed: false, text: settledText };
+    } catch (err) {
+      onMetric?.(
+        makeMetric('speaker', {
+          round,
+          memberId,
+          attempts: err.attempts || 1,
+          skipped: true,
+          error: err.message,
+          voiceExemplar: voiceExemplar?.id,
+          voiceExemplarSecondary: secondaryVoiceExemplars?.map(e => e.id),
+        })
+      );
+      // #354: the round goes on with fewer voices, but the attempt is not
+      // dropped from the record. No text (there is none — the call failed
+      // after its retry), so roundSoFar and the transcript are unchanged and
+      // the reader sees exactly what they saw before; the beat is what makes
+      // "called on, produced nothing" recoverable afterwards.
+      beatsList.push({ memberId, text: '', failed: true, error: err.message, ...(thread ? { thread } : {}) });
+      outcome = { failed: true };
+    }
+
+    // Recorded whether the beat succeeded or failed — a failing member
+    // still needs the recency/cap discount, or local picking would hammer
+    // the same broken speaker until the round's beat safety net kicks in.
+    spokenCounts.set(memberId, (spokenCounts.get(memberId) || 0) + 1);
+    lastSpeakerId = memberId;
+    beats++;
+    return outcome;
+  }
 
   while (remainingBudget >= MIN_WORDS_FOR_ANOTHER_BEAT && beats < MAX_TOTAL_BEATS) {
     const budgetSpentSinceConsult = budgetAtLastConsult - remainingBudget;
@@ -459,23 +672,56 @@ async function runRound({
         ? presentMembers.find(m => m.id === lastSpeakerId)
         : null;
 
+    // #196: a splinter is the other resolution of the same interrupt-intent
+    // signal INTERRUPT_INTENT_WEIGHT already biased pickNextSpeaker toward —
+    // see pipeline-splinter.js's header. Only ever considered when that
+    // signal is live; never a second, independent trigger.
+    if (interruptedMember && shouldSplinter({ interruptedMember, remainingBudget, splinterCount })) {
+      const other = interruptedMember;
+      const thread = { id: `splinter-${round}-${splinterCount}`, participants: [memberId, other.id] };
+
+      const opening = await generateBeat({
+        memberId,
+        member,
+        userMessage: buildSplinterUserMessage({
+          speaker: member,
+          other,
+          priorText: '',
+          triggeringText: lastMainBeatText,
+        }),
+        dispositionContext: '',
+        thread,
+      });
+
+      const splinterBeats = [];
+      if (!opening.failed) {
+        splinterBeats.push({ speakerName: member.name, text: opening.text });
+
+        const priorText = `${member.name}\n${opening.text}`;
+        const reply = await generateBeat({
+          memberId: other.id,
+          member: other,
+          userMessage: buildSplinterUserMessage({ speaker: other, other: member, priorText, triggeringText: null }),
+          dispositionContext: priorText,
+          thread,
+        });
+        if (!reply.failed) splinterBeats.push({ speakerName: other.name, text: reply.text });
+      }
+
+      // A splinter that produced no text (the opening beat itself failed)
+      // contributes nothing to roundSoFar, same as any other failed beat —
+      // but the failed attempt is still in beatsList via generateBeat, and
+      // spokenCounts/lastSpeakerId/beats were still updated, so the loop
+      // doesn't retry the same broken speaker indefinitely.
+      if (splinterBeats.length) {
+        roundSoFar += (roundSoFar ? '\n\n' : '') + formatSplinterBlock(member, other, splinterBeats);
+        speakerOrder.push(memberId, ...(splinterBeats.length > 1 ? [other.id] : []));
+        splinterCount++;
+      }
+      continue;
+    }
+
     const unheardCount = pool.filter(id => id !== memberId && !(spokenCounts.get(id) > 0)).length;
-    const voiceExemplar = exemplarFor(memberId);
-    const secondaryVoiceExemplars = secondaryExemplarsFor(memberId);
-    const residue = residueFor(memberId);
-    const system = buildSpeakerSystemPrompt({
-      lodgeContext,
-      member,
-      artifact,
-      notes,
-      loadMemberFile,
-      disposition: currentDisposition[memberId],
-      voiceExemplar,
-      secondaryVoiceExemplars,
-      residue,
-      otherPresentMembers: presentMembers.filter(m => m.id !== memberId),
-      relationshipEdges: relationshipEdges(),
-    });
     const userMessage = buildSpeakerUserMessage({
       roundPrompt,
       roundSoFarText: roundSoFar,
@@ -485,157 +731,12 @@ async function runRound({
       interruptingName: interruptedMember?.name || null,
     });
 
-    onChunk?.(`${member.name}\n`);
-    onSpeakerStart?.(memberId);
-    try {
-      const { result, attempts } = await withOneRetry(() =>
-        callSpeakerTurn({ client, model, system, conversationHistory, userMessage, onChunk, lodgeContext })
-      );
-      const contextBeforeTurn = roundSoFar;
-      const settledText = stripInternalBlankLines(result.text);
-      // #362: a pass is still a real, successful call — it just declined the
-      // turn via the room's own action-only idiom (see isPassTurn). Detected
-      // post-hoc on the settled text rather than as a separate response
-      // shape, so it costs nothing extra to check and can't diverge from
-      // what the transcript actually shows.
-      const passed = isPassTurn(settledText);
-      onMetric?.(
-        makeMetric('speaker', {
-          round,
-          memberId,
-          attempts,
-          usage: result.usage,
-          latencyMs: result.latencyMs,
-          voiceExemplar: voiceExemplar?.id,
-          voiceExemplarSecondary: secondaryVoiceExemplars?.map(e => e.id),
-          ...(passed ? { passed: true } : {}),
-        })
-      );
-
-      roundSoFar += (roundSoFar ? '\n\n' : '') + `${member.name}\n${settledText}`;
+    const result = await generateBeat({ memberId, member, userMessage, dispositionContext: roundSoFar, thread: null });
+    if (!result.failed) {
+      roundSoFar += (roundSoFar ? '\n\n' : '') + `${member.name}\n${result.text}`;
       speakerOrder.push(memberId);
-      // #355: kept as a live reference so the disposition try block below
-      // can attach `citations` onto this same beat once its piggybacked
-      // call resolves, rather than a second pass over beatsList to find it.
-      const beatEntry = passed ? { memberId, text: settledText, passed: true } : { memberId, text: settledText };
-      beatsList.push(beatEntry);
-      // #352: incremented here, on the success path beside the beat that
-      // will actually be persisted — deliberately *not* alongside
-      // spokenCounts below, which counts failed turns too. A turn that
-      // produced no words is not one the room heard, and counting it here
-      // would put the live ledger out of step with what turnsSoFar rebuilds
-      // from `beats` on the next passage.
-      //
-      // #362: a passed beat earns partial credit, not full — the member was
-      // called on (so this isn't "never heard from"), but nothing was
-      // actually said (so it isn't "heard from" either). See tuning.js's
-      // PASS_TURN_CREDIT for the reasoning.
-      if (meetingTurns) meetingTurns[memberId] = (meetingTurns[memberId] || 0) + (passed ? PASS_TURN_CREDIT : 1);
-      onSpeakerEnd?.(memberId, member.name, settledText);
-      onChunk?.('\n\n');
-      // #362: a pass's own word count is a few at most — charging only that
-      // would let passing hand the round's remaining budget to whoever
-      // speaks next as if the beat had never happened. Floored at
-      // PASS_BUDGET_COST so a pass still spends what the smallest real beat
-      // would have.
-      remainingBudget -= passed ? Math.max(countWords(settledText), PASS_BUDGET_COST) : countWords(settledText);
-
-      // #188: best-effort, isolated from the speaker try/catch above — a
-      // disposition failure must not get reported as a failed speaker turn
-      // that already succeeded and was already streamed to the client.
-      try {
-        const priorResidueText = residueFor(memberId);
-        const { list: libraryList, ids: libraryIds } = libraryContext();
-        const dispositionSystem = buildDispositionSystemPrompt({
-          member,
-          priorDisposition: currentDisposition[memberId],
-          presentMembers,
-          priorResidue: priorResidueText,
-          libraryList,
-        });
-        const dispositionUserMessage = buildDispositionUserMessage({
-          roundSoFarText: contextBeforeTurn || 'Nothing yet — you are the first to speak this round.',
-          turnText: settledText,
-          member,
-        });
-        const dispositionPresentIds = presentMembers.filter(m => m.id !== memberId).map(m => m.id);
-        const {
-          text: updatedDisposition,
-          waitingOnMemberId,
-          residueNote,
-          citations,
-          invokedWorks,
-          usage: dUsage,
-          latencyMs: dLatencyMs,
-        } = await callDispositionUpdate({
-          client,
-          model,
-          system: dispositionSystem,
-          userMessage: dispositionUserMessage,
-          presentIds: dispositionPresentIds,
-          libraryIds,
-        });
-        if (updatedDisposition) {
-          currentDisposition[memberId] = { text: updatedDisposition, waitingOnMemberId };
-          // #360: surfaces the same waitingOnMemberId pickNextSpeaker already
-          // reads (#203) — a member who wants to jump back in reads as
-          // "waiting" until their disposition next changes.
-          onDisposition?.(memberId, waitingOnMemberId);
-        }
-        // #166: only when the beat actually earned a fragment — most beats
-        // don't (see the tool schema's "most turns, nothing belongs here").
-        if (residueNote) {
-          const mergedResidue = mergeResidue(priorResidueText, residueNote);
-          residueCache.set(memberId, mergedResidue);
-          residueUpdates[memberId] = mergedResidue;
-        }
-        // #355: attached onto the same beat pushed above, omitted entirely
-        // when the turn cited nothing — see the beats-shape comment.
-        if (citations.length) beatEntry.citations = citations;
-        // #356: same convention, for the weaker invoked-works tier.
-        if (invokedWorks.length) beatEntry.invokedWorks = invokedWorks;
-        onMetric?.(
-          makeMetric('disposition', {
-            round,
-            memberId,
-            usage: dUsage,
-            latencyMs: dLatencyMs,
-            waitingOnMemberId,
-            residueNote: residueNote || null,
-            citationCount: citations.length,
-            invokedCount: invokedWorks.length,
-          })
-        );
-      } catch (err) {
-        onMetric?.(makeMetric('disposition', { round, memberId, skipped: true, error: err.message }));
-        // Best-effort — the member simply carries their prior disposition forward.
-      }
-    } catch (err) {
-      onMetric?.(
-        makeMetric('speaker', {
-          round,
-          memberId,
-          attempts: err.attempts || 1,
-          skipped: true,
-          error: err.message,
-          voiceExemplar: voiceExemplar?.id,
-          voiceExemplarSecondary: secondaryVoiceExemplars?.map(e => e.id),
-        })
-      );
-      // #354: the round goes on with fewer voices, but the attempt is not
-      // dropped from the record. No text (there is none — the call failed
-      // after its retry), so roundSoFar and the transcript are unchanged and
-      // the reader sees exactly what they saw before; the beat is what makes
-      // "called on, produced nothing" recoverable afterwards.
-      beatsList.push({ memberId, text: '', failed: true, error: err.message });
+      lastMainBeatText = result.text;
     }
-
-    // Recorded whether the beat succeeded or failed — a failing member
-    // still needs the recency/cap discount, or local picking would hammer
-    // the same broken speaker until the round's beat safety net kicks in.
-    spokenCounts.set(memberId, (spokenCounts.get(memberId) || 0) + 1);
-    lastSpeakerId = memberId;
-    beats++;
   }
 
   if (!roundSoFar) {
@@ -666,6 +767,7 @@ module.exports = {
   ...speaker,
   ...disposition,
   ...lull,
+  ...splinter,
   splitIntoBeats,
   BEAT_WORD_THRESHOLD,
   runRound,
