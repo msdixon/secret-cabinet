@@ -207,6 +207,32 @@ const MAX_INVOKED_PER_BEAT = 6;
 const INVOKED_WORK_MAX_CHARS = 160;
 const INVOKED_NOTE_MAX_CHARS = 240;
 
+// ── Splinter exchanges (pipeline-splinter.js) ──────────────────────────────
+
+// #196: a splinter is the other resolution of the same interrupt-intent
+// signal (#203's waitingOnMemberId) that INTERRUPT_INTENT_WEIGHT above
+// already biases pickNextSpeaker toward — instead of raising the unspent
+// business to the whole room, the two step aside for a private exchange run
+// on its own context rather than the shared roundSoFar every other speaker
+// call is conditioned on. See pipeline-splinter.js's header for the full
+// design note.
+const SPLINTER_EXCHANGE_BEATS = 2; // fixed length: "two members trade a barbed aside," per the issue, not an open thread
+const MAX_SPLINTERS_PER_PASSAGE = 1; // a horizon mechanic proving itself against real sessions, not yet a structural feature of every passage
+
+// The exception, not the default — most interrupt-intent picks still
+// resolve as the existing #203 path (an ordinary front-of-room
+// interruption). The speaker prompt's own "it's fine to let it pass"
+// already licenses declining even a real interrupt; a splinter has to earn
+// that same restraint rather than firing every time the signal is live.
+const SPLINTER_CHANCE = 0.35;
+
+// Needs headroom for both splinter beats *and* something left for the main
+// thread to close on afterward — an aside that spent the entire remaining
+// budget would end the passage mid-gesture, on a private exchange the room
+// itself never heard. WORDS_PER_BEAT_ESTIMATE (above) times 3: two beats for
+// the exchange, one beat's worth of slack for whatever the room does next.
+const SPLINTER_MIN_BUDGET_WORDS = WORDS_PER_BEAT_ESTIMATE * 3;
+
 // ── Pool/arc sizing (lodge-prompts.js) ─────────────────────────────────────
 
 // #194 touchpoint 2: SPEAKER_COUNTS/speakerCountForRound retire — pool
@@ -257,4 +283,8 @@ module.exports = {
   DEFAULT_POOL_SIZE,
   INTERJECT_SPEAKER_COUNT,
   ARC_STAGE_BOUNDARIES,
+  SPLINTER_EXCHANGE_BEATS,
+  MAX_SPLINTERS_PER_PASSAGE,
+  SPLINTER_CHANCE,
+  SPLINTER_MIN_BUDGET_WORDS,
 };

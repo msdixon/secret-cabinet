@@ -60,6 +60,9 @@ const {
   STOCK_LULL_NOTES,
   pickStockLullNote,
   resolveLullNote,
+  shouldSplinter,
+  buildSplinterUserMessage,
+  formatSplinterBlock,
 } = require('../src/pipeline.js');
 const record = require('../public/js/record.js');
 // #355 — citation-capture sizing constants live in tuning.js, not re-exported
@@ -72,6 +75,9 @@ const {
   MAX_INVOKED_PER_BEAT,
   INVOKED_WORK_MAX_CHARS,
   INVOKED_NOTE_MAX_CHARS,
+  SPLINTER_CHANCE,
+  SPLINTER_MIN_BUDGET_WORDS,
+  MAX_SPLINTERS_PER_PASSAGE,
 } = require('../src/tuning.js');
 
 // #352's ledger lives in lodge-prompts.js (see its own comment for why) but
@@ -2951,5 +2957,278 @@ test('runRound — citation capture piggybacked on the disposition call (#355)',
     });
     const result = await runRound({ ...baseArgs, client });
     assert.equal('invokedWorks' in result.beats[0], false);
+  });
+});
+
+// #196 — splinter exchanges: two members trading a private aside while the
+// main thread continues. shouldSplinter, buildSplinterUserMessage, and
+// formatSplinterBlock are pure and tested directly first; the runRound
+// integration test below (which needs a two-member pool, unlike every other
+// runRound fixture in this file) exercises the full loop wiring.
+test('shouldSplinter (#196)', async t => {
+  const interruptedMember = { id: 'crowley', name: 'Crowley' };
+
+  await t.test('never fires without a live interrupt-intent signal', () => {
+    assert.equal(
+      shouldSplinter({
+        interruptedMember: null,
+        remainingBudget: SPLINTER_MIN_BUDGET_WORDS + 100,
+        splinterCount: 0,
+        rng: () => 0,
+      }),
+      false
+    );
+  });
+
+  await t.test('respects the once-per-passage cap', () => {
+    assert.equal(
+      shouldSplinter({
+        interruptedMember,
+        remainingBudget: SPLINTER_MIN_BUDGET_WORDS + 100,
+        splinterCount: MAX_SPLINTERS_PER_PASSAGE,
+        rng: () => 0,
+      }),
+      false
+    );
+  });
+
+  await t.test('needs enough budget headroom for both beats plus something left over', () => {
+    assert.equal(
+      shouldSplinter({
+        interruptedMember,
+        remainingBudget: SPLINTER_MIN_BUDGET_WORDS - 1,
+        splinterCount: 0,
+        rng: () => 0,
+      }),
+      false
+    );
+    assert.equal(
+      shouldSplinter({
+        interruptedMember,
+        remainingBudget: SPLINTER_MIN_BUDGET_WORDS,
+        splinterCount: 0,
+        rng: () => 0,
+      }),
+      true
+    );
+  });
+
+  await t.test('is the exception, not the default — gated by SPLINTER_CHANCE', () => {
+    const args = { interruptedMember, remainingBudget: SPLINTER_MIN_BUDGET_WORDS + 100, splinterCount: 0 };
+    assert.equal(shouldSplinter({ ...args, rng: () => SPLINTER_CHANCE - 0.001 }), true);
+    assert.equal(shouldSplinter({ ...args, rng: () => SPLINTER_CHANCE }), false);
+    assert.equal(shouldSplinter({ ...args, rng: () => 0.999 }), false);
+  });
+});
+
+test('buildSplinterUserMessage (#196)', async t => {
+  const crowley = { name: 'Crowley' };
+  const scholem = { name: 'Scholem' };
+
+  await t.test('the opening line frames the aside and quotes what triggered it', () => {
+    const msg = buildSplinterUserMessage({
+      speaker: scholem,
+      other: crowley,
+      priorText: '',
+      triggeringText: 'A wild claim about the Golden Dawn.',
+    });
+    assert.match(msg, /stepped a half-step apart/);
+    assert.match(msg, /does not hear this exchange/);
+    assert.match(msg, /"A wild claim about the Golden Dawn\."/);
+    assert.match(msg, /Generate Scholem's side of this aside now/);
+    assert.equal(/SO FAR/.test(msg), false);
+  });
+
+  await t.test('a reply shows the exchange so far instead of the triggering line', () => {
+    const msg = buildSplinterUserMessage({
+      speaker: crowley,
+      other: scholem,
+      priorText: 'Scholem\nWhat did you mean by that?',
+      triggeringText: 'ignored on a reply',
+    });
+    assert.match(msg, /BETWEEN YOU AND SCHOLEM, SO FAR/);
+    assert.match(msg, /What did you mean by that\?/);
+    assert.equal(/ignored on a reply/.test(msg), false);
+  });
+
+  await t.test('never mentions the room or an audience — the whole point is that no one else hears it', () => {
+    const msg = buildSplinterUserMessage({ speaker: scholem, other: crowley, priorText: '', triggeringText: null });
+    assert.match(msg, /nothing addressed to the room/);
+  });
+});
+
+test('formatSplinterBlock (#196)', async t => {
+  await t.test('wraps the exchange in a diegetic bracket naming both participants', () => {
+    const block = formatSplinterBlock(
+      { name: 'Scholem' },
+      { name: 'Crowley' },
+      [
+        { speakerName: 'Scholem', text: 'You cannot have meant that.' },
+        { speakerName: 'Crowley', text: 'I meant every word.' },
+      ]
+    );
+    assert.match(block, /^\[Aside — Scholem and Crowley, apart from the room\]/);
+    assert.match(block, /Scholem\nYou cannot have meant that\./);
+    assert.match(block, /Crowley\nI meant every word\./);
+    assert.match(block, /\[\/Aside\]$/);
+  });
+
+  await t.test('a one-sided exchange (the reply failed) still renders the opening line alone', () => {
+    const block = formatSplinterBlock({ name: 'Scholem' }, { name: 'Crowley' }, [
+      { speakerName: 'Scholem', text: 'You cannot have meant that.' },
+    ]);
+    assert.match(block, /\[Aside — Scholem and Crowley, apart from the room\]\nScholem\n/);
+    assert.equal(/Crowley\n/.test(block), false);
+  });
+});
+
+// Temporarily replaces the global Math.random with a scripted sequence,
+// falling back to 0.5 once the script runs out — pickNextSpeaker and
+// shouldSplinter both default to Math.random and runRound doesn't expose
+// either as an injectable rng, so this is the only way to make a
+// multi-member runRound integration test deterministic. Every other
+// runRound fixture in this file sidesteps the question with a one-member
+// roster (SINGLE_MEMBER_ROSTER); a splinter needs two.
+function withScriptedRandom(values, fn) {
+  const original = Math.random;
+  let i = 0;
+  Math.random = () => (i < values.length ? values[i++] : 0.5);
+  return fn().finally(() => {
+    Math.random = original;
+  });
+}
+
+const SPLINTER_ROSTER = [
+  { id: 'crowley', name: 'Crowley', file: 'crowley.md' },
+  { id: 'scholem', name: 'Scholem', file: 'scholem.md' },
+];
+const loadSplinterMemberFile = () => 'A character file.';
+
+// select_speakers always offers both; windingDown flips true on the 2nd
+// consult so the passage ends deterministically right after the scenario
+// below plays out. update_disposition always answers 'none' — the interrupt
+// signal that triggers the splinter is seeded directly via runRound's own
+// `disposition` param instead, so no live call needs to "decide" to
+// interrupt.
+function fakeSplinterClient() {
+  let selectCalls = 0;
+  return {
+    messages: {
+      create: async req => {
+        const toolName = req.tools?.[0]?.name;
+        if (toolName === 'select_speakers') {
+          selectCalls++;
+          const windingDown = selectCalls >= 2;
+          return {
+            content: [
+              {
+                type: 'tool_use',
+                input: {
+                  speakers: ['crowley', 'scholem'],
+                  reasoning: 'r',
+                  windingDown,
+                  lullNote: windingDown ? 'A note.' : null,
+                },
+              },
+            ],
+            usage: { input_tokens: 10, output_tokens: 5 },
+          };
+        }
+        return {
+          content: [{ type: 'tool_use', input: { reflection: 'Considering.', waitingOnMemberId: 'none' } }],
+          usage: { input_tokens: 8, output_tokens: 4 },
+        };
+      },
+      stream: () => ({
+        [Symbol.asyncIterator]: async function* () {
+          yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'A turn.' } };
+        },
+        finalMessage: async () => ({ usage: { input_tokens: 20, output_tokens: 10 } }),
+      }),
+    },
+  };
+}
+
+test('runRound — a splinter exchange interleaves into the passage record (#196)', async t => {
+  await t.test('two members granted a private exchange, folded into the record and the rolled-up text', async () => {
+    // rng script: pick crowley (beat 1, roll 0 → first candidate), pick
+    // scholem (beat 2 — heavily interrupt-boosted already, 0.5 lands there
+    // regardless of exact weights), shouldSplinter's own roll (well under
+    // SPLINTER_CHANCE), then pick scholem again (beat 4 — crowley is at cap
+    // by then, so this is deterministic regardless of the roll's value).
+    const client = fakeSplinterClient();
+    const result = await withScriptedRandom([0, 0.5, 0.01, 0.5], () =>
+      runRound({
+        client,
+        model: 'test-model',
+        lodgeContext: LODGE,
+        ROSTER: SPLINTER_ROSTER,
+        loadMemberFile: loadSplinterMemberFile,
+        presentMemberIds: ['crowley', 'scholem'],
+        artifact: null,
+        notes: {},
+        roundPrompt: 'Opening prompt',
+        conversationHistory: [],
+        speakerCount: 2,
+        round: 0,
+        // Seeds the #203 interrupt-intent signal directly, exactly as if
+        // scholem's own disposition had already named crowley as unspent
+        // business before the passage even began — the trigger this
+        // mechanism is built to reuse, not a new one.
+        disposition: { scholem: { text: 'Unfinished business.', waitingOnMemberId: 'crowley' } },
+      })
+    );
+
+    assert.equal(result.beats.length, 4);
+    assert.deepEqual(
+      result.beats.map(b => b.memberId),
+      ['crowley', 'scholem', 'crowley', 'scholem']
+    );
+    // Only the middle two beats — the splinter — carry a thread tag.
+    assert.equal(result.beats[0].thread, undefined);
+    assert.equal(result.beats[3].thread, undefined);
+    assert.ok(result.beats[1].thread);
+    assert.ok(result.beats[2].thread);
+    assert.equal(result.beats[1].thread.id, result.beats[2].thread.id);
+    assert.deepEqual(result.beats[1].thread.participants, ['scholem', 'crowley']);
+
+    // The splinter is folded into the rolled-up text as one bracketed
+    // block, distinct from the ordinary "Name\ntext" beats around it — this
+    // is what makes every existing surface that renders segment.text
+    // (reading room, export, live SSE) show the aside correctly with no
+    // client change.
+    assert.match(result.fullRoundText, /\[Aside — Scholem and Crowley, apart from the room\]/);
+    assert.match(result.fullRoundText, /\[\/Aside\]/);
+
+    // Both participants read as having spoken, for the meeting-level
+    // ledger and pacing bookkeeping's sake — a splinter isn't "off the
+    // books."
+    assert.deepEqual(new Set(result.speakerOrder), new Set(['crowley', 'scholem']));
+    assert.equal(result.endedBy, 'lull');
+  });
+
+  await t.test('a splinter never triggers off the very first pick — there is no lastSpeakerId yet to interrupt', async () => {
+    // Same seeded disposition, but scholem is never picked first (rng: 0
+    // always favors the rank-0 candidate, crowley) — confirms the null
+    // lastSpeakerId guard rather than assuming it from the happy path above.
+    const client = fakeSplinterClient();
+    const result = await withScriptedRandom([0], () =>
+      runRound({
+        client,
+        model: 'test-model',
+        lodgeContext: LODGE,
+        ROSTER: SPLINTER_ROSTER,
+        loadMemberFile: loadSplinterMemberFile,
+        presentMemberIds: ['crowley', 'scholem'],
+        artifact: null,
+        notes: {},
+        roundPrompt: 'Opening prompt',
+        conversationHistory: [],
+        speakerCount: 2,
+        round: 0,
+        disposition: { crowley: { text: 'Unfinished business.', waitingOnMemberId: 'scholem' } },
+      })
+    );
+    assert.ok(result.beats.every(b => b.thread === undefined));
   });
 });
