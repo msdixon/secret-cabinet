@@ -138,6 +138,7 @@ function populatePlayAsMemberSelect() {
     });
   if (current && active.includes(current)) {
     sel.value = current;
+    updateConvenePlayerStatus();
     return;
   }
   // The previously "played" member is no longer present — reset defensively
@@ -146,6 +147,8 @@ function populatePlayAsMemberSelect() {
   if (modeSel?.value === 'member') {
     modeSel.value = 'none';
     handlePlayAsModeChange();
+  } else {
+    updateConvenePlayerStatus();
   }
 }
 
@@ -153,6 +156,40 @@ function handlePlayAsModeChange() {
   const mode = document.getElementById('play-as-mode-select').value;
   document.getElementById('play-as-member-field').style.display = mode === 'member' ? 'block' : 'none';
   document.getElementById('play-as-custom-field').style.display = mode === 'custom' ? 'block' : 'none';
+  updateConvenePlayerStatus();
+}
+
+// #348: mirrors the "Play as" panel's current selection next to Convene the
+// Lodge, so #31 (player-as-member) is visible at the point of convening
+// instead of only inside a collapsed details panel up in II. The Assembled.
+// Reads the live select/input rather than the playerMode/playerName globals
+// -- those are snapshots taken at convene() start and only mean anything
+// once a session is running, whereas this button always describes what the
+// *next* convene would use.
+function updateConvenePlayerStatus() {
+  const btn = document.getElementById('convene-player-status');
+  if (!btn) return;
+  const mode = document.getElementById('play-as-mode-select')?.value || 'none';
+  let label = '◆ Observing only';
+  if (mode === 'member') {
+    const sel = document.getElementById('play-as-member-select');
+    const name = sel?.options[sel.selectedIndex]?.textContent;
+    label = name && sel.value ? `◆ Playing as ${name}` : '◆ Play as…';
+  } else if (mode === 'custom') {
+    const name = document.getElementById('play-as-custom-name')?.value.trim();
+    label = name ? `◆ Playing as ${name}` : '◆ Play as…';
+  }
+  btn.textContent = label;
+  btn.classList.toggle('is-active', mode !== 'none');
+}
+
+// Jumps to and opens the "Play as" details panel, same scrollIntoView
+// pattern initStepperNav() uses for the numbered steps above.
+function focusPlayAsPanel() {
+  const panel = document.getElementById('playeras-panel');
+  if (!panel) return;
+  panel.open = true;
+  panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 function isPlayerActive() {
@@ -187,6 +224,7 @@ function restorePlayAsControlDisplay() {
   } else if (customInput) {
     customInput.disabled = false;
   }
+  updateConvenePlayerStatus();
 }
 
 function awaitPlayerTurn(roundLabel) {

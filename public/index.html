@@ -378,11 +378,11 @@
           </div>
           <div class="arc-field" id="play-as-member-field" style="display:none;">
             <div class="panel-label">Which member</div>
-            <select class="lodge-select" id="play-as-member-select"></select>
+            <select class="lodge-select" id="play-as-member-select" onchange="updateConvenePlayerStatus()"></select>
           </div>
           <div class="arc-field" id="play-as-custom-field" style="display:none;">
             <div class="panel-label">Name</div>
-            <input class="interject-input" id="play-as-custom-name" placeholder="e.g. yourself, or an invented persona" style="width:100%;border-left:3px solid var(--lodge-amber-dim);" />
+            <input class="interject-input" id="play-as-custom-name" placeholder="e.g. yourself, or an invented persona" style="width:100%;border-left:3px solid var(--lodge-amber-dim);" oninput="updateConvenePlayerStatus()" />
           </div>
         </div>
       </details>
@@ -445,6 +445,7 @@
              pre-commitment re-imports the round frame through the side door.
              How long the room sits is decided in the room, at each lull. -->
         <button class="lodge-btn primary" id="convene-btn" onclick="convene()">Convene the Lodge</button>
+        <button type="button" class="lodge-btn convene-player-status" id="convene-player-status" onclick="focusPlayAsPanel()" title="Set who you're playing as before convening"></button>
         <button class="lodge-btn" id="reveal-player-turns-btn" onclick="togglePlayerTurnReveal()">Reveal Player Turns ◆</button>
         <button class="lodge-btn sessions-btn" id="dossier-btn" onclick="window.Sessions.toggleDossier()" style="display:none;">Review the assembly ↗</button>
       </div>
