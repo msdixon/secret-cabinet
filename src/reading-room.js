@@ -4,11 +4,16 @@
 //
 // A session explicitly marked published renders at /reading-room/:id with no
 // login and no client JS: just the source document and the transcript,
-// typeset. Whole-session only for this MVP — no per-round curation, no
-// portraits, no annotations (matches the issue's "no generation controls, no
-// member grid"). Pure HTML templating, no I/O — depends on transcript-format.js
-// for speaker-header recognition and escaping, following the sibling-module
-// pattern pipeline.js already uses for dayone.js.
+// typeset. No portraits-off-switch, no annotations (matches the issue's "no
+// generation controls, no member grid"). Pure HTML templating, no I/O —
+// depends on transcript-format.js for speaker-header recognition and
+// escaping, following the sibling-module pattern pipeline.js already uses
+// for dayone.js.
+//
+// #178: publishing can optionally be curated down to a subset of passages
+// via session.publishedRounds (indices into session.rounds, same ordinal
+// branching already uses). Absent/null means every passage, matching the
+// #38 MVP's whole-session-only behavior for sessions published before this.
 
 const { escapeHtml, buildSpeakerHeaderSet, normalizeSpeaker } = require('./transcript-format');
 // #354: the shared label-placement rule — see record.js's own header.
@@ -75,7 +80,11 @@ function renderReadingRoomPage(session, roster) {
   // interjection announcing itself) or closes it (the lull that ended a
   // passage). One shared rule, in record.js — see the record and the stage,
   // which read the same one; public/sessions.js's restore loop.
-  const roundsHtml = (session.rounds || [])
+  const selectedRounds = Array.isArray(session.publishedRounds) ? new Set(session.publishedRounds) : null;
+  const visibleRounds = selectedRounds
+    ? (session.rounds || []).filter((_, i) => selectedRounds.has(i))
+    : session.rounds || [];
+  const roundsHtml = visibleRounds
     .map(r =>
       record.labelOpensSegment(r)
         ? `<section class="rr-round"><h2 class="rr-round-label">${escapeHtml(r.label)}</h2>${renderRoundHtml(r.text, roster)}</section>`

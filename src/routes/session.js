@@ -19,6 +19,21 @@ const record = require('../../public/js/record.js');
 // module, which this route still uses for the deliberate grounding pass.
 const { flattenBeatCitations } = require('../citations');
 
+// #178: validates a requested publishedRounds selection down to the
+// in-bounds integer indices it actually contains, deduped and sorted so
+// reading-room.js's filter doesn't need to. null/non-array input (including
+// the "clear the selection" case) maps to null, meaning "every passage" —
+// the same as the field being absent altogether.
+function normalizePublishedRounds(input, roundCount) {
+  if (!Array.isArray(input)) return null;
+  const kept = new Set();
+  input.forEach(v => {
+    const i = Number(v);
+    if (Number.isInteger(i) && i >= 0 && i < roundCount) kept.add(i);
+  });
+  return Array.from(kept).sort((a, b) => a - b);
+}
+
 function registerSessionRoutes(
   app,
   {
@@ -449,14 +464,37 @@ function registerSessionRoutes(
     });
   });
 
-  // PATCH /api/sessions/:id/publish — mark/unmark a session for the public reading room
+  // PATCH /api/sessions/:id/publish — mark/unmark a session for the public
+  // reading room, and (#178) optionally curate which passages it shows.
+  //
+  // publishedRounds is a list of session.rounds indices — the same ordinal
+  // branching already keys off (roundIndex/segmentIndex elsewhere in this
+  // file and in public/js/sessions.js). Omitting it from the request body
+  // leaves any existing selection untouched; sending null clears it back to
+  // "every passage", which is also the default for a session that's never
+  // been curated — see reading-room.js's own filtering.
   app.patch('/api/sessions/:id/publish', (req, res) => {
     const session = loadSession(req.params.id);
     if (!session) return res.status(404).json({ error: 'Session not found' });
+    const wasPublished = session.published;
     session.published = !!req.body.published;
-    session.publishedAt = session.published ? new Date().toISOString() : null;
+    if (session.published) {
+      // Editing curation on an already-published session (the "Curate"
+      // action) re-sends published:true; don't let that bump publishedAt.
+      if (!wasPublished || !session.publishedAt) session.publishedAt = new Date().toISOString();
+    } else {
+      session.publishedAt = null;
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'publishedRounds')) {
+      session.publishedRounds = normalizePublishedRounds(req.body.publishedRounds, session.rounds?.length || 0);
+    }
     saveSession(session);
-    res.json({ published: session.published, publishedAt: session.publishedAt, url: `/reading-room/${session.id}` });
+    res.json({
+      published: session.published,
+      publishedAt: session.publishedAt,
+      publishedRounds: session.publishedRounds ?? null,
+      url: `/reading-room/${session.id}`,
+    });
   });
 
   // GET /reading-room/:id — public, unauthenticated. 404s (rather than

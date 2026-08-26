@@ -106,4 +106,52 @@ test('renderReadingRoomPage', async t => {
     const html = renderReadingRoomPage({ id: 'empty', entry: '', rounds: [] }, ROSTER);
     assert.match(html, /^<!DOCTYPE html>/);
   });
+
+  // #178: publishedRounds curates the reading room down to a subset of
+  // session.rounds by index, defaulting to every passage when absent.
+  await t.test('renders every round when publishedRounds is absent (backward-compatible default)', () => {
+    const html = renderReadingRoomPage(
+      {
+        ...SESSION,
+        rounds: [
+          { label: 'First', text: 'Crowley\nThis is the first passage.' },
+          { label: 'Second', text: 'Crowley\nThis is the second passage.' },
+        ],
+      },
+      ROSTER
+    );
+    assert.match(html, /This is the first passage\./);
+    assert.match(html, /This is the second passage\./);
+  });
+
+  await t.test('renders only the passages named in publishedRounds, in their original order', () => {
+    const html = renderReadingRoomPage(
+      {
+        ...SESSION,
+        rounds: [
+          { label: 'First', text: 'Crowley\nThis is the first passage.' },
+          { label: 'Second', text: 'Crowley\nThis is the second passage.' },
+          { label: 'Third', text: 'Crowley\nThis is the third passage.' },
+        ],
+        publishedRounds: [2, 0],
+      },
+      ROSTER
+    );
+    assert.match(html, /This is the first passage\./);
+    assert.doesNotMatch(html, /This is the second passage\./);
+    assert.match(html, /This is the third passage\./);
+    assert.ok(
+      html.indexOf('This is the first passage.') < html.indexOf('This is the third passage.'),
+      'kept passages render in session order, not selection order'
+    );
+  });
+
+  await t.test('an empty publishedRounds array renders no passages (a valid, if unusual, curation)', () => {
+    const html = renderReadingRoomPage(
+      { ...SESSION, rounds: [{ label: 'First', text: 'Crowley\nThis is the first passage.' }], publishedRounds: [] },
+      ROSTER
+    );
+    assert.doesNotMatch(html, /This is the first passage\./);
+    assert.match(html, /^<!DOCTYPE html>/);
+  });
 });

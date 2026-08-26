@@ -532,6 +532,88 @@ test('PATCH /api/sessions/:id/publish + GET /reading-room/:id', async t => {
     app.routes['GET /reading-room/:id'](fakeReq({ params: { id: 'nope' } }), res);
     assert.equal(res.statusCode, 404);
   });
+
+  // #178: per-round curation. threeRoundSession has indices 0/1/2 to select from.
+  function threeRoundSession(id, extra = {}) {
+    return baseSession(id, {
+      rounds: [
+        { label: 'First', text: 'Crowley —\nOne.' },
+        { label: 'Second', text: 'Crowley —\nTwo.' },
+        { label: 'Third', text: 'Crowley —\nThree.' },
+      ],
+      ...extra,
+    });
+  }
+
+  await t.test('publishedRounds is normalized to deduped, sorted, in-bounds indices', () => {
+    const dir = makeFixtureDir();
+    t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+    store.saveSession(dir, threeRoundSession('s1'));
+    const app = fakeApp();
+    registerSessionRoutes(app, makeDeps(dir));
+    const res = fakeRes();
+    app.routes['PATCH /api/sessions/:id/publish'](
+      fakeReq({ params: { id: 's1' }, body: { published: true, publishedRounds: [2, 0, 2, 99, -1, 1.5, 'x'] } }),
+      res
+    );
+    assert.deepEqual(res.body.publishedRounds, [0, 2]);
+    assert.deepEqual(store.loadSession(dir, 's1').publishedRounds, [0, 2]);
+  });
+
+  await t.test('omitting publishedRounds from the request leaves the stored selection untouched', () => {
+    const dir = makeFixtureDir();
+    t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+    store.saveSession(dir, threeRoundSession('s1', { published: true, publishedRounds: [1] }));
+    const app = fakeApp();
+    registerSessionRoutes(app, makeDeps(dir));
+    const res = fakeRes();
+    app.routes['PATCH /api/sessions/:id/publish'](fakeReq({ params: { id: 's1' }, body: { published: true } }), res);
+    assert.deepEqual(res.body.publishedRounds, [1]);
+    assert.deepEqual(store.loadSession(dir, 's1').publishedRounds, [1]);
+  });
+
+  await t.test('an explicit null publishedRounds clears curation back to every passage', () => {
+    const dir = makeFixtureDir();
+    t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+    store.saveSession(dir, threeRoundSession('s1', { published: true, publishedRounds: [1] }));
+    const app = fakeApp();
+    registerSessionRoutes(app, makeDeps(dir));
+    const res = fakeRes();
+    app.routes['PATCH /api/sessions/:id/publish'](
+      fakeReq({ params: { id: 's1' }, body: { published: true, publishedRounds: null } }),
+      res
+    );
+    assert.equal(res.body.publishedRounds, null);
+    assert.equal(store.loadSession(dir, 's1').publishedRounds, null);
+  });
+
+  await t.test('re-publishing to edit curation does not bump publishedAt', () => {
+    const dir = makeFixtureDir();
+    t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+    store.saveSession(dir, threeRoundSession('s1', { published: true, publishedAt: '2026-01-01T00:00:00.000Z' }));
+    const app = fakeApp();
+    registerSessionRoutes(app, makeDeps(dir));
+    const res = fakeRes();
+    app.routes['PATCH /api/sessions/:id/publish'](
+      fakeReq({ params: { id: 's1' }, body: { published: true, publishedRounds: [0] } }),
+      res
+    );
+    assert.equal(res.body.publishedAt, '2026-01-01T00:00:00.000Z');
+    assert.deepEqual(res.body.publishedRounds, [0]);
+  });
+
+  await t.test('unpublishing clears publishedAt but leaves publishedRounds for the next publish', () => {
+    const dir = makeFixtureDir();
+    t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+    store.saveSession(dir, threeRoundSession('s1', { published: true, publishedRounds: [0, 1] }));
+    const app = fakeApp();
+    registerSessionRoutes(app, makeDeps(dir));
+    const res = fakeRes();
+    app.routes['PATCH /api/sessions/:id/publish'](fakeReq({ params: { id: 's1' }, body: { published: false } }), res);
+    assert.equal(res.body.published, false);
+    assert.equal(res.body.publishedAt, null);
+    assert.deepEqual(store.loadSession(dir, 's1').publishedRounds, [0, 1]);
+  });
 });
 
 test('POST /api/sessions/:id/verify-citations', async t => {

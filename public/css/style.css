@@ -598,6 +598,9 @@ a.archival-image-link:hover { border-color:var(--lodge-amber-dim); cursor:pointe
 .session-published-badge { font-family:'IM Fell English',serif; font-size:10px; letter-spacing:1px; background:rgba(200,146,42,0.15); border:1px solid var(--lodge-amber); color:var(--lodge-amber); padding:1px 6px; border-radius:2px; margin-left:4px; text-decoration:none; }
 .session-published-badge:hover { background:rgba(200,146,42,0.28); }
 .session-publish-hint { font-family:'Crimson Pro',serif; font-style:italic; font-size:10px; color:var(--lodge-ash); line-height:1.4; }
+/* #178: reuses .session-publish-btn's look — only shown once a session is published */
+.session-curate-btn { background:transparent; border:1px solid var(--lodge-border); color:var(--lodge-ash); font-family:'IM Fell English',serif; font-size:11px; padding:4px 6px; border-radius:2px; cursor:pointer; letter-spacing:0; text-align:center; transition:all 0.15s; }
+.session-curate-btn:hover { border-color:var(--lodge-amber-dim); color:var(--lodge-amber); background:rgba(200,146,42,0.05); }
 .compare-overlay { position:fixed; inset:0; background:var(--lodge-bg); z-index:200; display:flex; flex-direction:column; }
 .compare-header { display:flex; align-items:center; justify-content:space-between; padding:14px 20px; border-bottom:1px solid var(--lodge-border); flex-shrink:0; }
 .compare-title { font-family:'IM Fell English',serif; font-size:14px; letter-spacing:2px; text-transform:uppercase; color:var(--lodge-amber); }
@@ -682,6 +685,11 @@ a.archival-image-link:hover { border-color:var(--lodge-amber-dim); cursor:pointe
 .metrics-reasoning-tag { font-family:'IM Fell English',serif; font-size:11px; letter-spacing:1px; color:var(--lodge-amber); margin-bottom:4px; }
 .session-metrics-btn { background:transparent; border:1px solid var(--lodge-border); color:var(--lodge-ash); font-family:'IM Fell English',serif; font-size:11px; padding:4px 6px; border-radius:2px; cursor:pointer; letter-spacing:0; text-align:center; }
 .session-metrics-btn:hover { border-color:var(--lodge-amber-dim); color:var(--lodge-muted); }
+
+/* ─── Publish curation modal (#178) ────────────────────────────────────── */
+.publish-curate-row { display:flex; align-items:flex-start; gap:10px; padding:8px 0; border-bottom:1px solid var(--lodge-border); font-family:'Crimson Pro',serif; font-size:14px; color:var(--lodge-cream); cursor:pointer; }
+.publish-curate-row:last-child { border-bottom:none; }
+.publish-curate-check { margin-top:3px; flex-shrink:0; accent-color:var(--lodge-amber); }
 
 /* ─── Add member modal ─────────────────────────────────────────────────── */
 .add-member-btn { border-style:dashed; border-color:var(--lodge-ash); color:var(--lodge-muted); font-size:12px; padding:5px 14px; }

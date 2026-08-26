@@ -182,6 +182,11 @@ window.Sessions = (function () {
         const publishedBadge = s.published
           ? `<a class="session-published-badge" href="/reading-room/${s.id}" target="_blank" rel="noopener" title="View the public reading-room page">★ Public</a>`
           : '';
+        // #178: only once a session is public is there anything to curate —
+        // an unpublished one has no selection worth adjusting yet.
+        const curateBtn = s.published
+          ? `<button class="session-curate-btn" onclick="window.Sessions.openPublishModal('${s.id}', true)" title="Choose which passages are visible in the reading room">✎ Curate</button>`
+          : '';
         el.innerHTML = `
           <div class="session-card-top">
             ${buildAvatarStack(s)}
@@ -204,7 +209,8 @@ window.Sessions = (function () {
             <button class="session-thread-btn" onclick="window.Sessions.assignThreadUI('${s.id}', '${deps.escapeHTML(s.threadId || '')}', '${deps.escapeHTML(s.threadName || '')}', this)" title="Assign this meeting to a thread">⬡ Thread</button>
             <button class="session-compare-btn" id="compare-btn-${s.id}" onclick="window.Sessions.toggleCompareSelect('${s.id}', this)" title="Select for side-by-side comparison">⊕ Compare</button>
             <button class="session-metrics-btn" onclick="window.Metrics.toggle('${s.id}')" title="Tokens, cost, and the director's casting rationale for this session">⚙ Metrics</button>
-            <button class="session-publish-btn${s.published ? ' is-published' : ''}" onclick="window.Sessions.togglePublish('${s.id}', ${!!s.published}, this)" title="${s.published ? 'Unpublish from the public reading room' : 'Publish to the public reading room'}">${s.published ? '★ Unpublish' : '☆ Publish'}</button>
+            <button class="session-publish-btn${s.published ? ' is-published' : ''}" onclick="window.Sessions.togglePublish('${s.id}', ${!!s.published})" title="${s.published ? 'Unpublish from the public reading room' : 'Publish to the public reading room'}">${s.published ? '★ Unpublish' : '☆ Publish'}</button>
+            ${curateBtn}
             <button class="session-delete-btn" onclick="window.Sessions.deleteSession('${s.id}', this)" title="Remove this meeting from the record">Delete</button>
           </div>`;
         list.appendChild(el);
@@ -524,46 +530,171 @@ window.Sessions = (function () {
       : 'Publishing makes the source document, transcript, and member portraits public at a URL with no login required.';
   }
 
+  // Applies a /publish PATCH response to the session's row in the list —
+  // shared by both the unpublish path below and the curation modal's submit,
+  // so the two flows can't drift on what a publish-state change updates.
+  function applyPublishUIUpdate(id, data) {
+    const item = document.getElementById(`compare-btn-${id}`)?.closest('.session-item');
+    if (!item) return;
+
+    const publishBtn = item.querySelector('.session-publish-btn');
+    if (publishBtn) {
+      publishBtn.outerHTML = `<button class="session-publish-btn${data.published ? ' is-published' : ''}" onclick="window.Sessions.togglePublish('${id}', ${data.published})" title="${data.published ? 'Unpublish from the public reading room' : 'Publish to the public reading room'}">${data.published ? '★ Unpublish' : '☆ Publish'}</button>`;
+    }
+
+    const dateRow = item.querySelector('.session-item-date');
+    const existingBadge = dateRow?.querySelector('.session-published-badge');
+    if (data.published) {
+      if (!existingBadge && dateRow) {
+        const badge = document.createElement('a');
+        badge.className = 'session-published-badge';
+        badge.href = data.url;
+        badge.target = '_blank';
+        badge.rel = 'noopener';
+        badge.title = 'View the public reading-room page';
+        badge.textContent = '★ Public';
+        dateRow.appendChild(badge);
+      }
+    } else {
+      existingBadge?.remove();
+    }
+
+    const hintEl = item.querySelector('.session-publish-hint');
+    if (hintEl) hintEl.textContent = publishHintText(data.published);
+
+    // #178: the Curate action only makes sense once something's public.
+    const moreActions = item.querySelector('.session-item-more-actions');
+    const existingCurateBtn = moreActions?.querySelector('.session-curate-btn');
+    if (data.published && moreActions && !existingCurateBtn) {
+      const curateBtn = document.createElement('button');
+      curateBtn.className = 'session-curate-btn';
+      curateBtn.title = 'Choose which passages are visible in the reading room';
+      curateBtn.textContent = '✎ Curate';
+      curateBtn.onclick = () => openPublishModal(id, true);
+      moreActions.insertBefore(curateBtn, moreActions.querySelector('.session-delete-btn'));
+    } else if (!data.published) {
+      existingCurateBtn?.remove();
+    }
+  }
+
   // #38: toggles a session's public reading-room page. Publishing exposes the
   // source document (often a personal journal entry pulled from Day One) and
   // the full transcript at an unauthenticated URL — confirm plainly rather
   // than treating it as a low-stakes flip, unlike this row's other toggles.
-  async function togglePublish(id, currentlyPublished, btn) {
-    const confirmMsg = currentlyPublished
-      ? 'Unpublish this meeting? Its public reading-room page will stop working.'
-      : 'Publish this meeting? The source document, transcript, and member portraits become viewable by anyone with the link — no login required.';
-    if (!confirm(confirmMsg)) return;
+  //
+  // #178: the publish direction now opens the curation modal (below) rather
+  // than PATCHing straight away, so a subset of passages can be chosen
+  // before anything goes public. Unpublishing stays a direct, immediate
+  // toggle — nothing to curate on the way back to private.
+  async function togglePublish(id, currentlyPublished) {
+    if (!currentlyPublished) return openPublishModal(id, false);
+    if (!confirm('Unpublish this meeting? Its public reading-room page will stop working.')) return;
     try {
       const res = await fetch(`/api/sessions/${id}/publish`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ published: !currentlyPublished }),
+        body: JSON.stringify({ published: false }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to update publish status');
+      applyPublishUIUpdate(id, data);
+    } catch (e) {
+      alert('Could not update publish status.');
+    }
+  }
 
-      btn.outerHTML = `<button class="session-publish-btn${data.published ? ' is-published' : ''}" onclick="window.Sessions.togglePublish('${id}', ${data.published}, this)" title="${data.published ? 'Unpublish from the public reading room' : 'Publish to the public reading room'}">${data.published ? '★ Unpublish' : '☆ Publish'}</button>`;
+  // #178: a passage's checkbox label — its own label if it has one (an old
+  // round header, or the lull note that closed it), else a snippet of its
+  // first line, so an unlabeled passage is still recognizable in the list.
+  function publishCurateRowLabel(segment, idx) {
+    if (segment.label) return segment.label;
+    const firstLine = (segment.text || '').split('\n').find(l => l.trim()) || '';
+    return firstLine.trim().slice(0, 60) || `Passage ${idx + 1}`;
+  }
 
-      const item = document.getElementById(`compare-btn-${id}`)?.closest('.session-item');
-      const dateRow = item?.querySelector('.session-item-date');
-      const existingBadge = dateRow?.querySelector('.session-published-badge');
-      if (data.published) {
-        if (!existingBadge && dateRow) {
-          const badge = document.createElement('a');
-          badge.className = 'session-published-badge';
-          badge.href = data.url;
-          badge.target = '_blank';
-          badge.rel = 'noopener';
-          badge.title = 'View the public reading-room page';
-          badge.textContent = '★ Public';
-          dateRow.appendChild(badge);
-        }
-        prompt('Published. Public URL:', `${location.origin}${data.url}`);
-      } else {
-        existingBadge?.remove();
-      }
-      const hintEl = item?.querySelector('.session-publish-hint');
-      if (hintEl) hintEl.textContent = publishHintText(data.published);
+  let _curateSessionId = null;
+
+  // Opens the curation modal for session `id`, fetching its full passage
+  // list fresh each time (the meetings list only carries a round count, not
+  // the labels/text needed to tell passages apart). `currentlyPublished`
+  // controls only the confirm-and-submit copy below, not what's fetched.
+  //
+  // Closes the sessions drawer first: both it and this modal are
+  // position:fixed, right-anchored, same z-index — left open together, the
+  // drawer (later in the DOM) paints over the modal and hides it entirely.
+  // closePublishModal() reopens the drawer once curation is done.
+  async function openPublishModal(id, currentlyPublished) {
+    closeSessionsDrawer();
+    try {
+      const res = await fetch(`/api/sessions/${id}`);
+      if (!res.ok) throw new Error('Not found');
+      const session = await res.json();
+
+      _curateSessionId = id;
+      // null (never curated, or curation cleared) means every passage starts checked.
+      const selected = Array.isArray(session.publishedRounds) ? new Set(session.publishedRounds) : null;
+
+      const listEl = document.getElementById('publish-curate-list');
+      listEl.innerHTML = (session.rounds || [])
+        .map((r, idx) => {
+          const checked = !selected || selected.has(idx);
+          return `<label class="publish-curate-row">
+            <input type="checkbox" class="publish-curate-check" data-idx="${idx}" ${checked ? 'checked' : ''}>
+            <span>${deps.escapeHTML(publishCurateRowLabel(r, idx))}</span>
+          </label>`;
+        })
+        .join('');
+
+      const submitBtn = document.getElementById('publish-curate-submit-btn');
+      submitBtn.textContent = currentlyPublished ? 'Save Selection' : 'Publish Selected';
+      submitBtn.onclick = () => submitPublishSelection(currentlyPublished);
+
+      document.getElementById('publish-curate-overlay').classList.add('open');
+      document.getElementById('publish-curate-modal').classList.add('open');
+    } catch (e) {
+      alert('Could not load this meeting for curation.');
+    }
+  }
+
+  function closePublishModal() {
+    document.getElementById('publish-curate-overlay').classList.remove('open');
+    document.getElementById('publish-curate-modal').classList.remove('open');
+    _curateSessionId = null;
+    // Curation was opened from the meetings list — return to it rather than
+    // leaving the user looking at the stage behind both drawers.
+    document.getElementById('sessions-overlay').classList.add('open');
+    document.getElementById('sessions-drawer').classList.add('open');
+  }
+
+  async function submitPublishSelection(currentlyPublished) {
+    const id = _curateSessionId;
+    if (!id) return;
+    const checks = Array.from(document.querySelectorAll('.publish-curate-check'));
+    const checkedIdx = checks.filter(c => c.checked).map(c => Number(c.dataset.idx));
+    // Leaving every passage checked keeps the default "every passage,
+    // including ones added later" behavior rather than freezing today's
+    // count into an explicit list.
+    const publishedRounds = checkedIdx.length === checks.length ? null : checkedIdx;
+
+    if (!currentlyPublished) {
+      const confirmMsg =
+        checkedIdx.length === checks.length
+          ? 'Publish this meeting? The source document, transcript, and member portraits become viewable by anyone with the link — no login required.'
+          : `Publish this meeting? The source document, ${checkedIdx.length} of ${checks.length} selected passage${checkedIdx.length === 1 ? '' : 's'}, and member portraits become viewable by anyone with the link — no login required.`;
+      if (!confirm(confirmMsg)) return;
+    }
+
+    try {
+      const res = await fetch(`/api/sessions/${id}/publish`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ published: true, publishedRounds }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to publish');
+      closePublishModal();
+      applyPublishUIUpdate(id, data);
+      if (!currentlyPublished) prompt('Published. Public URL:', `${location.origin}${data.url}`);
     } catch (e) {
       alert('Could not update publish status.');
     }
@@ -853,6 +984,8 @@ window.Sessions = (function () {
     removeTagById,
     restoreSession,
     togglePublish,
+    openPublishModal,
+    closePublishModal,
     deleteSession,
     toggleCompareSelect,
     clearCompareSelection,
