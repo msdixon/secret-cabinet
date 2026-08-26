@@ -884,6 +884,34 @@ a.archival-image-link:hover { border-color:var(--lodge-amber-dim); cursor:pointe
 .room-events .witness-round-header,
 .room-events .transcript-lull { width:300px; }
 .room-events .action-line { color:var(--lodge-muted); font-style:italic; font-size:13px; }
+
+/* #34: the document-as-object reading panel. Opened by scene.js's book-click
+   handler (via the onDocumentInspect callback app.js registers with
+   LodgeScene.init) at the same moment the camera eases in on the book mesh
+   -- this is the "zoom into a passage" affordance for a first cut: the full
+   document, readable and scrollable, not per-passage highlighting synced to
+   citations (deliberately deferred, see scene.js's own #34 comment). Sized
+   and positioned like room-speech-card above (a floating parchment sheet
+   over the room, not a full-bleed modal) so it reads as an object being
+   examined rather than a page navigation. */
+.document-inspect-panel {
+  position:absolute; top:50%; left:50%; transform:translate(-50%, -50%);
+  width:min(480px, calc(100% - 48px)); max-height:calc(100% - 56px);
+  overflow-y:auto; overscroll-behavior:contain;
+  background:var(--lodge-parchment); border:1px solid var(--lodge-border);
+  border-radius:3px; padding:16px 20px 20px; box-shadow:0 12px 32px rgba(0,0,0,0.5);
+}
+.document-inspect-close {
+  position:sticky; top:0; float:right; margin:-4px -8px 4px 8px;
+  background:none; border:none; cursor:pointer;
+  font-family:'IM Fell English',serif; font-size:12px; letter-spacing:2px; text-transform:uppercase;
+  color:var(--lodge-border);
+}
+.document-inspect-close:hover { color:var(--lodge-fire); }
+.document-inspect-text {
+  clear:both; font-family:'Crimson Pro',serif; font-size:16px; line-height:1.7;
+  color:var(--lodge-bg); white-space:pre-wrap;
+}
 .witness-stage .transcript-entry { max-width:70%; }
 .witness-stage .speaker-name { font-size:22px; }
 .witness-stage .speech-text { font-size:17px; }

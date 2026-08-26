@@ -1647,10 +1647,23 @@ function initSceneLayer() {
     if (typeof BABYLON === 'undefined' || !window.LodgeScene) return;
     const canvas = document.getElementById('scene-canvas');
     if (!canvas) return;
-    if (LodgeScene.init(canvas)) window.Witness?.enableRoom();
+    if (LodgeScene.init(canvas, { onDocumentInspect: handleDocumentInspectChange })) window.Witness?.enableRoom();
   } catch (e) {
     console.error('[scene] failed to initialize, continuing without it', e);
   }
+}
+
+// #34: the reading panel itself is plain DOM (app.js's job, per #257's own
+// split -- scene.js owns the 3D/camera, app.js owns what gets drawn over
+// it); scene.js just tells us when inspect mode opens or closes. Reads the
+// live document text fresh on open rather than caching it, so it can't go
+// stale against a Day One/library/file document loaded after the panel's
+// last visit.
+function handleDocumentInspectChange(open) {
+  const panel = document.getElementById('document-inspect-panel');
+  if (!panel) return;
+  if (open) document.getElementById('document-inspect-text').textContent = window.Export.getEntry();
+  panel.hidden = !open;
 }
 
 // ── Casting triggers (#185) ───────────────────────────────────────────────────
@@ -1713,8 +1726,15 @@ function initStepperNav() {
 // just marks the first still-incomplete step to draw the eye to what's next
 // -- it doesn't gate or hide anything the way a strict wizard would.
 function updateStepper() {
+  // #34: rides this function's own existing hasEntry computation (below) as
+  // the single source of truth for "is there a document" -- kept ahead of
+  // the convene-stepper DOM check so the book stays in sync even on pages
+  // where that stepper markup isn't present.
+  const entryText = window.Export.getEntry();
+  window.LodgeScene?.setDocumentText(entryText?.trim() ? entryText : '');
+
   if (!document.getElementById('convene-stepper')) return;
-  const hasEntry = !!window.Export.getEntry()?.trim();
+  const hasEntry = !!entryText?.trim();
   const hasCast = activeMembers.size >= 2;
   const inSession = currentSessionId !== null;
 
@@ -1939,6 +1959,12 @@ window.Export.applyEnvConfig().then(applyConveneGate);
 initPreamble();
 initStepperNav();
 initSceneLayer();
+// #34: Escape closes the document-inspect panel -- closeDocumentInspect()
+// itself is a no-op if inspect mode isn't open, so no extra guard is needed
+// here for every other keypress that isn't Escape.
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') window.LodgeScene?.closeDocumentInspect();
+});
 fetchMembers().then(() => {
   window.Casting.seatRegulars();
   renderMembers();
