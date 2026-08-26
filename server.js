@@ -203,6 +203,21 @@ reloadLodgeRoster();
 const lodgeContext = fs.readFileSync(path.join(PROMPTS_DIR, 'lodge-context.md'), 'utf8');
 const axesDoc = fs.readFileSync(path.join(__dirname, 'docs', 'AXES.md'), 'utf8');
 
+// #259 — portrait-prompt drafting reuses the same exemplar-based pattern as
+// the character-file drafting below: STYLE_GUIDE.md is the rule set, a prior
+// wave's prompt sheet is the format exemplar.
+const PORTRAITS_DIR = path.join(__dirname, 'public', 'portraits');
+const portraitStyleGuide = fs.readFileSync(path.join(PORTRAITS_DIR, 'STYLE_GUIDE.md'), 'utf8');
+const portraitPromptExemplar = fs.readFileSync(path.join(PORTRAITS_DIR, 'WAVE-4-PROMPTS.md'), 'utf8');
+const PENDING_PORTRAIT_PROMPTS_FILE = path.join(PORTRAITS_DIR, 'PENDING-PROMPTS.md');
+
+// #435 — optional: if set, POST /api/members also generates a real portrait
+// candidate via the Gemini API directly (no agent session needed). Leave
+// unset to keep portrait generation at the prompt-drafting stage only, same
+// as #433's original scope.
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || null;
+const PORTRAIT_CANDIDATES_DIR = path.join(PORTRAITS_DIR, 'candidates');
+
 function loadMemberFile(filename) {
   return roster.loadMemberFile(MEMBERS_DIR, filename);
 }
@@ -447,6 +462,11 @@ registerMemberRoutes(app, {
   model: MODEL,
   lodgeContext,
   axesDoc,
+  portraitStyleGuide,
+  portraitPromptExemplar,
+  pendingPortraitPromptsFile: PENDING_PORTRAIT_PROMPTS_FILE,
+  geminiApiKey: GEMINI_API_KEY,
+  portraitCandidatesDir: PORTRAIT_CANDIDATES_DIR,
 });
 
 registerExportRoutes(app, {

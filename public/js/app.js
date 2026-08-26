@@ -1574,8 +1574,18 @@ async function submitNewMember() {
     });
 
     statusEl.style.color = 'var(--lodge-muted)';
-    statusEl.textContent = `${data.member.name} has joined the lodge.`;
-    setTimeout(closeAddMemberModal, 1400);
+    // #259/#435: portrait-prompt drafting and image generation are each
+    // best-effort and non-blocking server-side (see src/routes/member.js) --
+    // data.portraitPrompt / data.portraitCandidatePath are null if they failed
+    // or (for the candidate) if GEMINI_API_KEY isn't configured at all.
+    let statusSuffix = '';
+    if (data.portraitCandidatePath) {
+      statusSuffix = ` Portrait candidate generated -- review ${data.portraitCandidatePath} and run scripts/promote-portrait.js to place it.`;
+    } else if (data.portraitPrompt) {
+      statusSuffix = ' Portrait prompt drafted -- see public/portraits/PENDING-PROMPTS.md.';
+    }
+    statusEl.textContent = `${data.member.name} has joined the lodge.${statusSuffix}`;
+    setTimeout(closeAddMemberModal, statusSuffix ? 3200 : 1400);
   } catch (e) {
     statusEl.style.color = '#a06060';
     statusEl.textContent = e.message || 'The invitation could not be sent.';

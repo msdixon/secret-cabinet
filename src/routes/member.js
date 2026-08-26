@@ -8,10 +8,27 @@
 
 const fs = require('fs');
 const path = require('path');
+const portraitGeneration = require('../portrait-generation');
 
 function registerMemberRoutes(
   app,
-  { roster, rosterModule, loadMemberFile, membersDir, rosterFile, client, model, lodgeContext, axesDoc }
+  {
+    roster,
+    rosterModule,
+    loadMemberFile,
+    membersDir,
+    rosterFile,
+    client,
+    model,
+    lodgeContext,
+    axesDoc,
+    portraitStyleGuide,
+    portraitPromptExemplar,
+    pendingPortraitPromptsFile,
+    geminiApiKey,
+    portraitCandidatesDir,
+    generatePortraitImage = portraitGeneration.generatePortraitImage,
+  }
 ) {
   // GET /api/members — return current roster
   app.get('/api/members', (req, res) => {
@@ -126,12 +143,130 @@ ${relationships || '(not specified — infer from historical record)'}`;
       roster.push(newMember);
       fs.writeFileSync(rosterFile, JSON.stringify(roster, null, 2), 'utf8');
 
-      res.json({ member: newMember, characterFile });
+      // #259/#435 — draft a portrait-generation prompt at the same time the
+      // member is added, per STYLE_GUIDE.md's Process step 4, and (if a
+      // Gemini API key is configured) generate a real candidate image from
+      // it via the Gemini API directly (#435 spike, 2026-08-25: confirmed
+      // server-callable, no agent session needed). Both steps are
+      // independently best-effort -- a failure in either shouldn't take
+      // down member creation, which is the primary thing this endpoint
+      // does. The candidate lands in portraitCandidatesDir, never the
+      // canonical public/portraits/<id>.png path -- promotion (resize,
+      // place, changelog) stays a deliberate, human-reviewed step per
+      // STYLE_GUIDE.md's own human-validation requirement (see
+      // scripts/promote-portrait.js).
+      let portraitPrompt = null;
+      let portraitPromptText = null;
+      try {
+        const drafted = await draftPortraitPrompt({
+          client,
+          model,
+          name: name.trim(),
+          bio,
+          portraitStyleGuide,
+          portraitPromptExemplar,
+        });
+        portraitPrompt = drafted.entry;
+        portraitPromptText = drafted.promptText;
+        appendPendingPortraitPrompt(pendingPortraitPromptsFile, portraitPrompt);
+      } catch (err) {
+        console.error('Portrait prompt drafting error (member creation still succeeded):', err);
+      }
+
+      let portraitCandidatePath = null;
+      if (geminiApiKey && portraitPromptText) {
+        try {
+          const imageBuffer = await generatePortraitImage({ apiKey: geminiApiKey, prompt: portraitPromptText });
+          fs.mkdirSync(portraitCandidatesDir, { recursive: true });
+          fs.writeFileSync(path.join(portraitCandidatesDir, `${id}.png`), imageBuffer);
+          portraitCandidatePath = `public/portraits/candidates/${id}.png`;
+        } catch (err) {
+          console.error('Portrait image generation error (member creation still succeeded):', err);
+        }
+      }
+
+      res.json({ member: newMember, characterFile, portraitPrompt, portraitCandidatePath });
     } catch (err) {
       console.error('Member creation error:', err);
       res.status(500).json({ error: 'Failed to draft character file' });
     }
   });
+}
+
+// #259/#435 — draft one portrait-generation prompt entry, matching the
+// format of public/portraits/WAVE-4-PROMPTS.md, against the rules in
+// public/portraits/STYLE_GUIDE.md. Same exemplar-based pattern as the
+// character-file system prompt above, scaled down to a single short entry.
+// Reasoning is organized around Rachel's own established template (used by
+// hand across prior waves via Nano Banana/Gemini) rather than an invented
+// structure. Returns { entry, promptText }: `entry` is the full heading +
+// paragraph for PENDING-PROMPTS.md/manual pasting; `promptText` is just the
+// paragraph, for feeding directly to generatePortraitImage.
+async function draftPortraitPrompt({ client, model, name, bio, portraitStyleGuide, portraitPromptExemplar }) {
+  const systemPrompt = `You are drafting a single portrait-generation prompt entry for a member just added to The Secret-Cabin-et's historical salon roster.
+
+Reason through this established template (Rachel's own, used by hand across every prior portrait wave) to work out the content, then write the final prompt:
+- Subject: (who, with any concrete distinguishing detail)
+- Style: warm etching-adjacent portrait
+- Composition: head-and-shoulders, historically accurate attire, authentic material textures
+- Lighting / Mood: natural directional lighting, contemplative expression, minimal background distraction
+
+Two rules override that template and are NON-NEGOTIABLE regardless of what it alone would produce — a real test generation showed the template's own "minimal background distraction" phrasing is not strict enough on its own and let a bookshelf leak into the background:
+- **State portrait orientation explicitly in the prompt text** (taller than wide) — don't let it default to square or landscape.
+- **State a plain, dark, unornamented background explicitly and strongly — no scene elements at all**: no furniture, no bookshelves, no architectural detail, nothing beyond what the subject holds or wears. Not "minimal distraction" — actually absent.
+
+Also follow STYLE_GUIDE.md's remaining rules (full text below): limited warm sepia/candlelit palette, visible linework/texture rather than photorealistic or cartoon/flat-vector rendering.
+
+Output ONLY one entry, matching the exemplar sheet's shape exactly: one heading line ("## Name (\`id\`) — dates — likeness tier"), a blank line, then one paragraph of ready-to-paste prompt text — nothing else, no surrounding commentary, no markdown fencing, no separate "visual breakdown" section.
+
+Pick the correct likeness tier per the guide's "Known-vs-unknown likeness" section:
+- Photographed — recognizable likeness against surviving photographs.
+- Character study (known painted/engraved likeness) — a well-known contemporary portrait survives; use it as a loose likeness anchor, not a direct reproduction.
+- Character study — no photographic or contemporary likeness reference exists; render as a period-appropriate character study, not a likeness reproduction. For figures with an existing devotional/iconographic tradition, favor a secular character-study framing over reproducing religious iconography.
+
+If you're not confident which tier applies, say so in the heading and default to the plain "Character study" tier rather than inventing a likeness anchor that may not exist.
+
+Include one concrete visual distinguishing detail specific to this person's real, documented life or trade — not a generic addition — the way the exemplars use Böhme's cobbler's awl or Paracelsus's sword hilt. Don't invent biographical facts not supported by the biography given.
+
+STYLE_GUIDE.md:
+${portraitStyleGuide}
+
+FORMAT EXEMPLAR (WAVE-4-PROMPTS.md — match this heading/paragraph shape, one entry only):
+${portraitPromptExemplar}`;
+
+  const userMessage = `Draft one portrait-generation prompt entry for: ${name}
+
+Biography / background (same text used for this member's character file):
+${bio}`;
+
+  const response = await client.messages.create({
+    model,
+    max_tokens: 700,
+    system: systemPrompt,
+    messages: [{ role: 'user', content: userMessage }],
+  });
+
+  const raw = response.content
+    .filter(b => b.type === 'text')
+    .map(b => b.text)
+    .join('')
+    .trim();
+
+  const blankLineIdx = raw.indexOf('\n\n');
+  return blankLineIdx === -1
+    ? { entry: raw, promptText: raw }
+    : { entry: raw, promptText: raw.slice(blankLineIdx + 2).trim() };
+}
+
+// #259 — append one drafted entry to the running pending-prompts log,
+// writing the header only on first use. A human (or a future session)
+// clears an entry once its image is generated and placed, same lifecycle
+// as STYLE_GUIDE.md's own Process describes.
+function appendPendingPortraitPrompt(pendingPortraitPromptsFile, portraitPrompt) {
+  const header = fs.existsSync(pendingPortraitPromptsFile)
+    ? ''
+    : `# Pending Portrait Prompts\n\nAuto-drafted, one entry per member added via the in-app "Add Member" flow ([#259](https://github.com/msdixon/secret-cabinet/issues/259)) — ready to paste into whatever image-generation tool is currently in use (Nano Banana, as of this writing), same convention as [BATCH-1-PROMPTS.md](BATCH-1-PROMPTS.md) and [WAVE-4-PROMPTS.md](WAVE-4-PROMPTS.md). Once an entry's image is generated, resized to 512px on the long edge, and placed at \`public/portraits/<id>.png\` per [STYLE_GUIDE.md](STYLE_GUIDE.md)'s Process, delete the entry here and log the placement in STYLE_GUIDE.md's Changelog, same as every prior batch.\n\n---\n\n`;
+  fs.appendFileSync(pendingPortraitPromptsFile, `${header}${portraitPrompt}\n\n---\n\n`, 'utf8');
 }
 
 module.exports = { registerMemberRoutes };
