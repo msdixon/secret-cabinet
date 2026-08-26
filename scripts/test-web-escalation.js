@@ -4,9 +4,9 @@
 // library match, does a real lookup against open-data sources actually
 // confirm/deny rather than just trusting the model's memory? No Anthropic
 // call involved here — this exercises pure fetch logic, duplicated from
-// server.js's escalateCitationToWeb() rather than required from it (server.js
-// calls app.listen() on require, same reasoning as test-library-grounding.js
-// keeping its own copy of groundAgainstLibraryText()).
+// src/citations.js's escalateCitationToWeb() rather than required from it,
+// since that module is exercised for real (offline, fake-client) coverage in
+// test/citations.test.js and this script predates that suite.
 // No test framework exists in this repo — matches its existing ad hoc
 // script style (see scripts/test-director.js). Run with:
 //   node scripts/test-web-escalation.js

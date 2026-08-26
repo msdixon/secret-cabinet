@@ -14,6 +14,7 @@
     "citations": "node scripts/build-citation-manifest.js",
     "metrics-rollup": "node scripts/rollup-metrics.js",
     "eval-harness": "node scripts/eval-harness.js",
+    "eval-citation-grounding": "node scripts/eval-citation-grounding.js",
     "test": "node --test test/*.test.js",
     "test:watch": "node --test --watch test/*.test.js",
     "lint": "eslint .",
