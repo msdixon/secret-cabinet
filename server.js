@@ -211,6 +211,13 @@ const portraitStyleGuide = fs.readFileSync(path.join(PORTRAITS_DIR, 'STYLE_GUIDE
 const portraitPromptExemplar = fs.readFileSync(path.join(PORTRAITS_DIR, 'WAVE-4-PROMPTS.md'), 'utf8');
 const PENDING_PORTRAIT_PROMPTS_FILE = path.join(PORTRAITS_DIR, 'PENDING-PROMPTS.md');
 
+// #435 — optional: if set, POST /api/members also generates a real portrait
+// candidate via the Gemini API directly (no agent session needed). Leave
+// unset to keep portrait generation at the prompt-drafting stage only, same
+// as #433's original scope.
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || null;
+const PORTRAIT_CANDIDATES_DIR = path.join(PORTRAITS_DIR, 'candidates');
+
 function loadMemberFile(filename) {
   return roster.loadMemberFile(MEMBERS_DIR, filename);
 }
@@ -458,6 +465,8 @@ registerMemberRoutes(app, {
   portraitStyleGuide,
   portraitPromptExemplar,
   pendingPortraitPromptsFile: PENDING_PORTRAIT_PROMPTS_FILE,
+  geminiApiKey: GEMINI_API_KEY,
+  portraitCandidatesDir: PORTRAIT_CANDIDATES_DIR,
 });
 
 registerExportRoutes(app, {

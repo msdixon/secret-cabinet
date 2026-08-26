@@ -61,6 +61,11 @@ function makeDeps(overrides = {}) {
     portraitStyleGuide: 'style guide text',
     portraitPromptExemplar: 'exemplar text',
     pendingPortraitPromptsFile: '/nonexistent/PENDING-PROMPTS.md',
+    geminiApiKey: null,
+    portraitCandidatesDir: '/nonexistent/candidates',
+    generatePortraitImage: async () => {
+      throw new Error('generatePortraitImage should not be called when geminiApiKey is unset');
+    },
     ...overrides,
   };
 }
@@ -191,6 +196,89 @@ test('POST /api/members', async t => {
     assert.equal(res.body.characterFile, 'GENERATED FILE');
     assert.equal(res.body.portraitPrompt, null);
     assert.equal(fs.existsSync(pendingPortraitPromptsFile), false);
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  await t.test('with no geminiApiKey, no portrait image is generated (default: prompt-drafting only)', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'member-routes-test-'));
+    const rosterFile = path.join(dir, 'roster.json');
+    const pendingPortraitPromptsFile = path.join(dir, 'PENDING-PROMPTS.md');
+    const portraitCandidatesDir = path.join(dir, 'candidates');
+    const app = fakeApp();
+    const deps = makeDeps({ membersDir: dir, rosterFile, pendingPortraitPromptsFile, portraitCandidatesDir });
+    registerMemberRoutes(app, deps);
+    const res = fakeRes();
+    await app.routes['POST /api/members'](fakeReq({ body: { name: 'No Key Member', bio: 'A biography.' } }), res);
+
+    assert.equal(res.body.portraitCandidatePath, null);
+    assert.equal(fs.existsSync(portraitCandidatesDir), false);
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  await t.test('#435: with a geminiApiKey set, generates and writes a portrait candidate', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'member-routes-test-'));
+    const rosterFile = path.join(dir, 'roster.json');
+    const pendingPortraitPromptsFile = path.join(dir, 'PENDING-PROMPTS.md');
+    const portraitCandidatesDir = path.join(dir, 'candidates');
+    const app = fakeApp();
+    let capturedPrompt = null;
+    const deps = makeDeps({
+      membersDir: dir,
+      rosterFile,
+      pendingPortraitPromptsFile,
+      portraitCandidatesDir,
+      geminiApiKey: 'test-gemini-key',
+      generatePortraitImage: async ({ apiKey, prompt }) => {
+        capturedPrompt = prompt;
+        assert.equal(apiKey, 'test-gemini-key');
+        return Buffer.from('fake-png-bytes');
+      },
+    });
+    registerMemberRoutes(app, deps);
+    const res = fakeRes();
+    await app.routes['POST /api/members'](
+      fakeReq({ body: { name: 'Pictured Member', bio: 'A biography.' } }),
+      res
+    );
+
+    assert.equal(res.body.portraitCandidatePath, 'public/portraits/candidates/pictured-member.png');
+    const candidateFile = path.join(portraitCandidatesDir, 'pictured-member.png');
+    assert.ok(fs.existsSync(candidateFile));
+    assert.equal(fs.readFileSync(candidateFile, 'utf8'), 'fake-png-bytes');
+    assert.equal(capturedPrompt, 'GENERATED FILE');
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  await t.test('#435: a failed image-generation call is caught -- member creation and prompt drafting still succeed', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'member-routes-test-'));
+    const rosterFile = path.join(dir, 'roster.json');
+    const pendingPortraitPromptsFile = path.join(dir, 'PENDING-PROMPTS.md');
+    const portraitCandidatesDir = path.join(dir, 'candidates');
+    const app = fakeApp();
+    const deps = makeDeps({
+      membersDir: dir,
+      rosterFile,
+      pendingPortraitPromptsFile,
+      portraitCandidatesDir,
+      geminiApiKey: 'test-gemini-key',
+      generatePortraitImage: async () => {
+        throw new Error('Gemini API down');
+      },
+    });
+    registerMemberRoutes(app, deps);
+    const res = fakeRes();
+    await app.routes['POST /api/members'](
+      fakeReq({ body: { name: 'Unlucky Member', bio: 'A biography.' } }),
+      res
+    );
+
+    assert.equal(res.body.member.id, 'unlucky-member');
+    assert.ok(res.body.portraitPrompt);
+    assert.equal(res.body.portraitCandidatePath, null);
+    assert.equal(fs.existsSync(portraitCandidatesDir), false);
 
     fs.rmSync(dir, { recursive: true, force: true });
   });

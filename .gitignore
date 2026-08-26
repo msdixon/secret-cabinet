@@ -13,3 +13,4 @@ METRICS-ROLLUP.md
 EVAL-HARNESS-REPORT.md
 visits.json
 .DS_Store
+public/portraits/candidates/*.png

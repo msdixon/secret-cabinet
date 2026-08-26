@@ -8,6 +8,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const portraitGeneration = require('../portrait-generation');
 
 function registerMemberRoutes(
   app,
@@ -24,6 +25,9 @@ function registerMemberRoutes(
     portraitStyleGuide,
     portraitPromptExemplar,
     pendingPortraitPromptsFile,
+    geminiApiKey,
+    portraitCandidatesDir,
+    generatePortraitImage = portraitGeneration.generatePortraitImage,
   }
 ) {
   // GET /api/members — return current roster
@@ -139,18 +143,22 @@ ${relationships || '(not specified — infer from historical record)'}`;
       roster.push(newMember);
       fs.writeFileSync(rosterFile, JSON.stringify(roster, null, 2), 'utf8');
 
-      // #259 — draft a portrait-generation prompt at the same time the member
-      // is added, per STYLE_GUIDE.md's Process step 4. This only drafts the
-      // prompt text -- this server process has no way to call an image-gen
-      // tool itself (a general one does exist for a live Claude Code agent
-      // session, but not for this always-on unattended process); generating
-      // the image, resizing it, and placing it in public/portraits/ stays a
-      // manual (or future session-driven) step. A failure here shouldn't
-      // take down member creation, which is the primary thing this endpoint
-      // does.
+      // #259/#435 — draft a portrait-generation prompt at the same time the
+      // member is added, per STYLE_GUIDE.md's Process step 4, and (if a
+      // Gemini API key is configured) generate a real candidate image from
+      // it via the Gemini API directly (#435 spike, 2026-08-25: confirmed
+      // server-callable, no agent session needed). Both steps are
+      // independently best-effort -- a failure in either shouldn't take
+      // down member creation, which is the primary thing this endpoint
+      // does. The candidate lands in portraitCandidatesDir, never the
+      // canonical public/portraits/<id>.png path -- promotion (resize,
+      // place, changelog) stays a deliberate, human-reviewed step per
+      // STYLE_GUIDE.md's own human-validation requirement (see
+      // scripts/promote-portrait.js).
       let portraitPrompt = null;
+      let portraitPromptText = null;
       try {
-        portraitPrompt = await draftPortraitPrompt({
+        const drafted = await draftPortraitPrompt({
           client,
           model,
           name: name.trim(),
@@ -158,13 +166,26 @@ ${relationships || '(not specified — infer from historical record)'}`;
           portraitStyleGuide,
           portraitPromptExemplar,
         });
+        portraitPrompt = drafted.entry;
+        portraitPromptText = drafted.promptText;
         appendPendingPortraitPrompt(pendingPortraitPromptsFile, portraitPrompt);
       } catch (err) {
         console.error('Portrait prompt drafting error (member creation still succeeded):', err);
-        portraitPrompt = null;
       }
 
-      res.json({ member: newMember, characterFile, portraitPrompt });
+      let portraitCandidatePath = null;
+      if (geminiApiKey && portraitPromptText) {
+        try {
+          const imageBuffer = await generatePortraitImage({ apiKey: geminiApiKey, prompt: portraitPromptText });
+          fs.mkdirSync(portraitCandidatesDir, { recursive: true });
+          fs.writeFileSync(path.join(portraitCandidatesDir, `${id}.png`), imageBuffer);
+          portraitCandidatePath = `public/portraits/candidates/${id}.png`;
+        } catch (err) {
+          console.error('Portrait image generation error (member creation still succeeded):', err);
+        }
+      }
+
+      res.json({ member: newMember, characterFile, portraitPrompt, portraitCandidatePath });
     } catch (err) {
       console.error('Member creation error:', err);
       res.status(500).json({ error: 'Failed to draft character file' });
@@ -172,14 +193,31 @@ ${relationships || '(not specified — infer from historical record)'}`;
   });
 }
 
-// #259 — draft one portrait-generation prompt entry, matching the format of
-// public/portraits/WAVE-4-PROMPTS.md, against the rules in
+// #259/#435 — draft one portrait-generation prompt entry, matching the
+// format of public/portraits/WAVE-4-PROMPTS.md, against the rules in
 // public/portraits/STYLE_GUIDE.md. Same exemplar-based pattern as the
 // character-file system prompt above, scaled down to a single short entry.
+// Reasoning is organized around Rachel's own established template (used by
+// hand across prior waves via Nano Banana/Gemini) rather than an invented
+// structure. Returns { entry, promptText }: `entry` is the full heading +
+// paragraph for PENDING-PROMPTS.md/manual pasting; `promptText` is just the
+// paragraph, for feeding directly to generatePortraitImage.
 async function draftPortraitPrompt({ client, model, name, bio, portraitStyleGuide, portraitPromptExemplar }) {
-  const systemPrompt = `You are drafting a single portrait-generation prompt entry for a member just added to The Secret-Cabin-et's historical salon roster. Output ONLY one entry, matching the exemplar sheet's shape exactly: one heading line ("## Name (\`id\`) — dates — likeness tier"), then one paragraph of ready-to-paste prompt text. No surrounding commentary, no markdown fencing.
+  const systemPrompt = `You are drafting a single portrait-generation prompt entry for a member just added to The Secret-Cabin-et's historical salon roster.
 
-Follow STYLE_GUIDE.md's rules exactly (full text below): warm etching-adjacent tone, limited warm sepia/candlelit palette, head-and-shoulders composition, period-appropriate dress, plain dark background with no scene elements, visible linework/texture rather than photorealistic or cartoon/flat-vector rendering.
+Reason through this established template (Rachel's own, used by hand across every prior portrait wave) to work out the content, then write the final prompt:
+- Subject: (who, with any concrete distinguishing detail)
+- Style: warm etching-adjacent portrait
+- Composition: head-and-shoulders, historically accurate attire, authentic material textures
+- Lighting / Mood: natural directional lighting, contemplative expression, minimal background distraction
+
+Two rules override that template and are NON-NEGOTIABLE regardless of what it alone would produce — a real test generation showed the template's own "minimal background distraction" phrasing is not strict enough on its own and let a bookshelf leak into the background:
+- **State portrait orientation explicitly in the prompt text** (taller than wide) — don't let it default to square or landscape.
+- **State a plain, dark, unornamented background explicitly and strongly — no scene elements at all**: no furniture, no bookshelves, no architectural detail, nothing beyond what the subject holds or wears. Not "minimal distraction" — actually absent.
+
+Also follow STYLE_GUIDE.md's remaining rules (full text below): limited warm sepia/candlelit palette, visible linework/texture rather than photorealistic or cartoon/flat-vector rendering.
+
+Output ONLY one entry, matching the exemplar sheet's shape exactly: one heading line ("## Name (\`id\`) — dates — likeness tier"), a blank line, then one paragraph of ready-to-paste prompt text — nothing else, no surrounding commentary, no markdown fencing, no separate "visual breakdown" section.
 
 Pick the correct likeness tier per the guide's "Known-vs-unknown likeness" section:
 - Photographed — recognizable likeness against surviving photographs.
@@ -208,11 +246,16 @@ ${bio}`;
     messages: [{ role: 'user', content: userMessage }],
   });
 
-  return response.content
+  const raw = response.content
     .filter(b => b.type === 'text')
     .map(b => b.text)
     .join('')
     .trim();
+
+  const blankLineIdx = raw.indexOf('\n\n');
+  return blankLineIdx === -1
+    ? { entry: raw, promptText: raw }
+    : { entry: raw, promptText: raw.slice(blankLineIdx + 2).trim() };
 }
 
 // #259 — append one drafted entry to the running pending-prompts log,
