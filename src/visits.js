@@ -41,6 +41,14 @@ const API_ROUTE_LABELS = [
   ['POST', /^\/api\/voice\/speak$/, 'POST /api/voice/speak'],
 ];
 
+// The three page-view labels classifyVisit ever returns for a non-`/api/`
+// path — everything else in store.byRoute is one of API_ROUTE_LABELS. Used
+// at report-build time (#437) to split the blended byRoute/total into
+// "traffic" (a person loading a page) vs "calls" (the API requests that one
+// page load fans out into on boot, e.g. /api/members, /api/voice/config —
+// counting those toward "visits" massively overcounts actual visitors).
+const PAGE_ROUTE_LABELS = new Set(['GET /', 'GET /lodge', 'GET /reading-room/:id']);
+
 // Returns a human-readable route label for a countable visit, or null for
 // anything that shouldn't be counted (a static asset, or any path that isn't
 // actually part of the public read tier — reachable in practice too, since
@@ -102,29 +110,52 @@ function recordVisit(filePath, store, req, now = new Date()) {
 // Markdown summary, same "aggregate document, nothing raw" shape as the two
 // existing /api/admin/* routes (citation-manifest, bibliography) in
 // routes/session.js — legible in a browser with no JSON viewer needed.
+//
+// #437: store.byRoute already distinguishes page routes from API routes
+// (PAGE_ROUTE_LABELS above), so the traffic/calls split is derived here at
+// render time rather than tracked as a new counting mechanism — what gets
+// counted, and how recordVisit/emptyStore work, is unchanged.
 function buildReport(store) {
   const dates = Object.keys(store.byDate).sort();
   const last7 = dates.slice(-7);
   const routes = Object.entries(store.byRoute).sort((a, b) => b[1] - a[1]);
+  const pageRoutes = routes.filter(([route]) => PAGE_ROUTE_LABELS.has(route));
+  const apiRoutes = routes.filter(([route]) => !PAGE_ROUTE_LABELS.has(route));
+  const traffic = pageRoutes.reduce((sum, [, count]) => sum + count, 0);
+  const calls = apiRoutes.reduce((sum, [, count]) => sum + count, 0);
 
   const lines = [
     '# Visitation — public read tier',
     '',
-    `**${store.total} unauthenticated request(s) recorded** since tracking began. ` +
-      'Counts only requests from browsers that never signed in — your own visits while ' +
-      "logged in don't add to this.",
+    `**${traffic} page view(s) recorded** since tracking began — loads of /, /lodge, or ` +
+      'a reading room by browsers that never signed in. This is the number that answers ' +
+      '"is the invite-only pool staying small."',
     '',
-    '## Last 7 days with traffic',
+    '## Traffic by page',
     '',
-    '| Date | Visits |',
+    '| Page | Views |',
+    '|---|---|',
+    ...(pageRoutes.length ? pageRoutes.map(([route, count]) => `| ${route} | ${count} |`) : ['| — | 0 |']),
+    '',
+    '## Last 7 days (all tracked events)',
+    '',
+    'Page views and API calls combined — a single page load fans out into several of the ' +
+      'latter, so day-to-day totals here run higher than the traffic figure above.',
+    '',
+    '| Date | Events |',
     '|---|---|',
     ...(last7.length ? last7.map(d => `| ${d} | ${store.byDate[d]} |`) : ['| — | 0 |']),
     '',
-    '## By route',
+    '## API calls (secondary — not visits)',
     '',
-    '| Route | Visits |',
+    `${calls} call(s) recorded. Each page load fans out into several of these on its own ` +
+      "(e.g. loading / alone triggers /api/members and /api/voice/config too), so they'd " +
+      "overcount visits if blended into the traffic figure above — kept here as supporting " +
+      'detail instead (e.g. to spot scraper-like API hammering unaccompanied by page loads).',
+    '',
+    '| Route | Calls |',
     '|---|---|',
-    ...(routes.length ? routes.map(([route, count]) => `| ${route} | ${count} |`) : ['| — | 0 |']),
+    ...(apiRoutes.length ? apiRoutes.map(([route, count]) => `| ${route} | ${count} |`) : ['| — | 0 |']),
     '',
   ];
   return lines.join('\n');

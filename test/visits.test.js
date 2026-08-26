@@ -134,22 +134,52 @@ test('loadStore', async t => {
 });
 
 test('buildReport', async t => {
-  await t.test('renders totals, last-7-days, and by-route tables', () => {
+  await t.test('splits the headline traffic figure from page views only, not API calls', () => {
     const store = {
-      total: 3,
-      byDate: { '2026-08-24': 1, '2026-08-25': 2 },
-      byRoute: { 'GET /': 2, 'GET /reading-room/:id': 1 },
+      total: 6,
+      byDate: { '2026-08-24': 1, '2026-08-25': 5 },
+      byRoute: { 'GET /': 2, 'GET /reading-room/:id': 1, 'GET /api/members': 2, 'GET /api/voice/config': 1 },
     };
     const report = visits.buildReport(store);
-    assert.match(report, /3 unauthenticated request\(s\) recorded/);
+    // Headline is page views only (2 + 1 = 3), not the blended total (6).
+    assert.match(report, /3 page view\(s\) recorded/);
+    assert.doesNotMatch(report, /6 page view\(s\)/);
+  });
+
+  await t.test('renders traffic (page routes) and API calls as separate tables', () => {
+    const store = {
+      total: 6,
+      byDate: { '2026-08-24': 1, '2026-08-25': 5 },
+      byRoute: { 'GET /': 2, 'GET /reading-room/:id': 1, 'GET /api/members': 2, 'GET /api/voice/config': 1 },
+    };
+    const report = visits.buildReport(store);
+
+    const trafficSection = report.split('## Traffic by page')[1].split('## Last 7 days')[0];
+    assert.match(trafficSection, /\| GET \/ \| 2 \|/);
+    assert.match(trafficSection, /\| GET \/reading-room\/:id \| 1 \|/);
+    assert.doesNotMatch(trafficSection, /api/);
+
+    const apiSection = report.split('## API calls')[1];
+    assert.match(apiSection, /3 call\(s\) recorded/);
+    assert.match(apiSection, /\| GET \/api\/members \| 2 \|/);
+    assert.match(apiSection, /\| GET \/api\/voice\/config \| 1 \|/);
+    assert.doesNotMatch(apiSection, /\| GET \/ \| /);
+  });
+
+  await t.test('keeps the last-7-days table as combined page+API event counts', () => {
+    const store = {
+      total: 6,
+      byDate: { '2026-08-24': 1, '2026-08-25': 5 },
+      byRoute: { 'GET /': 2, 'GET /reading-room/:id': 1, 'GET /api/members': 2, 'GET /api/voice/config': 1 },
+    };
+    const report = visits.buildReport(store);
     assert.match(report, /\| 2026-08-24 \| 1 \|/);
-    assert.match(report, /\| 2026-08-25 \| 2 \|/);
-    assert.match(report, /\| GET \/ \| 2 \|/);
-    assert.match(report, /\| GET \/reading-room\/:id \| 1 \|/);
+    assert.match(report, /\| 2026-08-25 \| 5 \|/);
   });
 
   await t.test('renders sensibly with no data yet', () => {
     const report = visits.buildReport(visits.emptyStore());
-    assert.match(report, /0 unauthenticated request\(s\) recorded/);
+    assert.match(report, /0 page view\(s\) recorded/);
+    assert.match(report, /0 call\(s\) recorded/);
   });
 });
