@@ -1,0 +1,146 @@
+[
+  {
+    "id": "crowley-verbatim",
+    "libraryEntryId": "crowley-golden-dawn-1900",
+    "work": "The Confessions of Aleister Crowley",
+    "quote": "I have never recovered my respect for committee decisions in matters of initiation.",
+    "expectedVerdict": "verified",
+    "why": "Verbatim line from the excerpt."
+  },
+  {
+    "id": "crowley-inverted",
+    "libraryEntryId": "crowley-golden-dawn-1900",
+    "work": "The Confessions of Aleister Crowley",
+    "quote": "Yeats fought bravely at my side to reclaim the Order's papers from Mathers.",
+    "expectedVerdict": "unverified",
+    "why": "Excerpt says the opposite: Yeats was among those who refused Crowley's initiation and wrote against him to Mathers; the London members (not Crowley and Yeats together) locked out Mathers's side."
+  },
+  {
+    "id": "crowley-adjacent",
+    "libraryEntryId": "crowley-golden-dawn-1900",
+    "work": "The Confessions of Aleister Crowley",
+    "quote": "The Golden Dawn's inner conflicts reflected broader tensions in the occult revival of the 1900s.",
+    "expectedVerdict": "uncertain",
+    "why": "A plausible-sounding generalization the excerpt (a personal, specific account of one schism) never makes or supports either way."
+  },
+  {
+    "id": "blavatsky-verbatim",
+    "libraryEntryId": "blavatsky-astral-light-1877",
+    "work": "Isis Unveiled",
+    "quote": "Every adept who has learned to read the Astral Light reads, in effect, the whole history of the world.",
+    "expectedVerdict": "verified",
+    "why": "Verbatim closing line of the excerpt."
+  },
+  {
+    "id": "blavatsky-inverted",
+    "libraryEntryId": "blavatsky-astral-light-1877",
+    "work": "Isis Unveiled",
+    "quote": "Blavatsky rejected Eliphas Levi's concept of the Magical Agent as worthless superstition.",
+    "expectedVerdict": "unverified",
+    "why": "Excerpt says the opposite: she credits Levi ('He was right to name it so') and builds on his concept rather than rejecting it."
+  },
+  {
+    "id": "blavatsky-adjacent",
+    "libraryEntryId": "blavatsky-astral-light-1877",
+    "work": "Isis Unveiled",
+    "quote": "The Rishis of the Upanishads possessed more astral knowledge than any Western tradition.",
+    "expectedVerdict": "uncertain",
+    "why": "Excerpt mentions the Rishis/Upanishads only in passing as a source that also knew the astral principle; it makes no comparative superiority claim over Western traditions."
+  },
+  {
+    "id": "bohme-verbatim",
+    "libraryEntryId": "bohme-signature-rerum-1621",
+    "work": "Signatura Rerum",
+    "quote": "the Signature stands in the Essence, and is as a Lute that lies still",
+    "expectedVerdict": "verified",
+    "why": "Verbatim phrase from the excerpt."
+  },
+  {
+    "id": "bohme-inverted",
+    "libraryEntryId": "bohme-signature-rerum-1621",
+    "work": "Signatura Rerum",
+    "quote": "Bohme argued the Signature was purely a spiritual entity with no connection to Nature's essence.",
+    "expectedVerdict": "unverified",
+    "why": "Excerpt says the opposite: 'the Signature or Form is no Spirit, but the Receptacle... of the Spirit, wherein it lies... the Signature stands in the Essence.'"
+  },
+  {
+    "id": "bohme-adjacent",
+    "libraryEntryId": "bohme-signature-rerum-1621",
+    "work": "Signatura Rerum",
+    "quote": "Bohme's craft metaphors in this chapter directly influenced later Rosicrucian symbolism.",
+    "expectedVerdict": "uncertain",
+    "why": "Excerpt uses a lute/instrument metaphor but says nothing about Rosicrucian influence or reception history one way or the other."
+  },
+  {
+    "id": "dee-verbatim",
+    "libraryEntryId": "dee-monas-hieroglyphica-1564",
+    "work": "Monas Hieroglyphica",
+    "quote": "I wrote this work in twelve days.",
+    "expectedVerdict": "verified",
+    "why": "Verbatim line from the excerpt."
+  },
+  {
+    "id": "dee-inverted",
+    "libraryEntryId": "dee-monas-hieroglyphica-1564",
+    "work": "Monas Hieroglyphica",
+    "quote": "Dee admitted the sign of the Monad was a mere allegorical device with no literal unifying power.",
+    "expectedVerdict": "unverified",
+    "why": "Excerpt says the opposite: 'This is not metaphor... Those who think I am speaking of correspondences have not yet understood me. I am speaking of identities.'"
+  },
+  {
+    "id": "dee-adjacent",
+    "libraryEntryId": "dee-monas-hieroglyphica-1564",
+    "work": "Monas Hieroglyphica",
+    "quote": "Dee considered twelve days a mystically significant number for completing such a work.",
+    "expectedVerdict": "uncertain",
+    "why": "Excerpt states the twelve-day timeframe but frames it as evidence the knowledge 'arrives entire, not built up laboriously' rather than assigning numerological significance to twelve itself."
+  },
+  {
+    "id": "blake-verbatim",
+    "libraryEntryId": "blake-voice-of-the-devil-1790",
+    "work": "The Marriage of Heaven and Hell",
+    "quote": "Energy is Eternal Delight",
+    "expectedVerdict": "verified",
+    "why": "Verbatim line from the excerpt (plate 4)."
+  },
+  {
+    "id": "blake-inverted",
+    "libraryEntryId": "blake-voice-of-the-devil-1790",
+    "work": "The Marriage of Heaven and Hell",
+    "quote": "Blake insisted that the Body and Soul were entirely separate, opposing substances.",
+    "expectedVerdict": "unverified",
+    "why": "Excerpt says the opposite as one of its stated 'Contraries': 'Man has no Body distinct from his Soul.'"
+  },
+  {
+    "id": "blake-adjacent",
+    "libraryEntryId": "blake-voice-of-the-devil-1790",
+    "work": "The Marriage of Heaven and Hell",
+    "quote": "The Marriage of Heaven and Hell directly critiques the Church of England's doctrine of original sin.",
+    "expectedVerdict": "uncertain",
+    "why": "Excerpt criticizes 'Bibles or sacred codes' and the restraint of Energy/Desire in general terms; it names no specific church or doctrine of original sin."
+  },
+  {
+    "id": "arabi-verbatim",
+    "libraryEntryId": "arabi-imagination-fusus",
+    "work": "Fusus al-Hikam",
+    "quote": "the imagination is not nonexistent, even though it has no real external existence",
+    "expectedVerdict": "verified",
+    "why": "Verbatim opening line of the excerpt. Same case #153's original ad hoc check (scripts/test-library-grounding.js, now superseded by this harness) used."
+  },
+  {
+    "id": "arabi-inverted",
+    "libraryEntryId": "arabi-imagination-fusus",
+    "work": "Fusus al-Hikam",
+    "quote": "Ibn Arabi taught that the imagination must be abolished entirely for the mystic to reach unity with God.",
+    "expectedVerdict": "unverified",
+    "why": "Excerpt says the opposite: 'the mystic who knows this does not need to abolish forms to reach unity.'"
+  },
+  {
+    "id": "arabi-adjacent",
+    "libraryEntryId": "arabi-imagination-fusus",
+    "work": "Fusus al-Hikam",
+    "quote": "Ibn Arabi's teaching on imagination in this passage directly shaped later Sufi lodges' initiation rites.",
+    "expectedVerdict": "uncertain",
+    "why": "Excerpt is a metaphysical argument about imagination and form; it says nothing about institutional transmission into lodge initiation practice."
+  }
+]
