@@ -247,6 +247,20 @@ test('POST /api/cast', async t => {
     assert.equal(deps.savedSessions.size, 0);
   });
 
+  await t.test('a skipped casting metric reported through onMetric rides back in the response', async () => {
+    const app = fakeApp();
+    const deps = makeDeps({
+      proposeCast: async ({ onMetric }) => {
+        onMetric({ phase: 'casting', skipped: true, error: 'rate limited' });
+        return { cast: ['crowley'], additions: [], regulars: [], reasoning: 'fits the room' };
+      },
+    });
+    registerConveneRoutes(app, deps);
+    const res = fakeJSONRes();
+    await app.routes['POST /api/cast'](fakeReq({ entry: 'A document', regulars: [] }), res);
+    assert.deepEqual(res.body.metrics, [{ phase: 'casting', skipped: true, error: 'rate limited' }]);
+  });
+
   await t.test('a proposeCast failure is caught and returns 500', async () => {
     const app = fakeApp();
     registerConveneRoutes(
@@ -337,6 +351,52 @@ test('POST /api/round', async t => {
     });
     await app.routes['POST /api/round'](fakeReq({ sessionId: 's1' }), fakeSSERes());
     assert.deepEqual(seen, { crowley: 2 }, 'jung never spoke, so has no key — the whole point of the ledger');
+  });
+
+  await t.test('a player turn in the request body is recorded onto session.playerTurns', async () => {
+    const app = fakeApp();
+    const deps = makeDeps();
+    registerConveneRoutes(app, deps);
+    deps.savedSessions.set('s1', {
+      id: 's1',
+      entry: 'entry',
+      members: ['crowley', 'jung'],
+      conversationHistory: [],
+      rounds: [{ label: 'First Movement', text: 'r0', historyLength: 0 }],
+      transcriptText: 'HEADER\n',
+      generationMetrics: [],
+      playerTurns: [],
+      disposition: {},
+    });
+    await app.routes['POST /api/round'](fakeReq({ sessionId: 's1', playerTurn: 'A player line' }), fakeSSERes());
+    const saved = deps.savedSessions.get('s1');
+    assert.deepEqual(saved.playerTurns, [{ round: 1, speakerName: null, text: 'A player line' }]);
+  });
+
+  await t.test('a runRound failure streams an error event instead of throwing', async () => {
+    const app = fakeApp();
+    const deps = makeDeps({
+      runRound: async () => {
+        throw new Error('model unavailable');
+      },
+    });
+    registerConveneRoutes(app, deps);
+    deps.savedSessions.set('s1', {
+      id: 's1',
+      entry: 'entry',
+      members: ['crowley', 'jung'],
+      conversationHistory: [],
+      rounds: [{ label: 'First Movement', text: 'r0', historyLength: 0 }],
+      transcriptText: 'HEADER\n',
+      generationMetrics: [],
+      playerTurns: [],
+      disposition: {},
+    });
+    const res = fakeSSERes();
+    await app.routes['POST /api/round'](fakeReq({ sessionId: 's1' }), res);
+    assert.equal(res.events()[0].error, 'Failed to generate round');
+    assert.equal(res.ended, true);
+    assert.equal(deps.savedSessions.get('s1').rounds.length, 1, 'the failed round is never appended');
   });
 });
 
@@ -462,6 +522,30 @@ test('POST /api/interject', async t => {
       assert.deepEqual(turnsSoFar(priorRounds), { [record.PRESENCE_SPEAKER_ID]: 1, crowley: 1 });
     }
   );
+
+  await t.test('a runRound failure streams an error event instead of throwing', async () => {
+    const app = fakeApp();
+    const deps = makeDeps({
+      runRound: async () => {
+        throw new Error('model unavailable');
+      },
+    });
+    registerConveneRoutes(app, deps);
+    deps.savedSessions.set('s1', {
+      id: 's1',
+      members: ['crowley', 'jung'],
+      conversationHistory: [],
+      rounds: [],
+      transcriptText: 'HEADER\n',
+      generationMetrics: [],
+      disposition: {},
+    });
+    const res = fakeSSERes();
+    await app.routes['POST /api/interject'](fakeReq({ sessionId: 's1', text: 'What of silence?' }), res);
+    assert.equal(res.events()[0].error, 'Failed to interject');
+    assert.equal(res.ended, true);
+    assert.equal(deps.savedSessions.get('s1').rounds.length, 0, 'the failed interjection is never appended');
+  });
 });
 
 test('POST /api/prototype/round', async t => {
@@ -490,5 +574,21 @@ test('POST /api/prototype/round', async t => {
     const done = res.events().find(e => e.done);
     assert.equal(done.fullRoundText, 'Crowley —\nhello world');
     assert.equal(deps.savedSessions.size, 0);
+  });
+
+  await t.test('a runRound failure streams an error event instead of throwing', async () => {
+    const app = fakeApp();
+    registerConveneRoutes(
+      app,
+      makeDeps({
+        runRound: async () => {
+          throw new Error('model unavailable');
+        },
+      })
+    );
+    const res = fakeSSERes();
+    await app.routes['POST /api/prototype/round'](fakeReq({ entry: 'A test entry', members: ['crowley'] }), res);
+    assert.equal(res.events()[0].error, 'model unavailable');
+    assert.equal(res.ended, true);
   });
 });

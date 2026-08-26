@@ -61,6 +61,9 @@ function fakeRes() {
       this.sentText = text;
       return this;
     },
+    type() {
+      return this;
+    },
   };
   return res;
 }
@@ -87,6 +90,9 @@ function makeDeps(dir, overrides = {}) {
     loadArchiveImageIndex: () => ({}),
     groundAgainstLibraryText: async () => new Map(),
     escalateCitationsToWeb: async () => new Map(),
+    loadManifestSessions: () => [],
+    buildCitationManifest: () => '# Citation Manifest',
+    buildBibliography: () => '# Bibliography',
     ...overrides,
   };
 }
@@ -178,6 +184,16 @@ test('GET /api/sessions', async t => {
       ['s2', 's1']
     );
   });
+
+  await t.test('a sessions dir that cannot be read is caught, returns 500 rather than throwing', () => {
+    const missingDir = path.join(os.tmpdir(), `session-routes-missing-${Date.now()}`);
+    const app = fakeApp();
+    registerSessionRoutes(app, makeDeps(missingDir));
+    const res = fakeRes();
+    app.routes['GET /api/sessions'](fakeReq(), res);
+    assert.equal(res.statusCode, 500);
+    assert.deepEqual(res.body, { error: 'Failed to list sessions' });
+  });
 });
 
 test('GET /api/threads', async t => {
@@ -204,6 +220,93 @@ test('GET /api/threads', async t => {
     const res = fakeRes();
     app.routes['GET /api/threads'](fakeReq({ authed: false }), res);
     assert.deepEqual(res.body, [{ id: 't1', name: 'Thread One', count: 1 }]);
+  });
+
+  await t.test('a sessions dir that cannot be read is caught, returns 500 rather than throwing', () => {
+    const missingDir = path.join(os.tmpdir(), `session-routes-missing-${Date.now()}`);
+    const app = fakeApp();
+    registerSessionRoutes(app, makeDeps(missingDir));
+    const res = fakeRes();
+    app.routes['GET /api/threads'](fakeReq(), res);
+    assert.equal(res.statusCode, 500);
+    assert.deepEqual(res.body, { error: 'Failed to list threads' });
+  });
+});
+
+test('GET /api/admin/citation-manifest', async t => {
+  await t.test('returns the built manifest as markdown', () => {
+    const dir = makeFixtureDir();
+    t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+    let seenSessions;
+    const app = fakeApp();
+    registerSessionRoutes(
+      app,
+      makeDeps(dir, {
+        loadManifestSessions: d => {
+          seenSessions = d;
+          return [{ id: 's1' }];
+        },
+        buildCitationManifest: sessions => `# Manifest (${sessions.length})`,
+      })
+    );
+    const res = fakeRes();
+    app.routes['GET /api/admin/citation-manifest'](fakeReq(), res);
+    assert.equal(seenSessions, dir);
+    assert.equal(res.sentText, '# Manifest (1)');
+  });
+
+  await t.test('a build failure is caught, returns 500 rather than throwing', () => {
+    const dir = makeFixtureDir();
+    t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+    const app = fakeApp();
+    registerSessionRoutes(
+      app,
+      makeDeps(dir, {
+        loadManifestSessions: () => {
+          throw new Error('disk error');
+        },
+      })
+    );
+    const res = fakeRes();
+    app.routes['GET /api/admin/citation-manifest'](fakeReq(), res);
+    assert.equal(res.statusCode, 500);
+    assert.deepEqual(res.body, { error: 'Failed to build citation manifest' });
+  });
+});
+
+test('GET /api/admin/bibliography', async t => {
+  await t.test('returns the built bibliography as markdown', () => {
+    const dir = makeFixtureDir();
+    t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+    const app = fakeApp();
+    registerSessionRoutes(
+      app,
+      makeDeps(dir, {
+        loadManifestSessions: () => [{ id: 's1' }],
+        buildBibliography: sessions => `# Bibliography (${sessions.length})`,
+      })
+    );
+    const res = fakeRes();
+    app.routes['GET /api/admin/bibliography'](fakeReq(), res);
+    assert.equal(res.sentText, '# Bibliography (1)');
+  });
+
+  await t.test('a build failure is caught, returns 500 rather than throwing', () => {
+    const dir = makeFixtureDir();
+    t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+    const app = fakeApp();
+    registerSessionRoutes(
+      app,
+      makeDeps(dir, {
+        loadManifestSessions: () => {
+          throw new Error('disk error');
+        },
+      })
+    );
+    const res = fakeRes();
+    app.routes['GET /api/admin/bibliography'](fakeReq(), res);
+    assert.equal(res.statusCode, 500);
+    assert.deepEqual(res.body, { error: 'Failed to build bibliography' });
   });
 });
 
@@ -311,6 +414,21 @@ test('DELETE /api/sessions/:id', async t => {
     const res = fakeRes();
     app.routes['DELETE /api/sessions/:id'](fakeReq({ params: { id: 'nope' } }), res);
     assert.equal(res.statusCode, 404);
+  });
+
+  await t.test('an unlink failure is caught, returns 500 rather than throwing', () => {
+    const dir = makeFixtureDir();
+    t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+    // A directory at the expected .json path passes the existsSync check but
+    // makes unlinkSync itself throw (EISDIR/EPERM) — a deterministic way to
+    // reach the catch without relying on filesystem permissions.
+    fs.mkdirSync(path.join(dir, 's1.json'));
+    const app = fakeApp();
+    registerSessionRoutes(app, makeDeps(dir));
+    const res = fakeRes();
+    app.routes['DELETE /api/sessions/:id'](fakeReq({ params: { id: 's1' } }), res);
+    assert.equal(res.statusCode, 500);
+    assert.deepEqual(res.body, { error: 'Failed to delete session' });
   });
 });
 
@@ -682,6 +800,28 @@ test('POST /api/sessions/:id/verify-citations', async t => {
     assert.equal(res.statusCode, null);
     assert.deepEqual(res.body.citations, []);
     assert.deepEqual(store.loadSession(dir, 's1').citationFlags, []);
+  });
+
+  // #153 part 1's grounding pass reports its own usage back through a metrics
+  // callback (`m => session.generationMetrics.push(m)`); the default stub
+  // never invokes it, so it's otherwise never exercised.
+  await t.test('grounding-pass metrics reported through the onMetric callback land on the session', async () => {
+    const dir = makeFixtureDir();
+    t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+    store.saveSession(dir, baseSession('s1'));
+    const app = fakeApp();
+    registerSessionRoutes(
+      app,
+      makeDeps(dir, {
+        groundAgainstLibraryText: async (rawCitations, lookup, onMetric) => {
+          onMetric({ phase: 'grounding', usage: {} });
+          return new Map();
+        },
+      })
+    );
+    const res = fakeRes();
+    await app.routes['POST /api/sessions/:id/verify-citations'](fakeReq({ params: { id: 's1' } }), res);
+    assert.deepEqual(store.loadSession(dir, 's1').generationMetrics, [{ phase: 'grounding', usage: {} }]);
   });
 
   await t.test('a thrown error mid-verification (the grounding pass) is caught and returns 500', async () => {
