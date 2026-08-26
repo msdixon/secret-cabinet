@@ -432,6 +432,14 @@ a.lodge-btn { display:inline-block; text-decoration:none; }
 #reveal-player-turns-btn { display:none; }
 #reveal-player-turns-btn.visible { display:inline-block; }
 
+/* #348: a live readout of the "Play as" choice (.playeras-panel, down in
+   II. The Assembled), surfaced at the convene step itself so #31 is visible
+   at the point of convening rather than only in a collapsed details panel
+   above. Not a toggle — clicking it jumps to and opens the real control. */
+.convene-player-status { border-style:dashed; border-color:var(--lodge-ash); color:var(--lodge-ash); font-size:12px; padding:5px 14px; }
+.convene-player-status:hover { border-color:var(--lodge-amber-dim); color:var(--lodge-muted); }
+.convene-player-status.is-active { border-color:var(--lodge-amber-dim); color:var(--lodge-amber); }
+
 /* ─── Convene panel controls — artifact & play-as arcs ─────────────────── */
 
 /* Convene panel — convene button is primary; arc config sits below, demoted */
