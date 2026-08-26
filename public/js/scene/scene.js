@@ -37,10 +37,16 @@ window.LodgeScene = (function () {
   // seat glow's own "leaning in" read. CAMERA_FRAME_MS matches a natural
   // turn-taking glance, not a slow cinematic pan.
   const CAMERA_DEFAULT_ALPHA = -Math.PI / 2;
+  const CAMERA_DEFAULT_BETA = Math.PI / 2.5;
   const CAMERA_DEFAULT_RADIUS = 12;
   const CAMERA_SPEAKER_RADIUS = 9;
   const CAMERA_FRAME_MS = 900;
   const CAMERA_FPS = 60;
+  // #34: inspect-mode framing -- close and near-overhead, a step past the
+  // speaker radius rather than a variation on it, since it's the scene's
+  // only other scripted camera move (see openDocumentInspect() below).
+  const CAMERA_INSPECT_BETA = Math.PI / 2.15;
+  const CAMERA_INSPECT_RADIUS = 3;
 
   // #294: enclosing wall. Radius is deliberately CAMERA_DEFAULT_RADIUS + a
   // margin, not some fixed "room size" -- with beta fixed and no
@@ -558,6 +564,169 @@ window.LodgeScene = (function () {
     buildBookshelves(scene);
   }
 
+  // #34: "the document as object" -- the source provocation rendered as a
+  // physical artifact on the table rather than only living in a textarea.
+  // Scoped deliberately narrow, same discipline #357/#304 took for their own
+  // first passes: a static open-book model, a click-to-inspect camera move,
+  // and a DOM reading panel (app.js) for the text itself. Deliberately NOT
+  // built here, left for a later pass if pursued: per-passage highlighting
+  // synced to #355's per-beat citation capture, and any attempt to render
+  // readable text as an in-scene texture -- the DOM panel is the "zoom into
+  // a passage" affordance instead, reusing the #257 DOM-over-canvas pattern
+  // rather than adding a text-rendering pipeline. "Members gesture toward it
+  // during generation" (the issue's own phrase) has no character rig to
+  // animate -- avatars are flat billboards (#26 phase 2) -- so it's
+  // approximated the way the fire's own "banking" already is: a state read,
+  // not a literal animation. See updateDocumentAttention() below.
+  //
+  // DOCUMENT_Z sits near the table's camera-facing edge (negative Z, same
+  // side HEARTH_ANGLE's own comment identifies as what the resting camera
+  // actually sees) so the book reads as presented to the room without
+  // occluding the center candle.
+  const DOCUMENT_X = 0;
+  const DOCUMENT_Y = 0.4; // table top surface (table height 0.4, centered at y=0.2)
+  const DOCUMENT_Z = -(TABLE_RADIUS - 0.85);
+  const DOCUMENT_PAGE_WIDTH = 0.42;
+  const DOCUMENT_PAGE_DEPTH = 0.56;
+  const DOCUMENT_TILT = 0.22; // radians -- a shallow "open on a stand" angle, not a hinge simulation
+  const DOCUMENT_COVER_COLOR = '#4a1e14';
+  const DOCUMENT_PAGE_COLOR = '#e8ddb8';
+  const DOCUMENT_GLOW_DORMANT = 0.05;
+  const DOCUMENT_GLOW_ATTENDED = 0.26; // while someone is speaking -- see updateDocumentAttention()
+
+  let documentMeshes = [];
+  let documentPageMats = [];
+  let documentVisible = false;
+  let documentInspecting = false;
+  let onDocumentInspectChange = null;
+
+  // The book itself -- a base plinth, a spine, and two pages tilted up from
+  // it, the same primitives-only economy the candle above uses rather than
+  // anything sculpted. Pages get their own material (not shared) so
+  // updateDocumentAttention() can brighten them without touching the base/
+  // spine. Hidden until setDocumentText() finds an actual document to show.
+  function buildDocumentObject(scene) {
+    const baseMat = new BABYLON.StandardMaterial('documentBaseMat', scene);
+    baseMat.diffuseColor = BABYLON.Color3.FromHexString(DOCUMENT_COVER_COLOR);
+    baseMat.specularColor = new BABYLON.Color3(0.05, 0.04, 0.02);
+
+    const base = BABYLON.MeshBuilder.CreateBox(
+      'documentBase',
+      { width: DOCUMENT_PAGE_WIDTH * 2 * 0.92, height: 0.03, depth: DOCUMENT_PAGE_DEPTH + 0.06 },
+      scene
+    );
+    base.position.set(DOCUMENT_X, DOCUMENT_Y + 0.015, DOCUMENT_Z);
+    base.material = baseMat;
+
+    const spine = BABYLON.MeshBuilder.CreateBox(
+      'documentSpine',
+      { width: 0.05, height: 0.05, depth: DOCUMENT_PAGE_DEPTH },
+      scene
+    );
+    spine.position.set(DOCUMENT_X, DOCUMENT_Y + 0.045, DOCUMENT_Z);
+    spine.material = baseMat;
+
+    documentMeshes = [base, spine];
+    documentPageMats = [];
+
+    [-1, 1].forEach(side => {
+      const pageMat = new BABYLON.StandardMaterial(`documentPageMat-${side}`, scene);
+      pageMat.diffuseColor = BABYLON.Color3.FromHexString(DOCUMENT_PAGE_COLOR);
+      pageMat.emissiveColor = BABYLON.Color3.FromHexString(DOCUMENT_PAGE_COLOR).scale(DOCUMENT_GLOW_DORMANT);
+      pageMat.specularColor = new BABYLON.Color3(0.08, 0.07, 0.05);
+      pageMat.backFaceCulling = false;
+
+      const page = BABYLON.MeshBuilder.CreateBox(
+        `documentPage-${side}`,
+        { width: DOCUMENT_PAGE_WIDTH, height: 0.015, depth: DOCUMENT_PAGE_DEPTH },
+        scene
+      );
+      // Approximates a hinge at the spine (x=0) by lifting the outer edge
+      // rather than actually pivoting a rotated mesh around it -- the tilt
+      // is shallow enough that the difference isn't visible at this
+      // camera's distance, and it avoids the setPivotPoint bookkeeping a
+      // true hinge would need for two lines of geometry.
+      const lift = Math.sin(DOCUMENT_TILT) * (DOCUMENT_PAGE_WIDTH / 2);
+      page.position.set(
+        DOCUMENT_X + side * (DOCUMENT_PAGE_WIDTH / 2) * Math.cos(DOCUMENT_TILT),
+        DOCUMENT_Y + 0.05 + lift / 2,
+        DOCUMENT_Z
+      );
+      page.rotation.z = -side * DOCUMENT_TILT;
+      page.material = pageMat;
+
+      documentMeshes.push(page);
+      documentPageMats.push(pageMat);
+    });
+
+    documentMeshes.forEach(m => (m.isVisible = false));
+  }
+
+  // Called from app.js's updateStepper(), which already computes this exact
+  // "is there a provocation" condition for the pre-convene stepper -- this
+  // rides that existing signal instead of adding a second source of truth
+  // for whether a document exists. Any change here closes an open inspect
+  // view rather than risk it going stale (a new document loaded mid-read,
+  // or the entry cleared out from under it).
+  function setDocumentText(text) {
+    if (!sceneRef || !documentMeshes.length) return;
+    documentVisible = !!(text && text.trim());
+    documentMeshes.forEach(m => (m.isVisible = documentVisible));
+    if (documentInspecting) closeDocumentInspect();
+  }
+
+  // Reuses applySeatState's own eased-tween helper (animateSeatProp) and
+  // easing/timing -- it's a generic Color3/Vector3 tween despite the
+  // seat-focused name, and the "someone is leaning in" glow read is the same
+  // signal (setSpeaking's currentSpeakingId) the seat states already use.
+  function updateDocumentAttention(active) {
+    if (!sceneRef || !documentPageMats.length) return;
+    const scale = active ? DOCUMENT_GLOW_ATTENDED : DOCUMENT_GLOW_DORMANT;
+    documentPageMats.forEach((mat, i) => {
+      animateSeatProp(
+        mat,
+        'emissiveColor',
+        BABYLON.Color3.FromHexString(DOCUMENT_PAGE_COLOR).scale(scale),
+        `documentGlow-${i}`
+      );
+    });
+  }
+
+  // #34: click-to-inspect. The scene has no camera controls (init()'s own
+  // "Deliberately no attachControl" note) -- this is the second scripted
+  // camera move alongside frameCamera's speaker framing, not a new
+  // interactive-camera feature. onDocumentInspectChange (set via init()'s
+  // options bag) is how app.js's DOM reading panel stays in sync with open/
+  // close -- scene.js owns click detection and the camera move, app.js owns
+  // rendering the actual document text into the panel.
+  function openDocumentInspect() {
+    if (!cameraRef || !documentVisible || documentInspecting) return;
+    documentInspecting = true;
+    animateCameraProp(cameraRef, 'alpha', cameraRef.alpha + shortestAngleDelta(cameraRef.alpha, CAMERA_DEFAULT_ALPHA));
+    animateCameraProp(cameraRef, 'beta', CAMERA_INSPECT_BETA);
+    animateCameraProp(cameraRef, 'radius', CAMERA_INSPECT_RADIUS);
+    animateCameraProp(cameraRef, 'target', new BABYLON.Vector3(DOCUMENT_X, DOCUMENT_Y, DOCUMENT_Z));
+    onDocumentInspectChange?.(true);
+  }
+
+  // Exposed directly (see the returned API below) so the DOM panel's close
+  // button and an Escape-key listener (both in app.js) can end inspect mode
+  // without going through the canvas click path at all.
+  function closeDocumentInspect() {
+    if (!cameraRef || !documentInspecting) return;
+    documentInspecting = false;
+    animateCameraProp(cameraRef, 'alpha', cameraRef.alpha + shortestAngleDelta(cameraRef.alpha, CAMERA_DEFAULT_ALPHA));
+    animateCameraProp(cameraRef, 'beta', CAMERA_DEFAULT_BETA);
+    animateCameraProp(cameraRef, 'radius', currentSpeakingId ? CAMERA_SPEAKER_RADIUS : CAMERA_DEFAULT_RADIUS);
+    animateCameraProp(cameraRef, 'target', new BABYLON.Vector3(0, 1, 0));
+    onDocumentInspectChange?.(false);
+  }
+
+  function toggleDocumentInspect() {
+    if (documentInspecting) closeDocumentInspect();
+    else openDocumentInspect();
+  }
+
   // #357: the fireplace -- surround geometry, the fire itself, and the two
   // PointLights that replace the old floating 'hearth' + 'ember' sphere
   // (see HEARTH_RANGE's comment above for why those old numbers can't just
@@ -1040,7 +1209,10 @@ window.LodgeScene = (function () {
   // closer. Clearing to no speaker eases back to the room's resting shot,
   // rather than freezing wherever the last speaker left it.
   function frameCamera(memberId) {
-    if (!cameraRef) return;
+    // #34: while the user has the document open, a speaker-framing swing
+    // (or the reset one on updateSeats) would fight the inspect camera move
+    // -- leave the framing alone until they close it explicitly.
+    if (!cameraRef || documentInspecting) return;
     const seat = memberId && seatMeshes.find(s => s.memberId === memberId);
     const targetAlpha = seat
       ? cameraRef.alpha + shortestAngleDelta(cameraRef.alpha, seat.angle)
@@ -1092,6 +1264,9 @@ window.LodgeScene = (function () {
     // people who may no longer even be seated.
     currentPoolIds = null;
     waitingMemberIds.clear();
+    // #34: same reasoning -- a new roster likely means a new (or cleared)
+    // provocation too, so an open reading view shouldn't survive it.
+    if (documentInspecting) closeDocumentInspect();
     seatMeshes.forEach((seat, i) => {
       const id = ids[i] || null;
       seat.memberId = id;
@@ -1138,6 +1313,7 @@ window.LodgeScene = (function () {
     if (!sceneRef || !seatMeshes.length) return;
     currentSpeakingId = memberId || null;
     refreshSeatStates();
+    updateDocumentAttention(!!currentSpeakingId);
     frameCamera(currentSpeakingId);
   }
 
@@ -1179,7 +1355,7 @@ window.LodgeScene = (function () {
     return { x: projected.x, y: projected.y, visible };
   }
 
-  function init(canvas) {
+  function init(canvas, options = {}) {
     try {
       const engine = new BABYLON.Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true });
       const scene = new BABYLON.Scene(engine);
@@ -1192,13 +1368,16 @@ window.LodgeScene = (function () {
       const camera = new BABYLON.ArcRotateCamera(
         'camera',
         CAMERA_DEFAULT_ALPHA,
-        Math.PI / 2.5,
+        CAMERA_DEFAULT_BETA,
         CAMERA_DEFAULT_RADIUS,
         new BABYLON.Vector3(0, 1, 0),
         scene
       );
-      // Deliberately no attachControl — not interactive this phase.
+      // Deliberately no attachControl — not interactive this phase. (#34's
+      // click-to-inspect is a scripted camera move triggered by a canvas
+      // click handler, not camera-drag input, so this still holds.)
       cameraRef = camera;
+      onDocumentInspectChange = options.onDocumentInspect || null;
 
       // Light *colors* need to be bright/warm regardless of the dark theme
       // tokens — those describe surface/background hues, not illumination.
@@ -1221,7 +1400,31 @@ window.LodgeScene = (function () {
       buildWallDressing(scene);
       buildHearth(scene);
       buildTableAndSeats(scene);
+      buildDocumentObject(scene);
       sceneRef = scene;
+
+      // #34: fresh per init, same reasoning as the fire-state reset just
+      // below -- a newly opened room isn't mid-read of a previous instance's
+      // document.
+      documentVisible = false;
+      documentInspecting = false;
+
+      // #34: click-to-inspect the document object. A native canvas click
+      // listener + scene.pick(), not Babylon's ActionManager -- ActionManager
+      // would need registering per mesh (base/spine/2 pages) for what's
+      // really one hit-test. stopPropagation matters here specifically: the
+      // whole `.witness-room` div has its own onclick (Witness.advance(),
+      // #257) that a canvas click would otherwise bubble into, silently
+      // skipping ahead in the transcript at the same moment the reading
+      // panel opens.
+      canvas.addEventListener('click', e => {
+        if (!documentVisible) return;
+        const pick = scene.pick(scene.pointerX, scene.pointerY);
+        if (pick.hit && pick.pickedMesh && documentMeshes.includes(pick.pickedMesh)) {
+          e.stopPropagation();
+          toggleDocumentInspect();
+        }
+      });
 
       // #357: fresh fire state per init -- a newly opened room starts lit,
       // not mid-way through wherever a previous scene instance left off.
@@ -1284,5 +1487,7 @@ window.LodgeScene = (function () {
     getSeatScreenPosition,
     setPassageCount,
     stirFire,
+    setDocumentText,
+    closeDocumentInspect,
   };
 })();

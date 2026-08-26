@@ -108,6 +108,24 @@
           <canvas id="scene-canvas"></canvas>
           <div class="room-speech-layer" id="room-speech-layer"></div>
           <div class="room-events" id="room-events"></div>
+          <!-- #34: the document-as-object reading panel -- scene.js's book
+               mesh eases the camera in on click and calls back into
+               handleDocumentInspect() (app.js) to show this; the panel
+               itself just renders the plain document text, no in-scene
+               texture pipeline. onclick stops the click here from bubbling
+               to witness-room's own onclick above, which would otherwise
+               advance the transcript at the same time the panel opens. -->
+          <div class="document-inspect-panel" id="document-inspect-panel" hidden onclick="event.stopPropagation()">
+            <button
+              type="button"
+              class="document-inspect-close"
+              onclick="window.LodgeScene.closeDocumentInspect()"
+              title="Close (Esc)"
+            >
+              ✕ Close
+            </button>
+            <div class="document-inspect-text" id="document-inspect-text"></div>
+          </div>
         </div>
         <div class="witness-progress" id="witness-progress" style="display:none;"></div>
       </div>
