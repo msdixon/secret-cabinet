@@ -432,14 +432,6 @@ a.lodge-btn { display:inline-block; text-decoration:none; }
 #reveal-player-turns-btn { display:none; }
 #reveal-player-turns-btn.visible { display:inline-block; }
 
-/* #348: a live readout of the "Play as" choice (.playeras-panel, down in
-   II. The Assembled), surfaced at the convene step itself so #31 is visible
-   at the point of convening rather than only in a collapsed details panel
-   above. Not a toggle — clicking it jumps to and opens the real control. */
-.convene-player-status { border-style:dashed; border-color:var(--lodge-ash); color:var(--lodge-ash); font-size:12px; padding:5px 14px; }
-.convene-player-status:hover { border-color:var(--lodge-amber-dim); color:var(--lodge-muted); }
-.convene-player-status.is-active { border-color:var(--lodge-amber-dim); color:var(--lodge-amber); }
-
 /* ─── Convene panel controls — artifact & play-as arcs ─────────────────── */
 
 /* Convene panel — convene button is primary; arc config sits below, demoted */
@@ -447,7 +439,7 @@ a.lodge-btn { display:inline-block; text-decoration:none; }
 .convene-panel-label { padding:14px 14px 0; margin-bottom:0; }
 .convene-row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; padding:12px 14px; }
 
-/* Shared arc-field styles (used by .artifact-panel's "Bring an artifact" and .playeras-panel's "Play as" details) */
+/* Shared arc-field styles (used by .artifact-panel's "Bring an artifact" details and .playeras-panel's "Play as" fields) */
 .arc-summary { font-family:'IM Fell English',serif; font-size:13px; letter-spacing:2px; text-transform:uppercase; color:var(--lodge-muted); padding:10px 14px; cursor:pointer; list-style:none; user-select:none; }
 .arc-summary-note { font-size:12px; letter-spacing:1px; color:var(--lodge-muted); text-transform:none; font-style:italic; }
 .arc-summary::-webkit-details-marker { display:none; }
@@ -459,11 +451,24 @@ a.lodge-btn { display:inline-block; text-decoration:none; }
 .arc-textarea:focus { outline:none; border-left-color:var(--lodge-amber); }
 .arc-textarea:disabled { opacity:0.6; cursor:not-allowed; }
 
-/* Play-as panel — lives with roster state in .member-panel, same demoted/optional treatment as .artifact-panel */
-.playeras-panel { border:none; border-top:1px solid var(--lodge-border); border-radius:0; background:rgba(0,0,0,0.12); margin-top:12px; }
-.playeras-panel .arc-summary { font-size:11px; padding:8px 14px; color:var(--lodge-ash); }
-.playeras-panel .arc-summary-note { color:var(--lodge-ash); }
-.playeras-panel .arc-fields { padding:0 14px 12px; gap:8px; }
+/* #440: "Play as" is entered via the "You" chip in members-grid (below),
+   same click-to-reveal shape as any other member token, rather than a
+   collapsed <details> panel disconnected from how every other participant
+   gets picked. Collapsed by default; .expanded is toggled by
+   togglePlayAsCard() (and once, read-only, by restorePlayAsControlDisplay()
+   for a restored session). */
+.playeras-panel { display:none; border-top:1px solid var(--lodge-border); background:rgba(0,0,0,0.12); margin-top:12px; }
+.playeras-panel.expanded { display:block; }
+.playeras-panel .arc-fields { padding:12px 14px 14px; gap:8px; }
+
+/* The "You" chip -- same .member-token shape as a real roster chip, portrait
+   frame left empty since there's no portrait file for the player. The note
+   reuses updateConvenePlayerStatus()'s label logic (ex-.convene-player-status,
+   #348) and stays blank for the default "observe only" state -- untouched
+   and deliberately-observe-only aren't worth distinguishing visually. */
+.member-portrait-empty { background:transparent; }
+.you-token-note { font-size:12px; font-style:italic; color:var(--lodge-ash); }
+.you-token.active .you-token-note { color:var(--lodge-amber); }
 
 /* ─── Transcript annotations & citations ───────────────────────────────── */
 

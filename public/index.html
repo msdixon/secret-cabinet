@@ -359,14 +359,19 @@
           <button type="button" class="lodge-btn" onclick="window.Casting.requestProposal()">Ask again</button>
         </div>
       </div>
-      <div class="members-grid" id="members-grid"></div>
+      <div class="members-grid" id="members-grid">
+        <div id="members-grid-real" style="display:contents"></div>
+        <div class="member-token you-token" id="you-token" onclick="togglePlayAsCard()" title="Play as — write a turn as a voice in the room">
+          <div class="member-portrait member-portrait-empty"></div>
+          <span class="member-name">You<span class="you-token-note" id="you-token-note"></span></span>
+        </div>
+      </div>
       <div class="members-empty-hint" id="members-empty-hint" style="display:none;">No members match "<span id="members-empty-hint-term"></span>".</div>
       <div class="members-cast-hint" id="members-cast-hint" style="display:none;">No one is seated yet. Bring a provocation and the room will say who it draws — or pin a regular with ✦ and they will always be here.</div>
       <div style="margin-top:12px;">
         <button class="lodge-btn add-member-btn" onclick="openAddMemberModal()">+ Invite to the Lodge</button>
       </div>
-      <details class="playeras-panel" id="playeras-panel">
-        <summary class="arc-summary">Play as <span class="arc-summary-note">— optional, write a turn as a voice in the room</span></summary>
+      <div class="playeras-panel" id="playeras-panel">
         <div class="arc-fields">
           <div class="arc-field">
             <div class="panel-label">Mode</div>
@@ -385,7 +390,7 @@
             <input class="interject-input" id="play-as-custom-name" placeholder="e.g. yourself, or an invented persona" style="width:100%;border-left:3px solid var(--lodge-amber-dim);" oninput="updateConvenePlayerStatus()" />
           </div>
         </div>
-      </details>
+      </div>
     </div>
 
     <!-- Player turn modal -->
@@ -462,7 +467,6 @@
              pre-commitment re-imports the round frame through the side door.
              How long the room sits is decided in the room, at each lull. -->
         <button class="lodge-btn primary" id="convene-btn" onclick="convene()">Convene the Lodge</button>
-        <button type="button" class="lodge-btn convene-player-status" id="convene-player-status" onclick="focusPlayAsPanel()" title="Set who you're playing as before convening"></button>
         <button class="lodge-btn" id="reveal-player-turns-btn" onclick="togglePlayerTurnReveal()">Reveal Player Turns ◆</button>
         <button class="lodge-btn sessions-btn" id="dossier-btn" onclick="window.Sessions.toggleDossier()" style="display:none;">Review the assembly ↗</button>
       </div>
