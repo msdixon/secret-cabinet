@@ -472,6 +472,9 @@ function portraitFallback(img, kind, glyph) {
 //      reusing action-line's look, which reads as the same silently-skipped
 //      stage business.
 // Empty actions (** or * *) are left alone.
+// No inline link syntax is parsed here yet. When that lands, it should
+// target the reserved .inline-link class (style.css), not .keyword-inline --
+// underline is reserved exclusively for real links so the two never collide.
 function renderActions(text) {
   const safe = escapeHTML(text);
   return safe
