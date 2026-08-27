@@ -2557,6 +2557,26 @@ function fakePassageClient({ speakerText = 'A turn.', windingDownOnConsult = [fa
 const SINGLE_MEMBER_ROSTER = [{ id: 'crowley', name: 'Crowley', file: 'crowley.md' }];
 const loadMemberFile = () => "Crowley's character file.";
 
+// Shared base args for every single-member-pool runRound integration test
+// below (#244 passage end-causes, #355/#356 citation capture, #445 loader
+// fallbacks and observability) — each spreads this and overrides only the
+// one or two fields that test actually varies, rather than re-listing all
+// twelve every time.
+const RUNROUND_BASE_ARGS = {
+  model: 'test-model',
+  lodgeContext: LODGE,
+  ROSTER: SINGLE_MEMBER_ROSTER,
+  loadMemberFile,
+  presentMemberIds: ['crowley'],
+  artifact: null,
+  notes: {},
+  roundPrompt: 'Opening prompt',
+  conversationHistory: [],
+  speakerCount: 1,
+  round: 0,
+  disposition: {},
+};
+
 test('runRound — passage end-causes and beats (#244)', async t => {
   await t.test(
     'ends with endedBy "lull" and the director\'s own note when it judges the room winding down',
@@ -2568,21 +2588,7 @@ test('runRound — passage end-causes and beats (#244)', async t => {
         windingDownOnConsult: [false, true],
         lullNote: 'The fire settles; Yeats refills his glass.',
       });
-      const result = await runRound({
-        client,
-        model: 'test-model',
-        lodgeContext: LODGE,
-        ROSTER: SINGLE_MEMBER_ROSTER,
-        loadMemberFile,
-        presentMemberIds: ['crowley'],
-        artifact: null,
-        notes: {},
-        roundPrompt: 'Opening prompt',
-        conversationHistory: [],
-        speakerCount: 1,
-        round: 0,
-        disposition: {},
-      });
+      const result = await runRound({ ...RUNROUND_BASE_ARGS, client });
       assert.equal(result.endedBy, 'lull');
       assert.equal(result.lullNote, 'The fire settles; Yeats refills his glass.');
       assert.equal(result.beats.length, 2);
@@ -2599,21 +2605,7 @@ test('runRound — passage end-causes and beats (#244)', async t => {
 
   await t.test('falls back to a stock lull note when the director judges winding down but writes nothing', async () => {
     const client = fakePassageClient({ windingDownOnConsult: [false, true], lullNote: null });
-    const result = await runRound({
-      client,
-      model: 'test-model',
-      lodgeContext: LODGE,
-      ROSTER: SINGLE_MEMBER_ROSTER,
-      loadMemberFile,
-      presentMemberIds: ['crowley'],
-      artifact: null,
-      notes: {},
-      roundPrompt: 'Opening prompt',
-      conversationHistory: [],
-      speakerCount: 1,
-      round: 0,
-      disposition: {},
-    });
+    const result = await runRound({ ...RUNROUND_BASE_ARGS, client });
     assert.equal(result.endedBy, 'lull');
     assert.ok(STOCK_LULL_NOTES.includes(result.lullNote));
   });
@@ -2622,21 +2614,7 @@ test('runRound — passage end-causes and beats (#244)', async t => {
     'defaults to endedBy "budget" (with a resolved stock lull note) when the director never judges a wind-down',
     async () => {
       const client = fakePassageClient({ windingDownOnConsult: [false] });
-      const result = await runRound({
-        client,
-        model: 'test-model',
-        lodgeContext: LODGE,
-        ROSTER: SINGLE_MEMBER_ROSTER,
-        loadMemberFile,
-        presentMemberIds: ['crowley'],
-        artifact: null,
-        notes: {},
-        roundPrompt: 'Opening prompt',
-        conversationHistory: [],
-        speakerCount: 1,
-        round: 0,
-        disposition: {},
-      });
+      const result = await runRound({ ...RUNROUND_BASE_ARGS, client });
       // Short fixed speaker turns never spend BREATH_BUDGET_WORDS, so the
       // MAX_TOTAL_BEATS safety net is what actually ends this passage —
       // still 'budget', per runRound's single default for every non-lull exit.
@@ -2649,19 +2627,8 @@ test('runRound — passage end-causes and beats (#244)', async t => {
   await t.test("includes the player's preceding turn as a beat under a stable identity (#354)", async () => {
     const client = fakePassageClient({ windingDownOnConsult: [true] });
     const result = await runRound({
+      ...RUNROUND_BASE_ARGS,
       client,
-      model: 'test-model',
-      lodgeContext: LODGE,
-      ROSTER: SINGLE_MEMBER_ROSTER,
-      loadMemberFile,
-      presentMemberIds: ['crowley'],
-      artifact: null,
-      notes: {},
-      roundPrompt: 'Opening prompt',
-      conversationHistory: [],
-      speakerCount: 1,
-      round: 0,
-      disposition: {},
       // The caller (server.js/lodge-prompts.resolvePlayerSpeakerId) resolves
       // the real memberId before runRound ever sees precedingTurn — here a
       // custom-name player, so the non-roster sentinel.
@@ -2677,19 +2644,8 @@ test('runRound — passage end-causes and beats (#244)', async t => {
   await t.test('a precedingTurn with no memberId falls back to the non-roster sentinel, not null (#354)', async () => {
     const client = fakePassageClient({ windingDownOnConsult: [true] });
     const result = await runRound({
+      ...RUNROUND_BASE_ARGS,
       client,
-      model: 'test-model',
-      lodgeContext: LODGE,
-      ROSTER: SINGLE_MEMBER_ROSTER,
-      loadMemberFile,
-      presentMemberIds: ['crowley'],
-      artifact: null,
-      notes: {},
-      roundPrompt: 'Opening prompt',
-      conversationHistory: [],
-      speakerCount: 1,
-      round: 0,
-      disposition: {},
       precedingTurn: { speakerName: 'A Visitor', text: 'I have a question.' },
     });
     assert.equal(result.beats[0].memberId, record.PLAYER_SPEAKER_ID);
@@ -2718,21 +2674,7 @@ test('runRound — passage end-causes and beats (#244)', async t => {
       }
       return originalStream(req);
     };
-    const result = await runRound({
-      client,
-      model: 'test-model',
-      lodgeContext: LODGE,
-      ROSTER: SINGLE_MEMBER_ROSTER,
-      loadMemberFile,
-      presentMemberIds: ['crowley'],
-      artifact: null,
-      notes: {},
-      roundPrompt: 'Opening prompt',
-      conversationHistory: [],
-      speakerCount: 1,
-      round: 0,
-      disposition: {},
-    });
+    const result = await runRound({ ...RUNROUND_BASE_ARGS, client });
     // Two beats were attempted (spokenCounts still credits the failed one,
     // triggering the re-consult that ends the passage via lull): the failed
     // attempt first, recorded with no text and a failure marker rather than
@@ -2753,21 +2695,7 @@ test('runRound — passage end-causes and beats (#244)', async t => {
   // idiom is recorded distinctly from both a spoken turn and a failed one.
   await t.test('records a passed turn as a distinct beat, not a failure, and keeps it in the transcript', async () => {
     const client = fakePassageClient({ speakerText: '*lets the silence sit.*', windingDownOnConsult: [false] });
-    const result = await runRound({
-      client,
-      model: 'test-model',
-      lodgeContext: LODGE,
-      ROSTER: SINGLE_MEMBER_ROSTER,
-      loadMemberFile,
-      presentMemberIds: ['crowley'],
-      artifact: null,
-      notes: {},
-      roundPrompt: 'Opening prompt',
-      conversationHistory: [],
-      speakerCount: 1,
-      round: 0,
-      disposition: {},
-    });
+    const result = await runRound({ ...RUNROUND_BASE_ARGS, client });
     assert.equal(result.beats[0].memberId, 'crowley');
     assert.equal(result.beats[0].text, '*lets the silence sit.*');
     assert.equal(result.beats[0].passed, true);
@@ -2781,21 +2709,7 @@ test('runRound — passage end-causes and beats (#244)', async t => {
       speakerText: '*leans forward.*\nI have a great deal to say about this.',
       windingDownOnConsult: [false],
     });
-    const result = await runRound({
-      client,
-      model: 'test-model',
-      lodgeContext: LODGE,
-      ROSTER: SINGLE_MEMBER_ROSTER,
-      loadMemberFile,
-      presentMemberIds: ['crowley'],
-      artifact: null,
-      notes: {},
-      roundPrompt: 'Opening prompt',
-      conversationHistory: [],
-      speakerCount: 1,
-      round: 0,
-      disposition: {},
-    });
+    const result = await runRound({ ...RUNROUND_BASE_ARGS, client });
     assert.equal(result.beats[0].passed, undefined);
   });
 });
@@ -2833,20 +2747,7 @@ function fakeCitationPassageClient({ dispositionInput }) {
 }
 
 test('runRound — citation capture piggybacked on the disposition call (#355)', async t => {
-  const baseArgs = {
-    model: 'test-model',
-    lodgeContext: LODGE,
-    ROSTER: SINGLE_MEMBER_ROSTER,
-    loadMemberFile,
-    presentMemberIds: ['crowley'],
-    artifact: null,
-    notes: {},
-    roundPrompt: 'Opening prompt',
-    conversationHistory: [],
-    speakerCount: 1,
-    round: 0,
-    disposition: {},
-  };
+  const baseArgs = RUNROUND_BASE_ARGS;
 
   await t.test('attaches citations from the disposition call onto the beat that earned them', async () => {
     const client = fakeCitationPassageClient({
@@ -2960,6 +2861,200 @@ test('runRound — citation capture piggybacked on the disposition call (#355)',
   });
 });
 
+// #445 — the per-member cache loaders below (exemplarFor, secondaryExemplarsFor,
+// residueFor, relationshipEdges) each wrap a disk read in try/catch for the
+// same reason loadLibraryCitationLookup above does: a missing or malformed
+// on-disk file must never cost a member their turn. One sub-test per loader,
+// mirroring the "throws itself" citation cases just above.
+test('runRound — per-member cache loaders degrade to no data rather than costing a turn (#445)', async t => {
+  const baseArgs = RUNROUND_BASE_ARGS;
+
+  await t.test('loadVoiceExemplar throwing does not fail the beat', async () => {
+    const client = fakePassageClient({ windingDownOnConsult: [false, true] });
+    const result = await runRound({
+      ...baseArgs,
+      client,
+      loadVoiceExemplar: () => {
+        throw new Error('library.json malformed');
+      },
+    });
+    assert.ok(result.beats.length > 0);
+    assert.ok(result.beats.every(b => !b.failed));
+  });
+
+  await t.test('loadSecondaryVoiceExemplars throwing does not fail the beat', async () => {
+    const client = fakePassageClient({ windingDownOnConsult: [false, true] });
+    const result = await runRound({
+      ...baseArgs,
+      client,
+      loadSecondaryVoiceExemplars: () => {
+        throw new Error('library.json malformed');
+      },
+    });
+    assert.ok(result.beats.length > 0);
+    assert.ok(result.beats.every(b => !b.failed));
+  });
+
+  await t.test('loadResidue throwing does not fail the beat', async () => {
+    const client = fakePassageClient({ windingDownOnConsult: [false, true] });
+    const result = await runRound({
+      ...baseArgs,
+      client,
+      loadResidue: () => {
+        throw new Error('residue file malformed');
+      },
+    });
+    assert.ok(result.beats.length > 0);
+    assert.ok(result.beats.every(b => !b.failed));
+  });
+
+  await t.test('loadRelationshipEdges throwing does not fail the beat', async () => {
+    const client = fakePassageClient({ windingDownOnConsult: [false, true] });
+    const result = await runRound({
+      ...baseArgs,
+      client,
+      loadRelationshipEdges: () => {
+        throw new Error('graph.json malformed');
+      },
+    });
+    assert.ok(result.beats.length > 0);
+    assert.ok(result.beats.every(b => !b.failed));
+  });
+});
+
+// #445 — the rest of runRound's coverage gap: onMetric is never wired into
+// any runRound fixture elsewhere in this file, so the metric-emission lines
+// in generateBeat (speaker success/failure, disposition success) never ran;
+// the best-effort disposition try/catch (#188 — "a disposition failure must
+// not get reported as a failed speaker turn") and the residueNote merge it
+// can produce were likewise never exercised end-to-end.
+test('runRound — disposition-call observability and best-effort residue merge (#445)', async t => {
+  const baseArgs = RUNROUND_BASE_ARGS;
+
+  await t.test(
+    'emits speaker and disposition metrics, and merges a returned residueNote into residueUpdates',
+    async () => {
+      const metrics = [];
+      const client = fakeCitationPassageClient({
+        dispositionInput: {
+          reflection: 'Considering.',
+          waitingOnMemberId: 'none',
+          residueNote: "Noted the visitor's question for later.",
+        },
+      });
+      const result = await runRound({ ...baseArgs, client, onMetric: m => metrics.push(m) });
+
+      const speakerMetric = metrics.find(m => m.phase === 'speaker');
+      assert.ok(speakerMetric);
+      assert.equal(speakerMetric.memberId, 'crowley');
+      assert.equal(speakerMetric.skipped, false);
+
+      const dispositionMetric = metrics.find(m => m.phase === 'disposition');
+      assert.ok(dispositionMetric);
+      assert.equal(dispositionMetric.residueNote, "Noted the visitor's question for later.");
+
+      assert.match(result.residueUpdates.crowley, /Noted the visitor's question for later\./);
+    }
+  );
+
+  await t.test('a speaker call that fails after its retry emits a skipped metric with the error', async () => {
+    const metrics = [];
+    const client = fakePassageClient({ windingDownOnConsult: [false, true] });
+    let streamCalls = 0;
+    const originalStream = client.messages.stream;
+    // Same technique as the "records a failed speaker turn" test above: fail
+    // only the first beat's two withOneRetry attempts, then let the rest of
+    // the round proceed normally so it still ends via the director's lull.
+    client.messages.stream = req => {
+      streamCalls++;
+      if (streamCalls <= 2) {
+        return {
+          [Symbol.asyncIterator]: () => ({
+            next: async () => {
+              throw new Error('network blip');
+            },
+          }),
+          finalMessage: async () => {
+            throw new Error('network blip');
+          },
+        };
+      }
+      return originalStream(req);
+    };
+    await runRound({ ...baseArgs, client, onMetric: m => metrics.push(m) });
+    const speakerMetric = metrics.find(m => m.phase === 'speaker' && m.skipped);
+    assert.ok(speakerMetric);
+    assert.equal(speakerMetric.error, 'network blip');
+    assert.equal(speakerMetric.memberId, 'crowley');
+  });
+
+  await t.test(
+    'a disposition call that throws is swallowed — the beat still succeeds and the member carries their prior disposition forward',
+    async () => {
+      const client = {
+        messages: {
+          create: async req => {
+            const toolName = req.tools?.[0]?.name;
+            if (toolName === 'select_speakers') {
+              return {
+                content: [
+                  {
+                    type: 'tool_use',
+                    input: { speakers: ['crowley'], reasoning: 'r', windingDown: true, lullNote: null },
+                  },
+                ],
+                usage: { input_tokens: 10, output_tokens: 5 },
+              };
+            }
+            throw new Error('disposition call failed');
+          },
+          stream: () => ({
+            [Symbol.asyncIterator]: async function* () {
+              yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'A turn.' } };
+            },
+            finalMessage: async () => ({ usage: { input_tokens: 20, output_tokens: 10 } }),
+          }),
+        },
+      };
+      const metrics = [];
+      const result = await runRound({ ...baseArgs, client, onMetric: m => metrics.push(m) });
+
+      assert.ok(result.beats.length > 0);
+      assert.ok(result.beats.every(b => !b.failed && b.text === 'A turn.'));
+
+      const dispositionMetrics = metrics.filter(m => m.phase === 'disposition');
+      assert.ok(dispositionMetrics.length > 0);
+      assert.ok(dispositionMetrics.every(m => m.skipped === true && m.error === 'disposition call failed'));
+      assert.deepEqual(result.residueUpdates, {});
+    }
+  );
+});
+
+// #445 — the loop's one fail-loud exit: every other way out of runRound
+// (lull, budget exhaustion, an empty pool) still has *something* to save.
+// This is the case where it doesn't — proving the throw, not just the
+// individual-beat resilience the tests above cover, is reachable.
+test('runRound — every speaker failing the round throws rather than saving an empty passage (#445)', async t => {
+  await t.test('throws when every beat in the round fails', async () => {
+    const client = fakePassageClient({ windingDownOnConsult: [false, true] });
+    // Unlike the single-failed-beat tests above, every stream() attempt
+    // fails here — both beats a single-member pool gets before
+    // MAX_TURNS_PER_POOL_MEMBER forces the re-consult that (per
+    // windingDownOnConsult) ends the passage with roundSoFar still empty.
+    client.messages.stream = () => ({
+      [Symbol.asyncIterator]: () => ({
+        next: async () => {
+          throw new Error('network blip');
+        },
+      }),
+      finalMessage: async () => {
+        throw new Error('network blip');
+      },
+    });
+    await assert.rejects(runRound({ ...RUNROUND_BASE_ARGS, client }), /Every speaker failed this round/);
+  });
+});
+
 // #196 — splinter exchanges: two members trading a private aside while the
 // main thread continues. shouldSplinter, buildSplinterUserMessage, and
 // formatSplinterBlock are pure and tested directly first; the runRound
@@ -3059,14 +3154,10 @@ test('buildSplinterUserMessage (#196)', async t => {
 
 test('formatSplinterBlock (#196)', async t => {
   await t.test('wraps the exchange in a diegetic bracket naming both participants', () => {
-    const block = formatSplinterBlock(
-      { name: 'Scholem' },
-      { name: 'Crowley' },
-      [
-        { speakerName: 'Scholem', text: 'You cannot have meant that.' },
-        { speakerName: 'Crowley', text: 'I meant every word.' },
-      ]
-    );
+    const block = formatSplinterBlock({ name: 'Scholem' }, { name: 'Crowley' }, [
+      { speakerName: 'Scholem', text: 'You cannot have meant that.' },
+      { speakerName: 'Crowley', text: 'I meant every word.' },
+    ]);
     assert.match(block, /^\[Aside — Scholem and Crowley, apart from the room\]/);
     assert.match(block, /Scholem\nYou cannot have meant that\./);
     assert.match(block, /Crowley\nI meant every word\./);
@@ -3207,28 +3298,31 @@ test('runRound — a splinter exchange interleaves into the passage record (#196
     assert.equal(result.endedBy, 'lull');
   });
 
-  await t.test('a splinter never triggers off the very first pick — there is no lastSpeakerId yet to interrupt', async () => {
-    // Same seeded disposition, but scholem is never picked first (rng: 0
-    // always favors the rank-0 candidate, crowley) — confirms the null
-    // lastSpeakerId guard rather than assuming it from the happy path above.
-    const client = fakeSplinterClient();
-    const result = await withScriptedRandom([0], () =>
-      runRound({
-        client,
-        model: 'test-model',
-        lodgeContext: LODGE,
-        ROSTER: SPLINTER_ROSTER,
-        loadMemberFile: loadSplinterMemberFile,
-        presentMemberIds: ['crowley', 'scholem'],
-        artifact: null,
-        notes: {},
-        roundPrompt: 'Opening prompt',
-        conversationHistory: [],
-        speakerCount: 2,
-        round: 0,
-        disposition: { crowley: { text: 'Unfinished business.', waitingOnMemberId: 'scholem' } },
-      })
-    );
-    assert.ok(result.beats.every(b => b.thread === undefined));
-  });
+  await t.test(
+    'a splinter never triggers off the very first pick — there is no lastSpeakerId yet to interrupt',
+    async () => {
+      // Same seeded disposition, but scholem is never picked first (rng: 0
+      // always favors the rank-0 candidate, crowley) — confirms the null
+      // lastSpeakerId guard rather than assuming it from the happy path above.
+      const client = fakeSplinterClient();
+      const result = await withScriptedRandom([0], () =>
+        runRound({
+          client,
+          model: 'test-model',
+          lodgeContext: LODGE,
+          ROSTER: SPLINTER_ROSTER,
+          loadMemberFile: loadSplinterMemberFile,
+          presentMemberIds: ['crowley', 'scholem'],
+          artifact: null,
+          notes: {},
+          roundPrompt: 'Opening prompt',
+          conversationHistory: [],
+          speakerCount: 2,
+          round: 0,
+          disposition: { crowley: { text: 'Unfinished business.', waitingOnMemberId: 'scholem' } },
+        })
+      );
+      assert.ok(result.beats.every(b => b.thread === undefined));
+    }
+  );
 });
