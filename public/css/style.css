@@ -395,7 +395,17 @@ a.lodge-btn { display:inline-block; text-decoration:none; }
    silently skipped, and reads as emphasized/keyword text (foreign terms,
    phrases inviting exploration), not a stage direction, so it shouldn't
    look identical to one. */
-.keyword-inline { font-style:italic; color:var(--lodge-amber); border-bottom:1px dotted var(--lodge-amber-dim); }
+/* No underline/border-bottom and no --lodge-amber -- both are already the
+   app's real-link signals (see a.lodge-btn, a.archival-image-link below),
+   and the dotted border-bottom here was reading as a dead/broken link.
+   Underline is reserved exclusively for .inline-link (future markdown-link
+   support, not yet parsed anywhere) so the two affordances never collide. */
+.keyword-inline { font-style:italic; color:var(--lodge-gold); }
+/* Reserved for future inline hyperlinks -- no parser emits this class yet.
+   Underline must stay exclusive to it; .keyword-inline above must never
+   carry one, or a real link stops being distinguishable from emphasis. */
+.inline-link { color:var(--lodge-amber); text-decoration:underline; cursor:pointer; }
+.inline-link:hover { color:var(--lodge-gold); }
 .after-panel { display:none; }
 /* #343: now toggled on every lull (runLullLoop), not just once at a
    meeting's true end -- the same fadeIn every other transcript/lull element
