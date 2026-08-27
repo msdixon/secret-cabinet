@@ -33,6 +33,7 @@
 // asset in the project, per the issue.
 
 const { flattenBeatCitations, flattenBeatInvokedWorks } = require('./citations');
+const { escapeHtml } = require('./transcript-format');
 
 // Same convention as build-citation-manifest.js's SOURCE_LABEL — kept as its
 // own copy rather than a shared constant, matching this codebase's existing
@@ -81,17 +82,38 @@ function groupByWork(sessions, roster, extractFn) {
   return [...works.values()].sort((a, b) => a.displayWork.localeCompare(b.displayWork));
 }
 
+// The markdown counterpart of groundedInHtml below — same "prefer a real,
+// independently checkable link" priority, in markdown link syntax instead
+// of an anchor tag. Kept as its own small duplicate rather than sharing an
+// HTML-vs-markdown-aware helper, same convention this file already uses for
+// SOURCE_LABEL (see file header).
+function groundedInMarkdown(o) {
+  if (o.libraryCitation) {
+    if (o.librarySourceUrl) return `[${o.libraryCitation}](${o.librarySourceUrl})`;
+    return o.libraryCitation;
+  }
+  if (o.webSourceUrl) return `[${o.webSourceTitle || o.webSourceUrl}](${o.webSourceUrl})`;
+  return o.webSourceTitle || null;
+}
+
 function renderCitationGroup(group) {
   const n = group.occurrences.length;
   const lines = [`### ${group.displayWork}`, '', `_${n} citation${n === 1 ? '' : 's'}._`, ''];
   group.occurrences.forEach(o => {
-    const verdict = VERDICT_LABEL[o.verdict] || 'uncertain';
+    // #461: only a citation actually checked against a real source (library
+    // text or a live lookup) is labelled with its bare verdict — an
+    // unchecked one is the model's own turn-time self-assessment, and says
+    // so, rather than reading with the same weight. See isGrounded's comment
+    // where the HTML render does the same thing.
+    const verdict = isGrounded(o.source)
+      ? VERDICT_LABEL[o.verdict] || 'uncertain'
+      : `self-reported: ${VERDICT_LABEL[o.verdict] || 'uncertain'}`;
     const source = SOURCE_LABEL[o.source || 'ungrounded'];
-    const groundedIn =
-      o.libraryCitation || (o.webSourceUrl ? `[${o.webSourceTitle}](${o.webSourceUrl})` : o.webSourceTitle);
+    const groundedIn = groundedInMarkdown(o);
     lines.push(`- **${verdict}** (${source}) — ${o.speaker}, session \`${o.sessionId}\` (${o.date})`);
     if (o.quote) lines.push(`  > "${o.quote}"`);
-    const noteLine = [o.note, groundedIn ? `grounded in: ${groundedIn}` : null].filter(Boolean).join(' — ');
+    const grounding = groundedIn ? `grounded in: ${groundedIn}` : 'not checked against any source';
+    const noteLine = [o.note, grounding].filter(Boolean).join(' — ');
     if (noteLine) lines.push(`  ${noteLine}`);
     lines.push('');
   });
@@ -162,10 +184,246 @@ function buildBibliography(sessions, roster = [], libraryEntries = []) {
   return lines.join('\n');
 }
 
+// #461 — a browsable HTML rendering of the same aggregate document, for
+// GET /bibliography (see src/reading-room.js for the sibling "public page,
+// server-rendered, no client JS" pattern this follows). buildBibliography
+// above stays the markdown form the /api/admin/bibliography route and the
+// scripts/build-bibliography.js CLI dump both still use — this doesn't
+// replace it, it's a second view over the same grouped data.
+
+function verdictClass(verdict) {
+  return verdict === 'verified' ? 'bib-verified' : verdict === 'unverified' ? 'bib-unverified' : 'bib-uncertain';
+}
+
+// A citation's verdict is only as trustworthy as what actually checked it.
+// 'library'/'web' mean a grounding pass ran against something real, and
+// groundedInHtml below gives the reader a link to go check it themselves —
+// the same job a Wikipedia article's References section does. 'model-
+// knowledge'/'ungrounded' mean the verdict is the model's own turn-time
+// self-assessment, never independently checked against anything — those get
+// the plain, unstyled treatment in renderCitationGroupHtml rather than the
+// same colored pill, so "verified" never reads with more authority on an
+// unchecked claim than on a checked one.
+function isGrounded(source) {
+  return source === 'library' || source === 'web';
+}
+
+// A grounding source, as a link the reader can actually follow to check the
+// claim themselves — built once here rather than inside a template literal
+// so the link case isn't HTML-escaped twice. Prefers the library entry's own
+// publication source_url (an independently checkable external page, not
+// just this app's say-so); falls back to an in-page link to its Library
+// appendix entry (see renderLibraryAppendixHtml's anchor ids) when no
+// external URL was captured for it. Returns null when there's genuinely
+// nothing to link to — model-knowledge/ungrounded citations were never
+// checked against anything, and renderCitationGroupHtml says so rather than
+// leaving that gap silent.
+function groundedInHtml(o) {
+  if (o.libraryCitation) {
+    const text = escapeHtml(o.libraryCitation);
+    if (o.librarySourceUrl) return `<a href="${escapeHtml(o.librarySourceUrl)}" rel="noopener">${text}</a>`;
+    if (o.libraryMatch) return `<a href="#lib-${escapeHtml(o.libraryMatch)}">${text}</a>`;
+    return text;
+  }
+  if (o.webSourceUrl)
+    return `<a href="${escapeHtml(o.webSourceUrl)}" rel="noopener">${escapeHtml(o.webSourceTitle || o.webSourceUrl)}</a>`;
+  if (o.webSourceTitle) return escapeHtml(o.webSourceTitle);
+  return null;
+}
+
+function renderCitationGroupHtml(group) {
+  const n = group.occurrences.length;
+  const occurrencesHtml = group.occurrences
+    .map(o => {
+      const verdict = VERDICT_LABEL[o.verdict] || 'uncertain';
+      const source = SOURCE_LABEL[o.source || 'ungrounded'];
+      const grounded = groundedInHtml(o);
+      const grounding = grounded
+        ? `grounded in: ${grounded}`
+        : '<span class="bib-unchecked">not checked against any source</span>';
+      const noteLine = [o.note ? escapeHtml(o.note) : null, grounding].filter(Boolean).join(' — ');
+      // Only a citation actually checked against something (library text or
+      // a live lookup) earns the colored verdict pill — see isGrounded's
+      // comment above. An unchecked verdict still shows, but as plain text
+      // reading "self-reported", not styled to look like the same kind of
+      // claim.
+      const verdictHtml = isGrounded(o.source)
+        ? `<span class="bib-verdict ${verdictClass(o.verdict)}">${verdict}</span>`
+        : `<span class="bib-verdict-unchecked">self-reported: ${verdict}</span>`;
+      return `<li class="bib-occurrence">
+        <div class="bib-occurrence-meta">${verdictHtml}<span class="bib-source">${escapeHtml(source)}</span><span class="bib-attrib">${escapeHtml(o.speaker)}, session <code>${escapeHtml(o.sessionId)}</code> (${escapeHtml(o.date || '')})</span></div>
+        ${o.quote ? `<blockquote class="bib-quote">${escapeHtml(o.quote)}</blockquote>` : ''}
+        ${noteLine ? `<p class="bib-note">${noteLine}</p>` : ''}
+      </li>`;
+    })
+    .join('\n');
+  return `<article class="bib-work">
+    <h3>${escapeHtml(group.displayWork)}</h3>
+    <p class="bib-count">${n} citation${n === 1 ? '' : 's'}</p>
+    <ul class="bib-occurrences">${occurrencesHtml}</ul>
+  </article>`;
+}
+
+function renderInvokedGroupHtml(group) {
+  const n = group.occurrences.length;
+  const itemsHtml = group.occurrences
+    .map(o => {
+      const detail = o.note ? ` — ${escapeHtml(o.note)}` : '';
+      return `<li class="bib-invoked-occurrence"><span class="bib-attrib">${escapeHtml(o.speaker)}, session <code>${escapeHtml(o.sessionId)}</code> (${escapeHtml(o.date || '')})</span>${detail}</li>`;
+    })
+    .join('\n');
+  return `<article class="bib-work bib-work-invoked">
+    <h3>${escapeHtml(group.displayWork)}</h3>
+    <p class="bib-count">invoked ${n} time${n === 1 ? '' : 's'} without a supporting quote — not independently verified.</p>
+    <ul class="bib-occurrences">${itemsHtml}</ul>
+  </article>`;
+}
+
+function renderLibraryAppendixHtml(libraryEntries) {
+  if (!libraryEntries.length) return '<p class="bib-empty">No curated library entries yet.</p>';
+  const sorted = [...libraryEntries].sort((a, b) => (a.citation || a.title).localeCompare(b.citation || b.title));
+  const items = sorted
+    .map(e => {
+      const ref = e.citation
+        ? escapeHtml(e.citation)
+        : `${escapeHtml(e.title)} — <em>${escapeHtml(e.source)}</em>${e.date ? `, ${escapeHtml(e.date)}` : ''}`;
+      const license = e.license ? ` <span class="bib-license">(${escapeHtml(e.license)})</span>` : '';
+      const url = e.source_url ? ` — <a href="${escapeHtml(e.source_url)}" rel="noopener">source</a>` : '';
+      // #461 follow-up: the anchor a grounded citation's "grounded in" link
+      // points to (groundedInHtml above) when the entry has no source_url of
+      // its own to link out to directly.
+      const id = e.id ? ` id="lib-${escapeHtml(e.id)}"` : '';
+      return `<li${id}>${ref}${license}${url}</li>`;
+    })
+    .join('\n');
+  return `<ul class="bib-library">${items}</ul>`;
+}
+
+function renderBibliographyPage(sessions, roster = [], libraryEntries = []) {
+  const withRecord = sessions.filter(s => (s.rounds || []).some(seg => Array.isArray(seg.beats)));
+  const citationGroups = groupByWork(sessions, roster, citationsForSession);
+  const invokedGroups = groupByWork(sessions, roster, flattenBeatInvokedWorks);
+
+  const citedHtml = citationGroups.length
+    ? citationGroups.map(renderCitationGroupHtml).join('\n')
+    : '<p class="bib-empty">No citations captured yet.</p>';
+  const referencedHtml = invokedGroups.length
+    ? invokedGroups.map(renderInvokedGroupHtml).join('\n')
+    : '<p class="bib-empty">None captured yet.</p>';
+  const libraryHtml = renderLibraryAppendixHtml(libraryEntries);
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bibliography — The Secret-Cabin-et</title>
+<meta name="description" content="A cumulative works-cited record of every session convened by The Secret-Cabin-et.">
+<meta name="robots" content="noindex, nofollow">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=UnifrakturMaguntia&family=IM+Fell+English:ital@0;1&family=Crimson+Pro:ital,wght@0,300;0,400;0,600;1,300;1,400&display=swap');
+  :root {
+    --bg:#0e0b08; --panel:#17120d; --border:#3a2e1e; --amber:#c8922a; --amber-dim:#7a5418;
+    --cream:#e8dfc8; --muted:#c0a882; --ash:#9a8a74; --footer:#5a4a3a;
+    --verified:#7a9a5a; --unverified:#a05050; --uncertain:#b08a3a;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg:#f2e8d0; --panel:#e8dcc0; --border:#cbb98f; --amber:#8a5f14; --amber-dim:#a07a2a;
+      --cream:#2a2015; --muted:#4a3d28; --ash:#6a5a42; --footer:#a0906e;
+      --verified:#4a6a34; --unverified:#8a3030; --uncertain:#7a5a1a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--cream); font-family: 'Crimson Pro', Georgia, serif; font-size: 17px; line-height: 1.7; }
+  a { color: var(--amber); }
+  .bib-wrap { max-width: 760px; margin: 0 auto; padding: 64px 24px 96px; }
+  .bib-back { display: inline-block; font-family: 'IM Fell English', serif; font-style: italic; font-size: 13px; color: var(--ash); text-decoration: none; margin-bottom: 24px; }
+  .bib-back:hover { color: var(--amber); }
+  .bib-masthead { text-align: center; margin-bottom: 8px; }
+  .bib-masthead-name { font-family: 'UnifrakturMaguntia', serif; font-size: 26px; color: var(--amber); letter-spacing: 2px; }
+  .bib-masthead-tag { font-family: 'IM Fell English', serif; font-style: italic; font-size: 12px; color: var(--ash); letter-spacing: 3px; text-transform: uppercase; margin-top: 6px; }
+  .bib-intro { font-style: italic; color: var(--muted); text-align: center; max-width: 560px; margin: 28px auto 0; }
+  .bib-meta { text-align: center; font-family: 'IM Fell English', serif; font-size: 13px; color: var(--ash); margin: 16px 0 32px; }
+  .bib-toc { display: flex; justify-content: center; gap: 18px; font-family: 'IM Fell English', serif; font-size: 13px; letter-spacing: .5px; margin-bottom: 56px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
+  .bib-toc a { text-decoration: none; }
+  .bib-toc a:hover { text-decoration: underline; }
+  section.bib-section { margin-bottom: 64px; }
+  .bib-section h2 { font-family: 'IM Fell English', serif; font-size: 20px; letter-spacing: 1px; color: var(--amber); border-bottom: 1px solid var(--border); padding-bottom: 12px; margin-bottom: 8px; }
+  .bib-section-note { color: var(--muted); font-size: 15px; margin-bottom: 32px; }
+  .bib-work { margin-bottom: 36px; }
+  .bib-work h3 { font-family: 'IM Fell English', serif; font-size: 16px; color: var(--cream); margin: 0 0 4px; }
+  .bib-count { font-size: 12px; color: var(--ash); margin: 0 0 10px; text-transform: uppercase; letter-spacing: .5px; }
+  .bib-occurrences { list-style: none; margin: 0; padding: 0; }
+  .bib-occurrence, .bib-invoked-occurrence { padding: 10px 0 10px 16px; border-left: 2px solid var(--border); margin-bottom: 6px; }
+  .bib-occurrence-meta { font-size: 12px; color: var(--ash); display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; }
+  .bib-attrib { font-family: 'IM Fell English', serif; font-style: italic; }
+  .bib-attrib code { font-family: monospace; font-style: normal; }
+  .bib-verdict { text-transform: uppercase; font-size: 11px; letter-spacing: .5px; padding: 1px 6px; border-radius: 2px; border: 1px solid currentColor; }
+  .bib-verified { color: var(--verified); }
+  .bib-unverified { color: var(--unverified); }
+  .bib-uncertain { color: var(--uncertain); }
+  /* An unchecked citation's own turn-time self-assessment — deliberately not
+     styled like .bib-verdict's colored, bordered pill, so a claim nothing
+     has actually verified never reads with the same authority as one that
+     was checked against a real source. See isGrounded's comment in the
+     render function for why the two are kept visually distinct. */
+  .bib-verdict-unchecked { font-size: 11px; color: var(--ash); font-style: italic; }
+  .bib-unchecked { font-style: italic; }
+  .bib-source { color: var(--ash); font-style: italic; }
+  .bib-quote { margin: 8px 0 4px; padding-left: 12px; border-left: 2px solid var(--amber-dim); font-style: italic; color: var(--cream); }
+  .bib-note { margin: 4px 0 0; font-size: 14px; color: var(--muted); }
+  .bib-empty { color: var(--ash); font-style: italic; }
+  .bib-library { list-style: none; margin: 0; padding: 0; }
+  .bib-library li { padding: 8px 0; border-bottom: 1px solid var(--border); }
+  .bib-license { color: var(--ash); font-size: 13px; }
+  .bib-footer { text-align: center; margin-top: 72px; font-family: 'IM Fell English', serif; font-size: 11px; letter-spacing: 1px; color: var(--footer); line-height: 1.8; }
+</style>
+</head>
+<body>
+  <div class="bib-wrap">
+    <a class="bib-back" href="/">← The Salon</a>
+    <header class="bib-masthead">
+      <div class="bib-masthead-name">The Secret-Cabin-et</div>
+      <div class="bib-masthead-tag">Bibliography</div>
+    </header>
+    <p class="bib-intro">A works-cited record of the project itself, in appendix form: what was cited across every convened session, what was invoked by name or allusion without a supporting quote, and the curated primary-source library the room draws from. Citation status is carried through honestly on every entry — see each occurrence's grounding label — rather than flattened away.</p>
+    <p class="bib-meta">Generated from ${sessions.length} session${sessions.length === 1 ? '' : 's'} on disk, ${withRecord.length} with a turn-level record to cite from.</p>
+    <nav class="bib-toc">
+      <a href="#cited">I. Works Cited</a>
+      <a href="#referenced">II. Works Referenced</a>
+      <a href="#library">III. The Cabinet's Library</a>
+    </nav>
+
+    <section class="bib-section" id="cited">
+      <h2>I. Works Cited</h2>
+      <p class="bib-section-note">Direct citations — a quote, attributed to the speaker and session that made it.</p>
+      ${citedHtml}
+    </section>
+
+    <section class="bib-section" id="referenced">
+      <h2>II. Works Referenced — Invoked, Not Quoted</h2>
+      <p class="bib-section-note">A member reaching for a reading without quoting it, or naming a tradition rather than a title. Weaker evidence than Works Cited: named in passing, never independently checked — kept separate so what's confirmed and what's merely gestured at never get mistaken for each other.</p>
+      ${referencedHtml}
+    </section>
+
+    <section class="bib-section" id="library">
+      <h2>III. Appendix: The Cabinet's Library</h2>
+      <p class="bib-section-note">The curated primary-source texts each member draws from, independent of any single session — the most directly defensible bibliographic asset in the project.</p>
+      ${libraryHtml}
+    </section>
+
+    <footer class="bib-footer">Compiled from every convened session of The Secret-Cabin-et.<br>An imaginative exercise, not a historical record.</footer>
+  </div>
+</body>
+</html>`;
+}
+
 module.exports = {
   normalizeWorkKey,
   citationsForSession,
   groupByWork,
   renderLibraryAppendix,
   buildBibliography,
+  renderBibliographyPage,
 };

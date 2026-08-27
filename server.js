@@ -493,6 +493,8 @@ registerSessionRoutes(app, {
   loadManifestSessions: citationManifest.loadSessions,
   buildCitationManifest: sessions => citationManifest.buildManifest(sessions, ROSTER),
   buildBibliography: sessions => bibliography.buildBibliography(sessions, ROSTER, loadBibliographyLibraryEntries()),
+  renderBibliographyPage: sessions =>
+    bibliography.renderBibliographyPage(sessions, ROSTER, loadBibliographyLibraryEntries()),
 });
 
 registerVoiceRoutes(app, {
