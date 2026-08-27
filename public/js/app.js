@@ -1296,12 +1296,13 @@ async function verifyCitations() {
 }
 
 // #460: Verify Citations upgrades citation sources (library/web-grounded vs.
-// Claude's own knowledge) that Export Scholarly's bibliography already draws
+// Claude's own knowledge) that the Source Notes bibliography already draws
 // on -- but nothing said so at the point of the verify action itself. #331
 // tried a tooltip on the (separate-menu) export button instead, which never
 // surfaces at the moment someone clicks Verify expecting a visible result.
 // This names what just got upgraded and links straight to the destination it
-// feeds, right beside the button that triggered it.
+// feeds, in its own row below the buttons -- it's the result of the action,
+// not another action to sit inline beside it.
 function showCitationVerifyResult(citations) {
   const el = document.getElementById('citation-verify-result');
   if (!el) return;
@@ -1311,7 +1312,7 @@ function showCitationVerifyResult(citations) {
   }
   const grounded = citations.filter(c => c.source === 'library' || c.source === 'web').length;
   el.innerHTML = `${grounded} of ${citations.length} citation${citations.length === 1 ? '' : 's'} grounded to a source` +
-    ` — <button type="button" class="citation-verify-link" data-keep-menu-open onclick="openScholarlyExport()">Export Scholarly →</button>`;
+    ` — <button type="button" class="citation-verify-link" data-keep-menu-open onclick="openScholarlyExport()">Export Source Notes →</button>`;
   el.hidden = false;
 }
 

@@ -206,12 +206,6 @@
         </div>
 
         <button class="lodge-btn" id="verify-citations-btn" onclick="verifyCitations()">Verify Citations ⚑</button>
-        <!-- #460: the verify pass upgrades citation sources but has no visible
-             link to the bibliography it feeds -- #331 tried a tooltip on the
-             (different-menu) export button, which doesn't surface at the
-             moment of action. This appears only after a completed verify
-             call, at the point of that action. -->
-        <span class="citation-verify-result" id="citation-verify-result" hidden></span>
         <button class="lodge-btn" style="border-color:var(--lodge-ash);color:var(--lodge-ash);" onclick="startWitness()" title="Replay this meeting again from the start, paced by reading time">◎ Watch Again</button>
         <button class="lodge-btn" style="border-color:var(--lodge-ash);color:var(--lodge-ash);" onclick="window.Metrics.toggle()" title="Tokens, cost, and the director's casting rationale for this session">⚙ Metrics</button>
 
@@ -279,6 +273,14 @@
           </div>
         </div>
       </div>
+
+      <!-- #460: the verify pass upgrades citation sources but has no visible
+           link to the bibliography it feeds -- #331 tried a tooltip on the
+           (different-menu) export button, which doesn't surface at the
+           moment of action. This is the result of that action, so it sits in
+           its own row below the buttons rather than crowded in beside them;
+           it appears only after a completed verify call. -->
+      <div class="after-row citation-verify-row" id="citation-verify-result" hidden></div>
 
       <div class="after-row interject-form" id="interject-form" style="display:none;">
         <input type="text" class="interject-input" id="interject-input" placeholder="A presence moves through the room. It has something to say..." onkeydown="if(event.key==='Enter') interject();" />
