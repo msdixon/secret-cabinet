@@ -1,0 +1,1 @@
+Inline `*emphasis*` text (`.keyword-inline`) shared its amber color and a dotted border-bottom with the app's real links, making it look clickable; it now renders in a distinct gold with no underline, and a reserved `.inline-link` class (amber + underline) is in place for when inline hyperlink parsing is actually built. [#464](https://github.com/msdixon/secret-cabinet/pull/464)
