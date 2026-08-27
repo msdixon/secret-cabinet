@@ -52,6 +52,7 @@ function registerSessionRoutes(
     loadManifestSessions,
     buildCitationManifest,
     buildBibliography,
+    renderBibliographyPage,
   }
 ) {
   // GET /api/sessions — list recent sessions, with optional ?q=, ?tag=, ?thread= filters
@@ -174,6 +175,24 @@ function registerSessionRoutes(
       res.type('text/markdown').send(buildBibliography(sessions));
     } catch (err) {
       res.status(500).json({ error: 'Failed to build bibliography' });
+    }
+  });
+
+  // GET /bibliography — #461: a browsable, styled counterpart to the raw
+  // markdown dump above. Same data, same "aggregate document only" shape —
+  // no session/transcript content beyond what a citation quote already
+  // carries — but a page a collaborator or grant reviewer could actually be
+  // handed a link to, rather than an API response. Not in server.js's
+  // requireAuth bypass list (unlike /reading-room/*), so it stays gated the
+  // same way /lodge is: visible in the mantel nav to everyone, but an
+  // unauthenticated click lands on the passphrase gate — see #379's
+  // route-inventory precedent for that pattern.
+  app.get('/bibliography', (req, res) => {
+    try {
+      const sessions = loadManifestSessions(sessionsDir);
+      res.send(renderBibliographyPage(sessions));
+    } catch (err) {
+      res.status(500).send('Failed to build bibliography.');
     }
   });
 
