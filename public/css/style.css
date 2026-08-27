@@ -682,6 +682,10 @@ a.archival-image-link:hover { border-color:var(--lodge-amber-dim); cursor:pointe
 .export-icon.export-obsidian:hover, .export-icon.export-obsidian.active { background:rgba(80,130,80,0.15); }
 .export-dest-config { display:flex; flex-direction:column; gap:10px; }
 .export-dest-hint { font-family:'IM Fell English',serif; font-style:italic; font-size:12px; color:var(--lodge-muted); margin:0; padding:2px; }
+.citation-verify-result { font-family:'IM Fell English',serif; font-style:italic; font-size:12px; color:var(--lodge-muted); }
+.citation-verify-result[hidden] { display:none; }
+.citation-verify-link { font:inherit; font-style:normal; background:transparent; border:none; padding:0; margin-left:4px; color:var(--lodge-amber); cursor:pointer; text-decoration:underline; text-underline-offset:2px; }
+.citation-verify-link:hover { color:var(--lodge-amber-dim); }
 .export-dest-panel { display:flex; flex-direction:column; gap:10px; padding-top:8px; border-top:1px solid var(--lodge-border); }
 .export-dest-panel[hidden] { display:none; }
 .export-dest-desc { font-family:'Crimson Pro',serif; font-size:13px; font-style:italic; color:var(--lodge-muted); margin:0; }

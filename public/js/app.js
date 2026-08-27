@@ -1177,6 +1177,7 @@ function showSessionControls() {
   document.getElementById('verify-citations-btn').className = 'lodge-btn visible';
   document.getElementById('reveal-player-turns-btn').className =
     'lodge-btn' + (sessionPlayerTurns.length ? ' visible' : '');
+  hideCitationVerifyResult();
   window.Export.updateScholarlyExportButton();
 }
 
@@ -1192,6 +1193,7 @@ function hideSessionControls() {
   document.getElementById('after-panel').className = 'after-panel';
   document.getElementById('interject-form').style.display = 'none';
   closeAllAfterMenus();
+  hideCitationVerifyResult();
 }
 
 // ── Citation verification ────────────────────────────────────────────────────
@@ -1285,11 +1287,50 @@ async function verifyCitations() {
     applyCitationFlags(citations);
     window.Export.updateScholarlyExportButton();
     setStatus(`${citations.length} citation${citations.length === 1 ? '' : 's'} reviewed.`, false);
+    showCitationVerifyResult(citations);
   } catch (err) {
     setError('Citation verification failed.', verifyCitations);
   } finally {
     btn.disabled = false;
   }
+}
+
+// #460: Verify Citations upgrades citation sources (library/web-grounded vs.
+// Claude's own knowledge) that Export Scholarly's bibliography already draws
+// on -- but nothing said so at the point of the verify action itself. #331
+// tried a tooltip on the (separate-menu) export button instead, which never
+// surfaces at the moment someone clicks Verify expecting a visible result.
+// This names what just got upgraded and links straight to the destination it
+// feeds, right beside the button that triggered it.
+function showCitationVerifyResult(citations) {
+  const el = document.getElementById('citation-verify-result');
+  if (!el) return;
+  if (!citations.length) {
+    el.hidden = true;
+    return;
+  }
+  const grounded = citations.filter(c => c.source === 'library' || c.source === 'web').length;
+  el.innerHTML = `${grounded} of ${citations.length} citation${citations.length === 1 ? '' : 's'} grounded to a source` +
+    ` — <button type="button" class="citation-verify-link" data-keep-menu-open onclick="openScholarlyExport()">Export Scholarly →</button>`;
+  el.hidden = false;
+}
+
+function hideCitationVerifyResult() {
+  const el = document.getElementById('citation-verify-result');
+  if (el) el.hidden = true;
+}
+
+// Jumps straight to the destination Verify Citations feeds, from the result
+// message above, rather than leaving the user to find Preserve > note on
+// their own (the tooltip-only path #331 shipped and #460 found insufficient).
+function openScholarlyExport() {
+  const menu = document.getElementById('preserve-menu');
+  if (menu && !menu.classList.contains('open')) {
+    closeAllAfterMenus();
+    menu.classList.add('open');
+  }
+  window.Export.selectDestination('scholarly');
+  document.getElementById('export-scholarly-btn')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 }
 
 // ── Player turn markers ──────────────────────────────────────────────────────
