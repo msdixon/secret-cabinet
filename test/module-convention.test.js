@@ -58,6 +58,7 @@ const MODULES = [
       'stirFire',
       'setDocumentText',
       'closeDocumentInspect',
+      'citeFromBeat',
     ],
   },
   // #29: voice.js has no deps bag (unlike its siblings) -- it needs nothing

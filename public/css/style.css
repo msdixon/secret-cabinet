@@ -917,6 +917,14 @@ a.archival-image-link:hover { border-color:var(--lodge-amber-dim); cursor:pointe
   clear:both; font-family:'Crimson Pro',serif; font-size:16px; line-height:1.7;
   color:var(--lodge-bg); white-space:pre-wrap;
 }
+/* #34 follow-up: the passage a live citation (#355) matched against this
+   document, for the duration scene.js's citeFromBeat pulse holds it. Warm
+   fire-toned background rather than a plain yellow highlight, consistent
+   with the room's own palette. */
+.document-citation-mark {
+  background:var(--lodge-fire); color:var(--lodge-parchment);
+  border-radius:2px; padding:0 2px;
+}
 .witness-stage .transcript-entry { max-width:70%; }
 .witness-stage .speaker-name { font-size:22px; }
 .witness-stage .speech-text { font-size:17px; }

@@ -599,6 +599,13 @@ window.LodgeScene = (function () {
   let documentVisible = false;
   let documentInspecting = false;
   let onDocumentInspectChange = null;
+  // #34 follow-up: kept alongside documentVisible so citeFromBeat() below
+  // has the actual provocation text to check a live citation against,
+  // without re-reading window.Export.getEntry() itself -- scene.js stays
+  // ignorant of where the text comes from, same as documentVisible already is.
+  let documentTextRaw = '';
+  let citationHighlightTimer = null;
+  let onDocumentCitationChange = null;
 
   // The book itself -- a base plinth, a spine, and two pages tilted up from
   // it, the same primitives-only economy the candle above uses rather than
@@ -671,8 +678,12 @@ window.LodgeScene = (function () {
   function setDocumentText(text) {
     if (!sceneRef || !documentMeshes.length) return;
     documentVisible = !!(text && text.trim());
+    documentTextRaw = documentVisible ? text : '';
     documentMeshes.forEach(m => (m.isVisible = documentVisible));
     if (documentInspecting) closeDocumentInspect();
+    // A new/cleared document invalidates any in-flight citation highlight —
+    // same reasoning as the inspect-panel close just above.
+    clearDocumentCitation();
   }
 
   // Reuses applySeatState's own eased-tween helper (animateSeatProp) and
@@ -690,6 +701,84 @@ window.LodgeScene = (function () {
         `documentGlow-${i}`
       );
     });
+  }
+
+  // #34 follow-up (the issue's deferred "per-passage highlighting synced to
+  // citations" half): the book has no text-rendering pipeline (still out of
+  // scope, per this file's own #34 comment above) so there's no literal
+  // passage to light up on the mesh itself -- this is a brighter, distinct
+  // pulse above the ambient "someone is speaking" glow updateDocumentAttention
+  // already drives, reserved for the moment a beat's own citation turns out
+  // to quote the document rather than some other real work. app.js's
+  // onDocumentCitationChange callback is where the literal passage
+  // highlighting happens, in the DOM reading panel it already owns (#257's
+  // split: scene.js is 3D/camera, app.js is DOM) -- this function only
+  // decides *whether* one of the beat's citations matches, and hands the
+  // matched quote across.
+  //
+  // Matching is a normalize-then-substring check, same shape as app.js's own
+  // applyCitationFlags (matching a citation quote against rendered transcript
+  // text) applied here against the document instead: strip markdown emphasis
+  // asterisks, fold curly quotes to straight ones, lowercase. Deliberately
+  // NOT whitespace-collapsed here (unlike applyCitationFlags) — app.js's
+  // handleDocumentCitationChange needs char-for-char positions in the
+  // original document text to wrap a <mark> around, and collapsing runs of
+  // whitespace would shift those positions out from under it. A document
+  // with irregular internal whitespace at exactly the cited span is a named,
+  // accepted gap (no highlight fires) rather than solved — most citations of
+  // the document don't hit that edge, and a missed highlight is a quiet
+  // no-op, not a visible bug.
+  const CITATION_HIGHLIGHT_MS = 9000; // fixed, generous read time for a ~10-25 word quote -- a state cue, not a literal timer synced to anything
+  const DOCUMENT_GLOW_CITED = 0.55;
+
+  function normalizeForCitationMatch(s) {
+    return s
+      .replace(/[‘’]/g, "'")
+      .replace(/[“”]/g, '"')
+      .toLowerCase();
+  }
+
+  function findCitedQuote(citations) {
+    if (!documentVisible || !documentTextRaw || !Array.isArray(citations)) return null;
+    const haystack = normalizeForCitationMatch(documentTextRaw);
+    const match = citations.find(c => {
+      const needle = normalizeForCitationMatch((c.quote || '').replace(/\*/g, '').trim());
+      return needle && haystack.includes(needle);
+    });
+    return match ? match.quote : null;
+  }
+
+  // Called from app.js on the live `citation` SSE event (one per beat that
+  // cited anything) — most calls find no match (citing some other real work
+  // is the common case, per the citations tool's own schema) and are a
+  // silent no-op.
+  function citeFromBeat(citations) {
+    const quote = findCitedQuote(citations);
+    if (!quote) return;
+
+    if (citationHighlightTimer) clearTimeout(citationHighlightTimer);
+    documentPageMats.forEach((mat, i) => {
+      animateSeatProp(
+        mat,
+        'emissiveColor',
+        BABYLON.Color3.FromHexString(DOCUMENT_PAGE_COLOR).scale(DOCUMENT_GLOW_CITED),
+        `documentGlow-${i}`
+      );
+    });
+    onDocumentCitationChange?.(quote);
+
+    citationHighlightTimer = setTimeout(() => {
+      citationHighlightTimer = null;
+      updateDocumentAttention(!!currentSpeakingId);
+      onDocumentCitationChange?.(null);
+    }, CITATION_HIGHLIGHT_MS);
+  }
+
+  function clearDocumentCitation() {
+    if (!citationHighlightTimer) return;
+    clearTimeout(citationHighlightTimer);
+    citationHighlightTimer = null;
+    onDocumentCitationChange?.(null);
   }
 
   // #34: click-to-inspect. The scene has no camera controls (init()'s own
@@ -1378,6 +1467,7 @@ window.LodgeScene = (function () {
       // click handler, not camera-drag input, so this still holds.)
       cameraRef = camera;
       onDocumentInspectChange = options.onDocumentInspect || null;
+      onDocumentCitationChange = options.onDocumentCitation || null;
 
       // Light *colors* need to be bright/warm regardless of the dark theme
       // tokens — those describe surface/background hues, not illumination.
@@ -1408,6 +1498,9 @@ window.LodgeScene = (function () {
       // document.
       documentVisible = false;
       documentInspecting = false;
+      documentTextRaw = '';
+      if (citationHighlightTimer) clearTimeout(citationHighlightTimer);
+      citationHighlightTimer = null;
 
       // #34: click-to-inspect the document object. A native canvas click
       // listener + scene.pick(), not Babylon's ActionManager -- ActionManager
@@ -1489,5 +1582,6 @@ window.LodgeScene = (function () {
     stirFire,
     setDocumentText,
     closeDocumentInspect,
+    citeFromBeat,
   };
 })();

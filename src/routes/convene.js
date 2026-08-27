@@ -151,6 +151,11 @@ function registerConveneRoutes(
         onPoolUpdate: pool => res.write(`data: ${JSON.stringify({ pool })}\n\n`),
         onDisposition: (memberId, waitingOnMemberId) =>
           res.write(`data: ${JSON.stringify({ disposition: { memberId, waitingOnMemberId } })}\n\n`),
+        // #34 follow-up: live per-beat citations, so the room's book can
+        // highlight a passage the instant a member quotes it, instead of
+        // only after the round settles.
+        onCitation: (memberId, citations) =>
+          res.write(`data: ${JSON.stringify({ citation: { memberId, citations } })}\n\n`),
         onMetric: m => {
           generationMetrics.push(m);
           if (m.skipped) console.warn('[degraded]', m.phase, m.memberId || '', '—', m.error);
@@ -307,6 +312,9 @@ function registerConveneRoutes(
         onPoolUpdate: pool => res.write(`data: ${JSON.stringify({ pool })}\n\n`),
         onDisposition: (memberId, waitingOnMemberId) =>
           res.write(`data: ${JSON.stringify({ disposition: { memberId, waitingOnMemberId } })}\n\n`),
+        // #34 follow-up: see /api/convene above.
+        onCitation: (memberId, citations) =>
+          res.write(`data: ${JSON.stringify({ citation: { memberId, citations } })}\n\n`),
         onMetric: m => {
           session.generationMetrics.push(m);
           if (m.skipped) console.warn('[degraded]', m.phase, m.memberId || '', '—', m.error);
@@ -389,6 +397,9 @@ function registerConveneRoutes(
         onPoolUpdate: pool => res.write(`data: ${JSON.stringify({ pool })}\n\n`),
         onDisposition: (memberId, waitingOnMemberId) =>
           res.write(`data: ${JSON.stringify({ disposition: { memberId, waitingOnMemberId } })}\n\n`),
+        // #34 follow-up: see /api/convene above.
+        onCitation: (memberId, citations) =>
+          res.write(`data: ${JSON.stringify({ citation: { memberId, citations } })}\n\n`),
         onMetric: m => {
           session.generationMetrics.push(m);
           if (m.skipped) console.warn('[degraded]', m.phase, m.memberId || '', '—', m.error);
