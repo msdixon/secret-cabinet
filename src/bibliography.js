@@ -82,17 +82,38 @@ function groupByWork(sessions, roster, extractFn) {
   return [...works.values()].sort((a, b) => a.displayWork.localeCompare(b.displayWork));
 }
 
+// The markdown counterpart of groundedInHtml below — same "prefer a real,
+// independently checkable link" priority, in markdown link syntax instead
+// of an anchor tag. Kept as its own small duplicate rather than sharing an
+// HTML-vs-markdown-aware helper, same convention this file already uses for
+// SOURCE_LABEL (see file header).
+function groundedInMarkdown(o) {
+  if (o.libraryCitation) {
+    if (o.librarySourceUrl) return `[${o.libraryCitation}](${o.librarySourceUrl})`;
+    return o.libraryCitation;
+  }
+  if (o.webSourceUrl) return `[${o.webSourceTitle || o.webSourceUrl}](${o.webSourceUrl})`;
+  return o.webSourceTitle || null;
+}
+
 function renderCitationGroup(group) {
   const n = group.occurrences.length;
   const lines = [`### ${group.displayWork}`, '', `_${n} citation${n === 1 ? '' : 's'}._`, ''];
   group.occurrences.forEach(o => {
-    const verdict = VERDICT_LABEL[o.verdict] || 'uncertain';
+    // #461: only a citation actually checked against a real source (library
+    // text or a live lookup) is labelled with its bare verdict — an
+    // unchecked one is the model's own turn-time self-assessment, and says
+    // so, rather than reading with the same weight. See isGrounded's comment
+    // where the HTML render does the same thing.
+    const verdict = isGrounded(o.source)
+      ? VERDICT_LABEL[o.verdict] || 'uncertain'
+      : `self-reported: ${VERDICT_LABEL[o.verdict] || 'uncertain'}`;
     const source = SOURCE_LABEL[o.source || 'ungrounded'];
-    const groundedIn =
-      o.libraryCitation || (o.webSourceUrl ? `[${o.webSourceTitle}](${o.webSourceUrl})` : o.webSourceTitle);
+    const groundedIn = groundedInMarkdown(o);
     lines.push(`- **${verdict}** (${source}) — ${o.speaker}, session \`${o.sessionId}\` (${o.date})`);
     if (o.quote) lines.push(`  > "${o.quote}"`);
-    const noteLine = [o.note, groundedIn ? `grounded in: ${groundedIn}` : null].filter(Boolean).join(' — ');
+    const grounding = groundedIn ? `grounded in: ${groundedIn}` : 'not checked against any source';
+    const noteLine = [o.note, grounding].filter(Boolean).join(' — ');
     if (noteLine) lines.push(`  ${noteLine}`);
     lines.push('');
   });
@@ -174,10 +195,36 @@ function verdictClass(verdict) {
   return verdict === 'verified' ? 'bib-verified' : verdict === 'unverified' ? 'bib-unverified' : 'bib-uncertain';
 }
 
-// A grounding source, as HTML — built once here rather than inside a
-// template literal so the web-source case (a link) isn't escaped twice.
+// A citation's verdict is only as trustworthy as what actually checked it.
+// 'library'/'web' mean a grounding pass ran against something real, and
+// groundedInHtml below gives the reader a link to go check it themselves —
+// the same job a Wikipedia article's References section does. 'model-
+// knowledge'/'ungrounded' mean the verdict is the model's own turn-time
+// self-assessment, never independently checked against anything — those get
+// the plain, unstyled treatment in renderCitationGroupHtml rather than the
+// same colored pill, so "verified" never reads with more authority on an
+// unchecked claim than on a checked one.
+function isGrounded(source) {
+  return source === 'library' || source === 'web';
+}
+
+// A grounding source, as a link the reader can actually follow to check the
+// claim themselves — built once here rather than inside a template literal
+// so the link case isn't HTML-escaped twice. Prefers the library entry's own
+// publication source_url (an independently checkable external page, not
+// just this app's say-so); falls back to an in-page link to its Library
+// appendix entry (see renderLibraryAppendixHtml's anchor ids) when no
+// external URL was captured for it. Returns null when there's genuinely
+// nothing to link to — model-knowledge/ungrounded citations were never
+// checked against anything, and renderCitationGroupHtml says so rather than
+// leaving that gap silent.
 function groundedInHtml(o) {
-  if (o.libraryCitation) return escapeHtml(o.libraryCitation);
+  if (o.libraryCitation) {
+    const text = escapeHtml(o.libraryCitation);
+    if (o.librarySourceUrl) return `<a href="${escapeHtml(o.librarySourceUrl)}" rel="noopener">${text}</a>`;
+    if (o.libraryMatch) return `<a href="#lib-${escapeHtml(o.libraryMatch)}">${text}</a>`;
+    return text;
+  }
   if (o.webSourceUrl)
     return `<a href="${escapeHtml(o.webSourceUrl)}" rel="noopener">${escapeHtml(o.webSourceTitle || o.webSourceUrl)}</a>`;
   if (o.webSourceTitle) return escapeHtml(o.webSourceTitle);
@@ -191,11 +238,20 @@ function renderCitationGroupHtml(group) {
       const verdict = VERDICT_LABEL[o.verdict] || 'uncertain';
       const source = SOURCE_LABEL[o.source || 'ungrounded'];
       const grounded = groundedInHtml(o);
-      const noteLine = [o.note ? escapeHtml(o.note) : null, grounded ? `grounded in: ${grounded}` : null]
-        .filter(Boolean)
-        .join(' — ');
+      const grounding = grounded
+        ? `grounded in: ${grounded}`
+        : '<span class="bib-unchecked">not checked against any source</span>';
+      const noteLine = [o.note ? escapeHtml(o.note) : null, grounding].filter(Boolean).join(' — ');
+      // Only a citation actually checked against something (library text or
+      // a live lookup) earns the colored verdict pill — see isGrounded's
+      // comment above. An unchecked verdict still shows, but as plain text
+      // reading "self-reported", not styled to look like the same kind of
+      // claim.
+      const verdictHtml = isGrounded(o.source)
+        ? `<span class="bib-verdict ${verdictClass(o.verdict)}">${verdict}</span>`
+        : `<span class="bib-verdict-unchecked">self-reported: ${verdict}</span>`;
       return `<li class="bib-occurrence">
-        <div class="bib-occurrence-meta"><span class="bib-verdict ${verdictClass(o.verdict)}">${verdict}</span><span class="bib-source">${escapeHtml(source)}</span><span class="bib-attrib">${escapeHtml(o.speaker)}, session <code>${escapeHtml(o.sessionId)}</code> (${escapeHtml(o.date || '')})</span></div>
+        <div class="bib-occurrence-meta">${verdictHtml}<span class="bib-source">${escapeHtml(source)}</span><span class="bib-attrib">${escapeHtml(o.speaker)}, session <code>${escapeHtml(o.sessionId)}</code> (${escapeHtml(o.date || '')})</span></div>
         ${o.quote ? `<blockquote class="bib-quote">${escapeHtml(o.quote)}</blockquote>` : ''}
         ${noteLine ? `<p class="bib-note">${noteLine}</p>` : ''}
       </li>`;
@@ -233,7 +289,11 @@ function renderLibraryAppendixHtml(libraryEntries) {
         : `${escapeHtml(e.title)} — <em>${escapeHtml(e.source)}</em>${e.date ? `, ${escapeHtml(e.date)}` : ''}`;
       const license = e.license ? ` <span class="bib-license">(${escapeHtml(e.license)})</span>` : '';
       const url = e.source_url ? ` — <a href="${escapeHtml(e.source_url)}" rel="noopener">source</a>` : '';
-      return `<li>${ref}${license}${url}</li>`;
+      // #461 follow-up: the anchor a grounded citation's "grounded in" link
+      // points to (groundedInHtml above) when the entry has no source_url of
+      // its own to link out to directly.
+      const id = e.id ? ` id="lib-${escapeHtml(e.id)}"` : '';
+      return `<li${id}>${ref}${license}${url}</li>`;
     })
     .join('\n');
   return `<ul class="bib-library">${items}</ul>`;
@@ -278,6 +338,8 @@ function renderBibliographyPage(sessions, roster = [], libraryEntries = []) {
   body { margin: 0; background: var(--bg); color: var(--cream); font-family: 'Crimson Pro', Georgia, serif; font-size: 17px; line-height: 1.7; }
   a { color: var(--amber); }
   .bib-wrap { max-width: 760px; margin: 0 auto; padding: 64px 24px 96px; }
+  .bib-back { display: inline-block; font-family: 'IM Fell English', serif; font-style: italic; font-size: 13px; color: var(--ash); text-decoration: none; margin-bottom: 24px; }
+  .bib-back:hover { color: var(--amber); }
   .bib-masthead { text-align: center; margin-bottom: 8px; }
   .bib-masthead-name { font-family: 'UnifrakturMaguntia', serif; font-size: 26px; color: var(--amber); letter-spacing: 2px; }
   .bib-masthead-tag { font-family: 'IM Fell English', serif; font-style: italic; font-size: 12px; color: var(--ash); letter-spacing: 3px; text-transform: uppercase; margin-top: 6px; }
@@ -301,6 +363,13 @@ function renderBibliographyPage(sessions, roster = [], libraryEntries = []) {
   .bib-verified { color: var(--verified); }
   .bib-unverified { color: var(--unverified); }
   .bib-uncertain { color: var(--uncertain); }
+  /* An unchecked citation's own turn-time self-assessment — deliberately not
+     styled like .bib-verdict's colored, bordered pill, so a claim nothing
+     has actually verified never reads with the same authority as one that
+     was checked against a real source. See isGrounded's comment in the
+     render function for why the two are kept visually distinct. */
+  .bib-verdict-unchecked { font-size: 11px; color: var(--ash); font-style: italic; }
+  .bib-unchecked { font-style: italic; }
   .bib-source { color: var(--ash); font-style: italic; }
   .bib-quote { margin: 8px 0 4px; padding-left: 12px; border-left: 2px solid var(--amber-dim); font-style: italic; color: var(--cream); }
   .bib-note { margin: 4px 0 0; font-size: 14px; color: var(--muted); }
@@ -313,6 +382,7 @@ function renderBibliographyPage(sessions, roster = [], libraryEntries = []) {
 </head>
 <body>
   <div class="bib-wrap">
+    <a class="bib-back" href="/">← The Salon</a>
     <header class="bib-masthead">
       <div class="bib-masthead-name">The Secret-Cabin-et</div>
       <div class="bib-masthead-tag">Bibliography</div>
