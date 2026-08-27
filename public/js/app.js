@@ -789,6 +789,12 @@ async function streamPost(url, body, onChunk, onSpeaking, onSpeakerDone) {
           // update (#203's own signal) — a member wanting back in reads as
           // "waiting" until their disposition next changes.
           window.LodgeScene?.setDisposition(data.disposition.memberId, data.disposition.waitingOnMemberId);
+        } else if (data.citation) {
+          // #34 follow-up: one beat's worth of live-captured citations
+          // (#355) — scene.js decides for itself whether any of them quote
+          // the active provocation document; most don't (an external real
+          // work is the common case) and this is a silent no-op then.
+          window.LodgeScene?.citeFromBeat(data.citation.citations);
         }
       }
     }
@@ -1655,7 +1661,13 @@ function initSceneLayer() {
     if (typeof BABYLON === 'undefined' || !window.LodgeScene) return;
     const canvas = document.getElementById('scene-canvas');
     if (!canvas) return;
-    if (LodgeScene.init(canvas, { onDocumentInspect: handleDocumentInspectChange })) window.Witness?.enableRoom();
+    if (
+      LodgeScene.init(canvas, {
+        onDocumentInspect: handleDocumentInspectChange,
+        onDocumentCitation: handleDocumentCitationChange,
+      })
+    )
+      window.Witness?.enableRoom();
   } catch (e) {
     console.error('[scene] failed to initialize, continuing without it', e);
   }
@@ -1670,8 +1682,63 @@ function initSceneLayer() {
 function handleDocumentInspectChange(open) {
   const panel = document.getElementById('document-inspect-panel');
   if (!panel) return;
-  if (open) document.getElementById('document-inspect-text').textContent = window.Export.getEntry();
   panel.hidden = !open;
+  if (open) renderDocumentPanelText();
+}
+
+// #34 follow-up: the deferred half of the original issue -- a live citation
+// (#355's per-beat capture, relayed over SSE, see the `data.citation` branch
+// above) that scene.js's citeFromBeat found to actually quote the document
+// gets its passage highlighted here, in the one place the document's full
+// text is already rendered as readable DOM. Only touches the panel if it's
+// currently open; if it's closed, scene.js's own brighter page-glow pulse is
+// the entire cue -- this doesn't force the panel open, since that would
+// interrupt whatever the person is doing to show them a passage they didn't
+// ask to read yet.
+let documentCitationQuote = null;
+
+function handleDocumentCitationChange(quote) {
+  documentCitationQuote = quote;
+  const panel = document.getElementById('document-inspect-panel');
+  if (panel && !panel.hidden) renderDocumentPanelText();
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+}
+
+// Same curly-quote-folding + lowercasing normalization scene.js's own
+// citeFromBeat used to decide a match exists in the first place (see that
+// function's comment for why whitespace is deliberately left uncollapsed
+// here) -- re-derived independently since scene.js has no reason to know
+// about HTML escaping or the DOM. A quote that doesn't re-locate here (rare;
+// only possible if the document's own whitespace is irregular right at the
+// cited span) just renders as plain text -- a missed highlight, not a
+// broken panel.
+function normalizeForCitationMatch(s) {
+  return s
+    .replace(/[‘’]/g, "'")
+    .replace(/[“”]/g, '"')
+    .toLowerCase();
+}
+
+function renderDocumentPanelText() {
+  const el = document.getElementById('document-inspect-text');
+  if (!el) return;
+  const text = window.Export.getEntry() || '';
+  const needle = documentCitationQuote
+    ? normalizeForCitationMatch(documentCitationQuote.replace(/\*/g, '').trim())
+    : '';
+  const idx = needle ? normalizeForCitationMatch(text).indexOf(needle) : -1;
+  if (idx === -1) {
+    el.textContent = text;
+    return;
+  }
+  const before = text.slice(0, idx);
+  const match = text.slice(idx, idx + needle.length);
+  const after = text.slice(idx + needle.length);
+  el.innerHTML = `${escapeHtml(before)}<mark class="document-citation-mark">${escapeHtml(match)}</mark>${escapeHtml(after)}`;
+  el.querySelector('mark')?.scrollIntoView({ block: 'center' });
 }
 
 // ── Casting triggers (#185) ───────────────────────────────────────────────────

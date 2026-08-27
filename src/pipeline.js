@@ -132,6 +132,7 @@ async function runRound({
   onSpeakerEnd,
   onPoolUpdate,
   onDisposition,
+  onCitation,
   precedingTurn,
   disposition: priorDisposition,
   loadVoiceExemplar,
@@ -552,6 +553,12 @@ async function runRound({
         // #355: attached onto the same beat pushed above, omitted entirely
         // when the turn cited nothing — see the beats-shape comment.
         if (citations.length) beatEntry.citations = citations;
+        // #34 follow-up: a live signal for the client, fired only when this
+        // beat actually cited something — scene.js decides for itself
+        // whether any of these quote the active provocation document (most
+        // citations are of an external real work and won't), this just
+        // carries the raw citations array over.
+        if (citations.length) onCitation?.(memberId, citations);
         // #356: same convention, for the weaker invoked-works tier.
         if (invokedWorks.length) beatEntry.invokedWorks = invokedWorks;
         onMetric?.(
