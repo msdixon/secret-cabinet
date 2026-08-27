@@ -275,6 +275,14 @@
         </div>
       </div>
 
+      <!-- #460: the verify pass upgrades citation sources but has no visible
+           link to the bibliography it feeds -- #331 tried a tooltip on the
+           (different-menu) export button, which doesn't surface at the
+           moment of action. This is the result of that action, so it sits in
+           its own row below the buttons rather than crowded in beside them;
+           it appears only after a completed verify call. -->
+      <div class="after-row citation-verify-row" id="citation-verify-result" hidden></div>
+
       <div class="after-row interject-form" id="interject-form" style="display:none;">
         <input type="text" class="interject-input" id="interject-input" placeholder="A presence moves through the room. It has something to say..." onkeydown="if(event.key==='Enter') interject();" />
         <button class="lodge-btn" style="border-color:#a0c8a0;color:#a0c8a0;" onclick="interject()">Send</button>
