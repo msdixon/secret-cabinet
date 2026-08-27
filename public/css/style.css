@@ -371,6 +371,11 @@ a.lodge-btn { display:inline-block; text-decoration:none; }
 .transcript-entry.bubble-right { align-self:flex-end; }
 .bubble-body { background:rgba(23,18,13,0.5); border:1px solid var(--lodge-border); border-radius:2px 8px 8px 8px; padding:10px 14px; }
 .bubble-right .bubble-body { border-radius:8px 2px 8px 8px; }
+/* #457: the #witness-stage fallback's version of the room's card-entry-aside
+   treatment -- no seat geometry there to draw a connector between, so the
+   dashed border plus the "aside" tag (speechBodyHtml) is the whole signal. */
+.transcript-entry.bubble-aside .bubble-body { border-style:dashed; }
+.transcript-entry.bubble-aside .speech-text { font-style:italic; color:var(--lodge-muted); }
 @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
 /* #266 — identity names (proper nouns) get their own typeface, distinct from
    .panel-label's IM Fell English (functional labels) and .lodge-title's
@@ -878,6 +883,30 @@ a.archival-image-link:hover { border-color:var(--lodge-amber-dim); cursor:pointe
 .room-card-entry:not(:last-child) { opacity:0.55; }
 .room-card-entry + .room-card-entry { padding-top:10px; border-top:1px solid var(--lodge-border); }
 .room-card-entry-typing .speech-text::after { content:'▍'; opacity:0.6; animation:witnessCursorBlink 1s step-end infinite; }
+
+/* #457 — splinter/aside visual grammar. A splinter beat gets a plain-text
+   "aside" tag (speechBodyHtml, both room cards and the stage-fallback
+   bubbles below) plus this dimmed/dashed treatment on its own container --
+   text alone carries the distinction, color/border is reinforcement, not
+   the only signal. Deliberately no room-wide dimming or camera change: the
+   two participants' own styling plus the connector line below is the whole
+   grammar for a first pass (see room-thread-layer's comment for why not
+   portrait rotation). */
+.room-card-entry.card-entry-aside { opacity:0.85; }
+.room-card-entry.card-entry-aside .speech-text { font-style:italic; color:var(--lodge-muted); }
+.thread-tag {
+  font-family:'IM Fell English',serif; font-size:10px; letter-spacing:1.5px;
+  text-transform:uppercase; color:var(--lodge-ash); opacity:0.75; margin-bottom:3px;
+}
+/* room-thread-layer sits beneath room-speech-layer (painted first in DOM
+   order) so its connector line never blocks a card's own click target --
+   pointer-events:none on the whole layer means it wouldn't anyway, but the
+   ordering also keeps the line visually behind the cards it joins. One
+   <line> per active splinter (witness.js's updateThreadConnectors), x1/y1/
+   x2/y2 set from the same getSeatScreenPosition projection the cards
+   anchor to. */
+.room-thread-layer { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; overflow:visible; }
+.room-thread-line { stroke:var(--lodge-amber-dim); stroke-width:1; stroke-dasharray:3 5; opacity:0.55; }
 
 /* Round headers, lulls, and unattributed action lines aren't anchored to any
    one member's seat -- they read into a small fixed strip at the top of the

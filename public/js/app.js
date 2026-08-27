@@ -886,15 +886,21 @@ function startStreamEntry() {
       speakerMemberId = memberId;
       openTyping();
     },
-    onSpeakerDone({ memberId, name, text }) {
+    onSpeakerDone({ memberId, name, text, thread }) {
       removeTyping();
       // The remaining beats -- whatever hadn't already closed live -- come
       // from the settled text, which is authoritative (post-trim, post-
       // stripInternalBlankLines) rather than the raw streamed buffer.
       const beats = window.Beats.splitIntoBeats(text);
+      // #457: `thread` (present only for a splinter's two beats) is known
+      // only once the whole turn settles here, not while append() below was
+      // closing earlier beats of the same turn live -- a splinter beat split
+      // across more than one bubble only gets its later bubbles tagged. See
+      // convene.js's own onSpeakerEnd note for why onSpeaking isn't extended
+      // to close that gap.
       beats.slice(closedBeats).forEach(beatText => {
         addSpeech(name, beatText, false, memberId || undefined, null);
-        window.Witness.liveSpeech({ speaker: name, text: beatText, memberId: memberId || null });
+        window.Witness.liveSpeech({ speaker: name, text: beatText, memberId: memberId || null, thread: thread || null });
       });
       renderedLive = true;
       buffer = '';

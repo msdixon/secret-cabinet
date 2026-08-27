@@ -126,12 +126,71 @@ window.Witness = (function () {
     return document.getElementById('room-speech-layer');
   }
 
+  function threadLayer() {
+    return document.getElementById('room-thread-layer');
+  }
+
   // memberId -> card element currently shown, keyed so a member's typing
   // placeholder and settled bubble are the same DOM node (swapped in place,
   // not removed and recreated -- avoids a flicker between the two states).
   const roomCards = new Map();
   const roomCardFadeTimers = new Map();
   let roomRepositionHandle = null;
+
+  // #457: the room's one piece of "these two, apart from everyone else"
+  // grammar — a faint line drawn between the two seats currently trading a
+  // splinter, reusing the same screen-space projection (#257's
+  // getSeatScreenPosition) the cards themselves anchor to, rather than a new
+  // rendering system. Deliberately not mesh/billboard rotation ("two
+  // portraits turning toward each other," the issue's own image) — avatar
+  // billboards always face the camera (scene.js's own comment: "avatars are
+  // flat billboards... don't [independently rotate]"), and fighting that
+  // invariant for a first pass risked more than it bought. A DOM connector
+  // over the existing card layer gets the same "these two are linked, apart
+  // from the room" read without touching scene geometry.
+  //
+  // threadId -> [memberId, memberId], registered by renderRoomCard whenever
+  // a block carries `thread`. Never explicitly retired: a thread with no
+  // live card for either participant just stops drawing (checked fresh every
+  // tick in updateThreadConnectors), and clearRoom() drops the whole map
+  // when a fresh convene or replay starts.
+  const activeThreads = new Map();
+  const threadLineEls = new Map();
+
+  function registerThread(thread) {
+    if (!thread || !thread.id || !Array.isArray(thread.participants)) return;
+    if (!activeThreads.has(thread.id)) activeThreads.set(thread.id, thread.participants);
+  }
+
+  function updateThreadConnectors() {
+    const layer = threadLayer();
+    if (!layer) return;
+    activeThreads.forEach((participants, threadId) => {
+      const [a, b] = participants;
+      const cardA = a && roomCards.get(a);
+      const cardB = b && roomCards.get(b);
+      let line = threadLineEls.get(threadId);
+      const posA = cardA && window.LodgeScene?.getSeatScreenPosition?.(a);
+      const posB = cardB && window.LodgeScene?.getSeatScreenPosition?.(b);
+      if (!posA?.visible || !posB?.visible) {
+        if (line) {
+          line.remove();
+          threadLineEls.delete(threadId);
+        }
+        return;
+      }
+      if (!line) {
+        line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line.setAttribute('class', 'room-thread-line');
+        layer.appendChild(line);
+        threadLineEls.set(threadId, line);
+      }
+      line.setAttribute('x1', posA.x);
+      line.setAttribute('y1', posA.y);
+      line.setAttribute('x2', posB.x);
+      line.setAttribute('y2', posB.y);
+    });
+  }
   let liveTypingMemberId = null;
 
   // Settled cards linger long enough to read, then fade -- unlike the
@@ -234,6 +293,10 @@ window.Witness = (function () {
         }
       });
     }
+    // #457: rides the same continuous tick as the cards themselves, so a
+    // connector tracks the camera's easing exactly as the two cards it joins
+    // do.
+    updateThreadConnectors();
   }
 
   // The camera keeps easing toward whoever's speaking (#232) even between a
@@ -268,6 +331,13 @@ window.Witness = (function () {
     if (layer) layer.innerHTML = '';
     const events = document.getElementById('room-events');
     if (events) events.innerHTML = '';
+    // #457: threads are scoped to one convene/replay -- a fresh one starting
+    // shouldn't draw a stale connector left over from the last session's
+    // splinter.
+    activeThreads.clear();
+    threadLineEls.clear();
+    const tLayer = threadLayer();
+    if (tLayer) tLayer.innerHTML = '';
     liveTypingMemberId = null;
     stopRoomLoop();
     resetLiveTurnQueue(); // #400: a fresh stage shouldn't inherit a queued-but-not-yet-spoken turn from whatever came before
@@ -279,8 +349,15 @@ window.Witness = (function () {
     return `<div class="speaker-name ${nc}">${glyph}${deps.escapeHTML(speaker)}</div>`;
   }
 
-  function speechBodyHtml({ text, annotation }) {
-    let bodyHtml = `<div class="bubble-body"><div class="speech-text">${deps.renderActions(text)}</div>`;
+  // #457: `thread` (present only on a splinter's two beats — {id,
+  // participants}, see pipeline.js) gets a plain-text tag here rather than
+  // relying only on the container's aside styling class (renderRoomCard/
+  // renderSpeechBeat below) -- color/border alone isn't a reliable enough
+  // signal for "the room doesn't hear this."
+  function speechBodyHtml({ text, annotation, thread }) {
+    let bodyHtml = '<div class="bubble-body">';
+    if (thread) bodyHtml += '<div class="thread-tag">aside</div>';
+    bodyHtml += `<div class="speech-text">${deps.renderActions(text)}</div>`;
     if (annotation) bodyHtml += `<div class="witness-annotation">↳ ${deps.escapeHTML(annotation)}</div>`;
     bodyHtml += '</div>';
     return bodyHtml;
@@ -373,7 +450,13 @@ window.Witness = (function () {
         }
       };
     }
+    // #457: the aside styling class lives on the entry, not the card shell —
+    // a member's card is a stack (#287) that can hold both ordinary and
+    // splinter beats across one passage, so the card itself never gets a
+    // fixed "this member is asiding" state.
+    entry.classList.toggle('card-entry-aside', !!block.thread);
     entry.innerHTML = speechBodyHtml(block);
+    registerThread(block.thread);
     scrollCardToLatest(card);
     touchRoomLoop();
     scheduleCardFade(memberId, text);
@@ -664,8 +747,15 @@ window.Witness = (function () {
     }
   }
 
-  function liveSpeech({ speaker, text, memberId, annotation }) {
-    const block = { type: 'speech', speaker, text, memberId: memberId || null, annotation: annotation || null };
+  function liveSpeech({ speaker, text, memberId, annotation, thread }) {
+    const block = {
+      type: 'speech',
+      speaker,
+      text,
+      memberId: memberId || null,
+      annotation: annotation || null,
+      thread: thread || null,
+    };
     const turn = openLiveTurn();
     if (turn && !turn.block) {
       turn.block = block;
@@ -834,9 +924,22 @@ window.Witness = (function () {
    *              { type: 'speech', speaker, text, memberId, annotation }
    *              { type: 'action', text }
    */
+  // #457: formatSplinterBlock's exact bracket text (pipeline-splinter.js) --
+  // neither a recognized action line nor a recognized speaker header, so
+  // left unhandled the two delimiter lines leaked as literal text glued onto
+  // whichever speaker's block happened to be open (traced, not shipped: no
+  // replay of a real splinter exercised this path before now). Matched
+  // structurally against the bracket text itself rather than correlated
+  // against round.beats' own `thread` tag -- this parser's beats (further
+  // split for UI pacing via splitIntoBeats) don't line up 1:1 with
+  // pipeline.js's beats, but both sides agree on the bracket text.
+  const ASIDE_START_RE = /^\[Aside — .+ and .+, apart from the room\]$/;
+  const ASIDE_END = '[/Aside]';
+
   function parseWitnessBlocks(session) {
     const blocks = [];
     const annotations = session.annotations || {};
+    let threadSeq = 0;
 
     (session.rounds || []).forEach(round => {
       // #245/#354: a segment's label either opens it (an old round header,
@@ -849,10 +952,17 @@ window.Witness = (function () {
       const lines = (round.text || '').split('\n');
       let speaker = null,
         textLines = [];
+      // #457: set while the line cursor is between a [Aside...] and its
+      // [/Aside] -- the replay-side equivalent of pipeline.js's `thread`,
+      // reconstructed from the bracket text rather than carried forward from
+      // round.beats. `participants` fills in as each side's speaker line
+      // resolves to a roster id, below.
+      let thread = null;
 
       const flush = (keepSpeaker = false) => {
         if (!speaker || !textLines.length) return;
         const m = deps.resolveMember(speaker, deps.members);
+        if (thread && m?.id && !thread.participants.includes(m.id)) thread.participants.push(m.id);
         const annotation = Object.values(annotations).find(a => a.speaker === speaker)?.note || null;
         // #219: one turn, several bubbles -- same split app.js's live
         // streaming uses, so a replayed turn paces the same way it did the
@@ -868,6 +978,7 @@ window.Witness = (function () {
             text: beatText,
             memberId: m?.id || null,
             annotation: i === beats.length - 1 ? annotation : null,
+            thread,
           });
         });
         // Keep speaker across blank lines so multi-paragraph speeches aren't dropped
@@ -882,6 +993,16 @@ window.Witness = (function () {
           return;
         } // keepSpeaker=true: blank line is paragraph break, not speaker change
         if (t === '---' || t === '—' || t === '--') return;
+        if (ASIDE_START_RE.test(t)) {
+          flush();
+          thread = { id: `replay-aside-${threadSeq++}`, participants: [] };
+          return;
+        }
+        if (t === ASIDE_END) {
+          flush(); // settles the second participant's buffered text under the still-live thread
+          thread = null;
+          return;
+        }
         const isActionLine = /^\*[^*\n]+\*$/.test(t);
         if (isActionLine && !speaker) {
           flush();
@@ -1000,7 +1121,10 @@ window.Witness = (function () {
     if (sceneAvailable) return renderRoomCard(block);
     const side = getSpeakerSide(block.memberId || block.speaker);
     const e = document.createElement('div');
-    e.className = `transcript-entry bubble-${side}`;
+    // #457: the #witness-stage fallback has no seat geometry to connect, so
+    // it gets only the distinct bubble styling (dashed border, muted/italic
+    // text, the "aside" tag from speechBodyHtml) — no connector line.
+    e.className = `transcript-entry bubble-${side}${block.thread ? ' bubble-aside' : ''}`;
     e.innerHTML = speechHtml(block);
     const stage = document.getElementById('witness-stage');
     stage.appendChild(e);

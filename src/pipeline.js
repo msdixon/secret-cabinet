@@ -491,7 +491,14 @@ async function runRound({
       // actually said (so it isn't "heard from" either). See tuning.js's
       // PASS_TURN_CREDIT for the reasoning.
       if (meetingTurns) meetingTurns[memberId] = (meetingTurns[memberId] || 0) + (passed ? PASS_TURN_CREDIT : 1);
-      onSpeakerEnd?.(memberId, member.name, settledText);
+      // #457: the 4th arg is undefined on every ordinary beat, `thread` only
+      // for the two beats a splinter's own generateBeat calls pass it into —
+      // same optional shape beatEntry above already carries. This is the
+      // live half of the signal #456 shipped storage-only for; onSpeakerStart
+      // deliberately isn't extended the same way (see convene.js's own note
+      // at its onSpeakerEnd wiring) — a splinter beat generation-split across
+      // more than one on-screen bubble won't tag every bubble, a named limit.
+      onSpeakerEnd?.(memberId, member.name, settledText, thread);
       onChunk?.('\n\n');
       // #362: a pass's own word count is a few at most — charging only that
       // would let passing hand the round's remaining budget to whoever

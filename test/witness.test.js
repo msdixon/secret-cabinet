@@ -40,6 +40,7 @@ const WITNESS_IDS = [
   'transcript-content',
   'record-scroll',
   'witness-room',
+  'room-thread-layer',
   'room-speech-layer',
   'room-events',
 ];
@@ -52,6 +53,7 @@ const FIXTURE = `
       <button id="witness-exit-btn" style="display:none"></button>
       <div id="witness-stage"></div>
       <div id="witness-room">
+        <svg id="room-thread-layer"></svg>
         <div id="room-speech-layer"></div>
         <div id="room-events"></div>
       </div>
@@ -367,6 +369,55 @@ test('replay: parsing a stored session into playback blocks', async t => {
     assert.equal(document.querySelector('#witness-stage .speaker-glyph').textContent, '☿');
     assert.ok(escaped.includes('Crowley'), 'the speaker name should go through the injected escapeHTML');
   });
+
+  // #457: formatSplinterBlock's (pipeline-splinter.js) exact bracket shape --
+  // a real segment.text a splinter produces, main-thread beats on either
+  // side of it.
+  await t.test(
+    '#457: an [Aside — ...] block tags both speakers as an aside and its bracket lines never leak as text',
+    async t2 => {
+      const { document, module: Witness } = boot(t2);
+      await Witness.start(
+        {
+          rounds: [
+            {
+              label: 'Round I',
+              text:
+                'Crowley\nA claim for the whole table.\n\n' +
+                '[Aside — Crowley and Blavatsky, apart from the room]\n' +
+                'Crowley\nBetween us, I doubt half of that.\n\n' +
+                'Blavatsky\nSo did I, when I said it.\n' +
+                '[/Aside]\n\n' +
+                'Blavatsky\nAnd for the room, I stand by it.',
+            },
+          ],
+        },
+        makeDeps()
+      );
+      playToEnd(Witness, document);
+
+      const stage = document.getElementById('witness-stage');
+      const entries = [...stage.querySelectorAll('.transcript-entry')];
+      assert.equal(entries.length, 4);
+      assert.deepEqual(
+        entries.map(e => e.classList.contains('bubble-aside')),
+        [false, true, true, false],
+        'only the two beats inside the Aside block are tagged'
+      );
+      // The delimiter lines themselves never surface as visible text on
+      // either neighboring bubble or the aside's own two bubbles.
+      const allText = entries.map(e => e.querySelector('.speech-text').textContent).join(' | ');
+      assert.doesNotMatch(allText, /\[Aside|\[\/Aside\]/);
+      assert.match(entries[1].querySelector('.speech-text').textContent, /doubt half of that/);
+      assert.match(entries[2].querySelector('.speech-text').textContent, /when I said it/);
+      assert.match(entries[3].querySelector('.speech-text').textContent, /stand by it/);
+      // Each aside bubble also carries the plain-text "aside" tag.
+      assert.ok(entries[1].querySelector('.thread-tag'));
+      assert.ok(entries[2].querySelector('.thread-tag'));
+      assert.equal(entries[0].querySelector('.thread-tag'), null);
+      assert.equal(entries[3].querySelector('.thread-tag'), null);
+    }
+  );
 
   await t.test('ignores a session with no rounds instead of opening an empty stage', async t2 => {
     const { document, module: Witness } = boot(t2);
@@ -1105,6 +1156,67 @@ test('the room (#257): dialogue composited onto the scene, replacing the #202 to
     assert.equal(document.getElementById('room-speech-layer').innerHTML, '');
     assert.equal(document.getElementById('room-events').innerHTML, '');
   });
+
+  // #457: the room's visual grammar for a splinter — both participants'
+  // entries dimmed/tagged as an aside, and a connector line drawn between
+  // their two seat anchors once both cards are up.
+  await t.test(
+    'a splinter (`thread`) tags both participants as an aside and draws a connector between their seats',
+    async t2 => {
+      // #400: only one member's turn is ever on screen at a time -- each
+      // liveSpeech below needs its predecessor's pacing delay to clear
+      // before it renders, same as the scrollback (#287) tests below.
+      t2.mock.timers.enable({ apis: ['setTimeout'] });
+      const { document, window, module: Witness } = boot(t2);
+      stubScene(window, {
+        crowley: { x: 100, y: 200, visible: true },
+        blavatsky: { x: 300, y: 200, visible: true },
+      });
+      Witness.configure(makeDeps());
+      Witness.enableRoom();
+
+      const thread = { id: 'splinter-1-0', participants: ['crowley', 'blavatsky'] };
+      // Kept to 3 words or fewer -- witnessReadingTime floors at
+      // WITNESS_MIN_PAUSE (1200ms) only below that, which is what
+      // advancePastLiveTurn's single 1200ms tick assumes (same convention
+      // the scrollback (#287) tests below use, e.g. "One."/"Two.").
+      // An ordinary beat first, to confirm it stays untagged and draws nothing.
+      Witness.liveSpeech({ speaker: 'Crowley', text: 'For the table.', memberId: 'crowley' });
+      await advancePastLiveTurn(t2);
+      assert.equal(document.querySelectorAll('#room-thread-layer .room-thread-line').length, 0);
+
+      Witness.liveSpeech({ speaker: 'Crowley', text: 'I doubt it.', memberId: 'crowley', thread });
+      await advancePastLiveTurn(t2);
+      // Still only one participant's card up -- no line to draw yet.
+      assert.equal(document.querySelectorAll('#room-thread-layer .room-thread-line').length, 0);
+
+      // Renders synchronously (the queue was empty going in, per liveSpeech's
+      // own comment above) -- asserting right away, rather than awaiting
+      // another pacing tick first, matters here: ticking further would sweep
+      // past Crowley's own fade timer (scheduled fresh by the aside beat's
+      // renderRoomCard, above) and remove his card before this check runs.
+      Witness.liveSpeech({ speaker: 'Blavatsky', text: 'So did I.', memberId: 'blavatsky', thread });
+
+      const cards = [...document.querySelectorAll('#room-speech-layer .room-speech-card')];
+      assert.equal(cards.length, 2);
+      const crowleyEntries = [...cards[0].querySelectorAll('.room-card-entry')];
+      assert.equal(
+        crowleyEntries[0].classList.contains('card-entry-aside'),
+        false,
+        'the main-thread beat stays untagged'
+      );
+      assert.ok(crowleyEntries[1].classList.contains('card-entry-aside'), "Crowley's aside beat is tagged");
+      assert.ok(
+        cards[1].querySelector('.room-card-entry').classList.contains('card-entry-aside'),
+        "Blavatsky's aside beat is tagged"
+      );
+
+      const lines = document.querySelectorAll('#room-thread-layer .room-thread-line');
+      assert.equal(lines.length, 1, 'a connector is drawn once both participants have a card up');
+      assert.equal(lines[0].getAttribute('x1'), '100');
+      assert.equal(lines[0].getAttribute('x2'), '300');
+    }
+  );
 });
 
 test("scrollback (#287): a member's card is a short-lived stack of recent beats, not just the latest", async t => {
