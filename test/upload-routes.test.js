@@ -5,11 +5,67 @@
 // both; tests exercise the extraction handler directly with a crafted
 // req.file, the same way multer would have populated it, rather than
 // driving real multipart parsing.
+//
+// #443: upload.js does `const multer = require('multer')` and
+// `const PDFParser = require('pdf2json')` at module load time, so (same
+// reasoning as export-routes.test.js's `withMockedExecFile`) patching
+// either after the module is already required does nothing. The
+// with*-helpers below install a fake implementation in the require cache,
+// force a fresh require of upload.js so its module-scope bindings pick up
+// the fake, then restore the real module afterwards.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const Module = require('node:module');
 
 const { registerUploadRoutes, extractPdfText } = require('../src/routes/upload.js');
+
+function withMockedModule(depName, fakeExports, run) {
+  const modPath = require.resolve('../src/routes/upload.js');
+  const depPath = require.resolve(depName);
+  const original = require.cache[depPath];
+  const fakeModule = new Module(depPath);
+  fakeModule.exports = fakeExports;
+  require.cache[depPath] = fakeModule;
+  delete require.cache[modPath];
+  try {
+    return run(require(modPath));
+  } finally {
+    if (original) require.cache[depPath] = original;
+    else delete require.cache[depPath];
+    delete require.cache[modPath];
+    require(modPath);
+  }
+}
+
+function withMockedMulter(middlewareErr, run) {
+  function fakeMulter() {
+    return { single: () => (req, res, cb) => cb(middlewareErr) };
+  }
+  fakeMulter.memoryStorage = () => ({});
+  return withMockedModule('multer', fakeMulter, run);
+}
+
+// A fake PDFParser standing in for pdf2json: `succeedWith` resolves via the
+// dataReady callback (mirroring parser.getRawTextContent()), `failWith`
+// rejects via the dataError callback (mirroring err.parserError).
+function withMockedPdfParser({ succeedWith, failWith }, run) {
+  class FakePdfParser {
+    on(event, cb) {
+      (this._handlers ??= {})[event] = cb;
+    }
+    getRawTextContent() {
+      return succeedWith;
+    }
+    parseBuffer() {
+      setImmediate(() => {
+        if (failWith) this._handlers.pdfParser_dataError({ parserError: failWith });
+        else this._handlers.pdfParser_dataReady();
+      });
+    }
+  }
+  return withMockedModule('pdf2json', FakePdfParser, run);
+}
 
 function fakeApp() {
   const routes = {};
@@ -47,6 +103,51 @@ test('registerUploadRoutes', async t => {
   });
 });
 
+test('POST /api/upload — multer middleware handler', async t => {
+  await t.test('400s with a friendly message on LIMIT_FILE_SIZE', () => {
+    withMockedMulter({ code: 'LIMIT_FILE_SIZE' }, ({ registerUploadRoutes: freshRegister }) => {
+      const app = fakeApp();
+      freshRegister(app);
+      const middleware = app.routes['POST /api/upload'][0];
+      const res = fakeRes();
+      let nextCalled = false;
+      middleware({}, res, () => {
+        nextCalled = true;
+      });
+      assert.equal(res.statusCode, 400);
+      assert.equal(res.body.error, 'File too large — maximum 25 MB');
+      assert.equal(nextCalled, false);
+    });
+  });
+
+  await t.test('400s with the multer error message for other multer errors', () => {
+    withMockedMulter(new Error('Unexpected field'), ({ registerUploadRoutes: freshRegister }) => {
+      const app = fakeApp();
+      freshRegister(app);
+      const middleware = app.routes['POST /api/upload'][0];
+      const res = fakeRes();
+      middleware({}, res, () => {});
+      assert.equal(res.statusCode, 400);
+      assert.equal(res.body.error, 'Unexpected field');
+    });
+  });
+
+  await t.test('calls next() when multer succeeds', () => {
+    withMockedMulter(null, ({ registerUploadRoutes: freshRegister }) => {
+      const app = fakeApp();
+      freshRegister(app);
+      const middleware = app.routes['POST /api/upload'][0];
+      const res = fakeRes();
+      let nextCalled = false;
+      middleware({}, res, () => {
+        nextCalled = true;
+      });
+      assert.equal(nextCalled, true);
+      assert.equal(res.statusCode, null);
+    });
+  });
+});
+
 test('POST /api/upload — extraction handler', async t => {
   let app, handler;
   t.beforeEach(() => {
@@ -77,10 +178,76 @@ test('POST /api/upload — extraction handler', async t => {
     await handler(req, res);
     assert.equal(res.statusCode, 422);
   });
+
+  await t.test('routes a .pdf upload through extractPdfText and returns the extracted, normalised text', async () => {
+    await withMockedPdfParser(
+      { succeedWith: 'Line one\r\nLine two\r' },
+      async ({ registerUploadRoutes: freshRegister }) => {
+        const app = fakeApp();
+        freshRegister(app);
+        const pdfHandler = app.routes['POST /api/upload'][1];
+        const res = fakeRes();
+        const req = { file: { originalname: 'doc.pdf', mimetype: 'application/pdf', buffer: Buffer.from('%PDF-1.4') } };
+        await pdfHandler(req, res);
+        assert.equal(res.body.text, 'Line one\nLine two');
+        assert.equal(res.body.filename, 'doc.pdf');
+      }
+    );
+  });
+
+  await t.test('routes by mimetype when the extension is not .pdf', async () => {
+    await withMockedPdfParser(
+      { succeedWith: 'extracted' },
+      async ({ registerUploadRoutes: freshRegister }) => {
+        const app = fakeApp();
+        freshRegister(app);
+        const pdfHandler = app.routes['POST /api/upload'][1];
+        const res = fakeRes();
+        const req = {
+          file: { originalname: 'upload', mimetype: 'application/pdf', buffer: Buffer.from('%PDF-1.4') },
+        };
+        await pdfHandler(req, res);
+        assert.equal(res.body.text, 'extracted');
+      }
+    );
+  });
+
+  await t.test('500s when PDF extraction fails (corrupt/unparseable PDF)', async () => {
+    await withMockedPdfParser(
+      { failWith: new Error('corrupt PDF') },
+      async ({ registerUploadRoutes: freshRegister }) => {
+        const app = fakeApp();
+        freshRegister(app);
+        const pdfHandler = app.routes['POST /api/upload'][1];
+        const res = fakeRes();
+        const req = { file: { originalname: 'bad.pdf', mimetype: 'application/pdf', buffer: Buffer.from('broken') } };
+        await pdfHandler(req, res);
+        assert.equal(res.statusCode, 500);
+        assert.equal(res.body.error, 'Could not extract text from file');
+      }
+    );
+  });
 });
 
 test('extractPdfText', async t => {
   await t.test('rejects for a buffer that is not a valid PDF', async () => {
     await assert.rejects(() => extractPdfText(Buffer.from('not a pdf')));
+  });
+
+  await t.test('resolves with normalised text (CRLF/CR collapsed, trimmed) on a successful parse', async () => {
+    await withMockedPdfParser(
+      { succeedWith: '  \r\nLine one\r\nLine two\r  ' },
+      async ({ extractPdfText: freshExtract }) => {
+        const text = await freshExtract(Buffer.from('irrelevant'));
+        assert.equal(text, 'Line one\nLine two');
+      }
+    );
+  });
+
+  await t.test('rejects with the parser error on a dataError event', async () => {
+    const parserError = new Error('bad xref table');
+    await withMockedPdfParser({ failWith: parserError }, async ({ extractPdfText: freshExtract }) => {
+      await assert.rejects(() => freshExtract(Buffer.from('irrelevant')), parserError);
+    });
   });
 });
