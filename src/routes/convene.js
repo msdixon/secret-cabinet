@@ -143,8 +143,15 @@ function registerConveneRoutes(
         disposition: {},
         onChunk: chunk => res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`),
         onSpeakerStart: memberId => res.write(`data: ${JSON.stringify({ speaking: memberId })}\n\n`),
-        onSpeakerEnd: (memberId, name, text) =>
-          res.write(`data: ${JSON.stringify({ speakerDone: { memberId, name, text } })}\n\n`),
+        // #457: `thread` is undefined on every ordinary beat, forwarded only
+        // for the two beats a splinter's own pipeline.js call passes it into
+        // — the client-side signal a splinter reads distinctly in the room
+        // (#196/#456 shipped the storage-side `{ id, participants }` shape
+        // this just relays). onSpeakerStart above is deliberately left
+        // unchanged — the `speaking` event fires before a beat's thread is
+        // even decided server-side, so extending it would mean guessing.
+        onSpeakerEnd: (memberId, name, text, thread) =>
+          res.write(`data: ${JSON.stringify({ speakerDone: { memberId, name, text, ...(thread ? { thread } : {}) } })}\n\n`),
         // #360: the director's candidate pool and each beat's disposition
         // update, so the client can render listening/thinking/waiting states
         // instead of just speaking vs. not.
@@ -306,8 +313,9 @@ function registerConveneRoutes(
         previousLullNote: session.rounds.findLast(r => !record.isInterjectionSegment(r))?.label || null,
         onChunk: chunk => res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`),
         onSpeakerStart: memberId => res.write(`data: ${JSON.stringify({ speaking: memberId })}\n\n`),
-        onSpeakerEnd: (memberId, name, text) =>
-          res.write(`data: ${JSON.stringify({ speakerDone: { memberId, name, text } })}\n\n`),
+        // #457: see /api/convene above for why `thread` is forwarded here too.
+        onSpeakerEnd: (memberId, name, text, thread) =>
+          res.write(`data: ${JSON.stringify({ speakerDone: { memberId, name, text, ...(thread ? { thread } : {}) } })}\n\n`),
         // #360: see /api/convene above.
         onPoolUpdate: pool => res.write(`data: ${JSON.stringify({ pool })}\n\n`),
         onDisposition: (memberId, waitingOnMemberId) =>
@@ -391,8 +399,9 @@ function registerConveneRoutes(
         meetingTurns: turnsSoFar(session.rounds),
         onChunk: chunk => res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`),
         onSpeakerStart: memberId => res.write(`data: ${JSON.stringify({ speaking: memberId })}\n\n`),
-        onSpeakerEnd: (memberId, name, text) =>
-          res.write(`data: ${JSON.stringify({ speakerDone: { memberId, name, text } })}\n\n`),
+        // #457: see /api/convene above for why `thread` is forwarded here too.
+        onSpeakerEnd: (memberId, name, text, thread) =>
+          res.write(`data: ${JSON.stringify({ speakerDone: { memberId, name, text, ...(thread ? { thread } : {}) } })}\n\n`),
         // #360: see /api/convene above.
         onPoolUpdate: pool => res.write(`data: ${JSON.stringify({ pool })}\n\n`),
         onDisposition: (memberId, waitingOnMemberId) =>

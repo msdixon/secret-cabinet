@@ -103,9 +103,13 @@
              LodgeScene.getSeatScreenPosition's screen projection of their
              portrait billboard; room-events holds round headers, lulls, and
              unattributed action lines, which aren't anchored to any one
-             member's seat. -->
+             member's seat. room-thread-layer (#457) sits underneath
+             room-speech-layer and holds one SVG line per active splinter,
+             joining its two participants' card anchors -- the room's visual
+             grammar for "these two, apart from the room." -->
         <div class="witness-room" id="witness-room" onclick="window.Witness.advance()">
           <canvas id="scene-canvas"></canvas>
+          <svg class="room-thread-layer" id="room-thread-layer"></svg>
           <div class="room-speech-layer" id="room-speech-layer"></div>
           <div class="room-events" id="room-events"></div>
           <!-- #34: the document-as-object reading panel -- scene.js's book
