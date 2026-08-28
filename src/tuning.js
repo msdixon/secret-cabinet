@@ -184,6 +184,13 @@ const SECONDARY_VOICE_EXEMPLAR_WORD_BUDGET = 120;
 
 const RESIDUE_MAX_CHARS = 480; // same order of magnitude as disposition's 400, deliberately not larger — smaller and more conservative was the explicit mandate
 
+// #449: the starter reaction taxonomy Rachel decided on 2026-08-28 — a
+// smaller set than the 6-7 originally proposed (happy/thinking/listening/
+// perplexed/impatient/angry), grows later if it proves out. 'none' is the
+// expected default for an ordinary turn with no strong emotional read,
+// same "most turns, nothing belongs here" spirit as residueNote below.
+const REACTION_TAGS = ['happy', 'thinking', 'angry'];
+
 // #355: always-on per-beat citation capture, piggybacked on the existing
 // disposition call (#166's residueNote already established the pattern —
 // a cheap optional field on a call that fires after every beat anyway,
@@ -273,6 +280,7 @@ module.exports = {
   VOICE_EXEMPLAR_WORD_BUDGET,
   SECONDARY_VOICE_EXEMPLAR_WORD_BUDGET,
   RESIDUE_MAX_CHARS,
+  REACTION_TAGS,
   MAX_CITATIONS_PER_BEAT,
   CITATION_QUOTE_MAX_CHARS,
   CITATION_WORK_MAX_CHARS,

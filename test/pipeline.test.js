@@ -1186,6 +1186,40 @@ test('callDispositionUpdate', async t => {
     assert.equal(waitingOnMemberId, null);
   });
 
+  // #449 SPIKE
+  await t.test('passes through a valid reaction tag', async () => {
+    const fakeClient = fakeDispositionClient({
+      reflection: 'Something has shifted.',
+      waitingOnMemberId: 'none',
+      reaction: 'angry',
+    });
+    const { reaction, reactionRaw } = await callDispositionUpdate({
+      client: fakeClient,
+      model: 'test-model',
+      system: 'sys',
+      userMessage: 'msg',
+      presentIds: ['waite'],
+    });
+    assert.equal(reaction, 'angry');
+    assert.equal(reactionRaw, 'angry');
+  });
+
+  await t.test('fails closed to "none" on an unrecognized or missing reaction tag', async () => {
+    const fakeClient = fakeDispositionClient({
+      reflection: 'Something has shifted.',
+      waitingOnMemberId: 'none',
+      reaction: 'ecstatic',
+    });
+    const { reaction } = await callDispositionUpdate({
+      client: fakeClient,
+      model: 'test-model',
+      system: 'sys',
+      userMessage: 'msg',
+      presentIds: ['waite'],
+    });
+    assert.equal(reaction, 'none');
+  });
+
   await t.test(
     'ignores a target that is not in presentIds — a hallucinated or stale id must not silently pass through',
     async () => {
@@ -1525,7 +1559,16 @@ test('buildDispositionToolSchema', async t => {
     const schema = buildDispositionToolSchema(['waite', 'yeats']);
     assert.equal(schema.name, 'update_disposition');
     assert.deepEqual(schema.input_schema.properties.waitingOnMemberId.enum, ['waite', 'yeats', 'none']);
-    assert.deepEqual(schema.input_schema.required, ['reflection', 'waitingOnMemberId']);
+    assert.deepEqual(schema.input_schema.required, ['reflection', 'waitingOnMemberId', 'reaction']);
+  });
+
+  // #449 SPIKE — reaction is required (not omittable like residueNote/
+  // citations) because the eval needs an explicit read every turn, even
+  // "none", to score self-report reliability.
+  await t.test('constrains reaction to the starter taxonomy plus "none", and requires it', () => {
+    const schema = buildDispositionToolSchema(['waite']);
+    assert.deepEqual(schema.input_schema.properties.reaction.enum, ['happy', 'thinking', 'angry', 'none']);
+    assert.ok(schema.input_schema.required.includes('reaction'));
   });
 
   // #166 — residueNote must stay optional so an omitted field is how the

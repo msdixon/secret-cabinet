@@ -35,6 +35,7 @@ const {
   MAX_INVOKED_PER_BEAT,
   INVOKED_WORK_MAX_CHARS,
   INVOKED_NOTE_MAX_CHARS,
+  REACTION_TAGS,
 } = require('./tuning');
 
 const DISPOSITION_MAX_CHARS = 400; // a few sentences — hard cap so this can't balloon a speaker prompt over a long session
@@ -65,6 +66,23 @@ function buildDispositionToolSchema(presentIds, libraryIds = []) {
           enum: [...presentIds, 'none'],
           description:
             'The one present member (by id) this member has unspent business with and would want to answer or press if that person speaks again — or "none" if that is not true right now. Most turns are "none"; only name someone when it is real.',
+        },
+        // #449: SPIKE — a small emotional-reaction tag, piggybacked on this
+        // same call following #203's own precedent (a structured field
+        // beats parsing intent out of free prose). Not yet consumed by
+        // anything downstream (no #450 image swap wired up) — this exists
+        // to test, against real turns, whether the model can self-report a
+        // reaction reliably before that generation work is greenlit. 'none'
+        // is required rather than omittable, unlike residueNote/citations
+        // below, because the eval needs an explicit answer every turn to
+        // judge reliability — an omitted field can't be scored the same way
+        // an omitted residueNote can (residue is genuinely rare; a reaction
+        // read is expected on every turn, even if "none").
+        reaction: {
+          type: 'string',
+          enum: [...REACTION_TAGS, 'none'],
+          description:
+            'The one emotional reaction, if any, this member is visibly carrying right after this turn — a snapshot for their portrait, not a summary of the reflection above. "none" if their state right now reads as neutral/default rather than any of the named reactions.',
         },
         // #166: cross-session residue, piggybacked on this same call rather
         // than a second one — see pipeline-speaker.js's "Cross-session
@@ -144,7 +162,7 @@ function buildDispositionToolSchema(presentIds, libraryIds = []) {
           },
         },
       },
-      required: ['reflection', 'waitingOnMemberId'],
+      required: ['reflection', 'waitingOnMemberId', 'reaction'],
     },
   };
 }
@@ -183,6 +201,8 @@ ${priorBlock}${residueContextBlock}
 Write 1-3 sentences, as private thought rather than speech: your current stance on the evening's argument, anything you haven't yet said but intend to, who you're aligned with or irritated by tonight. Be concrete and specific to what just happened, not a generic character summary. Keep it under ${DISPOSITION_MAX_CHARS} characters — this is a scratchpad, not an essay.
 
 Separately, name whether there is one present person you have real unspent business with — something you'd want to answer or press if they spoke again. This is the exception, not the default: most turns, there is no one.
+
+Separately again, using the reaction tool field: tag the one emotional reaction (if any) you're visibly carrying right this moment, right after speaking — happy, thinking, or angry — or "none" if your state right now reads as neutral rather than any of those. This is a snapshot of how you'd look to someone watching you right now, not a restatement of the reflection above.
 
 Separately again, and rarer still: name whether tonight left something that should genuinely outlast this evening — not tonight's mood, a durable turn. Most turns, there is nothing here either.
 
@@ -262,12 +282,15 @@ async function callDispositionUpdate({ client, model, system, userMessage, prese
   });
   const latencyMs = Date.now() - start;
   const block = response.content.find(b => b.type === 'tool_use');
-  const { reflection, waitingOnMemberId, residueNote, citations, invokedWorks } = block?.input || {};
+  const { reflection, waitingOnMemberId, residueNote, citations, invokedWorks, reaction } = block?.input || {};
   const text = (reflection || '').trim().slice(0, DISPOSITION_MAX_CHARS);
   const target =
     waitingOnMemberId && waitingOnMemberId !== 'none' && presentIds.includes(waitingOnMemberId)
       ? waitingOnMemberId
       : null;
+  // #449 SPIKE: fail-closed to 'none' on anything unrecognized, same
+  // downgrade-rather-than-pass-through discipline as CITATION_VERDICTS above.
+  const reactionTag = REACTION_TAGS.includes(reaction) ? reaction : 'none';
   // #166: '' rather than undefined when absent, so callers can treat "no
   // residue this beat" uniformly without an extra undefined check.
   const residue = (residueNote || '').trim().slice(0, RESIDUE_NOTE_MAX_CHARS);
@@ -277,6 +300,8 @@ async function callDispositionUpdate({ client, model, system, userMessage, prese
     residueNote: residue,
     citations: sanitizeCitations(citations, libraryIds),
     invokedWorks: sanitizeInvokedWorks(invokedWorks),
+    reaction: reactionTag,
+    reactionRaw: reaction, // #449 SPIKE only: the model's raw (pre-fail-closed) value, for the eval script to score reliability against — not for any other caller to read
     usage: response.usage,
     latencyMs,
   };
