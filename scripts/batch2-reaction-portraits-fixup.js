@@ -1,31 +1,34 @@
 'use strict';
 
-// #450 batch 2 fixup — regenerates reaction candidates that drifted from
-// their member's baseline portrait on the first batch2 pass, per Rachel's
-// 2026-08-28 review: Pixie (lost ethnic ambiguity/earrings/layered dress,
-// over-warmed), Arabi (grew a beard and aged — wrong likeness), Maud (lost
-// her distinctive draped shawl/upswept hair, reads as different women per
-// reaction), Khaldun (reads notably younger than his deeply lined baseline),
-// Llull (lost his skullcap), Dee (lost his sharp cheekbones/pointed groomed
-// beard/black skullcap/structured ruff), and Warburg's `happy` reaction only
-// (deracialized, aged, jowly — thinking/angry were fine and already
-// promoted).
+// #450 batch 2 fixup v2 — regenerates reaction candidates a second time.
 //
-// Unlike the first batch2 pass and the #470 pilot, this run passes each
-// member's own baseline portrait to Gemini as a reference image (see the
-// referenceImages param added to src/portrait-generation.js) rather than
-// relying on prose description alone — plain text re-description already
-// failed once for these members, and gemini-2.5-flash-image treats a leading
-// reference image as a subject to stay consistent with, which is a much
-// stronger anchor for likeness/attire/headwear than more adjectives.
+// v1 of this script (see git history) attached each member's baseline
+// portrait as a reference image to fix likeness/attire drift, and that part
+// worked. But Rachel's review of the resulting PR (#472) caught a new,
+// worse problem: with a strong reference image and only a mild expression
+// instruction, gemini-2.5-flash-image mostly just reproduced the reference
+// photo — Arabi's thinking/angry read as near-duplicates of each other,
+// Dee/Llull/Pixie/Maud's three reactions were each barely distinguishable
+// from their own baseline, and Khaldun's `happy` picked up an unrelated,
+// unrealistic light-eyed "glow" artifact instead of an actual happy
+// expression. The reference image was anchoring the *whole* face, expression
+// included, not just identity/attire as intended.
 //
-// Also folds in Rachel's vignette note: every prompt now explicitly asks for
-// a flat, unvignetted background matching the reference, rather than leaving
-// that to chance and fixing it after the fact.
+// Fix, spiked and confirmed on Dee/Khaldun/Arabi before running the full
+// batch: an explicit "do not reuse the reference's expression — that is the
+// one thing you must change" instruction, combined with much more
+// physically concrete (not just adjective-based) expression descriptions,
+// reliably produces a real, visible expression change while still holding
+// the reference-anchored likeness/attire/headwear. Also explicitly pins eye
+// color/darkness to the reference to prevent the Khaldun glow artifact.
 //
-// Storage/naming: same as every prior batch — writes to
-// public/portraits/candidates/<id>-<reaction>.png, promote with
-// scripts/promote-portrait.js after review.
+// Regenerates all 19 candidates that needed a reference-image pass in the
+// first place (not just the ones Rachel happened to call out by name — the
+// underlying prompt bug applied to the whole set that went through v1).
+//
+// Storage/naming: same as ever — public/portraits/candidates/<id>-<reaction>.png,
+// review before promoting with scripts/promote-portrait.js --force (these
+// ids already have a canonical file from the first, flawed pass).
 //
 // Usage: node scripts/batch2-reaction-portraits-fixup.js
 
@@ -38,41 +41,45 @@ const ROOT = path.join(__dirname, '..');
 const PORTRAITS_DIR = path.join(ROOT, 'public', 'portraits');
 const CANDIDATES_DIR = path.join(PORTRAITS_DIR, 'candidates');
 
+// Forces a real expression change instead of a near-reproduction of the
+// reference photo — the actual bug this v2 script exists to fix.
+const EXPRESSION_OVERRIDE_META =
+  'This is a photo-editing task. The attached reference photo shows this person with a neutral, resting expression. You must NOT reuse or approximate the reference photo\'s facial expression under any circumstances — that neutral expression is the one thing you must change. Use the reference ONLY to match this person\'s facial structure/likeness, headwear, attire, palette, and background, including eye color and darkness exactly as in the reference (do not lighten, recolor, or add any glow to the eyes). His or her expression in your output must be a completely different, strongly and unmistakably expressed emotion, described below. If your output\'s face looks close to the reference\'s expression, you have failed the task.';
+
 const STYLE_SUFFIX =
   'Visible linework and texture (engraving/ink-wash register), not photorealistic or cartoon/flat-vector. Limited warm sepia/candlelit palette, consistent across a set. Plain dark background, no scene elements. Flat, evenly lit background with no vignette or gradient — matte and uniform edge to edge, matching the reference image\'s background exactly. Portrait-oriented, thumbnail resolution.';
 
-// Base subject clauses (BATCH-1-PROMPTS.md), each with one added sentence
-// pinning down the specific attribute that drifted on the first pass. A
-// reference image of the member's own baseline portrait is also attached to
-// every call below, so these sentences reinforce rather than solely carry
-// the fix.
+// Same likeness/attire-anchoring subject clauses as the v1 fixup — those
+// held up fine, only the expression handling needed fixing.
 const MEMBER_SUBJECTS = {
   pixie:
-    'Warm, etching-adjacent portrait of Pamela Colman Smith, Anglo-American artist and illustrator, Edwardian era — head-and-shoulders, short dark hair often bound in a headscarf, expressive intense eyes, bohemian artist\'s dress. Aim for a recognizable likeness consistent with surviving photographs. Match the reference image\'s exact skin tone and facial features precisely — do not lighten the skin or narrow the features. Keep the dangling earrings and the layered dress with visible fabric texture from the reference. Match the reference\'s sepia warmth exactly rather than a more intense warm tone.',
+    'Warm, etching-adjacent portrait of Pamela Colman Smith, Anglo-American artist and illustrator, Edwardian era — head-and-shoulders, short dark hair often bound in a headscarf, dangling earrings, layered bohemian artist\'s dress with visible fabric texture. Match the reference image\'s exact skin tone and facial features precisely — do not lighten the skin or narrow the features. Match the reference\'s sepia warmth exactly rather than a more intense warm tone.',
   arabi:
-    'Warm, etching-adjacent portrait of Muhyiddin Ibn Arabi, Andalusian-then-Damascene Sufi scholar, late 12th/early 13th century — head-and-shoulders, turban and scholar\'s robes appropriate to the Ayyubid-era Islamic world, composed expression. No photographic or contemporary likeness reference exists; render as a period-appropriate character study consistent with the set\'s register, not a specific likeness reproduction, favoring a secular character-study framing over reproducing existing devotional iconography. Match the reference image\'s clean-shaven, youthful face exactly — do not add a beard or age the face.',
+    'Warm, etching-adjacent portrait of Muhyiddin Ibn Arabi, Andalusian-then-Damascene Sufi scholar, late 12th/early 13th century — head-and-shoulders, turban and scholar\'s robes appropriate to the Ayyubid-era Islamic world. No photographic or contemporary likeness reference exists; render as a period-appropriate character study consistent with the set\'s register, favoring a secular character-study framing over reproducing existing devotional iconography. Match the reference image\'s clean-shaven, youthful face exactly — do not add a beard or age the face.',
   maud:
-    'Warm, etching-adjacent portrait of Maud Gonne, Irish revolutionary and actress, Edwardian era — head-and-shoulders, tall striking bearing, dark hair, elegant Edwardian dress, direct confident gaze. Aim for a recognizable likeness consistent with surviving photographs. Match the reference image\'s exact hairstyle (loose, upswept wavy hair) and draped shawl/wrap attire precisely — do not substitute a different dress or hairstyle.',
+    'Warm, etching-adjacent portrait of Maud Gonne, Irish revolutionary and actress, Edwardian era — head-and-shoulders, tall striking bearing, dark hair. Match the reference image\'s exact hairstyle (loose, upswept wavy hair) and draped shawl/wrap attire precisely — do not substitute a different dress or hairstyle.',
   khaldun:
-    'Warm, etching-adjacent portrait of Ibn Khaldun, North African/Andalusian historian and statesman, 14th century — head-and-shoulders, turban and formal robes appropriate to a Mamluk-era scholar-official, composed authoritative expression. No photographic or contemporary likeness reference exists; render as a period-appropriate character study consistent with the set\'s register, not a specific likeness reproduction. Match the reference image\'s elderly, deeply lined, gaunt facial structure exactly — do not render a younger or fuller face.',
+    'Warm, etching-adjacent portrait of Ibn Khaldun, North African/Andalusian historian and statesman, 14th century — head-and-shoulders, turban and formal robes appropriate to a Mamluk-era scholar-official. No photographic or contemporary likeness reference exists; render as a period-appropriate character study consistent with the set\'s register. Match the reference image\'s elderly, deeply lined, gaunt facial structure exactly — do not render a younger or fuller face.',
   llull:
-    'Warm, etching-adjacent portrait of Ramon Llull, Majorcan philosopher and mystic, 13th/14th century — head-and-shoulders, plain religious tertiary\'s habit (post-conversion, not courtly dress), weathered contemplative face. No photographic or contemporary likeness reference exists; render as a period-appropriate character study consistent with the set\'s register, not a specific likeness reproduction. Match the reference image\'s headwear exactly (skullcap/tonsure beneath the hood) — do not omit it.',
+    'Warm, etching-adjacent portrait of Ramon Llull, Majorcan philosopher and mystic, 13th/14th century — head-and-shoulders, plain religious tertiary\'s habit (post-conversion, not courtly dress), weathered contemplative face. No photographic or contemporary likeness reference exists; render as a period-appropriate character study consistent with the set\'s register. Match the reference image\'s headwear exactly (skullcap/tonsure beneath the hood) — do not omit it.',
   dee:
-    'Warm, etching-adjacent portrait of John Dee, English mathematician and astrologer, Elizabethan era — head-and-shoulders, long white beard, black skullcap, scholar\'s gown and ruff collar, penetrating gaze. No photograph exists, but a well-known contemporary painted portrait survives (Ashmolean Museum) — use it as a loose likeness anchor while keeping the etching register rather than reproducing the painting directly. Match the reference image\'s sharp cheekbones, neatly pointed and well-groomed beard, plain black skullcap (not a beret or cornered cap), and structured Elizabethan ruff collar exactly.',
+    'Warm, etching-adjacent portrait of John Dee, English mathematician and astrologer, Elizabethan era — head-and-shoulders, long white beard, black skullcap, scholar\'s gown and ruff collar. Match the reference image\'s sharp cheekbones, neatly pointed and well-groomed beard, plain black skullcap (not a beret or cornered cap), and structured Elizabethan ruff collar exactly.',
   warburg:
-    'Warm, etching-adjacent portrait of Aby Warburg, German art historian, early 20th century — head-and-shoulders, formal suit, intense/haunted expression, receding hairline. Aim for a recognizable likeness consistent with surviving photographs. Match the reference image\'s exact facial structure, age, and skin tone precisely — do not age the face or add jowls.',
+    'Warm, etching-adjacent portrait of Aby Warburg, German art historian, early 20th century — head-and-shoulders, formal suit, receding hairline. Match the reference image\'s exact facial structure, age, and skin tone precisely — do not age the face or add jowls.',
 };
 
+// v2: concrete, physically-described expressions rather than mood
+// adjectives alone — this is what actually overrides the reference image's
+// pull toward reproducing its own neutral expression.
 const REACTIONS = {
-  happy: 'Expression: a genuine, warm brightening — eyes lit with real pleasure, the faint start of a smile, an open and unguarded look.',
+  happy:
+    'Expression: a broad, unmistakable open-mouthed smile, teeth showing, cheeks pushed up high, eyes crinkled almost shut with genuine delighted laughter — an exuberant, joyful face, the opposite of a neutral or reserved expression.',
   thinking:
-    'Expression: inward and considering — gaze middle-distance or slightly downcast, brow faintly furrowed in concentration, the look of someone turning an idea over rather than addressing the viewer.',
+    'Expression: strongly inward and distracted — eyes unfocused and cast far into the middle distance (not toward the viewer at all), one eyebrow raised or brow deeply furrowed, mouth slightly open or twisted to one side as if murmuring — an obviously distracted, not-present face, the opposite of direct engagement with the viewer.',
   angry:
-    'Expression: controlled, real indignation — jaw set, eyes narrowed and direct, tension held rather than shouted; intensity, not cartoonish rage.',
+    'Expression: a hard, aggressive scowl — eyebrows sharply lowered and pulled together into a deep vertical crease, eyes narrowed to slits in a hard glare, mouth pulled into a tight snarl or bared teeth, jaw thrust forward — an unmistakably hostile, confrontational face.',
 };
 
-// member -> reactions to regenerate. Warburg only needs `happy` re-run;
-// thinking/angry were fine and are already promoted.
 const FIXUPS = {
   pixie: ['happy', 'thinking', 'angry'],
   arabi: ['happy', 'thinking', 'angry'],
@@ -84,7 +91,7 @@ const FIXUPS = {
 };
 
 function buildPrompt(memberId, reaction) {
-  return `${MEMBER_SUBJECTS[memberId]} ${REACTIONS[reaction]} ${STYLE_SUFFIX}`;
+  return `${EXPRESSION_OVERRIDE_META} ${MEMBER_SUBJECTS[memberId]} ${REACTIONS[reaction]} ${STYLE_SUFFIX}`;
 }
 
 async function main() {
@@ -104,7 +111,7 @@ async function main() {
     for (const reaction of reactions) {
       const id = `${memberId}-${reaction}`;
       const prompt = buildPrompt(memberId, reaction);
-      process.stdout.write(`Generating ${id} (with baseline reference)... `);
+      process.stdout.write(`Generating ${id} (v2, expression-override)... `);
       try {
         const start = Date.now();
         const imageBuffer = await generatePortraitImage({ apiKey, prompt, referenceImages });
