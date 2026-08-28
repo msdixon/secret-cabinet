@@ -790,8 +790,14 @@ async function streamPost(url, body, onChunk, onSpeaking, onSpeakerDone) {
         } else if (data.disposition) {
           // #360: waitingOnMemberId from the just-finished beat's disposition
           // update (#203's own signal) — a member wanting back in reads as
-          // "waiting" until their disposition next changes.
-          window.LodgeScene?.setDisposition(data.disposition.memberId, data.disposition.waitingOnMemberId);
+          // "waiting" until their disposition next changes. #451 rides the
+          // same payload out with #449's reaction tag (happy/thinking/angry/
+          // none), sticky the same way.
+          window.LodgeScene?.setDisposition(
+            data.disposition.memberId,
+            data.disposition.waitingOnMemberId,
+            data.disposition.reaction
+          );
         } else if (data.citation) {
           // #34 follow-up: one beat's worth of live-captured citations
           // (#355) — scene.js decides for itself whether any of them quote
