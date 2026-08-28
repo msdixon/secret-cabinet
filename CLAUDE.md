@@ -69,6 +69,14 @@ A tracked `post-checkout` hook at `.githooks/post-checkout` also runs `npm insta
 
 If a worktree ever turns up with 3D/scene features silently not working, check that `node_modules/babylonjs` exists before assuming it's a code bug — `npm install` in that worktree is the fix.
 
+## Closing issues via the PR body
+
+GitHub only auto-closes an issue on merge when the PR body contains a **bare** closing keyword directly adjacent to the issue number — `Closes #445`, `Fixes #445`, or `Resolves #445` (case-insensitive, all equivalent). A markdown link (`Closes [#445](url)`) or any words between the keyword and the number (`Closes the coverage gap for #445`) breaks GitHub's parser — it will not auto-close, and nothing errors or warns that it didn't.
+
+**When a PR fully resolves the issue it references, put one of those three keywords immediately before the bare issue number** — its own line or the end of the summary, not folded into a markdown link or a longer sentence. When a PR only partially addresses an issue (a pilot batch, a first cut with named deferred work), deliberately leave the keyword out and reference the issue in plain prose instead, so it correctly stays open.
+
+**Why:** confirmed 2026-08-28 by checking real PR bodies against actual issue state. PRs that used the bare form (`Closes #443.`, `Fixes #444.`) auto-closed cleanly on merge. PRs that used a markdown link or prose reference instead (`Closes the coverage gap [#445](...)`, or no keyword at all) never closed — #34, #445, and #453 all shipped fully-complete work in 2026-08-26/27/28 and sat open regardless, each needing a manual close later. This is the mechanical root cause behind the "before ending a session" check below coming up empty as often as it has for chip sessions in particular, which tend to write natural PR-body prose rather than GitHub's specific parser syntax.
+
 ## Before ending a session that touched issues or merged PRs
 
 Confirm every issue referenced this session is in the right state — closed if genuinely done, left open with a progress comment if partially done. Don't leave "decide X" tickets open once the decision's recorded (this happened to #116/#117: decided and commented on 2026-07-28, but not closed until a later housekeeping pass caught it).
