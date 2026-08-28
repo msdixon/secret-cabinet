@@ -2638,6 +2638,7 @@ test('runRound — passage end-causes and beats (#244)', async t => {
       memberId: record.PLAYER_SPEAKER_ID,
       speakerName: 'A Visitor',
       text: 'I have a question.',
+      playerAuthored: true,
     });
   });
 
@@ -2650,6 +2651,24 @@ test('runRound — passage end-causes and beats (#244)', async t => {
     });
     assert.equal(result.beats[0].memberId, record.PLAYER_SPEAKER_ID);
   });
+
+  await t.test(
+    'marks the preceding-turn beat playerAuthored even when it carries a real roster memberId (#453)',
+    async () => {
+      // Playing *as* a member (rather than under a custom name) files the
+      // beat under that member's real roster id -- exactly the case where,
+      // without this marker, a misquote would read back indistinguishable
+      // from the member's own words.
+      const client = fakePassageClient({ windingDownOnConsult: [true] });
+      const result = await runRound({
+        ...RUNROUND_BASE_ARGS,
+        client,
+        precedingTurn: { speakerName: 'Crowley', memberId: 'crowley', text: 'I never said that.' },
+      });
+      assert.equal(result.beats[0].memberId, 'crowley');
+      assert.equal(result.beats[0].playerAuthored, true);
+    }
+  );
 
   await t.test('records a failed speaker turn as a beat with no text rather than dropping it (#354)', async () => {
     const client = fakePassageClient({ windingDownOnConsult: [false, true] });

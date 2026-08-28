@@ -273,6 +273,64 @@ test('exportScholarly', async t => {
     }
   );
 
+  // #453 — a passage selected into the Scholarly Note is exactly the
+  // material that ends up quoted as if it were the room's own record; if the
+  // selected passage was actually the player's own submitted turn (playing
+  // as a member), the note has to say so rather than silently attributing it
+  // to that member.
+  await t.test(
+    'marks a selected passage that was actually the player playing as that member',
+    async t2 => {
+      const {
+        window,
+        document,
+        module: Export,
+      } = boot(t2, {
+        fetchImpl: () =>
+          Promise.resolve({
+            ok: true,
+            json: () =>
+              Promise.resolve({
+                rounds: [
+                  { beats: [{ memberId: 'blavatsky', text: 'I never said that.', playerAuthored: true }] },
+                ],
+                citationFlags: [],
+              }),
+          }),
+      });
+      addEntry(document, {
+        speaker: 'Blavatsky',
+        text: 'I never said that.',
+        note: 'flagging this for later',
+        playerTurn: true,
+      });
+      captureDownload(window, document);
+      await Export.exportScholarly();
+      const text = await window.__capturedBlob.text();
+      assert.match(text, /\*\*Blavatsky\*\* ⟡ played by a human participant, live —/);
+    }
+  );
+
+  await t.test('leaves a genuine member passage unmarked', async t2 => {
+    const {
+      window,
+      document,
+      module: Export,
+    } = boot(t2, {
+      fetchImpl: () =>
+        Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ rounds: [{ beats: [{ memberId: 'crowley', text: 'a' }] }], citationFlags: [] }),
+        }),
+    });
+    addEntry(document, { speaker: 'Crowley', text: 'The book is not the point.', note: 'a gloss' });
+    captureDownload(window, document);
+    await Export.exportScholarly();
+    const text = await window.__capturedBlob.text();
+    assert.match(text, /\*\*Crowley\*\* —/);
+    assert.doesNotMatch(text, /played by a human participant/);
+  });
+
   // #356 — the appendix-form bibliography: Works Cited (direct citations)
   // kept separate from Works Referenced (invoked, not quoted), and falling
   // back to always-on beat capture when the session was never run through
