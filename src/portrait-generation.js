@@ -18,14 +18,31 @@ const DEFAULT_ASPECT_RATIO = '3:4';
 // Buffer of the raw (un-resized) PNG bytes — resizing to the set's 512px
 // convention happens at promotion time (scripts/promote-portrait.js), not
 // here, so this stays a pure generate-and-return call.
-async function generatePortraitImage({ apiKey, prompt, model = GEMINI_IMAGE_MODEL, aspectRatio = DEFAULT_ASPECT_RATIO, fetchImpl = fetch }) {
+//
+// Optional `referenceImages` ([{ mimeType, data (Buffer) }]) are sent as
+// inlineData parts ahead of the text prompt — gemini-2.5-flash-image treats
+// leading images as subjects to keep consistent with, which anchors likeness
+// and attire far more reliably than describing them in prose alone (spiked
+// 2026-08-28 on #450 batch 2 after several reaction candidates drifted from
+// their member's baseline despite a detailed text-only prompt).
+async function generatePortraitImage({
+  apiKey,
+  prompt,
+  model = GEMINI_IMAGE_MODEL,
+  aspectRatio = DEFAULT_ASPECT_RATIO,
+  referenceImages = [],
+  fetchImpl = fetch,
+}) {
+  const imageParts = referenceImages.map(({ mimeType, data }) => ({
+    inlineData: { mimeType, data: Buffer.isBuffer(data) ? data.toString('base64') : data },
+  }));
   const response = await fetchImpl(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
+        contents: [{ parts: [...imageParts, { text: prompt }] }],
         generationConfig: { imageConfig: { aspectRatio } },
       }),
     }

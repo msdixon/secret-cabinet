@@ -71,6 +71,24 @@ test('generatePortraitImage', async t => {
     );
   });
 
+  await t.test('sends reference images as leading inlineData parts ahead of the text prompt', async () => {
+    const fetchImpl = fakeFetch({
+      json: { candidates: [{ content: { parts: [{ inlineData: { data: Buffer.from('hi').toString('base64') } }] } }] },
+    });
+    await generatePortraitImage({
+      apiKey: 'k',
+      prompt: 'a test prompt',
+      referenceImages: [{ mimeType: 'image/png', data: Buffer.from('ref-bytes') }],
+      fetchImpl,
+    });
+
+    const body = JSON.parse(fetchImpl.calls[0].opts.body);
+    assert.equal(body.contents[0].parts.length, 2);
+    assert.equal(body.contents[0].parts[0].inlineData.mimeType, 'image/png');
+    assert.equal(body.contents[0].parts[0].inlineData.data, Buffer.from('ref-bytes').toString('base64'));
+    assert.equal(body.contents[0].parts[1].text, 'a test prompt');
+  });
+
   await t.test('throws when the response has no image data', async () => {
     const fetchImpl = fakeFetch({
       json: { candidates: [{ content: { parts: [{ text: 'no image, just talk' }] } }] },
