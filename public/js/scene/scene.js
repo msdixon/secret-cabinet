@@ -192,6 +192,15 @@ window.LodgeScene = (function () {
   let seatMeshes = [];
   let tableMesh = null;
   const portraitTextures = {}; // memberId -> BABYLON.Texture, cached across seat reassignment
+  // #452: "<memberId>-<reaction>" -> BABYLON.Texture, entered only once that
+  // image's load has actually succeeded (see applyReactionTexture below for
+  // why the failure path is handled differently than portraitTextures' own).
+  const reactionTextures = {};
+  // "<memberId>-<reaction>" keys already confirmed 404 -- checked before
+  // requesting the same URL twice. With only 13/38 members carrying any
+  // reaction set as of #470/#472, most disposition updates land here, and
+  // there's no reason to re-hit the network for a pair already known absent.
+  const missingReactionKeys = new Set();
 
   // #357: fire state. fireLevel is the value actually applied to lights/
   // flames each frame, eased toward fireTargetLevel rather than snapping --
@@ -1328,9 +1337,9 @@ window.LodgeScene = (function () {
   // this member's own next disposition update either confirms or replaces
   // it -- exactly the same "sticky until this member is heard from again"
   // lifetime the server already gives waitingOnMemberId, and the disposition
-  // SSE event already carries both together. Read by #452 (not yet built)
-  // to pick which portrait texture a seat shows; this issue only stores the
-  // signal, it doesn't act on it.
+  // SSE event already carries both together. Read via getReaction() by
+  // applyReactionTexture (#452) to pick which portrait texture a seat
+  // shows.
   const memberReactions = new Map();
 
   // speaking (currentSpeakingId) takes priority over waiting, which takes
@@ -1395,21 +1404,83 @@ window.LodgeScene = (function () {
     refreshSeatStates();
   }
 
-  // #360/#451: waitingOnMemberId and #449's reaction tag from a beat's
+  // #452: resolves which texture a seated member's billboard should show
+  // for their current reaction, and applies it directly to that seat's
+  // material. Falls back to the member's default portrait both for 'none'
+  // and for any member/reaction pair that hasn't been generated yet (25/38
+  // members as of #470/#472) -- never hides the seat the way
+  // getPortraitTexture's own failure path does, since a reaction not
+  // landing shouldn't read as the member themselves going missing.
+  //
+  // Unlike getPortraitTexture, this does NOT optimistically assign a
+  // not-yet-loaded texture and let onError correct it afterward: with most
+  // member/reaction pairs currently absent, that would flash a blank
+  // texture on nearly every disposition update before falling back, which
+  // reads as a bug rather than a transition. Instead the seat keeps
+  // whatever it's already showing until the reaction image is confirmed to
+  // exist via BABYLON.Texture's onLoad callback, then swaps -- a hard cut,
+  // not a cross-fade, matching the rest of this file's animation
+  // vocabulary: animateSeatProp's CreateAndStartAnimation tweens Color3/
+  // Vector3 properties (diffuseColor, scaling), and Babylon has no built-in
+  // way to interpolate between two Texture objects. A real cross-fade would
+  // need a second overlapping plane with its own alpha tween -- a
+  // meaningfully bigger feature than this issue asks for.
+  function applyReactionTexture(seat, memberId, reaction) {
+    const defaultTex = getPortraitTexture(sceneRef, memberId);
+    const key = reaction && reaction !== 'none' ? `${memberId}-${reaction}` : null;
+    if (!key || missingReactionKeys.has(key)) {
+      seat.avatarMat.emissiveTexture = defaultTex;
+      return;
+    }
+    if (reactionTextures[key]) {
+      seat.avatarMat.emissiveTexture = reactionTextures[key];
+      return;
+    }
+    // Not yet known either way -- show the default while we find out, and
+    // swap over asynchronously only on a confirmed successful load.
+    seat.avatarMat.emissiveTexture = defaultTex;
+    const tex = new BABYLON.Texture(
+      `/portraits/${key}.png`,
+      sceneRef,
+      false,
+      false,
+      BABYLON.Texture.TRILINEAR_SAMPLINGMODE,
+      () => {
+        reactionTextures[key] = tex;
+        // The load is async -- by the time it resolves, this seat may have
+        // been reassigned to someone else, or this member may have moved on
+        // to a different reaction. Only apply if both still match.
+        const current = seatMeshes.find(s => s.memberId === memberId);
+        if (current && getReaction(memberId) === reaction) {
+          current.avatarMat.emissiveTexture = tex;
+        }
+      },
+      () => {
+        missingReactionKeys.add(key);
+      }
+    );
+    // Same V-axis flip as getPortraitTexture, and for the same reason (see
+    // that function's comment) -- these are the same portrait pipeline's
+    // images, just a different suffix.
+    tex.vScale = -1;
+    tex.vOffset = 1;
+  }
+
+  // #360/#451/#452: waitingOnMemberId and #449's reaction tag from a beat's
   // disposition update -- both sticky per member until their own next
   // disposition update says otherwise, same lifetime the server-side
   // disposition object itself has (see memberReactions above for why that's
   // the right lifetime for reaction specifically). Empty seats can't reach
   // this (memberId always comes from a real beat), so no seat.memberId guard
-  // is needed here the way the others have. reaction only ever affects
-  // memberReactions, not seatStateFor/refreshSeatStates -- #452 will read it
-  // to choose a portrait texture, this issue just needs the signal stored.
+  // is needed here the way the others have.
   function setDisposition(memberId, waitingOnMemberId, reaction) {
     if (!sceneRef || !seatMeshes.length || !memberId) return;
     if (waitingOnMemberId) waitingMemberIds.add(memberId);
     else waitingMemberIds.delete(memberId);
     if (reaction) memberReactions.set(memberId, reaction);
     refreshSeatStates();
+    const seat = seatMeshes.find(s => s.memberId === memberId);
+    if (seat) applyReactionTexture(seat, memberId, getReaction(memberId));
   }
 
   // #451: current reaction tag for a member, 'none' if they have none yet
