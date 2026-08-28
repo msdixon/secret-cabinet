@@ -550,6 +550,7 @@ async function runRound({
           residueNote,
           citations,
           invokedWorks,
+          reaction,
           usage: dUsage,
           latencyMs: dLatencyMs,
         } = await callDispositionUpdate({
@@ -561,11 +562,12 @@ async function runRound({
           libraryIds,
         });
         if (updatedDisposition) {
-          currentDisposition[memberId] = { text: updatedDisposition, waitingOnMemberId };
-          // #360: surfaces the same waitingOnMemberId pickNextSpeaker already
-          // reads (#203) — a member who wants to jump back in reads as
-          // "waiting" until their disposition next changes.
-          onDisposition?.(memberId, waitingOnMemberId);
+          currentDisposition[memberId] = { text: updatedDisposition, waitingOnMemberId, reaction };
+          // #360/#451: surfaces the same waitingOnMemberId pickNextSpeaker
+          // already reads (#203), plus #449's reaction tag — a member who
+          // wants to jump back in reads as "waiting", and their reaction
+          // sticks the same way, until their disposition next changes.
+          onDisposition?.(memberId, waitingOnMemberId, reaction);
         }
         // #166: only when the beat actually earned a fragment — most beats
         // don't (see the tool schema's "most turns, nothing belongs here").

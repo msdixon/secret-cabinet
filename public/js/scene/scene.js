@@ -1320,6 +1320,18 @@ window.LodgeScene = (function () {
   // alongside currentSpeakingId.
   let currentPoolIds = null;
   const waitingMemberIds = new Set();
+  // #451: each present member's most recent #449 reaction tag
+  // (happy/thinking/angry/none), keyed by memberId. Lifetime deliberately
+  // mirrors waitingMemberIds above rather than a timed decay or a
+  // turn-scoped flash: a reaction is how a member reads *right now*, which
+  // stays true regardless of how many other members speak in between, until
+  // this member's own next disposition update either confirms or replaces
+  // it -- exactly the same "sticky until this member is heard from again"
+  // lifetime the server already gives waitingOnMemberId, and the disposition
+  // SSE event already carries both together. Read by #452 (not yet built)
+  // to pick which portrait texture a seat shows; this issue only stores the
+  // signal, it doesn't act on it.
+  const memberReactions = new Map();
 
   // speaking (currentSpeakingId) takes priority over waiting, which takes
   // priority over pool membership -- a member who's actually mid-turn or who
@@ -1353,6 +1365,9 @@ window.LodgeScene = (function () {
     // people who may no longer even be seated.
     currentPoolIds = null;
     waitingMemberIds.clear();
+    // #451: same reasoning -- a stale reaction would describe an expression
+    // struck for a beat that's no longer part of the current occupancy.
+    memberReactions.clear();
     // #34: same reasoning -- a new roster likely means a new (or cleared)
     // provocation too, so an open reading view shouldn't survive it.
     if (documentInspecting) closeDocumentInspect();
@@ -1380,16 +1395,30 @@ window.LodgeScene = (function () {
     refreshSeatStates();
   }
 
-  // #360: waitingOnMemberId from a beat's disposition update (#203's own
-  // signal) -- sticky per member until their own next disposition update
-  // says otherwise, same lifetime the server-side disposition object itself
-  // has. Empty seats can't reach this (memberId always comes from a real
-  // beat), so no seat.memberId guard is needed here the way the others have.
-  function setDisposition(memberId, waitingOnMemberId) {
+  // #360/#451: waitingOnMemberId and #449's reaction tag from a beat's
+  // disposition update -- both sticky per member until their own next
+  // disposition update says otherwise, same lifetime the server-side
+  // disposition object itself has (see memberReactions above for why that's
+  // the right lifetime for reaction specifically). Empty seats can't reach
+  // this (memberId always comes from a real beat), so no seat.memberId guard
+  // is needed here the way the others have. reaction only ever affects
+  // memberReactions, not seatStateFor/refreshSeatStates -- #452 will read it
+  // to choose a portrait texture, this issue just needs the signal stored.
+  function setDisposition(memberId, waitingOnMemberId, reaction) {
     if (!sceneRef || !seatMeshes.length || !memberId) return;
     if (waitingOnMemberId) waitingMemberIds.add(memberId);
     else waitingMemberIds.delete(memberId);
+    if (reaction) memberReactions.set(memberId, reaction);
     refreshSeatStates();
+  }
+
+  // #451: current reaction tag for a member, 'none' if they have none yet
+  // recorded (never seated, or their only disposition update so far tagged
+  // 'none'). Exists so #452 has a read hook into memberReactions without
+  // reaching into module-private state, and so this issue's own live
+  // verification has something to assert against besides raw SSE frames.
+  function getReaction(memberId) {
+    return memberReactions.get(memberId) || 'none';
   }
 
   // #28: brightens whichever seated member is currently generating a turn,
@@ -1577,6 +1606,7 @@ window.LodgeScene = (function () {
     setSpeaking,
     setPool,
     setDisposition,
+    getReaction,
     getSeatScreenPosition,
     setPassageCount,
     stirFire,

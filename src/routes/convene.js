@@ -154,10 +154,11 @@ function registerConveneRoutes(
           res.write(`data: ${JSON.stringify({ speakerDone: { memberId, name, text, ...(thread ? { thread } : {}) } })}\n\n`),
         // #360: the director's candidate pool and each beat's disposition
         // update, so the client can render listening/thinking/waiting states
-        // instead of just speaking vs. not.
+        // instead of just speaking vs. not. #451 rides the same disposition
+        // payload out with #449's reaction tag.
         onPoolUpdate: pool => res.write(`data: ${JSON.stringify({ pool })}\n\n`),
-        onDisposition: (memberId, waitingOnMemberId) =>
-          res.write(`data: ${JSON.stringify({ disposition: { memberId, waitingOnMemberId } })}\n\n`),
+        onDisposition: (memberId, waitingOnMemberId, reaction) =>
+          res.write(`data: ${JSON.stringify({ disposition: { memberId, waitingOnMemberId, reaction } })}\n\n`),
         // #34 follow-up: live per-beat citations, so the room's book can
         // highlight a passage the instant a member quotes it, instead of
         // only after the round settles.
@@ -318,8 +319,8 @@ function registerConveneRoutes(
           res.write(`data: ${JSON.stringify({ speakerDone: { memberId, name, text, ...(thread ? { thread } : {}) } })}\n\n`),
         // #360: see /api/convene above.
         onPoolUpdate: pool => res.write(`data: ${JSON.stringify({ pool })}\n\n`),
-        onDisposition: (memberId, waitingOnMemberId) =>
-          res.write(`data: ${JSON.stringify({ disposition: { memberId, waitingOnMemberId } })}\n\n`),
+        onDisposition: (memberId, waitingOnMemberId, reaction) =>
+          res.write(`data: ${JSON.stringify({ disposition: { memberId, waitingOnMemberId, reaction } })}\n\n`),
         // #34 follow-up: see /api/convene above.
         onCitation: (memberId, citations) =>
           res.write(`data: ${JSON.stringify({ citation: { memberId, citations } })}\n\n`),
@@ -404,8 +405,8 @@ function registerConveneRoutes(
           res.write(`data: ${JSON.stringify({ speakerDone: { memberId, name, text, ...(thread ? { thread } : {}) } })}\n\n`),
         // #360: see /api/convene above.
         onPoolUpdate: pool => res.write(`data: ${JSON.stringify({ pool })}\n\n`),
-        onDisposition: (memberId, waitingOnMemberId) =>
-          res.write(`data: ${JSON.stringify({ disposition: { memberId, waitingOnMemberId } })}\n\n`),
+        onDisposition: (memberId, waitingOnMemberId, reaction) =>
+          res.write(`data: ${JSON.stringify({ disposition: { memberId, waitingOnMemberId, reaction } })}\n\n`),
         // #34 follow-up: see /api/convene above.
         onCitation: (memberId, citations) =>
           res.write(`data: ${JSON.stringify({ citation: { memberId, citations } })}\n\n`),
