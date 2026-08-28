@@ -362,11 +362,17 @@ window.Export = (function () {
   // Annotated passages in document order — DOM order matches speech order since
   // entries are appended sequentially by addSpeech()/parseAndRenderTranscript(),
   // so no round-grouping or re-sorting is needed.
+  //
+  // #453: `.player-turn` is the same class applyPlayerTurnMarkers() puts on a
+  // passage's entry — carried through here so a selected passage that was
+  // actually the player's own submitted turn (playing as a member) reads as
+  // such in the scholarly note, not silently as that member's own words.
   function getAnnotatedPassages() {
     return [...document.querySelectorAll('.transcript-entry.annotated')].map(e => ({
       speaker: e.dataset.speaker,
       text: e.querySelector('.speech-text')?.textContent.trim() || '',
       note: e.querySelector('.annotation-input')?.value.trim() || '',
+      playerAuthored: e.classList.contains('player-turn'),
     }));
   }
 
@@ -536,7 +542,8 @@ window.Export = (function () {
       if (passages.length) {
         lines.push('## Selected Passages', '');
         passages.forEach(p => {
-          lines.push(`**${p.speaker}** —`, '', p.text, '', `> ${p.note}`, '');
+          const playedNote = p.playerAuthored ? ' ⟡ played by a human participant, live' : '';
+          lines.push(`**${p.speaker}**${playedNote} —`, '', p.text, '', `> ${p.note}`, '');
         });
       }
       // #354 item 4: pre-#244 sessions have no turn-level record at all, and

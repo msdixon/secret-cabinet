@@ -289,6 +289,22 @@ async function runRound({
   //   { memberId, speakerName, text }            ...by someone off-roster
   //   { memberId, text, passed: true }           a turn the member declined
   //   { memberId, text: '', failed: true, error} a turn that produced nothing
+  //   { memberId, speakerName, text,
+  //     playerAuthored: true }                   a human's own submitted turn
+  //
+  // #453: `playerAuthored` marks the one beat per round that came from the
+  // player's own submitted text rather than the model — set here, the same
+  // place `memberId` is resolved to the real roster id when playing as a
+  // member (lodge-prompts' resolvePlayerSpeakerId). Without it, a beat filed
+  // under a member's real id is indistinguishable in the stored record from
+  // that member's own words — a misquote or misattribution during play would
+  // silently read back as if the figure had said it. The client's live/export
+  // marking (applyPlayerTurnMarkers, buildAnnotatedTranscript) already tracks
+  // this itself round-by-round as the player submits each turn; this field is
+  // the same fact recorded structurally, so a consumer reading the session
+  // record directly — not just live-tracked client state — can tell honestly
+  // too (see export.js's getAnnotatedPassages). Omitted rather than `false`
+  // on every other beat, same convention as `failed`/`passed` above.
   //
   // #355: a spoken beat may also carry `citations` — an array, present only
   // when the piggybacked disposition call (see the try block below) both
@@ -347,6 +363,7 @@ async function runRound({
       memberId: precedingTurn.memberId || record.PLAYER_SPEAKER_ID,
       speakerName: precedingTurn.speakerName,
       text: precedingTurn.text,
+      playerAuthored: true,
     });
   }
 
