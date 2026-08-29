@@ -403,6 +403,24 @@ window.Witness = (function () {
     card.scrollTop = card.scrollHeight;
   }
 
+  // A freshly-appended entry should open showing its own opening lines, not
+  // the tail of the whole card. scrollCardToLatest (still right while a
+  // single entry's text is actively growing -- keeps a live-typed line in
+  // view, and #287's "reader already following the stack" case) is wrong
+  // for a beat that lands complete in one shot, with no typing phase
+  // (replay's renderRoomCard, or a settled beat that reused nothing): a
+  // passage longer than the card's max-height would open scrolled straight
+  // to its end, its opening lines hidden behind the sticky .speaker-name
+  // header. This scrolls just far enough that the entry's top clears the
+  // header -- the browser clamps scrollTop to the valid range on its own,
+  // so an entry near the top of a short card is left effectively
+  // unscrolled. #476.
+  function scrollCardToEntryStart(card, entry) {
+    const header = card.querySelector('.speaker-name');
+    const headerBottom = header ? header.getBoundingClientRect().bottom : card.getBoundingClientRect().top;
+    card.scrollTop += entry.getBoundingClientRect().top - headerBottom;
+  }
+
   // Renders one settled speech beat into a member's card, anchored to their
   // seat. A member with no seat to anchor to (interject's "a voice from
   // elsewhere", memberId null) reads into the event strip instead, same
@@ -457,7 +475,12 @@ window.Witness = (function () {
     entry.classList.toggle('card-entry-aside', !!block.thread);
     entry.innerHTML = speechBodyHtml(block);
     registerThread(block.thread);
-    scrollCardToLatest(card);
+    // typing: this entry's tail was already being followed as its text grew
+    // (setRoomTypingText below) -- keep following it. Fresh entry: it just
+    // landed complete with no typing phase (replay's own path here), so
+    // show its start instead of jumping to the card's tail. #476.
+    if (typing) scrollCardToLatest(card);
+    else scrollCardToEntryStart(card, entry);
     touchRoomLoop();
     scheduleCardFade(memberId, text);
     return {
@@ -478,7 +501,10 @@ window.Witness = (function () {
     entry.innerHTML =
       '<div class="bubble-body"><div class="speech-text typing-text transcript-stream-live"></div></div>';
     cardEntries(card).appendChild(entry);
-    scrollCardToLatest(card);
+    // A newly opened beat should show its own start, not the card's tail
+    // (#476) -- setRoomTypingText below takes over tail-following once its
+    // text starts growing past the card's height.
+    scrollCardToEntryStart(card, entry);
     touchRoomLoop();
   }
 
