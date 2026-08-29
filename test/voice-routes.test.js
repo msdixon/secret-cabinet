@@ -169,6 +169,11 @@ test('POST /api/voice/speak', async t => {
     assert.match(stub.calls[0].url, /\/text-to-speech\/voice-crowley$/);
     assert.equal(stub.calls[0].opts.headers['xi-api-key'], 'sk-test');
     assert.equal(JSON.parse(stub.calls[0].opts.body).model_id, 'turbo-model');
+    assert.equal(
+      JSON.parse(stub.calls[0].opts.body).voice_settings.speed,
+      1.1,
+      '#478: request should carry a speed faster than ElevenLabs\' bare default'
+    );
 
     assert.equal(res.headers['Content-Type'], 'audio/mpeg');
     assert.equal(res.buffer().toString(), 'fake-mp3-bytes');

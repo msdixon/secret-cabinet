@@ -27,6 +27,16 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
+// #478: with no voice_settings.speed at all, ElevenLabs falls back to
+// whatever its bare per-voice default happens to be, which read as
+// uniformly too slow across every member. Live A/B testing against the
+// real API (same voice/model/text, repeated trials to average out
+// ElevenLabs' own generation-to-generation timing variance) showed 1.1
+// consistently producing ~6-7% shorter audio than 1.0 with no audible
+// artifacts -- comfortably inside the API's documented [0.7, 1.2] range,
+// short of the top edge where docs warn quality degrades.
+const DEFAULT_VOICE_SPEED = 1.1;
+
 function registerVoiceRoutes(app, { roster, voiceCacheDir, apiKey, modelId }) {
   const available = !!apiKey;
 
@@ -44,10 +54,15 @@ function registerVoiceRoutes(app, { roster, voiceCacheDir, apiKey, modelId }) {
     const voiceId = member?.voiceId;
     if (!voiceId) return res.status(404).json({ error: 'No ElevenLabs voice assigned for this member' });
 
-    // Cache key covers voice + exact text: a replayed session speaks the
-    // same line through the same member every time, so this is the common
-    // case, not an edge case — worth the disk write.
-    const cacheKey = crypto.createHash('sha256').update(`${voiceId}::${text}`).digest('hex');
+    // Cache key covers voice + exact text + speed: a replayed session speaks
+    // the same line through the same member every time, so this is the
+    // common case, not an edge case — worth the disk write. Speed is folded
+    // in (#478) so a pace change actually reaches disk-cached lines instead
+    // of silently continuing to serve pre-existing slow audio forever.
+    const cacheKey = crypto
+      .createHash('sha256')
+      .update(`${voiceId}::${DEFAULT_VOICE_SPEED}::${text}`)
+      .digest('hex');
     const cachePath = path.join(voiceCacheDir, `${cacheKey}.mp3`);
     const cached = fs.existsSync(cachePath);
 
@@ -66,7 +81,11 @@ function registerVoiceRoutes(app, { roster, voiceCacheDir, apiKey, modelId }) {
             'Content-Type': 'application/json',
             Accept: 'audio/mpeg',
           },
-          body: JSON.stringify({ text, model_id: modelId }),
+          body: JSON.stringify({
+            text,
+            model_id: modelId,
+            voice_settings: { speed: DEFAULT_VOICE_SPEED },
+          }),
         });
         if (!response.ok) {
           const detail = await response.text().catch(() => '');
