@@ -1093,6 +1093,15 @@ async function convene() {
 async function runLullLoop(lullNote) {
   let note = lullNote;
   while (true) {
+    // #475: streamPost resolving only means the *server* finished generating
+    // the passage -- witness.js's liveTurnQueue (#400) is still pacing that
+    // same text/audio onto the stage turn by turn, and without this wait the
+    // lull UI could render (and its "Continue"/"Let it end" buttons become
+    // clickable) while a member was still visibly/audibly mid-turn
+    // underneath it. This is the same queue collapseStage() already drains
+    // on the *dismissal* side (see closeMeeting()); this gates the lull's
+    // *appearance* on the identical signal.
+    await window.Witness.waitForLiveQueueDrain();
     const lull = addLullDivider(note, segmentCount - 1);
     const stageLull = window.Witness.liveLull(note);
     setStatus(note, false);
