@@ -1625,6 +1625,32 @@ test('playback speed (#288): one multiplier reaches room-mode holds, replay, and
     assert.equal(btn(), '1×', 'and back to the default completes the cycle');
   });
 
+  // #477: the speed control used to only reach the *next* Voice.speak() call
+  // -- a mid-utterance change had no effect on the line currently playing.
+  // setSpeed() now also tells voice.js to re-pace whatever's already in
+  // flight; window.Voice may be absent entirely (unsupported browser), so
+  // this must not throw when it's undefined.
+  await t.test('cycling speed calls Voice.updateSpeed() with the new multiplier, to re-pace the in-flight line', t2 => {
+    const updateSpeedCalls = [];
+    const loaded = loadPublicModule('witness.js', FIXTURE, window => {
+      window.Voice = { speak: () => undefined, stop: () => {}, updateSpeed: v => updateSpeedCalls.push(v) };
+    });
+    t2.after(loaded.cleanup);
+    const { module: Witness } = loaded;
+
+    Witness.cycleSpeed(); // 1x -> 1.5x
+    assert.deepEqual(updateSpeedCalls, [1.5]);
+
+    Witness.cycleSpeed(); // 1.5x -> 2x
+    assert.deepEqual(updateSpeedCalls, [1.5, 2]);
+  });
+
+  await t.test('cycling speed with no window.Voice at all does not throw', t2 => {
+    const loaded = loadPublicModule('witness.js', FIXTURE); // no window.Voice stub
+    t2.after(loaded.cleanup);
+    assert.doesNotThrow(() => loaded.module.cycleSpeed());
+  });
+
   await t.test('a speed persisted from a prior session is honored on the next load', t2 => {
     const { document } = boot2WithSpeed(t2, '2');
     assert.equal(document.getElementById('witness-speed-btn').textContent, '2×');
