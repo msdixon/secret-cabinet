@@ -689,11 +689,32 @@ window.Witness = (function () {
   // same one-thing-at-a-time backbone, just fed by a live stream.
   let liveTurnQueue = [];
   let liveTurnGeneration = 0;
+  // #475: awaitLull() has nothing of its own to check the queue against -- it
+  // just resolves a promise as soon as it's called, and app.js was calling it
+  // (via runLullLoop) the instant streamPost resolved, which per the #400
+  // comment above routinely races ahead of the queue draining. Each spot
+  // below that can bring the queue to empty resolves every pending waiter, so
+  // waitForLiveQueueDrain() -- the fix for #475 -- can hand runLullLoop a
+  // promise that only settles once the last paced turn is actually done.
+  let drainWaiters = [];
+
+  function resolveDrainWaiters() {
+    if (!drainWaiters.length) return;
+    const waiters = drainWaiters;
+    drainWaiters = [];
+    waiters.forEach(resolve => resolve());
+  }
+
+  function waitForLiveQueueDrain() {
+    if (!liveTurnQueue.length) return Promise.resolve();
+    return new Promise(resolve => drainWaiters.push(resolve));
+  }
 
   function resetLiveTurnQueue() {
     liveTurnGeneration++;
     liveTurnQueue = [];
     if (sceneAvailable) window.LodgeScene?.setSpeaking(null);
+    resolveDrainWaiters();
   }
 
   // typingSet/liveSpeech always target the turn most recently opened by
@@ -748,7 +769,10 @@ window.Witness = (function () {
         // waiting, advanceLiveTurnQueue below reframes straight to them, so
         // this avoids a needless resting-shot flicker between back-to-back
         // turns.
-        if (!liveTurnQueue.length && sceneAvailable) window.LodgeScene?.setSpeaking(null);
+        if (!liveTurnQueue.length) {
+          if (sceneAvailable) window.LodgeScene?.setSpeaking(null);
+          resolveDrainWaiters();
+        }
         advanceLiveTurnQueue();
       }, resolvedDelay);
     });
@@ -884,7 +908,10 @@ window.Witness = (function () {
         }
       }
     }
-    if (!liveTurnQueue.length && sceneAvailable) window.LodgeScene?.setSpeaking(null);
+    if (!liveTurnQueue.length) {
+      if (sceneAvailable) window.LodgeScene?.setSpeaking(null);
+      resolveDrainWaiters();
+    }
     advanceLiveTurnQueue();
   }
 
@@ -1482,6 +1509,7 @@ window.Witness = (function () {
     liveTypingSet,
     liveClearTyping,
     liveAbortTurn,
+    waitForLiveQueueDrain,
     collapseStage,
     reopenStage,
     exitClicked,
