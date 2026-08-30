@@ -444,31 +444,40 @@ window.LodgeScene = (function () {
   // and [2] are the two bays immediately flanking the hearth (each PI/2 --
   // one pilaster-bay -- from HEARTH_ANGLE; [3] is the far side of the room,
   // PI away). Picking [0] as "near the fireplace" is an arbitrary tiebreak
-  // between two equally-adjacent bays. The image itself
-  // (public/portraits/decor/dorian-gray.png) is static room decor only --
-  // generated against STYLE_GUIDE.md's baseline register, not a roster
-  // member portrait, and deliberately kept out of public/portraits/'s
-  // top-level (member-id-keyed) namespace so no roster/reaction-portrait
-  // code path could ever pick it up by id.
+  // between two equally-adjacent bays. The images themselves
+  // (public/portraits/decor/dorian-gray-01.png..08.png) are static room decor
+  // only -- generated against STYLE_GUIDE.md's baseline register, not a
+  // roster member portrait, and deliberately kept out of public/portraits/'s
+  // top-level (member-id-keyed) namespace so no roster/reaction-portrait code
+  // path could ever pick one up by id.
+  //
+  // Literary easter egg (still #479): 8 variants trace the same face across
+  // the novel's central conceit -- the portrait visibly aging/corrupting
+  // while the man stays young -- from unmarked (01) to ruinous (08). One is
+  // picked at random each time the scene builds; deliberately not tied to
+  // any room state, session, or persistence, just a fresh roll per load.
   const DORIAN_FRAME_INDEX = 0;
-  let dorianPortraitTexture = null;
+  const DORIAN_PORTRAIT_COUNT = 8;
+  function pickDorianPortraitPath() {
+    const n = 1 + Math.floor(Math.random() * DORIAN_PORTRAIT_COUNT);
+    return `/portraits/decor/dorian-gray-${String(n).padStart(2, '0')}.png`;
+  }
+
   function getDorianPortraitTexture(scene) {
-    if (!dorianPortraitTexture) {
-      // Same invertY workaround as getPortraitTexture above: the Texture
-      // constructor's own invertY flag has no visible effect, so the V axis
-      // is flipped via vScale/vOffset instead.
-      const tex = new BABYLON.Texture(
-        '/portraits/decor/dorian-gray.png',
-        scene,
-        false,
-        false,
-        BABYLON.Texture.TRILINEAR_SAMPLINGMODE
-      );
-      tex.vScale = -1;
-      tex.vOffset = 1;
-      dorianPortraitTexture = tex;
-    }
-    return dorianPortraitTexture;
+    // Same invertY workaround as getPortraitTexture above: the Texture
+    // constructor's own invertY flag has no visible effect, so the V axis
+    // is flipped via vScale/vOffset instead. No caching here (unlike member
+    // avatar textures) -- each scene build should be free to roll again.
+    const tex = new BABYLON.Texture(
+      pickDorianPortraitPath(),
+      scene,
+      false,
+      false,
+      BABYLON.Texture.TRILINEAR_SAMPLINGMODE
+    );
+    tex.vScale = -1;
+    tex.vOffset = 1;
+    return tex;
   }
 
   // Gilt-frame + dark-panel pair per portrait, echoing the dorian-frame's
