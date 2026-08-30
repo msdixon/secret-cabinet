@@ -439,11 +439,53 @@ window.LodgeScene = (function () {
     }
   }
 
+  // #479: the one bay that hangs an actual image -- the rest stay the empty
+  // gilt-frame-over-dark-panel furnishing described below. PORTRAIT_ANGLES[0]
+  // and [2] are the two bays immediately flanking the hearth (each PI/2 --
+  // one pilaster-bay -- from HEARTH_ANGLE; [3] is the far side of the room,
+  // PI away). Picking [0] as "near the fireplace" is an arbitrary tiebreak
+  // between two equally-adjacent bays. The images themselves
+  // (public/portraits/decor/dorian-gray-01.png..08.png) are static room decor
+  // only -- generated against STYLE_GUIDE.md's baseline register, not a
+  // roster member portrait, and deliberately kept out of public/portraits/'s
+  // top-level (member-id-keyed) namespace so no roster/reaction-portrait code
+  // path could ever pick one up by id.
+  //
+  // Literary easter egg (still #479): 8 variants trace the same face across
+  // the novel's central conceit -- the portrait visibly aging/corrupting
+  // while the man stays young -- from unmarked (01) to ruinous (08). One is
+  // picked at random each time the scene builds; deliberately not tied to
+  // any room state, session, or persistence, just a fresh roll per load.
+  const DORIAN_FRAME_INDEX = 0;
+  const DORIAN_PORTRAIT_COUNT = 8;
+  function pickDorianPortraitPath() {
+    const n = 1 + Math.floor(Math.random() * DORIAN_PORTRAIT_COUNT);
+    return `/portraits/decor/dorian-gray-${String(n).padStart(2, '0')}.png`;
+  }
+
+  function getDorianPortraitTexture(scene) {
+    // Same invertY workaround as getPortraitTexture above: the Texture
+    // constructor's own invertY flag has no visible effect, so the V axis
+    // is flipped via vScale/vOffset instead. No caching here (unlike member
+    // avatar textures) -- each scene build should be free to roll again.
+    const tex = new BABYLON.Texture(
+      pickDorianPortraitPath(),
+      scene,
+      false,
+      false,
+      BABYLON.Texture.TRILINEAR_SAMPLINGMODE
+    );
+    tex.vScale = -1;
+    tex.vOffset = 1;
+    return tex;
+  }
+
   // Gilt-frame + dark-panel pair per portrait, echoing the dorian-frame's
   // own amber/gold molding gradient (public/css/style.css's #fmG-equivalent
   // tokens) rather than a per-member image -- no ancestor art exists to
   // render here, and an empty gilt frame reads as intentional lodge
-  // furnishing rather than a placeholder.
+  // furnishing rather than a placeholder. DORIAN_FRAME_INDEX above is the
+  // sole exception (#479).
   //
   // #357: skips the bay at HEARTH_ANGLE -- that's PORTRAIT_ANGLES[1]
   // exactly (both PI/8 + PI/2), since the hearth took over that mid-bay
@@ -467,8 +509,18 @@ window.LodgeScene = (function () {
       panel.position.set(panelSpot.x, 3.2, panelSpot.z);
       panel.rotation.y = panelSpot.rotationY;
       const panelMat = new BABYLON.StandardMaterial(`portraitPanelMat-${i}`, scene);
-      panelMat.diffuseColor = BABYLON.Color3.FromHexString(LODGE_BG);
-      panelMat.emissiveColor = new BABYLON.Color3(0.03, 0.025, 0.015);
+      if (i === DORIAN_FRAME_INDEX) {
+        // emissiveTexture, not diffuseTexture: with disableLighting true the
+        // diffuse channel never contributes (same #217 reasoning as the
+        // member avatar billboards above), so emissiveTexture is what
+        // actually renders the image instead of a black panel.
+        panelMat.emissiveTexture = getDorianPortraitTexture(scene);
+        panelMat.disableLighting = true;
+        panelMat.emissiveColor = new BABYLON.Color3(0, 0, 0);
+      } else {
+        panelMat.diffuseColor = BABYLON.Color3.FromHexString(LODGE_BG);
+        panelMat.emissiveColor = new BABYLON.Color3(0.03, 0.025, 0.015);
+      }
       panelMat.backFaceCulling = false;
       panel.material = panelMat;
     });
