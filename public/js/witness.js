@@ -1115,6 +1115,10 @@ window.Witness = (function () {
       localStorage.setItem(WITNESS_SPEED_KEY, String(v));
     } catch (_) {} // a blocked/full localStorage should cost persistence, not the setting itself
     updateSpeedButton();
+    // #477: re-pace whatever ElevenLabs clip is already playing, not just the
+    // next beat -- see voice.js's updateSpeed() for why this can't reach an
+    // in-flight Web Speech utterance the same way.
+    window.Voice?.updateSpeed(v);
   }
 
   function cycleSpeed() {

@@ -595,4 +595,70 @@ test('voice.js', async t => {
       assert.equal(rateEvent.value, 3, 'clamped to the same sane maximum the Web Speech rate uses');
     }
   );
+
+  // #477: playbackRate was only ever set once, at audio-element creation
+  // (#400 above) -- a mid-utterance speed change had no effect on the clip
+  // already playing, only the next one. updateSpeed() re-assigns
+  // playbackRate on whatever's in flight so the change lands immediately.
+  await t.test(
+    '#477: updateSpeed() re-paces the ElevenLabs audio already playing, not just the next beat',
+    async t2 => {
+      let events;
+      const loaded = loadPublicModule('voice.js', FIXTURE, window => {
+        stubSpeech(window, [{ name: 'A', lang: 'en-US' }]);
+        events = stubElevenLabs(window);
+      });
+      t2.after(loaded.cleanup);
+      await flushMicrotasks();
+
+      loaded.window.Voice.setEnabled(true);
+      loaded.window.Voice.speak('Hello there.', 'crowley', 1);
+      await flushMicrotasks();
+      events.length = 0; // clear the initial construct/playbackRate-set/play from speak()
+
+      loaded.window.Voice.updateSpeed(2);
+
+      const rateEvent = events.find(e => e.type === 'playbackRate-set');
+      assert.ok(rateEvent, "expected the in-flight audio element's playbackRate to be reassigned");
+      assert.equal(rateEvent.value, 2);
+      assert.equal(
+        events.some(e => e.type === 'audio-construct'),
+        false,
+        'no new audio element should be created -- this re-paces the existing one'
+      );
+    }
+  );
+
+  await t.test('updateSpeed() clamps to the same sane bounds as speak()', async t2 => {
+    let events;
+    const loaded = loadPublicModule('voice.js', FIXTURE, window => {
+      stubSpeech(window, [{ name: 'A', lang: 'en-US' }]);
+      events = stubElevenLabs(window);
+    });
+    t2.after(loaded.cleanup);
+    await flushMicrotasks();
+
+    loaded.window.Voice.setEnabled(true);
+    loaded.window.Voice.speak('Hello there.', 'crowley', 1);
+    await flushMicrotasks();
+    events.length = 0;
+
+    loaded.window.Voice.updateSpeed(100);
+
+    const rateEvent = events.find(e => e.type === 'playbackRate-set');
+    assert.equal(rateEvent.value, 3, 'clamped to the same sane maximum speak() uses');
+  });
+
+  await t.test('updateSpeed() is a no-op when nothing is currently playing', async t2 => {
+    const loaded = loadPublicModule('voice.js', FIXTURE, window => {
+      stubSpeech(window, [{ name: 'A', lang: 'en-US' }]);
+      stubElevenLabs(window);
+    });
+    t2.after(loaded.cleanup);
+    await flushMicrotasks();
+
+    loaded.window.Voice.setEnabled(true);
+    // Nothing spoken yet -- should not throw despite no audio element existing.
+    assert.doesNotThrow(() => loaded.window.Voice.updateSpeed(2));
+  });
 });

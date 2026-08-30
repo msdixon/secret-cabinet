@@ -87,7 +87,8 @@ window.Voice = (function () {
   // speak() call (next beat) or stop() can interrupt it, the same
   // cut-to-the-newest-beat behavior speak()'s synth().cancel() already gives
   // the Web Speech path (see its own comment below for why: witness.js paces
-  // by reading time already, not by waiting for audio to finish).
+  // by reading time already, not by waiting for audio to finish). #477 also
+  // reads this to re-pace the *in-flight* clip -- see updateSpeed() below.
   let currentAudio = null;
 
   function stopCurrentAudio() {
@@ -422,6 +423,20 @@ window.Voice = (function () {
     synth()?.cancel();
   }
 
+  // #477: the speed control used to only reach the *next* speak() call --
+  // audio.playbackRate in speakViaElevenLabs above was set once, at element
+  // creation, so a mid-utterance change silently did nothing until the next
+  // beat. An <audio> element's playbackRate can be reassigned at any time
+  // and takes effect immediately (unlike SpeechSynthesisUtterance.rate,
+  // which browsers snapshot when speech starts and won't honor a change
+  // after -- there's no live-update path for the Web Speech fallback, so
+  // that one still applies starting next beat, same as before). witness.js
+  // calls this from setSpeed() alongside its own witnessSpeed assignment, so
+  // the currently-playing ElevenLabs clip re-paces in step with the button.
+  function updateSpeed(speedMultiplier) {
+    if (currentAudio) currentAudio.playbackRate = clampRate(speedMultiplier || 1);
+  }
+
   return {
     isSupported,
     toggle,
@@ -429,5 +444,6 @@ window.Voice = (function () {
     isEnabled: () => enabled,
     speak,
     stop,
+    updateSpeed,
   };
 })();
