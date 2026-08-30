@@ -223,7 +223,7 @@ test('POST /api/members', async t => {
     const pendingPortraitPromptsFile = path.join(dir, 'PENDING-PROMPTS.md');
     const portraitCandidatesDir = path.join(dir, 'candidates');
     const app = fakeApp();
-    let capturedPrompt = null;
+    const calls = [];
     const deps = makeDeps({
       membersDir: dir,
       rosterFile,
@@ -231,7 +231,7 @@ test('POST /api/members', async t => {
       portraitCandidatesDir,
       geminiApiKey: 'test-gemini-key',
       generatePortraitImage: async ({ apiKey, prompt }) => {
-        capturedPrompt = prompt;
+        calls.push(prompt);
         assert.equal(apiKey, 'test-gemini-key');
         return Buffer.from('fake-png-bytes');
       },
@@ -244,7 +244,92 @@ test('POST /api/members', async t => {
     const candidateFile = path.join(portraitCandidatesDir, 'pictured-member.png');
     assert.ok(fs.existsSync(candidateFile));
     assert.equal(fs.readFileSync(candidateFile, 'utf8'), 'fake-png-bytes');
-    assert.equal(capturedPrompt, 'GENERATED FILE');
+    assert.equal(calls[0], 'GENERATED FILE');
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  await t.test('#450: also drafts a reaction candidate per reaction, anchored on the baseline image', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'member-routes-test-'));
+    const rosterFile = path.join(dir, 'roster.json');
+    const pendingPortraitPromptsFile = path.join(dir, 'PENDING-PROMPTS.md');
+    const portraitCandidatesDir = path.join(dir, 'candidates');
+    const app = fakeApp();
+    const calls = [];
+    const deps = makeDeps({
+      membersDir: dir,
+      rosterFile,
+      pendingPortraitPromptsFile,
+      portraitCandidatesDir,
+      geminiApiKey: 'test-gemini-key',
+      generatePortraitImage: async ({ apiKey, prompt, referenceImages }) => {
+        calls.push({ prompt, referenceImages });
+        assert.equal(apiKey, 'test-gemini-key');
+        return Buffer.from(`fake-png-bytes-${calls.length}`);
+      },
+    });
+    registerMemberRoutes(app, deps);
+    const res = fakeRes();
+    await app.routes['POST /api/members'](fakeReq({ body: { name: 'Reactive Member', bio: 'A biography.' } }), res);
+
+    assert.deepEqual(Object.keys(res.body.reactionCandidatePaths), ['happy', 'thinking', 'angry']);
+    for (const reaction of ['happy', 'thinking', 'angry']) {
+      assert.equal(
+        res.body.reactionCandidatePaths[reaction],
+        `public/portraits/candidates/reactive-member-${reaction}.png`
+      );
+      assert.ok(fs.existsSync(path.join(portraitCandidatesDir, `reactive-member-${reaction}.png`)));
+    }
+
+    // baseline call, then one per reaction, in taxonomy order
+    assert.equal(calls.length, 4);
+    const [baselineCall, ...reactionCalls] = calls;
+    assert.equal(baselineCall.referenceImages, undefined);
+    reactionCalls.forEach((call, i) => {
+      assert.notEqual(call.prompt, baselineCall.prompt);
+      assert.deepEqual(call.referenceImages, [{ mimeType: 'image/png', data: Buffer.from('fake-png-bytes-1') }]);
+      assert.match(call.prompt, /neutral, resting expression/);
+    });
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  await t.test('#450: a failed reaction call is caught per-reaction -- the baseline and other reactions still succeed', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'member-routes-test-'));
+    const rosterFile = path.join(dir, 'roster.json');
+    const pendingPortraitPromptsFile = path.join(dir, 'PENDING-PROMPTS.md');
+    const portraitCandidatesDir = path.join(dir, 'candidates');
+    const app = fakeApp();
+    let callCount = 0;
+    const deps = makeDeps({
+      membersDir: dir,
+      rosterFile,
+      pendingPortraitPromptsFile,
+      portraitCandidatesDir,
+      geminiApiKey: 'test-gemini-key',
+      generatePortraitImage: async () => {
+        callCount += 1;
+        // 1st call is the baseline, 2nd is the "happy" reaction -- fail just that one.
+        if (callCount === 2) throw new Error('Gemini API down for this reaction');
+        return Buffer.from(`fake-png-bytes-${callCount}`);
+      },
+    });
+    registerMemberRoutes(app, deps);
+    const res = fakeRes();
+    await app.routes['POST /api/members'](fakeReq({ body: { name: 'Partly Unlucky Member', bio: 'A biography.' } }), res);
+
+    assert.equal(res.body.member.id, 'partly-unlucky-member');
+    assert.ok(res.body.portraitCandidatePath);
+    assert.equal(res.body.reactionCandidatePaths.happy, undefined);
+    assert.equal(
+      res.body.reactionCandidatePaths.thinking,
+      'public/portraits/candidates/partly-unlucky-member-thinking.png'
+    );
+    assert.equal(
+      res.body.reactionCandidatePaths.angry,
+      'public/portraits/candidates/partly-unlucky-member-angry.png'
+    );
+    assert.equal(fs.existsSync(path.join(portraitCandidatesDir, 'partly-unlucky-member-happy.png')), false);
 
     fs.rmSync(dir, { recursive: true, force: true });
   });
