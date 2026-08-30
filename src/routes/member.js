@@ -175,7 +175,10 @@ ${relationships || '(not specified — infer from historical record)'}`;
       // canonical public/portraits/<id>.png path -- promotion (resize,
       // place, changelog) stays a deliberate, human-reviewed step per
       // STYLE_GUIDE.md's own human-validation requirement (see
-      // scripts/promote-portrait.js).
+      // scripts/promote-portrait.js). #450 extends this same best-effort
+      // block to also draft the #449-decided reaction set (happy/thinking/
+      // angry) once the baseline candidate exists, gated behind the same
+      // promotion script.
       let portraitPrompt = null;
       let portraitPromptText = null;
       try {
@@ -195,18 +198,44 @@ ${relationships || '(not specified — infer from historical record)'}`;
       }
 
       let portraitCandidatePath = null;
+      const reactionCandidatePaths = {};
       if (geminiApiKey && portraitPromptText) {
         try {
           const imageBuffer = await generatePortraitImage({ apiKey: geminiApiKey, prompt: portraitPromptText });
           fs.mkdirSync(portraitCandidatesDir, { recursive: true });
           fs.writeFileSync(path.join(portraitCandidatesDir, `${id}.png`), imageBuffer);
           portraitCandidatePath = `public/portraits/candidates/${id}.png`;
+
+          // #450 — draft the decided reaction set (happy/thinking/angry,
+          // per #449) alongside the baseline, same best-effort/non-fatal
+          // treatment as the baseline candidate above. Anchored on the
+          // baseline candidate buffer just generated (not yet promoted, so
+          // there's no public/portraits/<id>.png to read yet) via
+          // referenceImages, same reference-image approach batch 2/3 landed
+          // on for the existing-roster backfill. Each reaction candidate
+          // lands at public/portraits/candidates/<id>-<reaction>.png,
+          // promotable with the existing `node scripts/promote-portrait.js
+          // <id>-<reaction>` (it already treats its id argument as opaque).
+          for (const reaction of portraitGeneration.REACTION_TYPES) {
+            try {
+              const reactionBuffer = await generatePortraitImage({
+                apiKey: geminiApiKey,
+                prompt: portraitGeneration.buildReactionPrompt(reaction),
+                referenceImages: [{ mimeType: 'image/png', data: imageBuffer }],
+              });
+              const reactionId = `${id}-${reaction}`;
+              fs.writeFileSync(path.join(portraitCandidatesDir, `${reactionId}.png`), reactionBuffer);
+              reactionCandidatePaths[reaction] = `public/portraits/candidates/${reactionId}.png`;
+            } catch (err) {
+              console.error(`Reaction portrait generation error for "${reaction}" (member creation still succeeded):`, err);
+            }
+          }
         } catch (err) {
           console.error('Portrait image generation error (member creation still succeeded):', err);
         }
       }
 
-      res.json({ member: newMember, characterFile, portraitPrompt, portraitCandidatePath });
+      res.json({ member: newMember, characterFile, portraitPrompt, portraitCandidatePath, reactionCandidatePaths });
     } catch (err) {
       console.error('Member creation error:', err);
       res.status(500).json({ error: 'Failed to draft character file' });
@@ -263,6 +292,13 @@ ${bio}`;
   const response = await client.messages.create({
     model,
     max_tokens: 700,
+    // Same #406/#436 failure mode as the character-file call above (adaptive
+    // thinking silently consuming the whole budget with no text block) —
+    // found while verifying #450: this call's small 700-token budget hit it
+    // too, and its empty result short-circuits the `portraitPromptText`
+    // check downstream, silently skipping both baseline and reaction image
+    // generation with no error logged.
+    thinking: { type: 'disabled' },
     system: systemPrompt,
     messages: [{ role: 'user', content: userMessage }],
   });
