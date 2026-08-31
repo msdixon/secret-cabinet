@@ -27,14 +27,18 @@ const CANDIDATES_DIR = path.join(ROOT, 'public', 'portraits', 'candidates');
 
 // Same baseline register as every member portrait (STYLE_GUIDE.md), but with
 // no identifying facial detail at all -- a robed, hooded figure whose face
-// is left in shadow/unresolved, not a blank silhouette shape or a broken-
-// image icon. Reads as "a presence, deliberately unspecified" rather than
-// "an error", which is the right register for a seat that has someone in it
-// but no likeness to show for them.
-const PROMPT = `Subject: a single robed, hooded figure seen head-and-shoulders, facing forward, in the manner of an anonymous period portrait -- the face left in soft shadow beneath the hood, no identifiable features (no eyes, nose, or mouth rendered with any detail), no indication of age, gender, or ethnicity. Plain draped hood and robe, no ornamentation, no visible hands or objects.
-Style: warm, etching-adjacent -- not photorealistic, not cartoon/flat-vector. Visible linework and texture (engraving/ink-wash register).
+// is a flat, solid blackened void, not a blank silhouette shape or a
+// broken-image icon. First pass (kept here for the record) rendered the
+// face in soft shadow with faint visible contours -- close enough to a real
+// face in darkness that it read as unsettling/uncanny rather than simply
+// "unspecified" (Rachel's call, 2026-08-31). Revised to an explicitly flat,
+// featureless void -- no shadow gradient, no suggestion of underlying
+// bone/eye-socket structure -- so it reads as "no likeness rendered" rather
+// than "a face I can't quite see".
+const PROMPT = `Subject: a single robed, hooded figure seen head-and-shoulders, facing forward, in the manner of an anonymous period portrait -- where the face would be is a completely flat, solid black void, with no shading, gradient, or shape suggesting any underlying facial structure (no eyes, nose, mouth, or even an implied jawline or cheekbone) -- just an even, matte black silhouette shape, like a cut-out or an unlit opening, floating within the hood. No indication of age, gender, or ethnicity. Plain draped hood and robe, no ornamentation, no visible hands or objects.
+Style: warm, etching-adjacent -- not photorealistic, not cartoon/flat-vector. Visible linework and texture (engraving/ink-wash register) on the robe and hood only -- the face void itself must stay perfectly flat and featureless, with zero linework or texture inside it.
 Composition: head-and-shoulders, centered, plain dark background, no scene elements.
-Lighting/Mood: limited warm sepia/candlelit palette, matching the rest of the roster's portrait set. Contemplative, still, anonymous -- not eerie or ominous.
+Lighting/Mood: limited warm sepia/candlelit palette on the robe, matching the rest of the roster's portrait set, against the flat black face void. Contemplative, still, anonymous -- not eerie or ominous.
 Portrait-oriented, thumbnail resolution.`;
 
 async function main() {
