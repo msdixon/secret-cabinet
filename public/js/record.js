@@ -37,7 +37,6 @@ const Record = (function () {
   const PLAYER_SPEAKER_ID = 'player:custom'; // playerMode === 'custom' — the player under their own name
   const PRESENCE_SPEAKER_ID = 'presence:interjection'; // the observer from outside time (/api/interject)
   const PRESENCE_SPEAKER_NAME = '— a voice from elsewhere —';
-  const NON_ROSTER_SPEAKER_IDS = [PLAYER_SPEAKER_ID, PRESENCE_SPEAKER_ID];
 
   // ── What kind of segment ───────────────────────────────────────────────
   const SEGMENT_KIND_PASSAGE = 'passage';
@@ -113,7 +112,6 @@ const Record = (function () {
     PLAYER_SPEAKER_ID,
     PRESENCE_SPEAKER_ID,
     PRESENCE_SPEAKER_NAME,
-    NON_ROSTER_SPEAKER_IDS,
     SEGMENT_KIND_PASSAGE,
     SEGMENT_KIND_INTERJECTION,
     segmentKind,
