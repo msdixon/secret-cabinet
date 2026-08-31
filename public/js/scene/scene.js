@@ -201,6 +201,24 @@ window.LodgeScene = (function () {
   // reaction set as of #470/#472, most disposition updates land here, and
   // there's no reason to re-hit the network for a pair already known absent.
   const missingReactionKeys = new Set();
+  // #474: cached lazily, not at module load -- same reasoning as
+  // portraitTextures, keyed on nothing but its own load since it's not
+  // per-member. Shared by getPortraitTexture's own failure path (a member
+  // with no baseline portrait at all) and applyReactionTexture's
+  // NON_LIKENESS_REACTION_MEMBERS check below.
+  let fallbackPortraitTexture = null;
+  // #474: Amadou Bamba's reaction set was deliberately held back at
+  // generation time rather than personified -- the single surviving
+  // photograph of him carries near-devotional status within the Muridiyya
+  // tradition, and a personalized happy/thinking/angry expression on that
+  // likeness was judged a bigger swing than the reaction feature should take
+  // for him specifically (see STYLE_GUIDE.md's 2026-08-29 changelog entry).
+  // Scoped to Bamba only, not the wider iconography-bound tier (Llull,
+  // Teresa of Ávila, Ibn Arabi, Al-Hallaj), which keep their existing
+  // character-study likeness portraits and reaction sets unchanged. His own
+  // baseline portrait (bamba.png) is also unaffected -- only scoped to
+  // reactions, per Rachel's original call.
+  const NON_LIKENESS_REACTION_MEMBERS = new Set(['bamba']);
 
   // #357: fire state. fireLevel is the value actually applied to lights/
   // flames each frame, eased toward fireTargetLevel rather than snapping --
@@ -1280,10 +1298,36 @@ window.LodgeScene = (function () {
     animateSeatProp(seat.avatar, 'scaling', new BABYLON.Vector3(spec.scale, spec.scale, spec.scale), 'scaling');
   }
 
-  // On load failure (a member added after batch 1, with no portrait yet),
-  // hide whichever seat currently holds this memberId -- the load is async
-  // and updateSeats() has already made the plane visible by the time this
-  // fires, so we look the seat up by memberId rather than by closure.
+  // #474: the one generic, non-likeness image used everywhere a seat has no
+  // real portrait to show -- see NON_LIKENESS_REACTION_MEMBERS above for the
+  // full rationale. Same vScale/vOffset flip as every other portrait texture
+  // in this file (see getPortraitTexture's own comment on why).
+  function getFallbackPortraitTexture(scene) {
+    if (!fallbackPortraitTexture) {
+      const tex = new BABYLON.Texture(
+        '/portraits/generic-silhouette.png',
+        scene,
+        false,
+        false,
+        BABYLON.Texture.TRILINEAR_SAMPLINGMODE
+      );
+      tex.vScale = -1;
+      tex.vOffset = 1;
+      fallbackPortraitTexture = tex;
+    }
+    return fallbackPortraitTexture;
+  }
+
+  // On load failure (a member added after batch 1, with no portrait
+  // generated yet), swap whichever seat currently holds this memberId to
+  // the #474 generic silhouette rather than hiding it -- an occupied seat
+  // with no likeness should still read as "someone is here", not as the
+  // member vanishing. The load is async and updateSeats() has already made
+  // the plane visible by the time this fires, so we look the seat up by
+  // memberId rather than by closure. Caching the fallback into
+  // portraitTextures[memberId] itself (rather than a separate "known
+  // missing" set) means a later re-seat of the same member reuses it
+  // directly instead of re-requesting and re-failing the same URL.
   function getPortraitTexture(scene, memberId) {
     if (!portraitTextures[memberId]) {
       const tex = new BABYLON.Texture(
@@ -1294,9 +1338,10 @@ window.LodgeScene = (function () {
         BABYLON.Texture.TRILINEAR_SAMPLINGMODE,
         null,
         () => {
-          console.warn(`[scene] no portrait for ${memberId} yet`);
+          console.warn(`[scene] no portrait for ${memberId} yet -- using generic fallback (#474)`);
+          portraitTextures[memberId] = getFallbackPortraitTexture(scene);
           const seat = seatMeshes.find(s => s.memberId === memberId);
-          if (seat) seat.avatar.isVisible = false;
+          if (seat) seat.avatarMat.emissiveTexture = portraitTextures[memberId];
         }
       );
       // The Texture constructor's invertY flag is supposed to flip this, but
@@ -1480,6 +1525,16 @@ window.LodgeScene = (function () {
   function applyReactionTexture(seat, memberId, reaction) {
     const defaultTex = getPortraitTexture(sceneRef, memberId);
     const key = reaction && reaction !== 'none' ? `${memberId}-${reaction}` : null;
+    // #474: Bamba (and any future member judged to need the same restraint)
+    // never has a personalized reaction image to request in the first place
+    // -- go straight to the generic silhouette instead of hitting the
+    // network for a URL that was deliberately never generated. Falls
+    // through to defaultTex below for reaction 'none', same as everyone
+    // else, since his baseline portrait is unaffected by this.
+    if (key && NON_LIKENESS_REACTION_MEMBERS.has(memberId)) {
+      seat.avatarMat.emissiveTexture = getFallbackPortraitTexture(sceneRef);
+      return;
+    }
     if (!key || missingReactionKeys.has(key)) {
       seat.avatarMat.emissiveTexture = defaultTex;
       return;
