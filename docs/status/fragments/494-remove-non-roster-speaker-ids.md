@@ -1,0 +1,1 @@
+[#494](https://github.com/msdixon/secret-cabinet/issues/494): removed `NON_ROSTER_SPEAKER_IDS` from `public/js/record.js` — a derived convenience array with zero callers anywhere in the repo, confirmed by a fresh grep before deleting. [PR #498](https://github.com/msdixon/secret-cabinet/pull/498)
