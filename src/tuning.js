@@ -224,7 +224,12 @@ const INVOKED_NOTE_MAX_CHARS = 240;
 // call is conditioned on. See pipeline-splinter.js's header for the full
 // design note.
 const SPLINTER_EXCHANGE_BEATS = 2; // fixed length: "two members trade a barbed aside," per the issue, not an open thread
-const MAX_SPLINTERS_PER_PASSAGE = 1; // a horizon mechanic proving itself against real sessions, not yet a structural feature of every passage
+// #458: shared across both trigger sources (the reactive #203 signal and
+// the director-initiated pairing) — one splinter budget per passage
+// regardless of which one proposes it, not one each. Still a horizon
+// mechanic proving itself against real sessions, not yet a structural
+// feature of every passage.
+const MAX_SPLINTERS_PER_PASSAGE = 1;
 
 // The exception, not the default — most interrupt-intent picks still
 // resolve as the existing #203 path (an ordinary front-of-room

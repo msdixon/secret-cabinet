@@ -42,6 +42,25 @@
 // live SSE stream, Day One/Obsidian/Ulysses export) shows an aside
 // correctly with no client change at all — a real visual treatment is a
 // separately scoped follow-up, not a gap in this one.
+//
+// #458 adds the second trigger this file's own header named as deferred:
+// the director opening a splinter directly ("Crowley leans toward
+// Coleman-Smith") rather than only ever reinterpreting a live #203 signal.
+// By the time this landed, both halves of #196's own validation condition
+// were met — the reactive trigger above and its visual grammar (#457/PR
+// #463) were each confirmed live against a real, organically-produced
+// session (see that PR's own "Verified live" note). canOpenDirectorSplinter
+// gates a director-proposed pairing with the *same* MAX_SPLINTERS_PER_PASSAGE
+// cap and SPLINTER_MIN_BUDGET_WORDS headroom check as shouldSplinter above —
+// one splinter budget per passage, shared across both trigger sources,
+// deliberately not doubled just because there are now two ways in. It has
+// no SPLINTER_CHANCE-equivalent rng roll: shouldSplinter needs one because
+// the reactive path fires off a signal that exists for an unrelated reason
+// (#203's interrupt-intent) and needs its own restraint layered on top; a
+// director-proposed pairing is already the director's own considered
+// judgment (the prompt itself asks for restraint — "leave it out almost
+// every time"), so a second coin-flip on top of a deliberate choice would
+// just make a rare proposal rarer for no legible reason.
 
 const {
   MAX_SPLINTERS_PER_PASSAGE,
@@ -66,6 +85,19 @@ function shouldSplinter({ interruptedMember, remainingBudget, splinterCount, rng
   if (splinterCount >= MAX_SPLINTERS_PER_PASSAGE) return false;
   if (remainingBudget < SPLINTER_MIN_BUDGET_WORDS) return false;
   return rng() < SPLINTER_CHANCE;
+}
+
+// #458: whether a director-proposed `pair` (already validated against the
+// present roster by pipeline-director.js's sanitizeSplinterPair — this
+// never re-checks membership) may open a splinter right now. Same shared
+// cap and budget headroom as shouldSplinter, no rng roll — see this file's
+// header for why the two trigger sources don't each need their own
+// restraint layer.
+function canOpenDirectorSplinter({ pair, splinterCount, remainingBudget }) {
+  if (!pair) return false;
+  if (splinterCount >= MAX_SPLINTERS_PER_PASSAGE) return false;
+  if (remainingBudget < SPLINTER_MIN_BUDGET_WORDS) return false;
+  return true;
 }
 
 // Frames the aside for whichever of the two members is about to speak.
@@ -104,6 +136,7 @@ function formatSplinterBlock(initiator, other, beats) {
 
 module.exports = {
   shouldSplinter,
+  canOpenDirectorSplinter,
   buildSplinterUserMessage,
   formatSplinterBlock,
 };

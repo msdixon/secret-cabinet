@@ -44,10 +44,39 @@ function buildDirectorToolSchema(presentIds, minCount, maxCount) {
           description:
             'Optional. If windingDown is true, one diegetic line marking the pause, in the room\'s register — an image or a small action, not a summary. E.g. "The fire settles; Yeats refills his glass." Leave out if nothing concrete comes to mind, or if windingDown is false.',
         },
+        // #458: the director opening a splinter directly, independent of
+        // whatever either member currently carries privately — a second,
+        // proactive trigger alongside the reactive #203-signal one
+        // pipeline-splinter.js's shouldSplinter already covers. Optional and
+        // rare by design; see the description below and buildDirectorPrompt's
+        // matching paragraph for the restraint this asks for.
+        splinterPair: {
+          type: 'array',
+          items: { type: 'string', enum: presentIds },
+          minItems: 2,
+          maxItems: 2,
+          description:
+            'Optional. Two present member ids you are opening a private aside between right now, apart from the room — "Crowley leans toward Coleman-Smith" as an opening move, not a reaction to anything either has said. Leave out almost every time; this is a rare directorial choice, not a per-passage default.',
+        },
       },
       required: ['speakers', 'reasoning', 'windingDown'],
     },
   };
+}
+
+// #458: sanitizes the director's optional splinterPair proposal. Unlike
+// `speakers`, an invalid value here isn't worth a corrective retry — this is
+// a rare bonus judgment, not the call's core question — so a malformed
+// shape (wrong length, the same id twice, an id outside the present roster)
+// is simply dropped rather than corrected. `presentIds` is redundant with
+// the schema's own per-item enum in practice, but kept as a real check
+// rather than trusting the model's tool call was actually schema-valid.
+function sanitizeSplinterPair(pair, presentIds) {
+  if (!Array.isArray(pair) || pair.length !== 2) return null;
+  const [a, b] = pair;
+  if (a === b) return null;
+  if (!presentIds.includes(a) || !presentIds.includes(b)) return null;
+  return [a, b];
 }
 
 // #352: the director's prompt has always asked it to weigh "who hasn't been
@@ -108,7 +137,9 @@ ${instruction}${soFarBlock}
 
 Choose between ${minCount} and ${maxCount} of the present members as this round's candidate pool, ordered by priority. Not everyone in the pool is guaranteed to speak, and someone in the pool may end up speaking more than once — the room decides who actually goes, beat by beat, from among them. Base the pool on who has something to react to, who hasn't been heard from, and what this round's instruction calls for — not on alphabetical or arbitrary order.
 
-Separately — and this is a judgment about the whole evening, not just this pool — say whether the room is winding down: energy ebbing, threads settling, no one straining to speak. This is usually false; most consults, the room still has more in it. If it is genuinely true, you may also write one diegetic line marking the pause — an image or a small action in the room's register, not a summary of what just happened.`;
+Separately — and this is a judgment about the whole evening, not just this pool — say whether the room is winding down: energy ebbing, threads settling, no one straining to speak. This is usually false; most consults, the room still has more in it. If it is genuinely true, you may also write one diegetic line marking the pause — an image or a small action in the room's register, not a summary of what just happened.
+
+Separately again: you may name a splinterPair — two present members you are opening a private aside between right now, apart from the room, independent of anything either has said or currently carries. This is the rare exception, not a per-passage habit — leave it out almost every time. Reach for it only when a pairing would read as genuinely alive right now: who they evidently are to each other, not a habit of pairing off whoever is present. It can be the opening move of the passage, before anyone has spoken at all.`;
 
   const userMessage = "Choose this round's candidate pool.";
 
@@ -147,15 +178,20 @@ async function callDirector({
   });
   const latencyMs = Date.now() - start;
   const block = response.content.find(b => b.type === 'tool_use');
-  // windingDown/lullNote are absent from the casting tool's schema (a
-  // different question, see buildCastingToolSchema) — undefined there
-  // degrades to false/null below, which proposeCast simply never reads.
-  const { speakers, reasoning, windingDown, lullNote } = block?.input || {};
+  // windingDown/lullNote/splinterPair are absent from the casting tool's
+  // schema (a different question, see buildCastingToolSchema) — undefined
+  // there degrades to false/null/null below, which proposeCast simply never
+  // reads.
+  const { speakers, reasoning, windingDown, lullNote, splinterPair } = block?.input || {};
   return {
     speakers,
     reasoning,
     windingDown: !!windingDown,
     lullNote: lullNote || null,
+    // #458: sanitized here, once, against this call's own present-roster
+    // enum — every caller downstream (runDirectorSelection, selectSpeakers,
+    // runRound) can treat a non-null splinterPair as already valid.
+    splinterPair: sanitizeSplinterPair(splinterPair, presentIds),
     usage: response.usage,
     latencyMs,
   };
@@ -202,7 +238,7 @@ async function runDirectorSelection({
   let lastReasoning = null;
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
-      const { speakers, reasoning, windingDown, lullNote, usage, latencyMs } = await callDirector({
+      const { speakers, reasoning, windingDown, lullNote, splinterPair, usage, latencyMs } = await callDirector({
         client,
         model,
         system,
@@ -217,7 +253,14 @@ async function runDirectorSelection({
       lastReasoning = reasoning || lastReasoning;
       onMetric?.(makeMetric(phase, { round, attempts: attempt, usage, latencyMs, reasoning }));
       if (isValidSelection(speakers, candidateIds, minCount, maxCount)) {
-        return { speakers, reasoning, windingDown, lullNote, source: attempt === 1 ? 'director' : 'director-retry' };
+        return {
+          speakers,
+          reasoning,
+          windingDown,
+          lullNote,
+          splinterPair,
+          source: attempt === 1 ? 'director' : 'director-retry',
+        };
       }
     } catch (err) {
       onMetric?.(makeMetric(phase, { round, attempts: attempt, error: err.message }));
@@ -226,8 +269,17 @@ async function runDirectorSelection({
 
   onMetric?.(makeMetric(phase, { round, attempts: 2, skipped: true, error: fallbackNote, reasoning: lastReasoning }));
   // A director failure must never quietly read as an intentional lull —
-  // the fallback always reports the room as not winding down.
-  return { speakers: fallbackIds, reasoning: lastReasoning, windingDown: false, lullNote: null, source: 'fallback' };
+  // the fallback always reports the room as not winding down, and never
+  // proposes a splinter (#458): a deterministic fallback pool is not the
+  // director exercising judgment, so it gets no discretionary calls at all.
+  return {
+    speakers: fallbackIds,
+    reasoning: lastReasoning,
+    windingDown: false,
+    lullNote: null,
+    splinterPair: null,
+    source: 'fallback',
+  };
 }
 
 // presentMembers must already be in roster order — the fallback pick
@@ -281,6 +333,7 @@ module.exports = {
   buildDirectorToolSchema,
   buildDirectorPrompt,
   buildTurnLedgerBlock,
+  sanitizeSplinterPair,
   callDirector,
   isValidSelection,
   runDirectorSelection,

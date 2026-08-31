@@ -61,7 +61,7 @@ const {
 } = speaker;
 const { buildDispositionSystemPrompt, buildDispositionUserMessage, callDispositionUpdate } = disposition;
 const { resolveLullNote } = lull;
-const { shouldSplinter, buildSplinterUserMessage, formatSplinterBlock } = splinter;
+const { shouldSplinter, canOpenDirectorSplinter, buildSplinterUserMessage, formatSplinterBlock } = splinter;
 
 // ── Orchestrator ──────────────────────────────────────────────────────────
 
@@ -380,7 +380,7 @@ async function runRound({
     presentMembers.length,
     Math.max(effectiveCount, Math.min(effectiveCount + POOL_SLACK, budgetCapacity))
   );
-  const { speakers: initialPool } = await selectSpeakers({
+  const { speakers: initialPool, splinterPair: initialSplinterPair } = await selectSpeakers({
     client,
     model,
     lodgeContext,
@@ -427,6 +427,12 @@ async function runRound({
   // kept separate from roundSoFar because roundSoFar does end up holding a
   // resolved splinter's bracketed block too, once it's folded in below.
   let lastMainBeatText = precedingTurn?.text || '';
+  // #458: the director's own proposed pairing from the opening consult, if
+  // any — consumed by tryDirectorSplinter below, right before the loop
+  // starts, so it can resolve as the passage's opening move ("Crowley leans
+  // toward Coleman-Smith," before anyone in the room has spoken) rather
+  // than waiting for a reactive trigger that may never come.
+  let pendingDirectorSplinterPair = initialSplinterPair || null;
 
   const speakerOrder = [];
 
@@ -634,6 +640,72 @@ async function runRound({
     return outcome;
   }
 
+  // Runs a full splinter exchange between `initiator` and `other` — the
+  // opening line, then (if it landed) the reply — and folds it into
+  // roundSoFar/speakerOrder/splinterCount if it produced any text at all.
+  // Shared by both trigger sources: the reactive #203 interrupt-intent
+  // resolution below, and #458's director-initiated pairing via
+  // tryDirectorSplinter. Neither trigger differs in how a splinter actually
+  // plays out once it's decided to happen — only in how that decision gets
+  // made — so this is the one place either path ends up.
+  async function runSplinterExchange({ initiator, other, triggeringText }) {
+    const thread = { id: `splinter-${round}-${splinterCount}`, participants: [initiator.id, other.id] };
+
+    const opening = await generateBeat({
+      memberId: initiator.id,
+      member: initiator,
+      userMessage: buildSplinterUserMessage({ speaker: initiator, other, priorText: '', triggeringText }),
+      dispositionContext: '',
+      thread,
+    });
+
+    const splinterBeats = [];
+    if (!opening.failed) {
+      splinterBeats.push({ speakerName: initiator.name, text: opening.text });
+
+      const priorText = `${initiator.name}\n${opening.text}`;
+      const reply = await generateBeat({
+        memberId: other.id,
+        member: other,
+        userMessage: buildSplinterUserMessage({ speaker: other, other: initiator, priorText, triggeringText: null }),
+        dispositionContext: priorText,
+        thread,
+      });
+      if (!reply.failed) splinterBeats.push({ speakerName: other.name, text: reply.text });
+    }
+
+    // A splinter that produced no text (the opening beat itself failed)
+    // contributes nothing to roundSoFar, same as any other failed beat —
+    // but the failed attempt is still in beatsList via generateBeat, and
+    // spokenCounts/lastSpeakerId/beats were still updated, so the loop
+    // doesn't retry the same broken speaker indefinitely.
+    if (splinterBeats.length) {
+      roundSoFar += (roundSoFar ? '\n\n' : '') + formatSplinterBlock(initiator, other, splinterBeats);
+      speakerOrder.push(initiator.id, ...(splinterBeats.length > 1 ? [other.id] : []));
+      splinterCount++;
+    }
+  }
+
+  // #458: attempts a director-proposed `pair` (already sanitized to two
+  // distinct present ids by pipeline-director.js, or null if none was
+  // proposed) and consumes it either way — a proposal that didn't have room
+  // this consult isn't retried later off a stale judgment. Called once
+  // before the loop starts (the opening consult, so a director-initiated
+  // splinter can be the passage's opening move — "Crowley leans toward
+  // Coleman-Smith," before anyone has spoken, per the issue's own framing)
+  // and once after every mid-passage re-consult inside the loop, so both
+  // kinds of consult can open one uniformly.
+  async function tryDirectorSplinter(pair) {
+    if (!canOpenDirectorSplinter({ pair, splinterCount, remainingBudget })) return;
+    const [aId, bId] = pair;
+    const a = presentMembers.find(m => m.id === aId);
+    const b = presentMembers.find(m => m.id === bId);
+    if (!a || !b) return; // shouldn't happen — sanitizeSplinterPair validates against presentIds
+    await runSplinterExchange({ initiator: a, other: b, triggeringText: lastMainBeatText });
+  }
+
+  await tryDirectorSplinter(pendingDirectorSplinterPair);
+
   while (remainingBudget >= MIN_WORDS_FOR_ANOTHER_BEAT && beats < MAX_TOTAL_BEATS) {
     const budgetSpentSinceConsult = budgetAtLastConsult - remainingBudget;
     if (
@@ -652,6 +724,7 @@ async function runRound({
         speakers: freshPool,
         windingDown,
         lullNote,
+        splinterPair,
       } = await selectSpeakers({
         client,
         model,
@@ -669,7 +742,9 @@ async function runRound({
       // #244: the exhaustion signal. The director judging the room itself
       // winding down ends the passage right here, before drawing from the
       // fresh pool it just proposed — a passage that stops mid-thought
-      // reads worse than one that stops one beat early.
+      // reads worse than one that stops one beat early. #458: also why this
+      // is checked before tryDirectorSplinter below — a winding-down room
+      // isn't a room the director is about to open a fresh private aside in.
       if (windingDown) {
         endedBy = 'lull';
         directorLullNote = lullNote;
@@ -680,6 +755,7 @@ async function runRound({
       spokenCounts = new Map();
       budgetAtLastConsult = remainingBudget;
       if (!pool.length) break;
+      await tryDirectorSplinter(splinterPair);
     }
 
     const memberId = pickNextSpeaker({
@@ -708,49 +784,11 @@ async function runRound({
     // #196: a splinter is the other resolution of the same interrupt-intent
     // signal INTERRUPT_INTENT_WEIGHT already biased pickNextSpeaker toward —
     // see pipeline-splinter.js's header. Only ever considered when that
-    // signal is live; never a second, independent trigger.
+    // signal is live; never a second, independent trigger. (#458 adds a
+    // genuinely second, director-initiated trigger — see tryDirectorSplinter
+    // above — but it resolves at consult points, not here.)
     if (interruptedMember && shouldSplinter({ interruptedMember, remainingBudget, splinterCount })) {
-      const other = interruptedMember;
-      const thread = { id: `splinter-${round}-${splinterCount}`, participants: [memberId, other.id] };
-
-      const opening = await generateBeat({
-        memberId,
-        member,
-        userMessage: buildSplinterUserMessage({
-          speaker: member,
-          other,
-          priorText: '',
-          triggeringText: lastMainBeatText,
-        }),
-        dispositionContext: '',
-        thread,
-      });
-
-      const splinterBeats = [];
-      if (!opening.failed) {
-        splinterBeats.push({ speakerName: member.name, text: opening.text });
-
-        const priorText = `${member.name}\n${opening.text}`;
-        const reply = await generateBeat({
-          memberId: other.id,
-          member: other,
-          userMessage: buildSplinterUserMessage({ speaker: other, other: member, priorText, triggeringText: null }),
-          dispositionContext: priorText,
-          thread,
-        });
-        if (!reply.failed) splinterBeats.push({ speakerName: other.name, text: reply.text });
-      }
-
-      // A splinter that produced no text (the opening beat itself failed)
-      // contributes nothing to roundSoFar, same as any other failed beat —
-      // but the failed attempt is still in beatsList via generateBeat, and
-      // spokenCounts/lastSpeakerId/beats were still updated, so the loop
-      // doesn't retry the same broken speaker indefinitely.
-      if (splinterBeats.length) {
-        roundSoFar += (roundSoFar ? '\n\n' : '') + formatSplinterBlock(member, other, splinterBeats);
-        speakerOrder.push(memberId, ...(splinterBeats.length > 1 ? [other.id] : []));
-        splinterCount++;
-      }
+      await runSplinterExchange({ initiator: member, other: interruptedMember, triggeringText: lastMainBeatText });
       continue;
     }
 
