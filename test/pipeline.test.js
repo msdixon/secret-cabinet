@@ -3218,20 +3218,23 @@ test('canOpenDirectorSplinter (#458)', async t => {
     );
   });
 
-  await t.test('unlike shouldSplinter, there is no rng gating — a proposed pair with room and budget always opens', () => {
-    // shouldSplinter's own SPLINTER_CHANCE test above shows a roll can still
-    // say no even with room and budget; canOpenDirectorSplinter takes no rng
-    // at all, so there is nothing to script here — the director's own
-    // prompt-level restraint is the only thing keeping a proposal rare.
-    assert.equal(
-      canOpenDirectorSplinter({
-        pair: ['crowley', 'scholem'],
-        splinterCount: 0,
-        remainingBudget: SPLINTER_MIN_BUDGET_WORDS + 1000,
-      }),
-      true
-    );
-  });
+  await t.test(
+    'unlike shouldSplinter, there is no rng gating — a proposed pair with room and budget always opens',
+    () => {
+      // shouldSplinter's own SPLINTER_CHANCE test above shows a roll can still
+      // say no even with room and budget; canOpenDirectorSplinter takes no rng
+      // at all, so there is nothing to script here — the director's own
+      // prompt-level restraint is the only thing keeping a proposal rare.
+      assert.equal(
+        canOpenDirectorSplinter({
+          pair: ['crowley', 'scholem'],
+          splinterCount: 0,
+          remainingBudget: SPLINTER_MIN_BUDGET_WORDS + 1000,
+        }),
+        true
+      );
+    }
+  );
 });
 
 test('sanitizeSplinterPair (#458)', async t => {
@@ -3524,7 +3527,7 @@ function fakeDirectorSplinterClient({ splinterPairOnConsult = [], windingDownOnC
 }
 
 test('runRound — a director-proposed splinter opens the passage before anyone in the room has spoken (#458)', async t => {
-  await t.test('the opening consult\'s pair resolves as the passage\'s first move, then the room continues', async () => {
+  await t.test("the opening consult's pair resolves as the passage's first move, then the room continues", async () => {
     // rng script: two zeros for the two main-thread picks after the
     // director's splinter resolves. rng 0 always lands on the pool's first
     // still-eligible candidate (see pickNextSpeaker: roll starts at 0, so it
@@ -3574,87 +3577,93 @@ test('runRound — a director-proposed splinter opens the passage before anyone 
 });
 
 test('runRound — a director-proposed splinter opens at a mid-passage re-consult too (#458)', async t => {
-  await t.test('a pair proposed on a later consult opens exactly where it was proposed, not just at the start', async () => {
-    // No pair on the opening consult; the mid-passage re-consult (the 2nd
-    // select_speakers call) proposes one, and the 3rd ends the passage.
-    const client = fakeDirectorSplinterClient({
-      windingDownOnConsult: [false, false, true],
-      splinterPairOnConsult: [null, ['crowley', 'scholem']],
-    });
-    // Six main-thread picks, all rng 0: four to exhaust the pool the first
-    // time (crowley, crowley, scholem, scholem — each hits
-    // MAX_TURNS_PER_POOL_MEMBER, forcing the re-consult), two more after the
-    // mid-consult splinter resets spokenCounts and exhausts it again.
-    const result = await withScriptedRandom([0, 0, 0, 0, 0, 0], () =>
-      runRound({
-        client,
-        model: 'test-model',
-        lodgeContext: LODGE,
-        ROSTER: SPLINTER_ROSTER,
-        loadMemberFile: loadSplinterMemberFile,
-        presentMemberIds: ['crowley', 'scholem'],
-        artifact: null,
-        notes: {},
-        roundPrompt: 'Opening prompt',
-        conversationHistory: [],
-        speakerCount: 2,
-        round: 0,
-        disposition: {},
-      })
-    );
+  await t.test(
+    'a pair proposed on a later consult opens exactly where it was proposed, not just at the start',
+    async () => {
+      // No pair on the opening consult; the mid-passage re-consult (the 2nd
+      // select_speakers call) proposes one, and the 3rd ends the passage.
+      const client = fakeDirectorSplinterClient({
+        windingDownOnConsult: [false, false, true],
+        splinterPairOnConsult: [null, ['crowley', 'scholem']],
+      });
+      // Six main-thread picks, all rng 0: four to exhaust the pool the first
+      // time (crowley, crowley, scholem, scholem — each hits
+      // MAX_TURNS_PER_POOL_MEMBER, forcing the re-consult), two more after the
+      // mid-consult splinter resets spokenCounts and exhausts it again.
+      const result = await withScriptedRandom([0, 0, 0, 0, 0, 0], () =>
+        runRound({
+          client,
+          model: 'test-model',
+          lodgeContext: LODGE,
+          ROSTER: SPLINTER_ROSTER,
+          loadMemberFile: loadSplinterMemberFile,
+          presentMemberIds: ['crowley', 'scholem'],
+          artifact: null,
+          notes: {},
+          roundPrompt: 'Opening prompt',
+          conversationHistory: [],
+          speakerCount: 2,
+          round: 0,
+          disposition: {},
+        })
+      );
 
-    assert.equal(result.beats.length, 8);
-    // The four main-thread beats before the mid-consult splinter.
-    assert.deepEqual(
-      result.beats.slice(0, 4).map(b => b.memberId),
-      ['crowley', 'crowley', 'scholem', 'scholem']
-    );
-    assert.ok(result.beats.slice(0, 4).every(b => b.thread === undefined));
-    // The splinter itself, opened at the re-consult rather than at passage start.
-    assert.ok(result.beats[4].thread);
-    assert.ok(result.beats[5].thread);
-    assert.equal(result.beats[4].thread.id, result.beats[5].thread.id);
-    assert.deepEqual(result.beats[4].thread.participants, ['crowley', 'scholem']);
-    assert.equal(result.beats[4].memberId, 'crowley');
-    assert.equal(result.beats[5].memberId, 'scholem');
-    // Two more ordinary main-thread beats after the splinter, before the
-    // final consult ends the passage.
-    assert.ok(result.beats.slice(6).every(b => b.thread === undefined));
+      assert.equal(result.beats.length, 8);
+      // The four main-thread beats before the mid-consult splinter.
+      assert.deepEqual(
+        result.beats.slice(0, 4).map(b => b.memberId),
+        ['crowley', 'crowley', 'scholem', 'scholem']
+      );
+      assert.ok(result.beats.slice(0, 4).every(b => b.thread === undefined));
+      // The splinter itself, opened at the re-consult rather than at passage start.
+      assert.ok(result.beats[4].thread);
+      assert.ok(result.beats[5].thread);
+      assert.equal(result.beats[4].thread.id, result.beats[5].thread.id);
+      assert.deepEqual(result.beats[4].thread.participants, ['crowley', 'scholem']);
+      assert.equal(result.beats[4].memberId, 'crowley');
+      assert.equal(result.beats[5].memberId, 'scholem');
+      // Two more ordinary main-thread beats after the splinter, before the
+      // final consult ends the passage.
+      assert.ok(result.beats.slice(6).every(b => b.thread === undefined));
 
-    assert.match(result.fullRoundText, /\[Aside — Crowley and Scholem, apart from the room\]/);
-    assert.equal(result.endedBy, 'lull');
-  });
+      assert.match(result.fullRoundText, /\[Aside — Crowley and Scholem, apart from the room\]/);
+      assert.equal(result.endedBy, 'lull');
+    }
+  );
 
-  await t.test('the once-per-passage cap still applies across consults — a second proposal is dropped, not queued', async () => {
-    // Both the opening and the mid-passage re-consult propose a pair;
-    // MAX_SPLINTERS_PER_PASSAGE (1) means only the first one can ever open.
-    const client = fakeDirectorSplinterClient({
-      windingDownOnConsult: [false, false, true],
-      splinterPairOnConsult: [
-        ['crowley', 'scholem'],
-        ['scholem', 'crowley'],
-      ],
-    });
-    const result = await withScriptedRandom([0, 0], () =>
-      runRound({
-        client,
-        model: 'test-model',
-        lodgeContext: LODGE,
-        ROSTER: SPLINTER_ROSTER,
-        loadMemberFile: loadSplinterMemberFile,
-        presentMemberIds: ['crowley', 'scholem'],
-        artifact: null,
-        notes: {},
-        roundPrompt: 'Opening prompt',
-        conversationHistory: [],
-        speakerCount: 2,
-        round: 0,
-        disposition: {},
-      })
-    );
+  await t.test(
+    'the once-per-passage cap still applies across consults — a second proposal is dropped, not queued',
+    async () => {
+      // Both the opening and the mid-passage re-consult propose a pair;
+      // MAX_SPLINTERS_PER_PASSAGE (1) means only the first one can ever open.
+      const client = fakeDirectorSplinterClient({
+        windingDownOnConsult: [false, false, true],
+        splinterPairOnConsult: [
+          ['crowley', 'scholem'],
+          ['scholem', 'crowley'],
+        ],
+      });
+      const result = await withScriptedRandom([0, 0], () =>
+        runRound({
+          client,
+          model: 'test-model',
+          lodgeContext: LODGE,
+          ROSTER: SPLINTER_ROSTER,
+          loadMemberFile: loadSplinterMemberFile,
+          presentMemberIds: ['crowley', 'scholem'],
+          artifact: null,
+          notes: {},
+          roundPrompt: 'Opening prompt',
+          conversationHistory: [],
+          speakerCount: 2,
+          round: 0,
+          disposition: {},
+        })
+      );
 
-    const threaded = result.beats.filter(b => b.thread);
-    assert.equal(threaded.length, 2);
-    assert.equal(new Set(threaded.map(b => b.thread.id)).size, 1);
-  });
+      const threaded = result.beats.filter(b => b.thread);
+      assert.equal(threaded.length, 2);
+      assert.equal(new Set(threaded.map(b => b.thread.id)).size, 1);
+    }
+  );
 });

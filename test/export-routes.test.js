@@ -106,7 +106,13 @@ test('Day One routes', async t => {
     const app = fakeApp();
     registerExportRoutes(
       app,
-      makeDeps({ dayOne: { listJournals: async () => { throw new Error('boom'); } } })
+      makeDeps({
+        dayOne: {
+          listJournals: async () => {
+            throw new Error('boom');
+          },
+        },
+      })
     );
     const res = fakeRes();
     await app.routes['POST /api/dayone/journals'](fakeReq(), res);
@@ -185,7 +191,13 @@ test('Day One routes', async t => {
     const app = fakeApp();
     registerExportRoutes(
       app,
-      makeDeps({ dayOne: { getRecentEntries: async () => { throw new Error('boom'); } } })
+      makeDeps({
+        dayOne: {
+          getRecentEntries: async () => {
+            throw new Error('boom');
+          },
+        },
+      })
     );
     const res = fakeRes();
     await app.routes['POST /api/dayone/entries'](fakeReq({ journalId: 'j1' }), res);
@@ -227,7 +239,13 @@ test('Day One routes', async t => {
     const app = fakeApp();
     registerExportRoutes(
       app,
-      makeDeps({ dayOne: { getLatestEntry: async () => { throw new Error('boom'); } } })
+      makeDeps({
+        dayOne: {
+          getLatestEntry: async () => {
+            throw new Error('boom');
+          },
+        },
+      })
     );
     const res = fakeRes();
     await app.routes['POST /api/dayone/fetch'](fakeReq({ journalId: 'j1' }), res);
@@ -258,13 +276,16 @@ test('Day One routes', async t => {
     const app = fakeApp();
     registerExportRoutes(
       app,
-      makeDeps({ dayOne: { createEntry: async () => { throw new Error('boom'); } } })
+      makeDeps({
+        dayOne: {
+          createEntry: async () => {
+            throw new Error('boom');
+          },
+        },
+      })
     );
     const res = fakeRes();
-    await app.routes['POST /api/dayone/export'](
-      fakeReq({ journalId: 'j1', transcriptText: 'text' }),
-      res
-    );
+    await app.routes['POST /api/dayone/export'](fakeReq({ journalId: 'j1', transcriptText: 'text' }), res);
     assert.equal(res.statusCode, 500);
     assert.equal(res.body.error, 'Export failed');
   });

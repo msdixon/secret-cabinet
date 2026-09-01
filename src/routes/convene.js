@@ -151,7 +151,9 @@ function registerConveneRoutes(
         // unchanged — the `speaking` event fires before a beat's thread is
         // even decided server-side, so extending it would mean guessing.
         onSpeakerEnd: (memberId, name, text, thread) =>
-          res.write(`data: ${JSON.stringify({ speakerDone: { memberId, name, text, ...(thread ? { thread } : {}) } })}\n\n`),
+          res.write(
+            `data: ${JSON.stringify({ speakerDone: { memberId, name, text, ...(thread ? { thread } : {}) } })}\n\n`
+          ),
         // #360: the director's candidate pool and each beat's disposition
         // update, so the client can render listening/thinking/waiting states
         // instead of just speaking vs. not. #451 rides the same disposition
@@ -316,7 +318,9 @@ function registerConveneRoutes(
         onSpeakerStart: memberId => res.write(`data: ${JSON.stringify({ speaking: memberId })}\n\n`),
         // #457: see /api/convene above for why `thread` is forwarded here too.
         onSpeakerEnd: (memberId, name, text, thread) =>
-          res.write(`data: ${JSON.stringify({ speakerDone: { memberId, name, text, ...(thread ? { thread } : {}) } })}\n\n`),
+          res.write(
+            `data: ${JSON.stringify({ speakerDone: { memberId, name, text, ...(thread ? { thread } : {}) } })}\n\n`
+          ),
         // #360: see /api/convene above.
         onPoolUpdate: pool => res.write(`data: ${JSON.stringify({ pool })}\n\n`),
         onDisposition: (memberId, waitingOnMemberId, reaction) =>
@@ -402,7 +406,9 @@ function registerConveneRoutes(
         onSpeakerStart: memberId => res.write(`data: ${JSON.stringify({ speaking: memberId })}\n\n`),
         // #457: see /api/convene above for why `thread` is forwarded here too.
         onSpeakerEnd: (memberId, name, text, thread) =>
-          res.write(`data: ${JSON.stringify({ speakerDone: { memberId, name, text, ...(thread ? { thread } : {}) } })}\n\n`),
+          res.write(
+            `data: ${JSON.stringify({ speakerDone: { memberId, name, text, ...(thread ? { thread } : {}) } })}\n\n`
+          ),
         // #360: see /api/convene above.
         onPoolUpdate: pool => res.write(`data: ${JSON.stringify({ pool })}\n\n`),
         onDisposition: (memberId, waitingOnMemberId, reaction) =>

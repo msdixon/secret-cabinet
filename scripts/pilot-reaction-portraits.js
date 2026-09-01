@@ -40,16 +40,17 @@ const STYLE_SUFFIX =
 // the expression/mood fragment (REACTIONS below) is swapped in.
 const PILOT_SUBJECTS = {
   crowley:
-    'Warm, etching-adjacent portrait of Aleister Crowley, English ceremonial magician, Edwardian era — head-and-shoulders, shaved head, formal Edwardian dress or ceremonial magician\'s robe. Aim for a recognizable likeness consistent with surviving photographs.',
+    "Warm, etching-adjacent portrait of Aleister Crowley, English ceremonial magician, Edwardian era — head-and-shoulders, shaved head, formal Edwardian dress or ceremonial magician's robe. Aim for a recognizable likeness consistent with surviving photographs.",
   yeats:
     'Warm, etching-adjacent portrait of William Butler Yeats, Irish poet, Edwardian era — head-and-shoulders, wire-rimmed spectacles, wavy hair, formal suit and cravat. Aim for a recognizable likeness consistent with surviving photographs.',
   teresa:
-    'Warm, etching-adjacent portrait of Teresa of Ávila, Spanish Carmelite mystic, 16th century — head-and-shoulders, plain brown Carmelite habit and white wimple. No photographic or contemporary likeness reference exists; render as a period-appropriate character study consistent with the set\'s register, not a specific likeness reproduction, favoring a secular character-study framing over reproducing existing devotional iconography (no halo, no ecstatic/visionary staging).',
+    "Warm, etching-adjacent portrait of Teresa of Ávila, Spanish Carmelite mystic, 16th century — head-and-shoulders, plain brown Carmelite habit and white wimple. No photographic or contemporary likeness reference exists; render as a period-appropriate character study consistent with the set's register, not a specific likeness reproduction, favoring a secular character-study framing over reproducing existing devotional iconography (no halo, no ecstatic/visionary staging).",
 };
 
 // The one field each reaction varies, per the #449-decided starter taxonomy.
 const REACTIONS = {
-  happy: 'Expression: a genuine, warm brightening — eyes lit with real pleasure, the faint start of a smile, an open and unguarded look.',
+  happy:
+    'Expression: a genuine, warm brightening — eyes lit with real pleasure, the faint start of a smile, an open and unguarded look.',
   thinking:
     'Expression: inward and considering — gaze middle-distance or slightly downcast, brow faintly furrowed in concentration, the look of someone turning an idea over rather than addressing the viewer.',
   angry:

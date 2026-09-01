@@ -147,7 +147,9 @@ async function main() {
   const noneOnly = results.every(r => r.got === 'none');
 
   console.log('\n=== SUMMARY ===');
-  console.log(`${validCount}/${results.length} calls returned a valid enum value (schema-enforced, so this should always be 6/6).`);
+  console.log(
+    `${validCount}/${results.length} calls returned a valid enum value (schema-enforced, so this should always be 6/6).`
+  );
   console.log(`${hitCount}/${results.length} calls matched the hand-authored expected reaction.`);
   console.log(
     noneOnly

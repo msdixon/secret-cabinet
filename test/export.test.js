@@ -278,38 +278,33 @@ test('exportScholarly', async t => {
   // selected passage was actually the player's own submitted turn (playing
   // as a member), the note has to say so rather than silently attributing it
   // to that member.
-  await t.test(
-    'marks a selected passage that was actually the player playing as that member',
-    async t2 => {
-      const {
-        window,
-        document,
-        module: Export,
-      } = boot(t2, {
-        fetchImpl: () =>
-          Promise.resolve({
-            ok: true,
-            json: () =>
-              Promise.resolve({
-                rounds: [
-                  { beats: [{ memberId: 'blavatsky', text: 'I never said that.', playerAuthored: true }] },
-                ],
-                citationFlags: [],
-              }),
-          }),
-      });
-      addEntry(document, {
-        speaker: 'Blavatsky',
-        text: 'I never said that.',
-        note: 'flagging this for later',
-        playerTurn: true,
-      });
-      captureDownload(window, document);
-      await Export.exportScholarly();
-      const text = await window.__capturedBlob.text();
-      assert.match(text, /\*\*Blavatsky\*\* ⟡ played by a human participant, live —/);
-    }
-  );
+  await t.test('marks a selected passage that was actually the player playing as that member', async t2 => {
+    const {
+      window,
+      document,
+      module: Export,
+    } = boot(t2, {
+      fetchImpl: () =>
+        Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              rounds: [{ beats: [{ memberId: 'blavatsky', text: 'I never said that.', playerAuthored: true }] }],
+              citationFlags: [],
+            }),
+        }),
+    });
+    addEntry(document, {
+      speaker: 'Blavatsky',
+      text: 'I never said that.',
+      note: 'flagging this for later',
+      playerTurn: true,
+    });
+    captureDownload(window, document);
+    await Export.exportScholarly();
+    const text = await window.__capturedBlob.text();
+    assert.match(text, /\*\*Blavatsky\*\* ⟡ played by a human participant, live —/);
+  });
 
   await t.test('leaves a genuine member passage unmarked', async t2 => {
     const {

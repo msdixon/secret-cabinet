@@ -50,7 +50,11 @@ test('classifyVisit', async t => {
       ['POST', '/api/convene'],
       ['GET', '/api/admin/visits'],
     ]) {
-      assert.equal(visits.classifyVisit(fakeReq({ path: p, method })), null, `expected ${method} ${p} not to be counted`);
+      assert.equal(
+        visits.classifyVisit(fakeReq({ path: p, method })),
+        null,
+        `expected ${method} ${p} not to be counted`
+      );
     }
   });
 

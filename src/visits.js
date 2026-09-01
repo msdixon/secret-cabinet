@@ -150,7 +150,7 @@ function buildReport(store) {
     '',
     `${calls} call(s) recorded. Each page load fans out into several of these on its own ` +
       "(e.g. loading / alone triggers /api/members and /api/voice/config too), so they'd " +
-      "overcount visits if blended into the traffic figure above — kept here as supporting " +
+      'overcount visits if blended into the traffic figure above — kept here as supporting ' +
       'detail instead (e.g. to spot scraper-like API hammering unaccompanied by page loads).',
     '',
     '| Route | Calls |',

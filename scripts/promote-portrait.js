@@ -73,7 +73,7 @@ function main() {
   }
 
   if (process.platform !== 'darwin') {
-    console.error('This script shells out to macOS\'s `sips` for resizing and only runs on macOS.');
+    console.error("This script shells out to macOS's `sips` for resizing and only runs on macOS.");
     process.exit(1);
   }
 
@@ -82,8 +82,14 @@ function main() {
   const removedFromPending = removePendingEntry(id);
 
   console.log(`\nPromoted public/portraits/candidates/${id}.png -> public/portraits/${id}.png`);
-  console.log(removedFromPending ? `Removed its entry from PENDING-PROMPTS.md.` : `No matching entry found in PENDING-PROMPTS.md (nothing removed).`);
-  console.log(`\nRemaining manual step: add a line to STYLE_GUIDE.md's Changelog noting what you checked — this needs an actual look at the image against the register, same as every prior batch.`);
+  console.log(
+    removedFromPending
+      ? `Removed its entry from PENDING-PROMPTS.md.`
+      : `No matching entry found in PENDING-PROMPTS.md (nothing removed).`
+  );
+  console.log(
+    `\nRemaining manual step: add a line to STYLE_GUIDE.md's Changelog noting what you checked — this needs an actual look at the image against the register, same as every prior batch.`
+  );
 }
 
 main();
