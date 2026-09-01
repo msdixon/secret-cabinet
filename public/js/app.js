@@ -915,7 +915,12 @@ function startStreamEntry() {
       // to close that gap.
       beats.slice(closedBeats).forEach(beatText => {
         addSpeech(name, beatText, false, memberId || undefined, null);
-        window.Witness.liveSpeech({ speaker: name, text: beatText, memberId: memberId || null, thread: thread || null });
+        window.Witness.liveSpeech({
+          speaker: name,
+          text: beatText,
+          memberId: memberId || null,
+          thread: thread || null,
+        });
       });
       renderedLive = true;
       buffer = '';
@@ -1326,7 +1331,8 @@ function showCitationVerifyResult(citations) {
     return;
   }
   const grounded = citations.filter(c => c.source === 'library' || c.source === 'web').length;
-  el.innerHTML = `${grounded} of ${citations.length} citation${citations.length === 1 ? '' : 's'} grounded to a source` +
+  el.innerHTML =
+    `${grounded} of ${citations.length} citation${citations.length === 1 ? '' : 's'} grounded to a source` +
     ` — <button type="button" class="citation-verify-link" data-keep-menu-open onclick="openScholarlyExport()">Export Source Notes →</button>`;
   el.hidden = false;
 }
@@ -1782,10 +1788,7 @@ function escapeHtml(s) {
 // cited span) just renders as plain text -- a missed highlight, not a
 // broken panel.
 function normalizeForCitationMatch(s) {
-  return s
-    .replace(/[‘’]/g, "'")
-    .replace(/[“”]/g, '"')
-    .toLowerCase();
+  return s.replace(/[‘’]/g, "'").replace(/[“”]/g, '"').toLowerCase();
 }
 
 function renderDocumentPanelText() {

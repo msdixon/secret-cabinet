@@ -196,20 +196,17 @@ test('POST /api/upload — extraction handler', async t => {
   });
 
   await t.test('routes by mimetype when the extension is not .pdf', async () => {
-    await withMockedPdfParser(
-      { succeedWith: 'extracted' },
-      async ({ registerUploadRoutes: freshRegister }) => {
-        const app = fakeApp();
-        freshRegister(app);
-        const pdfHandler = app.routes['POST /api/upload'][1];
-        const res = fakeRes();
-        const req = {
-          file: { originalname: 'upload', mimetype: 'application/pdf', buffer: Buffer.from('%PDF-1.4') },
-        };
-        await pdfHandler(req, res);
-        assert.equal(res.body.text, 'extracted');
-      }
-    );
+    await withMockedPdfParser({ succeedWith: 'extracted' }, async ({ registerUploadRoutes: freshRegister }) => {
+      const app = fakeApp();
+      freshRegister(app);
+      const pdfHandler = app.routes['POST /api/upload'][1];
+      const res = fakeRes();
+      const req = {
+        file: { originalname: 'upload', mimetype: 'application/pdf', buffer: Buffer.from('%PDF-1.4') },
+      };
+      await pdfHandler(req, res);
+      assert.equal(res.body.text, 'extracted');
+    });
   });
 
   await t.test('500s when PDF extraction fails (corrupt/unparseable PDF)', async () => {

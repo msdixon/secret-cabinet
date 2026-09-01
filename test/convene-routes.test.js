@@ -194,33 +194,40 @@ test('POST /api/convene', async t => {
   // #457: onSpeakerEnd's 4th arg (present only for a splinter's two beats,
   // see pipeline.js) is the live half of the signal #456 shipped storage-only
   // — the route just relays whatever pipeline.js hands it, undefined or not.
-  await t.test('forwards a splinter beat`s `thread` onto its speakerDone event, and omits the key on an ordinary beat', async () => {
-    const app = fakeApp();
-    const thread = { id: 'splinter-1-0', participants: ['crowley', 'jung'] };
-    const deps = makeDeps({
-      runRound: async ({ onSpeakerEnd }) => {
-        onSpeakerEnd?.('crowley', 'Crowley', 'an ordinary beat');
-        onSpeakerEnd?.('crowley', 'Crowley', 'an aside beat', thread);
-        return {
-          fullRoundText: 'Crowley —\nan ordinary beat',
-          speakerOrder: ['crowley'],
-          disposition: {},
-          residueUpdates: {},
-          beats: [],
-          endedBy: 'budget',
-          lullNote: null,
-        };
-      },
-    });
-    registerConveneRoutes(app, deps);
-    const res = fakeSSERes();
-    await app.routes['POST /api/convene'](fakeReq({ entry: 'A test entry', members: ['crowley', 'jung'] }), res);
+  await t.test(
+    'forwards a splinter beat`s `thread` onto its speakerDone event, and omits the key on an ordinary beat',
+    async () => {
+      const app = fakeApp();
+      const thread = { id: 'splinter-1-0', participants: ['crowley', 'jung'] };
+      const deps = makeDeps({
+        runRound: async ({ onSpeakerEnd }) => {
+          onSpeakerEnd?.('crowley', 'Crowley', 'an ordinary beat');
+          onSpeakerEnd?.('crowley', 'Crowley', 'an aside beat', thread);
+          return {
+            fullRoundText: 'Crowley —\nan ordinary beat',
+            speakerOrder: ['crowley'],
+            disposition: {},
+            residueUpdates: {},
+            beats: [],
+            endedBy: 'budget',
+            lullNote: null,
+          };
+        },
+      });
+      registerConveneRoutes(app, deps);
+      const res = fakeSSERes();
+      await app.routes['POST /api/convene'](fakeReq({ entry: 'A test entry', members: ['crowley', 'jung'] }), res);
 
-    const speakerDoneEvents = res.events().filter(e => e.speakerDone);
-    assert.equal(speakerDoneEvents.length, 2);
-    assert.equal('thread' in speakerDoneEvents[0].speakerDone, false, 'an ordinary beat carries no thread key at all');
-    assert.deepEqual(speakerDoneEvents[1].speakerDone.thread, thread);
-  });
+      const speakerDoneEvents = res.events().filter(e => e.speakerDone);
+      assert.equal(speakerDoneEvents.length, 2);
+      assert.equal(
+        'thread' in speakerDoneEvents[0].speakerDone,
+        false,
+        'an ordinary beat carries no thread key at all'
+      );
+      assert.deepEqual(speakerDoneEvents[1].speakerDone.thread, thread);
+    }
+  );
 
   await t.test('a runRound failure streams an error event instead of throwing', async () => {
     const app = fakeApp();

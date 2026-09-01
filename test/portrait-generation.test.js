@@ -31,7 +31,11 @@ test('generatePortraitImage', async t => {
 
     assert.equal(fetchImpl.calls.length, 1);
     const { url, opts } = fetchImpl.calls[0];
-    assert.ok(url.startsWith(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_IMAGE_MODEL}:generateContent?key=key123`));
+    assert.ok(
+      url.startsWith(
+        `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_IMAGE_MODEL}:generateContent?key=key123`
+      )
+    );
     assert.equal(opts.method, 'POST');
     const body = JSON.parse(opts.body);
     assert.equal(body.contents[0].parts[0].text, 'a test prompt');
@@ -54,7 +58,14 @@ test('generatePortraitImage', async t => {
     const fetchImpl = fakeFetch({
       json: {
         candidates: [
-          { content: { parts: [{ text: 'here you go' }, { inlineData: { mimeType: 'image/png', data: Buffer.from(raw).toString('base64') } }] } },
+          {
+            content: {
+              parts: [
+                { text: 'here you go' },
+                { inlineData: { mimeType: 'image/png', data: Buffer.from(raw).toString('base64') } },
+              ],
+            },
+          },
         ],
       },
     });

@@ -73,7 +73,7 @@ const MEMBER_SUBJECTS = {
   'dion-fortune':
     'Warm, etching-adjacent portrait of Dion Fortune (Violet Mary Firth), English occultist, early 20th century — head-and-shoulders, formal 1920s–30s dress.',
   'william-blake':
-    "Warm, etching-adjacent portrait of William Blake, English poet and engraver, Georgian era — head-and-shoulders, plain Georgian dress, wide intense visionary eyes, high forehead. No photograph exists, but a well-known contemporary painted portrait survives (Thomas Phillips, 1807) — use it as a loose likeness anchor while keeping the etching register rather than reproducing the painting directly.",
+    'Warm, etching-adjacent portrait of William Blake, English poet and engraver, Georgian era — head-and-shoulders, plain Georgian dress, wide intense visionary eyes, high forehead. No photograph exists, but a well-known contemporary painted portrait survives (Thomas Phillips, 1807) — use it as a loose likeness anchor while keeping the etching register rather than reproducing the painting directly.',
   'catherine-blake':
     "Warm, etching-adjacent portrait of Catherine Blake, English artisan and engraver, Georgian era — head-and-shoulders, plain working-class Georgian woman's dress and cap. No photographic or contemporary likeness reference exists; render as a period-appropriate character study consistent with the set's register, not a specific likeness reproduction.",
   yates:
@@ -94,8 +94,7 @@ const MEMBER_SUBJECTS = {
     "Warm, etching-adjacent portrait of Hildegard of Bingen, German Benedictine abbess, 12th century — head-and-shoulders, visibly elderly (70s-80s, deeply lined face, heavy-lidded eyes), black Benedictine habit with a stiff, severe black wimple pinned tightly and close to the face. A plain wooden staff of monastic office rests visibly against her shoulder or is held in one hand. No photographic or contemporary likeness reference exists; render as a period-appropriate character study consistent with the set's register, favoring a secular character-study framing over reproducing existing devotional/illuminated-manuscript iconography (no halo, no visionary light-beam staging).",
   julian:
     "Warm, etching-adjacent portrait of Julian of Norwich, English anchoress, later 14th century, framed as seen through a small stone window aperture — the historical 'anchorhold squint,' the actual physical opening through which an enclosed anchoress spoke to visitors. Her face and shoulders are visible within the window's dark stone frame, partially shadowed but not obscured. She reads as elderly — 50s or 60s, weathered and deeply lined, silver or grey hair at the edges of the wimple. Dress: a coarse black or undyed wool habit, plainer and less voluminous than a formal monastic order's habit, a simple linen wimple and veil pinned close, consistent with 14th-century English anchoritic dress. Favor this secular, architectural framing over any devotional staging.",
-  jung:
-    'Warm, etching-adjacent portrait of Carl Gustav Jung, Swiss psychiatrist, mid-20th century — head-and-shoulders, glasses, formal suit, pipe optional.',
+  jung: 'Warm, etching-adjacent portrait of Carl Gustav Jung, Swiss psychiatrist, mid-20th century — head-and-shoulders, glasses, formal suit, pipe optional.',
   pauli:
     'Warm, etching-adjacent portrait of Wolfgang Pauli, Austrian theoretical physicist, mid-20th century — head-and-shoulders, glasses, formal suit.',
   eckhart:

@@ -59,10 +59,7 @@ function registerVoiceRoutes(app, { roster, voiceCacheDir, apiKey, modelId }) {
     // common case, not an edge case — worth the disk write. Speed is folded
     // in (#478) so a pace change actually reaches disk-cached lines instead
     // of silently continuing to serve pre-existing slow audio forever.
-    const cacheKey = crypto
-      .createHash('sha256')
-      .update(`${voiceId}::${DEFAULT_VOICE_SPEED}::${text}`)
-      .digest('hex');
+    const cacheKey = crypto.createHash('sha256').update(`${voiceId}::${DEFAULT_VOICE_SPEED}::${text}`).digest('hex');
     const cachePath = path.join(voiceCacheDir, `${cacheKey}.mp3`);
     const cached = fs.existsSync(cachePath);
 

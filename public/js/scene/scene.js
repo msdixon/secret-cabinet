@@ -392,7 +392,11 @@ window.LodgeScene = (function () {
       cupMat.disableLighting = true;
       cup.material = cupMat;
 
-      const sconce = new BABYLON.PointLight(`sconce-${i}`, new BABYLON.Vector3(bulbSpot.x, SCONCE_HEIGHT, bulbSpot.z), scene);
+      const sconce = new BABYLON.PointLight(
+        `sconce-${i}`,
+        new BABYLON.Vector3(bulbSpot.x, SCONCE_HEIGHT, bulbSpot.z),
+        scene
+      );
       sconce.diffuse = BABYLON.Color3.FromHexString(LODGE_AMBER);
       sconce.specular = BABYLON.Color3.FromHexString(LODGE_GOLD);
       sconce.intensity = SCONCE_INTENSITY;
@@ -811,10 +815,7 @@ window.LodgeScene = (function () {
   const DOCUMENT_GLOW_CITED = 0.55;
 
   function normalizeForCitationMatch(s) {
-    return s
-      .replace(/[‘’]/g, "'")
-      .replace(/[“”]/g, '"')
-      .toLowerCase();
+    return s.replace(/[‘’]/g, "'").replace(/[“”]/g, '"').toLowerCase();
   }
 
   function findCitedQuote(citations) {

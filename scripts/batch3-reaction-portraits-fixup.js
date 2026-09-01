@@ -82,24 +82,28 @@ const HEAD_TURN_REACTION =
 const THINKING_FIXUPS = {
   'dion-fortune': {
     tier: 'A',
-    subject: 'Warm, etching-adjacent portrait of Dion Fortune (Violet Mary Firth), English occultist, early 20th century — head-and-shoulders, formal 1920s–30s dress.',
+    subject:
+      'Warm, etching-adjacent portrait of Dion Fortune (Violet Mary Firth), English occultist, early 20th century — head-and-shoulders, formal 1920s–30s dress.',
   },
   'frieda-harris': {
     tier: 'A',
-    subject: 'Warm, etching-adjacent portrait of Lady Frieda Harris, English artist, 1930s–40s — head-and-shoulders, refined older Englishwoman, elegant period dress.',
+    subject:
+      'Warm, etching-adjacent portrait of Lady Frieda Harris, English artist, 1930s–40s — head-and-shoulders, refined older Englishwoman, elegant period dress.',
   },
   'moina-mathers': {
     tier: 'A',
-    subject: 'Warm, etching-adjacent portrait of Moina Mathers, Golden Dawn co-leader and artist, Edwardian era — head-and-shoulders, formal Edwardian dress or Golden Dawn ceremonial regalia.',
+    subject:
+      'Warm, etching-adjacent portrait of Moina Mathers, Golden Dawn co-leader and artist, Edwardian era — head-and-shoulders, formal Edwardian dress or Golden Dawn ceremonial regalia.',
   },
   yates: {
     tier: 'B',
-    subject: 'Warm, etching-adjacent portrait of Frances Yates, English historian, mid-20th century — head-and-shoulders, glasses, sensible tweed or cardigan.',
+    subject:
+      'Warm, etching-adjacent portrait of Frances Yates, English historian, mid-20th century — head-and-shoulders, glasses, sensible tweed or cardigan.',
   },
   'william-blake': {
     tier: 'B',
     subject:
-      "Warm, etching-adjacent portrait of William Blake, English poet and engraver, Georgian era — head-and-shoulders, plain Georgian dress, wide intense visionary eyes, high forehead. No photograph exists, but a well-known contemporary painted portrait survives (Thomas Phillips, 1807) — use it as a loose likeness anchor while keeping the etching register rather than reproducing the painting directly.",
+      'Warm, etching-adjacent portrait of William Blake, English poet and engraver, Georgian era — head-and-shoulders, plain Georgian dress, wide intense visionary eyes, high forehead. No photograph exists, but a well-known contemporary painted portrait survives (Thomas Phillips, 1807) — use it as a loose likeness anchor while keeping the etching register rather than reproducing the painting directly.',
   },
   randolph: {
     tier: 'B',
@@ -113,11 +117,12 @@ const THINKING_FIXUPS = {
   swedenborg: {
     tier: 'B',
     subject:
-      "Warm, etching-adjacent portrait of Emanuel Swedenborg, Swedish scientist and visionary, 18th century — head-and-shoulders, formal 18th-century dress appropriate to a Swedish assessor of the Royal College of Mines (plain coat, natural or lightly-powdered white hair, no ostentation).",
+      'Warm, etching-adjacent portrait of Emanuel Swedenborg, Swedish scientist and visionary, 18th century — head-and-shoulders, formal 18th-century dress appropriate to a Swedish assessor of the Royal College of Mines (plain coat, natural or lightly-powdered white hair, no ostentation).',
   },
   corbin: {
     tier: 'B',
-    subject: 'Warm, etching-adjacent portrait of Henri Corbin, French philosopher, mid-20th century — head-and-shoulders, glasses, formal suit.',
+    subject:
+      'Warm, etching-adjacent portrait of Henri Corbin, French philosopher, mid-20th century — head-and-shoulders, glasses, formal suit.',
   },
 };
 

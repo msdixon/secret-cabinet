@@ -62,11 +62,7 @@
 // every time"), so a second coin-flip on top of a deliberate choice would
 // just make a rare proposal rarer for no legible reason.
 
-const {
-  MAX_SPLINTERS_PER_PASSAGE,
-  SPLINTER_CHANCE,
-  SPLINTER_MIN_BUDGET_WORDS,
-} = require('./tuning');
+const { MAX_SPLINTERS_PER_PASSAGE, SPLINTER_CHANCE, SPLINTER_MIN_BUDGET_WORDS } = require('./tuning');
 
 // Whether the interrupt-intent pick pipeline.js's runRound just made
 // resolves as a splinter instead of an ordinary front-of-room interruption.

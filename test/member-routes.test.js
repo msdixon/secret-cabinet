@@ -285,7 +285,7 @@ test('POST /api/members', async t => {
     assert.equal(calls.length, 4);
     const [baselineCall, ...reactionCalls] = calls;
     assert.equal(baselineCall.referenceImages, undefined);
-    reactionCalls.forEach((call, i) => {
+    reactionCalls.forEach(call => {
       assert.notEqual(call.prompt, baselineCall.prompt);
       assert.deepEqual(call.referenceImages, [{ mimeType: 'image/png', data: Buffer.from('fake-png-bytes-1') }]);
       assert.match(call.prompt, /neutral, resting expression/);
@@ -294,45 +294,51 @@ test('POST /api/members', async t => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  await t.test('#450: a failed reaction call is caught per-reaction -- the baseline and other reactions still succeed', async () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'member-routes-test-'));
-    const rosterFile = path.join(dir, 'roster.json');
-    const pendingPortraitPromptsFile = path.join(dir, 'PENDING-PROMPTS.md');
-    const portraitCandidatesDir = path.join(dir, 'candidates');
-    const app = fakeApp();
-    let callCount = 0;
-    const deps = makeDeps({
-      membersDir: dir,
-      rosterFile,
-      pendingPortraitPromptsFile,
-      portraitCandidatesDir,
-      geminiApiKey: 'test-gemini-key',
-      generatePortraitImage: async () => {
-        callCount += 1;
-        // 1st call is the baseline, 2nd is the "happy" reaction -- fail just that one.
-        if (callCount === 2) throw new Error('Gemini API down for this reaction');
-        return Buffer.from(`fake-png-bytes-${callCount}`);
-      },
-    });
-    registerMemberRoutes(app, deps);
-    const res = fakeRes();
-    await app.routes['POST /api/members'](fakeReq({ body: { name: 'Partly Unlucky Member', bio: 'A biography.' } }), res);
+  await t.test(
+    '#450: a failed reaction call is caught per-reaction -- the baseline and other reactions still succeed',
+    async () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'member-routes-test-'));
+      const rosterFile = path.join(dir, 'roster.json');
+      const pendingPortraitPromptsFile = path.join(dir, 'PENDING-PROMPTS.md');
+      const portraitCandidatesDir = path.join(dir, 'candidates');
+      const app = fakeApp();
+      let callCount = 0;
+      const deps = makeDeps({
+        membersDir: dir,
+        rosterFile,
+        pendingPortraitPromptsFile,
+        portraitCandidatesDir,
+        geminiApiKey: 'test-gemini-key',
+        generatePortraitImage: async () => {
+          callCount += 1;
+          // 1st call is the baseline, 2nd is the "happy" reaction -- fail just that one.
+          if (callCount === 2) throw new Error('Gemini API down for this reaction');
+          return Buffer.from(`fake-png-bytes-${callCount}`);
+        },
+      });
+      registerMemberRoutes(app, deps);
+      const res = fakeRes();
+      await app.routes['POST /api/members'](
+        fakeReq({ body: { name: 'Partly Unlucky Member', bio: 'A biography.' } }),
+        res
+      );
 
-    assert.equal(res.body.member.id, 'partly-unlucky-member');
-    assert.ok(res.body.portraitCandidatePath);
-    assert.equal(res.body.reactionCandidatePaths.happy, undefined);
-    assert.equal(
-      res.body.reactionCandidatePaths.thinking,
-      'public/portraits/candidates/partly-unlucky-member-thinking.png'
-    );
-    assert.equal(
-      res.body.reactionCandidatePaths.angry,
-      'public/portraits/candidates/partly-unlucky-member-angry.png'
-    );
-    assert.equal(fs.existsSync(path.join(portraitCandidatesDir, 'partly-unlucky-member-happy.png')), false);
+      assert.equal(res.body.member.id, 'partly-unlucky-member');
+      assert.ok(res.body.portraitCandidatePath);
+      assert.equal(res.body.reactionCandidatePaths.happy, undefined);
+      assert.equal(
+        res.body.reactionCandidatePaths.thinking,
+        'public/portraits/candidates/partly-unlucky-member-thinking.png'
+      );
+      assert.equal(
+        res.body.reactionCandidatePaths.angry,
+        'public/portraits/candidates/partly-unlucky-member-angry.png'
+      );
+      assert.equal(fs.existsSync(path.join(portraitCandidatesDir, 'partly-unlucky-member-happy.png')), false);
 
-    fs.rmSync(dir, { recursive: true, force: true });
-  });
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  );
 
   await t.test(
     '#435: a failed image-generation call is caught -- member creation and prompt drafting still succeed',

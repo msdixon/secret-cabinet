@@ -172,7 +172,7 @@ test('POST /api/voice/speak', async t => {
     assert.equal(
       JSON.parse(stub.calls[0].opts.body).voice_settings.speed,
       1.1,
-      '#478: request should carry a speed faster than ElevenLabs\' bare default'
+      "#478: request should carry a speed faster than ElevenLabs' bare default"
     );
 
     assert.equal(res.headers['Content-Type'], 'audio/mpeg');

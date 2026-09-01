@@ -44,21 +44,18 @@ const MEMBER_SUBJECTS = {
   waite:
     'Warm, etching-adjacent portrait of Arthur Edward Waite, English occult scholar, late-Victorian/Edwardian era — head-and-shoulders, formal dark suit and high collar, mustache, scholarly bearing. Aim for a recognizable likeness consistent with surviving photographs.',
   pixie:
-    'Warm, etching-adjacent portrait of Pamela Colman Smith, Anglo-American artist and illustrator, Edwardian era — head-and-shoulders, short dark hair often bound in a headscarf, expressive intense eyes, bohemian artist\'s dress. Aim for a recognizable likeness consistent with surviving photographs.',
+    "Warm, etching-adjacent portrait of Pamela Colman Smith, Anglo-American artist and illustrator, Edwardian era — head-and-shoulders, short dark hair often bound in a headscarf, expressive intense eyes, bohemian artist's dress. Aim for a recognizable likeness consistent with surviving photographs.",
   blavatsky:
     'Warm, etching-adjacent portrait of Helena Petrovna Blavatsky, Russian-born Theosophist, Victorian era — head-and-shoulders, imposing older woman, elaborate Victorian dress, piercing direct gaze, rings visible if hands are in frame. Aim for a recognizable likeness consistent with surviving photographs.',
-  levi:
-    'Warm, etching-adjacent portrait of Éliphas Lévi (Alphonse Louis Constant), French occultist, mid-19th century — head-and-shoulders, beard, dark formal coat with the residual bearing of a lapsed seminarian, direct gaze. Aim for a recognizable likeness consistent with surviving photographs.',
+  levi: 'Warm, etching-adjacent portrait of Éliphas Lévi (Alphonse Louis Constant), French occultist, mid-19th century — head-and-shoulders, beard, dark formal coat with the residual bearing of a lapsed seminarian, direct gaze. Aim for a recognizable likeness consistent with surviving photographs.',
   arabi:
-    'Warm, etching-adjacent portrait of Muhyiddin Ibn Arabi, Andalusian-then-Damascene Sufi scholar, late 12th/early 13th century — head-and-shoulders, turban and scholar\'s robes appropriate to the Ayyubid-era Islamic world, composed expression. No photographic or contemporary likeness reference exists; render as a period-appropriate character study consistent with the set\'s register, not a specific likeness reproduction, favoring a secular character-study framing over reproducing existing devotional iconography.',
-  maud:
-    'Warm, etching-adjacent portrait of Maud Gonne, Irish revolutionary and actress, Edwardian era — head-and-shoulders, tall striking bearing, dark hair, elegant Edwardian dress, direct confident gaze. Aim for a recognizable likeness consistent with surviving photographs.',
+    "Warm, etching-adjacent portrait of Muhyiddin Ibn Arabi, Andalusian-then-Damascene Sufi scholar, late 12th/early 13th century — head-and-shoulders, turban and scholar's robes appropriate to the Ayyubid-era Islamic world, composed expression. No photographic or contemporary likeness reference exists; render as a period-appropriate character study consistent with the set's register, not a specific likeness reproduction, favoring a secular character-study framing over reproducing existing devotional iconography.",
+  maud: 'Warm, etching-adjacent portrait of Maud Gonne, Irish revolutionary and actress, Edwardian era — head-and-shoulders, tall striking bearing, dark hair, elegant Edwardian dress, direct confident gaze. Aim for a recognizable likeness consistent with surviving photographs.',
   llull:
-    'Warm, etching-adjacent portrait of Ramon Llull, Majorcan philosopher and mystic, 13th/14th century — head-and-shoulders, plain religious tertiary\'s habit (post-conversion, not courtly dress), weathered contemplative face. No photographic or contemporary likeness reference exists; render as a period-appropriate character study consistent with the set\'s register, not a specific likeness reproduction.',
+    "Warm, etching-adjacent portrait of Ramon Llull, Majorcan philosopher and mystic, 13th/14th century — head-and-shoulders, plain religious tertiary's habit (post-conversion, not courtly dress), weathered contemplative face. No photographic or contemporary likeness reference exists; render as a period-appropriate character study consistent with the set's register, not a specific likeness reproduction.",
   khaldun:
-    'Warm, etching-adjacent portrait of Ibn Khaldun, North African/Andalusian historian and statesman, 14th century — head-and-shoulders, turban and formal robes appropriate to a Mamluk-era scholar-official, composed authoritative expression. No photographic or contemporary likeness reference exists; render as a period-appropriate character study consistent with the set\'s register, not a specific likeness reproduction.',
-  dee:
-    'Warm, etching-adjacent portrait of John Dee, English mathematician and astrologer, Elizabethan era — head-and-shoulders, long white beard, black skullcap, scholar\'s gown and ruff collar, penetrating gaze. No photograph exists, but a well-known contemporary painted portrait survives (Ashmolean Museum) — use it as a loose likeness anchor while keeping the etching register rather than reproducing the painting directly.',
+    "Warm, etching-adjacent portrait of Ibn Khaldun, North African/Andalusian historian and statesman, 14th century — head-and-shoulders, turban and formal robes appropriate to a Mamluk-era scholar-official, composed authoritative expression. No photographic or contemporary likeness reference exists; render as a period-appropriate character study consistent with the set's register, not a specific likeness reproduction.",
+  dee: "Warm, etching-adjacent portrait of John Dee, English mathematician and astrologer, Elizabethan era — head-and-shoulders, long white beard, black skullcap, scholar's gown and ruff collar, penetrating gaze. No photograph exists, but a well-known contemporary painted portrait survives (Ashmolean Museum) — use it as a loose likeness anchor while keeping the etching register rather than reproducing the painting directly.",
   warburg:
     'Warm, etching-adjacent portrait of Aby Warburg, German art historian, early 20th century — head-and-shoulders, formal suit, intense/haunted expression, receding hairline. Aim for a recognizable likeness consistent with surviving photographs.',
 };
@@ -66,7 +63,8 @@ const MEMBER_SUBJECTS = {
 // Same wording the #470 pilot used, kept identical for consistency across
 // the whole reaction set regardless of which batch generated a given image.
 const REACTIONS = {
-  happy: 'Expression: a genuine, warm brightening — eyes lit with real pleasure, the faint start of a smile, an open and unguarded look.',
+  happy:
+    'Expression: a genuine, warm brightening — eyes lit with real pleasure, the faint start of a smile, an open and unguarded look.',
   thinking:
     'Expression: inward and considering — gaze middle-distance or slightly downcast, brow faintly furrowed in concentration, the look of someone turning an idea over rather than addressing the viewer.',
   angry:

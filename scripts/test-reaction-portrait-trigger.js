@@ -103,9 +103,15 @@ async function runCase(c) {
 
   console.log(`\n--- ${m.name} ---`);
   console.log(`reflection: ${result.text}`);
-  console.log(`reaction: ${result.reaction} (expected ${expected}, ${matchedExpected ? 'match' : 'differs — real model variance'})`);
+  console.log(
+    `reaction: ${result.reaction} (expected ${expected}, ${matchedExpected ? 'match' : 'differs — real model variance'})`
+  );
   console.log(`resolved portrait path: ${path.relative(ROOT, resolvedPath)}`);
-  console.log(fileExists ? '✅ file exists on disk — trigger correctly resolved to a real generated image' : '❌ resolved path does not exist');
+  console.log(
+    fileExists
+      ? '✅ file exists on disk — trigger correctly resolved to a real generated image'
+      : '❌ resolved path does not exist'
+  );
 
   return { memberId: c.memberId, reaction: result.reaction, resolvedPath, fileExists };
 }
@@ -129,7 +135,9 @@ async function main() {
       : '❌ at least one reaction tag did not resolve to an existing file.'
   );
   for (const r of results) {
-    console.log(`  ${r.memberId}: reaction="${r.reaction}" -> ${path.relative(ROOT, r.resolvedPath)} (${r.fileExists ? 'exists' : 'MISSING'})`);
+    console.log(
+      `  ${r.memberId}: reaction="${r.reaction}" -> ${path.relative(ROOT, r.resolvedPath)} (${r.fileExists ? 'exists' : 'MISSING'})`
+    );
   }
 
   process.exit(allResolved ? 0 : 1);

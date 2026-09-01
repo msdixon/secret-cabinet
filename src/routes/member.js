@@ -227,7 +227,10 @@ ${relationships || '(not specified — infer from historical record)'}`;
               fs.writeFileSync(path.join(portraitCandidatesDir, `${reactionId}.png`), reactionBuffer);
               reactionCandidatePaths[reaction] = `public/portraits/candidates/${reactionId}.png`;
             } catch (err) {
-              console.error(`Reaction portrait generation error for "${reaction}" (member creation still succeeded):`, err);
+              console.error(
+                `Reaction portrait generation error for "${reaction}" (member creation still succeeded):`,
+                err
+              );
             }
           }
         } catch (err) {
