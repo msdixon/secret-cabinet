@@ -405,7 +405,7 @@ a.lodge-btn { display:inline-block; text-decoration:none; }
    and the dotted border-bottom here was reading as a dead/broken link.
    Underline is reserved exclusively for .inline-link (future markdown-link
    support, not yet parsed anywhere) so the two affordances never collide. */
-.keyword-inline { font-style:italic; color:var(--lodge-gold); }
+.keyword-inline { font-style:italic; }
 /* Reserved for future inline hyperlinks -- no parser emits this class yet.
    Underline must stay exclusive to it; .keyword-inline above must never
    carry one, or a real link stops being distinguishable from emphasis. */
