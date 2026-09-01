@@ -47,12 +47,27 @@ window.LodgeScene = (function () {
   // only other scripted camera move (see openDocumentInspect() below).
   const CAMERA_INSPECT_BETA = Math.PI / 2.15;
   const CAMERA_INSPECT_RADIUS = 3;
+  // #504: free-drag orbit, live only between scripted moves (see
+  // enableFreeCameraControl below). Radius is locked to
+  // CAMERA_DEFAULT_RADIUS while dragging is live -- no wheel/pinch zoom is
+  // offered, only rotate -- specifically so the WALL_RADIUS margin's own
+  // invariant ("camera's horizontal distance from center never exceeds
+  // CAMERA_DEFAULT_RADIUS") still holds with user input in the mix, not
+  // just scripted moves. Beta gets a modest tilt range instead of staying
+  // pinned to CAMERA_DEFAULT_BETA: MIN keeps the camera's computed height
+  // (1 + radius*cos(beta)) safely under the WALL_HEIGHT=6 ceiling, MAX
+  // keeps it comfortably above the floor -- both picked from that same
+  // trig rather than left at Babylon's near-unbounded defaults.
+  const CAMERA_FREE_BETA_MIN = 1.15; // ~66°, camera y ~5.35
+  const CAMERA_FREE_BETA_MAX = 1.5; // ~86°, camera y ~1.85
 
   // #294: enclosing wall. Radius is deliberately CAMERA_DEFAULT_RADIUS + a
-  // margin, not some fixed "room size" -- with beta fixed and no
-  // attachControl, the camera's horizontal distance from center never
-  // exceeds CAMERA_DEFAULT_RADIUS (frameCamera() only ever eases alpha/
-  // radius between the default and CAMERA_SPEAKER_RADIUS, both smaller).
+  // margin, not some fixed "room size" -- the camera's horizontal distance
+  // from center never exceeds CAMERA_DEFAULT_RADIUS: scripted moves only
+  // ever ease alpha/radius between the default and CAMERA_SPEAKER_RADIUS/
+  // CAMERA_INSPECT_RADIUS (both smaller), and #504's free-drag orbit locks
+  // radius to exactly CAMERA_DEFAULT_RADIUS whenever it's live (see
+  // enableFreeCameraControl) rather than leaving zoom open to user input.
   // Keeping the wall outside that bound means the camera is always inside
   // the room looking toward the table, so the wall can never land between
   // camera and subject regardless of which seat's angle it swings to --
@@ -189,6 +204,14 @@ window.LodgeScene = (function () {
 
   let sceneRef = null;
   let cameraRef = null;
+  let canvasRef = null;
+  // #504: whether the camera currently has drag/orbit input attached --
+  // see enableFreeCameraControl/disableFreeCameraControl.
+  let freeControlActive = false;
+  // #504: bumped every time a scripted camera move starts, so a delayed
+  // "re-enable free control" callback from an older move can recognize a
+  // newer one has since taken over and skip re-enabling out from under it.
+  let cameraMoveToken = 0;
   let seatMeshes = [];
   let tableMesh = null;
   const portraitTextures = {}; // memberId -> BABYLON.Texture, cached across seat reassignment
@@ -861,16 +884,17 @@ window.LodgeScene = (function () {
     onDocumentCitationChange?.(null);
   }
 
-  // #34: click-to-inspect. The scene has no camera controls (init()'s own
-  // "Deliberately no attachControl" note) -- this is the second scripted
-  // camera move alongside frameCamera's speaker framing, not a new
-  // interactive-camera feature. onDocumentInspectChange (set via init()'s
-  // options bag) is how app.js's DOM reading panel stays in sync with open/
-  // close -- scene.js owns click detection and the camera move, app.js owns
-  // rendering the actual document text into the panel.
+  // #34: click-to-inspect -- a scripted camera move alongside frameCamera's
+  // speaker framing, not related to #504's free-drag orbit (which yields to
+  // this one the same way it yields to frameCamera, via yieldToScriptedMove
+  // below). onDocumentInspectChange (set via init()'s options bag) is how
+  // app.js's DOM reading panel stays in sync with open/close -- scene.js
+  // owns click detection and the camera move, app.js owns rendering the
+  // actual document text into the panel.
   function openDocumentInspect() {
     if (!cameraRef || !documentVisible || documentInspecting) return;
     documentInspecting = true;
+    yieldToScriptedMove();
     animateCameraProp(cameraRef, 'alpha', cameraRef.alpha + shortestAngleDelta(cameraRef.alpha, CAMERA_DEFAULT_ALPHA));
     animateCameraProp(cameraRef, 'beta', CAMERA_INSPECT_BETA);
     animateCameraProp(cameraRef, 'radius', CAMERA_INSPECT_RADIUS);
@@ -884,6 +908,7 @@ window.LodgeScene = (function () {
   function closeDocumentInspect() {
     if (!cameraRef || !documentInspecting) return;
     documentInspecting = false;
+    yieldToScriptedMove();
     animateCameraProp(cameraRef, 'alpha', cameraRef.alpha + shortestAngleDelta(cameraRef.alpha, CAMERA_DEFAULT_ALPHA));
     animateCameraProp(cameraRef, 'beta', CAMERA_DEFAULT_BETA);
     animateCameraProp(cameraRef, 'radius', currentSpeakingId ? CAMERA_SPEAKER_RADIUS : CAMERA_DEFAULT_RADIUS);
@@ -1398,6 +1423,63 @@ window.LodgeScene = (function () {
     );
   }
 
+  // #504: attaches drag/orbit input -- rotate only (see CAMERA_FREE_BETA_MIN/
+  // MAX's comment for why radius/beta are bounded rather than left open).
+  // Only ever called when the room is idle (no live speaker-framing, not
+  // inspecting the document): directly from init() for the "seating the
+  // room" pre-session state, and from yieldToScriptedMove()'s delayed
+  // callback once a scripted move's ease finishes back into that same
+  // idle state.
+  function enableFreeCameraControl() {
+    if (!cameraRef || !canvasRef || freeControlActive) return;
+    freeControlActive = true;
+    cameraRef.attachControl(canvasRef, true);
+    cameraRef.panningSensibility = 0; // rotate only -- no drag-to-pan off the room's center
+    cameraRef.lowerRadiusLimit = CAMERA_DEFAULT_RADIUS;
+    cameraRef.upperRadiusLimit = CAMERA_DEFAULT_RADIUS;
+    cameraRef.lowerBetaLimit = CAMERA_FREE_BETA_MIN;
+    cameraRef.upperBetaLimit = CAMERA_FREE_BETA_MAX;
+  }
+
+  // #504: detaches drag input and relaxes the limits enableFreeCameraControl
+  // set, so a scripted move (frameCamera's CAMERA_SPEAKER_RADIUS pull-in,
+  // openDocumentInspect's CAMERA_INSPECT_RADIUS/BETA) isn't clamped back by
+  // them -- Babylon enforces lowerRadiusLimit/upperRadiusLimit/beta limits
+  // every frame regardless of which input (drag vs. Animation) is driving
+  // the property, so the free-drag bounds have to come off before a
+  // scripted animation can move outside them. Idempotent and safe to call
+  // even when already detached.
+  function disableFreeCameraControl() {
+    if (!cameraRef) return;
+    freeControlActive = false;
+    cameraRef.detachControl();
+    cameraRef.lowerRadiusLimit = null;
+    cameraRef.upperRadiusLimit = null;
+    cameraRef.lowerBetaLimit = 0.01;
+    cameraRef.upperBetaLimit = Math.PI - 0.01;
+  }
+
+  // #504: called at the start of every scripted camera move (frameCamera,
+  // openDocumentInspect, closeDocumentInspect) so free-drag can't fight it
+  // -- the moment a new turn starts speaking or document-inspect triggers,
+  // control yields back to the scripted move immediately, not just once the
+  // ease finishes. Control returns automatically once that move's own
+  // CAMERA_FRAME_MS ease completes, but only if the room is still idle at
+  // that point (no one speaking, not inspecting) -- checked via
+  // cameraMoveToken so a second move that starts mid-ease (e.g. a new
+  // speaker while the previous one's framing is still easing back to
+  // default) leaves control right where it belongs, with whichever move is
+  // now current.
+  function yieldToScriptedMove() {
+    disableFreeCameraControl();
+    cameraMoveToken++;
+    const token = cameraMoveToken;
+    setTimeout(() => {
+      if (token !== cameraMoveToken) return;
+      if (!currentSpeakingId && !documentInspecting) enableFreeCameraControl();
+    }, CAMERA_FRAME_MS);
+  }
+
   // #232: swings the camera toward whichever seat is speaking (angle = 0
   // pulls the camera to the same ray as that seat, so it sits between the
   // camera and the table center — foregrounded and close, per the shared
@@ -1414,6 +1496,7 @@ window.LodgeScene = (function () {
       ? cameraRef.alpha + shortestAngleDelta(cameraRef.alpha, seat.angle)
       : cameraRef.alpha + shortestAngleDelta(cameraRef.alpha, CAMERA_DEFAULT_ALPHA);
     const targetRadius = seat ? CAMERA_SPEAKER_RADIUS : CAMERA_DEFAULT_RADIUS;
+    yieldToScriptedMove();
     animateCameraProp(cameraRef, 'alpha', targetAlpha);
     animateCameraProp(cameraRef, 'radius', targetRadius);
   }
@@ -1670,10 +1753,13 @@ window.LodgeScene = (function () {
         new BABYLON.Vector3(0, 1, 0),
         scene
       );
-      // Deliberately no attachControl — not interactive this phase. (#34's
-      // click-to-inspect is a scripted camera move triggered by a canvas
-      // click handler, not camera-drag input, so this still holds.)
+      // #504: drag/orbit is enabled below, once the rest of init() has run
+      // (canvasRef needs to exist first) -- gated by enableFreeCameraControl
+      // to idle states only, same room-only interactivity #34's click-to-
+      // inspect already established (a canvas click handler triggering a
+      // scripted move, not raw camera-drag input).
       cameraRef = camera;
+      canvasRef = canvas;
       onDocumentInspectChange = options.onDocumentInspect || null;
       onDocumentCitationChange = options.onDocumentCitation || null;
 
@@ -1763,7 +1849,12 @@ window.LodgeScene = (function () {
 
       // #232: no continuous auto-rotate — the camera holds the resting shot
       // and only moves when frameCamera() (via setSpeaking) swings it to
-      // whoever's talking, easing back here once no one is.
+      // whoever's talking, easing back here once no one is. #504: the room
+      // starts idle (no session yet, nothing speaking), so free drag/orbit
+      // goes live immediately -- "seating the room" before anything's
+      // actually said.
+      enableFreeCameraControl();
+
       engine.runRenderLoop(() => {
         updateFire();
         scene.render();
