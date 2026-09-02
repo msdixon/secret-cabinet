@@ -593,6 +593,80 @@ test('replay: auto-advance paces off real speech duration when Voice reports it'
   );
 });
 
+// #527: renderWitnessBlock used to render a speech beat's text and only
+// afterward call Voice.speak(), which for the ElevenLabs backend is a fresh
+// fetch->blob->play chain -- a live-measured 650-1150ms gap between text and
+// audio, since nothing had started that fetch any earlier. advance() now
+// also kicks off Voice.prefetch() for the *next* block the moment the
+// current one renders, while replay already knows the whole block list
+// ahead of time.
+test('replay: prefetch (#527) — the next speech beat starts loading while this one plays', async t => {
+  await t.test('start() prefetches the first speech beat, and each advance() prefetches the one after', async t2 => {
+    const calls = [];
+    const loaded = loadPublicModule('witness.js', FIXTURE, window => {
+      window.Voice = { speak: () => undefined, prefetch: (text, memberId) => calls.push({ text, memberId }), stop: () => {} };
+    });
+    t2.after(loaded.cleanup);
+    const { module: Witness } = loaded;
+
+    await Witness.start(
+      { rounds: [{ label: 'Round I', text: 'Crowley:\nOne.\n\nBlavatsky:\nTwo.' }] },
+      makeDeps()
+    );
+    // start() renders block 0 (the "Round I" header) and, per advance()'s own
+    // #527 comment, immediately prefetches block 1 -- the header is on
+    // screen well before Crowley's line is due.
+    assert.deepEqual(calls, [{ text: 'One.', memberId: 'crowley' }]);
+
+    Witness.advance(); // renders "One.", prefetches "Two." while it plays
+    assert.deepEqual(calls, [
+      { text: 'One.', memberId: 'crowley' },
+      { text: 'Two.', memberId: 'blavatsky' },
+    ]);
+
+    Witness.advance(); // renders "Two." -- nothing left to look ahead to
+    assert.deepEqual(
+      calls,
+      [
+        { text: 'One.', memberId: 'crowley' },
+        { text: 'Two.', memberId: 'blavatsky' },
+      ],
+      'no further prefetch once the last block is on screen'
+    );
+  });
+
+  await t.test('a non-speech block (a round header) coming up next is not passed to prefetch()', async t2 => {
+    const calls = [];
+    const loaded = loadPublicModule('witness.js', FIXTURE, window => {
+      window.Voice = { speak: () => undefined, prefetch: (text, memberId) => calls.push({ text, memberId }), stop: () => {} };
+    });
+    t2.after(loaded.cleanup);
+    const { module: Witness } = loaded;
+
+    await Witness.start(
+      {
+        rounds: [
+          { label: 'Round I', text: 'Crowley:\nOne.' },
+          { label: 'Round II', text: 'Blavatsky:\nTwo.' },
+        ],
+      },
+      makeDeps()
+    );
+    // Blocks: 0 header "Round I", 1 speech "One.", 2 header "Round II", 3
+    // speech "Two.". start() already prefetched block 1.
+    assert.deepEqual(calls, [{ text: 'One.', memberId: 'crowley' }]);
+
+    Witness.advance(); // renders "One.", upcoming block 2 is a header -- skipped
+    assert.deepEqual(calls, [{ text: 'One.', memberId: 'crowley' }], 'a header block must not reach Voice.prefetch()');
+
+    Witness.advance(); // renders "Round II" header, upcoming block 3 is speech
+    assert.deepEqual(calls, [
+      { text: 'One.', memberId: 'crowley' },
+      { text: 'Two.', memberId: 'blavatsky' },
+    ]);
+  });
+});
+
 test('replay: start syncs the record, exit stops playback and collapses the stage', async t => {
   // #184: restoreSession now fires when replay STARTS, not when it exits —
   // both panes show the same session as soon as playback begins, rather
@@ -1673,6 +1747,73 @@ test("live turn queue (#400): only one member's turn is ever on screen at a time
     assert.match(entries[0].textContent, /One\./);
     assert.match(entries[1].textContent, /Two\./);
   });
+});
+
+// #527: the live turn queue very often knows a turn's block before it
+// reaches the front (generation outruns speech) -- maybePrefetchUpcoming()
+// takes advantage of that by kicking off Voice.prefetch() for whichever turn
+// sits one behind the one currently playing, so its ElevenLabs audio is
+// already loading by the time it's needed.
+test('live prefetch (#527): the turn one behind the one now playing starts loading early', async t => {
+  await t.test(
+    'liveSpeech() for a later turn prefetches it the moment it lands one behind the one playing',
+    async t2 => {
+      t2.mock.timers.enable({ apis: ['setTimeout'] });
+      const calls = [];
+      const loaded = loadPublicModule('witness.js', FIXTURE, window => {
+        window.Voice = { speak: () => undefined, prefetch: (text, memberId) => calls.push({ text, memberId }), stop: () => {} };
+      });
+      t2.after(loaded.cleanup);
+      const { module: Witness } = loaded;
+      Witness.configure(makeDeps());
+
+      Witness.liveSpeech({ speaker: 'Crowley', text: 'One.', memberId: 'crowley' });
+      assert.deepEqual(calls, [], 'nothing queued behind the only turn yet -- no prefetch target');
+
+      // Blavatsky's turn lands right behind Crowley's while Crowley is still
+      // playing (paced on the WPM floor, unresolved) -- this is exactly the
+      // "generation outran speech" case the comment above describes.
+      Witness.liveSpeech({ speaker: 'Blavatsky', text: 'Two.', memberId: 'blavatsky' });
+      assert.deepEqual(
+        calls,
+        [{ text: 'Two.', memberId: 'blavatsky' }],
+        "Blavatsky's turn is one behind the one now playing -- prefetch it immediately, not once it's on screen"
+      );
+    }
+  );
+
+  await t.test(
+    'the look-ahead also fires when the queue shifts and a new turn starts playing, not only from liveSpeech()',
+    async t2 => {
+      t2.mock.timers.enable({ apis: ['setTimeout'] });
+      const calls = [];
+      const loaded = loadPublicModule('witness.js', FIXTURE, window => {
+        window.Voice = { speak: () => undefined, prefetch: (text, memberId) => calls.push({ text, memberId }), stop: () => {} };
+      });
+      t2.after(loaded.cleanup);
+      const { document, module: Witness } = loaded;
+      Witness.configure(makeDeps());
+
+      Witness.liveSpeech({ speaker: 'Crowley', text: 'One.', memberId: 'crowley' }); // playing
+      Witness.liveSpeech({ speaker: 'Blavatsky', text: 'Two.', memberId: 'blavatsky' }); // one behind -- prefetched above
+      Witness.liveSpeech({ speaker: 'Crowley', text: 'Three.', memberId: 'crowley' }); // two behind -- not yet
+
+      calls.length = 0; // isolate what the upcoming shift itself triggers
+      await advancePastLiveTurn(t2); // "One." finishes and shifts out -- "Two." becomes the one playing
+      assert.deepEqual(
+        calls,
+        [{ text: 'Three.', memberId: 'crowley' }],
+        "once \"Two.\" takes the floor, \"Three.\" is now one behind it and should start loading -- this happens inside " +
+          'advanceLiveTurnQueue() as the queue shifts, with no liveSpeech() call of its own to trigger it'
+      );
+      const entries = document.querySelectorAll('#witness-stage .transcript-entry .speech-text');
+      assert.match(
+        entries[entries.length - 1]?.textContent || '',
+        /Two\./,
+        'sanity check: "Two." is in fact the one now on screen'
+      );
+    }
+  );
 });
 
 test('playback speed (#288): one multiplier reaches room-mode holds, replay, and the old stage alike', async t => {

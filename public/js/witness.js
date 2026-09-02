@@ -729,6 +729,21 @@ window.Witness = (function () {
     return liveTurnQueue.length ? liveTurnQueue[liveTurnQueue.length - 1] : null;
   }
 
+  // #527: the turn one behind the front of the queue -- if generation has
+  // already outrun speech enough that its block is settled, kick off its
+  // ElevenLabs fetch now, while the front turn is still speaking, rather
+  // than only once it reaches the front and renders. Deliberately looks
+  // only one turn ahead, matching Voice.prefetch()'s single-slot cache (see
+  // that module's own comment for why prefetching further ahead isn't worth
+  // it). Called both when the front turn starts settling (queue shape
+  // unchanged, but the turn behind it may now be prefetchable) and from
+  // liveSpeech() (a turn's block can settle after it's already sitting in
+  // this position, since app.js streams one turn at a time).
+  function maybePrefetchUpcoming() {
+    const upcoming = liveTurnQueue[1];
+    if (upcoming?.block?.type === 'speech') window.Voice?.prefetch?.(upcoming.block.text, upcoming.block.memberId);
+  }
+
   // Renders whatever's known so far for the turn now at the front of the
   // queue -- a typing preview if its text isn't fully settled yet, or (far
   // more often in practice, since generation outruns speech) straight to
@@ -752,6 +767,7 @@ window.Witness = (function () {
     }
     if (!turn.block) return; // still being typed -- liveTypingSet/liveSpeech will call back in
     turn.settling = true;
+    maybePrefetchUpcoming();
     const myGeneration = liveTurnGeneration;
     const { delay } = renderWitnessBlock(turn.block);
     // Same two-step as replay's advance(): Promise.resolve(delay) is
@@ -820,6 +836,14 @@ window.Witness = (function () {
       });
     }
     advanceLiveTurnQueue();
+    // #527: advanceLiveTurnQueue() above only reaches maybePrefetchUpcoming()
+    // when the *front* turn is the one starting to settle -- if the front
+    // turn is already mid-playback (turn.settling already true), it returns
+    // immediately without looking at what's now behind it. This is exactly
+    // the case where this liveSpeech() call just settled the block for the
+    // turn sitting one behind the one currently playing, so call it
+    // explicitly here too.
+    maybePrefetchUpcoming();
   }
 
   // Mirrors the record's "typing" placeholder (#115) so the active surface
@@ -1330,6 +1354,15 @@ window.Witness = (function () {
 
     witnessIndex++;
     _updateControls();
+
+    // #527: replay already knows every block ahead of time, so kick off the
+    // *next* speech beat's ElevenLabs fetch now, while this beat's audio/
+    // pacing delay is still running, instead of only starting that fetch
+    // once the next beat is already on screen. Voice.prefetch() applies the
+    // same stripForSpeech()+empty-text no-op speak() does, so passing a
+    // non-speech or all-action block's text through unfiltered is harmless.
+    const upcoming = witnessBlocks[witnessIndex];
+    if (upcoming?.type === 'speech') window.Voice?.prefetch?.(upcoming.text, upcoming.memberId);
 
     // Schedule auto-advance. `delay` is a plain ms number for every block
     // except a spoken speech beat with voice actually on, where it's a
