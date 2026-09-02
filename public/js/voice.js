@@ -340,6 +340,77 @@ window.Voice = (function () {
   // beat rather than going silent -- and doesn't flip elevenLabsAvailable
   // off, since a single failed request shouldn't downgrade every later beat
   // in the session too.
+  function fetchElevenLabsUrl(memberId, spoken) {
+    return fetch('/api/voice/speak', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ memberId, text: spoken }),
+    })
+      .then(r => {
+        if (!r.ok) throw new Error(`voice request failed: ${r.status}`);
+        return r.blob();
+      })
+      .then(blob => URL.createObjectURL(blob));
+  }
+
+  // #527: the fetch -> blob -> object-URL chain above is what produces the
+  // ~650-1150ms gap between a beat's text appearing (renderWitnessBlock
+  // renders synchronously) and its ElevenLabs audio actually starting --
+  // speak() used to always kick that chain off only once the beat was
+  // already on screen. witness.js now knows the *next* beat's text ahead of
+  // time in both playback modes (replay's witnessBlocks array is fully
+  // known in advance; the live turn queue routinely settles a turn's block
+  // before it reaches the front, since generation outruns speech -- see
+  // that module's own comments) and calls prefetch() for it while the
+  // current beat is still playing, so by the time speak() is actually
+  // called for it the audio is usually already fetched and this collapses
+  // to a local blob-URL lookup instead of a fresh network round trip.
+  //
+  // Deliberately a single slot, not a growing cache: prefetching more than
+  // one beat ahead would multiply ElevenLabs API cost for turns that may
+  // never be reached (a live session can abort a queued turn -- see
+  // liveAbortTurn/evictUnsettledTurn in witness.js -- or the user can
+  // goBack() past a replayed one) for a diminishing latency return, since
+  // only the *next* beat's prefetch has time to land before it's needed.
+  // Calling prefetch() again for a different beat -- or stop() -- discards
+  // whatever's pending/cached here, so an abandoned prefetch's blob URL is
+  // still eventually revoked rather than leaked; it just isn't reclaimed
+  // the instant it's abandoned.
+  let prefetched = null; // { key, urlPromise } | null
+
+  function prefetchKey(memberId, spoken) {
+    return `${memberId || '—'} ${spoken}`;
+  }
+
+  function discardPrefetch() {
+    if (!prefetched) return;
+    const { urlPromise } = prefetched;
+    prefetched = null;
+    urlPromise.then(url => URL.revokeObjectURL(url)).catch(() => {});
+  }
+
+  function prefetch(text, memberId) {
+    if (!enabled || !isSupported() || !elevenLabsAvailable || !text) return; // matches speak()'s own no-op gate
+    const spoken = stripForSpeech(text);
+    if (!spoken) return;
+    const key = prefetchKey(memberId, spoken);
+    if (prefetched && prefetched.key === key) return; // already in flight/cached for this exact beat
+    discardPrefetch();
+    prefetched = { key, urlPromise: fetchElevenLabsUrl(memberId, spoken) };
+  }
+
+  // Consumes the cached entry if it matches this exact beat, leaving the
+  // slot empty either way -- a prefetch that turns out not to match (a beat
+  // spoken out of the order it was prefetched in, or one whose text changed)
+  // is simply discarded rather than served to the wrong beat.
+  function takePrefetch(memberId, spoken) {
+    const key = prefetchKey(memberId, spoken);
+    if (!prefetched || prefetched.key !== key) return null;
+    const { urlPromise } = prefetched;
+    prefetched = null;
+    return urlPromise;
+  }
+
   function speakViaElevenLabs(spoken, memberId, speedMultiplier, memberGender, memberDemeanor) {
     const audio = new Audio();
     // #400/#518: speedMultiplier used to reach speakViaWebSpeech's utterance.rate
@@ -354,26 +425,21 @@ window.Voice = (function () {
     // so nothing resets them afterward.
     const rate = clampRate(speedMultiplier || 1);
     currentAudio = audio;
+    // #527: reuse a matching prefetch if #527's look-ahead already landed
+    // one for this exact beat; otherwise fall back to fetching it fresh
+    // right now, exactly as before prefetching existed.
+    const urlPromise = takePrefetch(memberId, spoken) || fetchElevenLabsUrl(memberId, spoken);
     // #336: resolved on the <audio> element's own 'ended'/'error', or by
     // chaining into the Web Speech fallback's promise when the request
     // itself fails -- either way the caller is awaiting *this* beat's actual
     // completion, not whichever backend happened to produce it.
     return new Promise(resolve => {
-      fetch('/api/voice/speak', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ memberId, text: spoken }),
-      })
-        .then(r => {
-          if (!r.ok) throw new Error(`voice request failed: ${r.status}`);
-          return r.blob();
-        })
-        .then(blob => {
+      urlPromise
+        .then(url => {
           if (currentAudio !== audio) {
             resolve(); // superseded by a newer speak()/stop() before this resolved
             return;
           }
-          const url = URL.createObjectURL(blob);
           audio.src = url;
           audio.defaultPlaybackRate = rate;
           audio.playbackRate = rate;
@@ -428,6 +494,7 @@ window.Voice = (function () {
   function stop() {
     stopCurrentAudio();
     synth()?.cancel();
+    discardPrefetch(); // #527: whatever was queued up next is no longer coming
   }
 
   // #477: the speed control used to only reach the *next* speak() call --
@@ -450,6 +517,7 @@ window.Voice = (function () {
     setEnabled,
     isEnabled: () => enabled,
     speak,
+    prefetch,
     stop,
     updateSpeed,
   };

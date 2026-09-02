@@ -712,4 +712,135 @@ test('voice.js', async t => {
     // Nothing spoken yet -- should not throw despite no audio element existing.
     assert.doesNotThrow(() => loaded.window.Voice.updateSpeed(2));
   });
+
+  // ── Prefetch (#527) ──────────────────────────────────────────────────────
+  // #527: the ~650-1150ms gap between a beat's text becoming visible and its
+  // ElevenLabs audio actually starting comes from the fetch -> blob -> play
+  // chain only ever starting once the beat is already on screen. witness.js
+  // now calls prefetch() for the *next* beat while the current one is still
+  // playing/pacing, so speak() can reuse an already-fetched blob URL instead
+  // of starting a fresh request. These tests exercise prefetch() and its
+  // consumption directly; witness.test.js covers the call sites that decide
+  // when to invoke it.
+  await t.test('prefetch() fetches ahead of time; a matching speak() reuses it without a second request', async t2 => {
+    let events;
+    const loaded = loadPublicModule('voice.js', FIXTURE, window => {
+      stubSpeech(window, [{ name: 'A', lang: 'en-US' }]);
+      events = stubElevenLabs(window);
+    });
+    t2.after(loaded.cleanup);
+    await flushMicrotasks();
+
+    const { Voice } = loaded.window;
+    Voice.setEnabled(true);
+
+    Voice.prefetch('Hello there.', 'crowley');
+    await flushMicrotasks();
+    assert.equal(
+      events.filter(e => e.type === 'speak-request').length,
+      1,
+      'prefetch() itself makes the request ahead of time'
+    );
+    events.length = 0;
+
+    Voice.speak('Hello there.', 'crowley', 1);
+    await flushMicrotasks();
+
+    assert.deepEqual(
+      events.filter(e => e.type === 'speak-request'),
+      [],
+      'speak() should reuse the prefetched audio instead of fetching it again'
+    );
+    assert.ok(events.some(e => e.type === 'audio-play'), 'the prefetched audio should still get played');
+  });
+
+  await t.test('speak() for a beat that does not match the pending prefetch fetches fresh', async t2 => {
+    let events;
+    const loaded = loadPublicModule('voice.js', FIXTURE, window => {
+      stubSpeech(window, [{ name: 'A', lang: 'en-US' }]);
+      events = stubElevenLabs(window);
+    });
+    t2.after(loaded.cleanup);
+    await flushMicrotasks();
+
+    const { Voice } = loaded.window;
+    Voice.setEnabled(true);
+
+    Voice.prefetch('The next beat.', 'crowley');
+    await flushMicrotasks();
+    events.length = 0;
+
+    Voice.speak('A different beat entirely.', 'crowley', 1);
+    await flushMicrotasks();
+
+    const speakEvent = events.find(e => e.type === 'speak-request');
+    assert.ok(speakEvent, 'expected a fresh request for text the pending prefetch does not cover');
+    assert.equal(speakEvent.body.text, 'A different beat entirely.');
+  });
+
+  await t.test(
+    'prefetch() is a no-op when disabled, unsupported, or the server reports ElevenLabs unavailable',
+    async t2 => {
+      let events;
+      const loaded = loadPublicModule('voice.js', FIXTURE, window => {
+        stubSpeech(window, [{ name: 'A', lang: 'en-US' }]);
+        events = stubElevenLabs(window, { configAvailable: false });
+      });
+      t2.after(loaded.cleanup);
+      await flushMicrotasks();
+
+      loaded.window.Voice.setEnabled(true);
+      loaded.window.Voice.prefetch('Hello there.', 'crowley');
+      await flushMicrotasks();
+
+      assert.deepEqual(
+        events.filter(e => e.type === 'speak-request'),
+        [],
+        'no request should be made when the server reports ElevenLabs unavailable'
+      );
+    }
+  );
+
+  await t.test('a second prefetch() call replaces the first, revoking its unused blob URL rather than leaking it', async t2 => {
+    let events;
+    const revoked = [];
+    const loaded = loadPublicModule('voice.js', FIXTURE, window => {
+      stubSpeech(window, [{ name: 'A', lang: 'en-US' }]);
+      events = stubElevenLabs(window);
+      window.URL.revokeObjectURL = url => revoked.push(url);
+    });
+    t2.after(loaded.cleanup);
+    await flushMicrotasks();
+
+    const { Voice } = loaded.window;
+    Voice.setEnabled(true);
+
+    Voice.prefetch('First upcoming beat.', 'crowley');
+    await flushMicrotasks();
+    Voice.prefetch('Second upcoming beat.', 'crowley'); // supersedes the first before it was ever spoken
+    await flushMicrotasks();
+
+    assert.deepEqual(revoked, ['blob:fake'], 'the abandoned first prefetch should be revoked, not leaked');
+  });
+
+  await t.test('stop() discards a pending prefetch, revoking its blob URL', async t2 => {
+    const revoked = [];
+    const loaded = loadPublicModule('voice.js', FIXTURE, window => {
+      stubSpeech(window, [{ name: 'A', lang: 'en-US' }]);
+      stubElevenLabs(window);
+      window.URL.revokeObjectURL = url => revoked.push(url);
+    });
+    t2.after(loaded.cleanup);
+    await flushMicrotasks();
+
+    const { Voice } = loaded.window;
+    Voice.setEnabled(true);
+
+    Voice.prefetch('An upcoming beat.', 'crowley');
+    await flushMicrotasks();
+    Voice.stop();
+    await flushMicrotasks();
+
+    assert.deepEqual(revoked, ['blob:fake']);
+  });
 });
