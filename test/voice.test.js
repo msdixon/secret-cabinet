@@ -640,7 +640,11 @@ test('voice.js', async t => {
 
     const playEvent = events.find(e => e.type === 'audio-play');
     assert.ok(playEvent, 'expected the resolved audio to be played');
-    assert.equal(playEvent.playbackRate, 2, 'expected playbackRate to still be 2 at play(), after the src-assignment reset');
+    assert.equal(
+      playEvent.playbackRate,
+      2,
+      'expected playbackRate to still be 2 at play(), after the src-assignment reset'
+    );
   });
 
   // #477: playbackRate was only ever set once, at audio-element creation
