@@ -201,28 +201,69 @@ window.Witness = (function () {
   const ROOM_CARD_FADE_TRANSITION_MS = 550;
 
   function cancelCardFade(memberId) {
-    const timer = roomCardFadeTimers.get(memberId);
-    if (timer) {
-      clearTimeout(timer);
+    const pending = roomCardFadeTimers.get(memberId);
+    if (pending) {
+      pending.cancel();
       roomCardFadeTimers.delete(memberId);
     }
   }
 
-  function scheduleCardFade(memberId, text) {
+  function fadeCardNow(memberId) {
+    const card = roomCards.get(memberId);
+    if (!card) return;
+    card.classList.add('room-card-fading');
+    setTimeout(() => {
+      if (roomCards.get(memberId) === card) {
+        card.remove();
+        roomCards.delete(memberId);
+      }
+    }, ROOM_CARD_FADE_TRANSITION_MS);
+  }
+
+  // #529: this used to count only witnessReadingTime(text)'s WPM estimate,
+  // with no connection to whether the ElevenLabs/Web Speech audio for that
+  // same text was still playing -- a card could fade and vanish mid-sentence
+  // while Voice was still narrating it. `spoken`, when passed, is the same
+  // Voice.speak() promise renderWitnessBlock already paces advance()/the live
+  // turn queue on (#336): it resolves once audio for this beat has actually
+  // finished (or errored). The grace-period countdown now only starts once
+  // *both* the WPM estimate and (if something is playing) that real
+  // completion have happened -- i.e. whichever is longer -- so a long clip
+  // that runs past the WPM guess no longer gets cut short. `spoken` is
+  // undefined for every case where nothing was spoken (voice off,
+  // unsupported, or empty after stripping asides), and the WPM estimate is
+  // the only signal there is then, unchanged from before.
+  function scheduleCardFade(memberId, text, spoken) {
     cancelCardFade(memberId);
-    const delay = witnessReadingTime(text) + ROOM_CARD_FADE_GRACE_MS;
-    const timer = setTimeout(() => {
-      const card = roomCards.get(memberId);
-      if (!card) return;
-      card.classList.add('room-card-fading');
-      setTimeout(() => {
-        if (roomCards.get(memberId) === card) {
-          card.remove();
-          roomCards.delete(memberId);
-        }
-      }, ROOM_CARD_FADE_TRANSITION_MS);
-    }, delay);
-    roomCardFadeTimers.set(memberId, timer);
+    const minDelayMs = witnessReadingTime(text);
+    const audioPending = spoken && typeof spoken.then === 'function';
+    let minElapsed = false;
+    let audioDone = !audioPending;
+    let cancelled = false;
+
+    const maybeStartGrace = () => {
+      if (cancelled || !minElapsed || !audioDone) return;
+      const timer = setTimeout(() => fadeCardNow(memberId), ROOM_CARD_FADE_GRACE_MS);
+      roomCardFadeTimers.set(memberId, { cancel: () => clearTimeout(timer) });
+    };
+
+    const minTimer = setTimeout(() => {
+      minElapsed = true;
+      maybeStartGrace();
+    }, minDelayMs);
+    roomCardFadeTimers.set(memberId, {
+      cancel: () => {
+        cancelled = true;
+        clearTimeout(minTimer);
+      },
+    });
+
+    if (audioPending) {
+      spoken.then(() => {
+        audioDone = true;
+        maybeStartGrace();
+      });
+    }
   }
 
   // #257's other named rough edge: nudge a card down when its horizontal
@@ -482,7 +523,9 @@ window.Witness = (function () {
     if (typing) scrollCardToLatest(card);
     else scrollCardToEntryStart(card, entry);
     touchRoomLoop();
-    scheduleCardFade(memberId, text);
+    // #529: the real fade schedule needs to know whether Voice.speak() is
+    // narrating this same text, which isn't called until renderWitnessBlock
+    // gets back the `undo` below -- see the scheduleCardFade call there.
     return {
       undo: () => {
         cancelCardFade(memberId);
@@ -1274,6 +1317,15 @@ window.Witness = (function () {
         memberVoiceGender(block.memberId),
         memberVoiceDemeanor(block.memberId)
       );
+      // #529: reschedule the room card's own fade now that `spoken` is
+      // known, so it waits on the same real-audio signal `delay` below
+      // paces advancing on, not just the WPM estimate renderRoomCard had to
+      // guess with before this was available. Only the room surface has a
+      // card to fade -- the #witness-stage bubble fallback has no
+      // auto-dismiss at all.
+      if (sceneAvailable && block.memberId) {
+        scheduleCardFade(block.memberId, block.text, spoken);
+      }
       const delay =
         spoken && typeof spoken.then === 'function'
           ? spoken.then(() => WITNESS_MIN_PAUSE / witnessSpeed) // a short beat-to-beat breath, same floor pacing uses elsewhere

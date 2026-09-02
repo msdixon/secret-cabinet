@@ -1357,6 +1357,95 @@ test("scrollback (#287): a member's card is a short-lived stack of recent beats,
   );
 });
 
+// #529: scheduleCardFade used to count only witnessReadingTime(text)'s WPM
+// estimate, with no connection to whether Voice.speak()'s promise (real
+// ElevenLabs/Web Speech audio for that same beat) had actually resolved -- a
+// card could fade and be removed while audio was still narrating it. The
+// fade now waits for whichever finishes later -- the WPM estimate or real
+// audio completion -- before starting its grace-period countdown.
+test('room card fade (#529): a card does not fade while its own audio is still playing', async t => {
+  await t.test(
+    'a short beat is kept on screen well past its WPM estimate until Voice.speak() resolves, then the grace period',
+    async t2 => {
+      t2.mock.timers.enable({ apis: ['setTimeout'] });
+      let resolveSpeech;
+      const loaded = loadPublicModule('witness.js', FIXTURE, window => {
+        window.Voice = {
+          speak: () =>
+            new Promise(resolve => {
+              resolveSpeech = resolve;
+            }),
+          stop: () => {},
+        };
+      });
+      t2.after(loaded.cleanup);
+      const { document, window, module: Witness } = loaded;
+      stubScene(window, { crowley: { x: 10, y: 10, visible: true } });
+      Witness.configure(makeDeps());
+      Witness.enableRoom();
+
+      Witness.liveSpeech({ speaker: 'Crowley', text: 'One.', memberId: 'crowley' });
+      await flushMicrotasks();
+
+      // "One." floors to WITNESS_MIN_PAUSE (1200ms) -- if the fade still
+      // counted only that WPM estimate, this tick would already be well past
+      // it plus the 1500ms grace, and the card would be long gone.
+      t2.mock.timers.tick(10000);
+      assert.ok(
+        document.querySelector('#room-speech-layer .room-speech-card'),
+        'the card should still be on screen -- Voice.speak() has not resolved yet'
+      );
+
+      resolveSpeech();
+      await flushMicrotasks();
+      t2.mock.timers.tick(1499); // ROOM_CARD_FADE_GRACE_MS - 1
+      assert.ok(
+        document.querySelector('#room-speech-layer .room-speech-card'),
+        'the grace period has not fully elapsed since audio actually finished'
+      );
+      t2.mock.timers.tick(1);
+      t2.mock.timers.tick(550); // ROOM_CARD_FADE_TRANSITION_MS
+      assert.equal(
+        document.querySelectorAll('#room-speech-layer .room-speech-card').length,
+        0,
+        'once audio has actually finished and the grace period elapses, the card fades'
+      );
+    }
+  );
+
+  await t.test('a beat whose audio finishes fast is still held for the WPM estimate before fading', async t2 => {
+    t2.mock.timers.enable({ apis: ['setTimeout'] });
+    const loaded = loadPublicModule('witness.js', FIXTURE, window => {
+      window.Voice = { speak: () => Promise.resolve(), stop: () => {} }; // audio "finishes" on the next microtask
+    });
+    t2.after(loaded.cleanup);
+    const { document, window, module: Witness } = loaded;
+    stubScene(window, { crowley: { x: 10, y: 10, visible: true } });
+    Witness.configure(makeDeps());
+    Witness.enableRoom();
+
+    // Long enough that its WPM estimate (words / 180wpm) clears the 1200ms
+    // floor by a comfortable, assertable margin -- 15 words is ~5000ms.
+    const text = 'One two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen.';
+    Witness.liveSpeech({ speaker: 'Crowley', text, memberId: 'crowley' });
+    await flushMicrotasks(); // lets Voice's already-resolved promise settle
+
+    t2.mock.timers.tick(4999);
+    assert.ok(
+      document.querySelector('#room-speech-layer .room-speech-card'),
+      "audio finished immediately, but the card must still wait out the beat's own reading-time estimate"
+    );
+    t2.mock.timers.tick(1); // reading-time estimate now elapsed
+    t2.mock.timers.tick(1500); // grace period
+    t2.mock.timers.tick(550); // fade-out transition
+    assert.equal(
+      document.querySelectorAll('#room-speech-layer .room-speech-card').length,
+      0,
+      'once the longer of the two estimates has elapsed plus the grace period, the card fades'
+    );
+  });
+});
+
 // #279's original per-member, WPM-only room hold is gone -- superseded by
 // #400's global live turn queue (see that section's own comment in
 // witness.js). #279 held one member's card back from clobbering *itself*
