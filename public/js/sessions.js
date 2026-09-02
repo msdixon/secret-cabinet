@@ -182,6 +182,10 @@ window.Sessions = (function () {
         const publishedBadge = s.published
           ? `<a class="session-published-badge" href="/reading-room/${s.id}" target="_blank" rel="noopener" title="View the public reading-room page">★ Public</a>`
           : '';
+        // The entry text is truncated to a single line by CSS clamp — a native
+        // title attribute surfaces the rest on hover without an extra fetch.
+        const firstSentence = (s.entry || '').match(/^.*?[.!?](?=\s|$)/);
+        const entryTitle = deps.escapeHTML(firstSentence ? firstSentence[0] : s.entry || '');
         // #178: only once a session is public is there anything to curate —
         // an unpublished one has no selection worth adjusting yet.
         const curateBtn = s.published
@@ -196,8 +200,8 @@ window.Sessions = (function () {
             </div>
           </div>
           <div class="session-item-badges">${threadBadge}${branchBadge}${publishedBadge}</div>
-          <div class="session-item-entry">${deps.escapeHTML(s.entry || '—')}</div>
-          <div class="session-tags-row">${tagsHtml}<button class="add-tag-btn" onclick="window.Sessions.addTagUI('${s.id}', this)">+</button></div>
+          <div class="session-item-entry" title="${entryTitle}">${deps.escapeHTML(s.entry || '—')}</div>
+          <div class="session-tags-row">${tagsHtml}</div>
           <div class="session-publish-hint">${publishHintText(s.published)}</div>
           <div class="session-item-actions">
             <button class="session-load-btn" onclick="window.Sessions.restoreSession('${s.id}')">Load this meeting</button>
@@ -207,6 +211,7 @@ window.Sessions = (function () {
             <button class="session-witness-btn" onclick="startWitnessFromSession('${s.id}')" title="Watch this meeting play back">◎ Watch</button>
             <button class="session-reconvene-btn" onclick="window.Sessions.reconveneOnSession('${s.id}')" title="Use this transcript as the document for a new session">↩ Reconvene</button>
             <button class="session-thread-btn" onclick="window.Sessions.assignThreadUI('${s.id}', '${deps.escapeHTML(s.threadId || '')}', '${deps.escapeHTML(s.threadName || '')}', this)" title="Assign this meeting to a thread">⬡ Thread</button>
+            <button class="session-tag-btn" onclick="window.Sessions.addTagUI('${s.id}', this)" title="Add a tag to this meeting">+ Tag</button>
             <button class="session-compare-btn" id="compare-btn-${s.id}" onclick="window.Sessions.toggleCompareSelect('${s.id}', this)" title="Select for side-by-side comparison">⊕ Compare</button>
             <button class="session-metrics-btn" onclick="window.Metrics.toggle('${s.id}')" title="Tokens, cost, and the director's casting rationale for this session">⚙ Metrics</button>
             <button class="session-publish-btn${s.published ? ' is-published' : ''}" onclick="window.Sessions.togglePublish('${s.id}', ${!!s.published})" title="${s.published ? 'Unpublish from the public reading room' : 'Publish to the public reading room'}">${s.published ? '★ Unpublish' : '☆ Publish'}</button>
@@ -308,13 +313,13 @@ window.Sessions = (function () {
   }
 
   function addTagUI(sessionId, btn) {
-    const row = btn.closest('.session-tags-row');
+    const row = btn.closest('.session-item').querySelector('.session-tags-row');
     if (row.querySelector('.tag-input')) return; // already open
     const inp = document.createElement('input');
     inp.className = 'tag-input';
     inp.placeholder = 'tag…';
     inp.maxLength = 30;
-    row.insertBefore(inp, btn);
+    row.appendChild(inp);
     inp.focus();
 
     let committed = false;
@@ -331,7 +336,7 @@ window.Sessions = (function () {
       const existing = [...row.querySelectorAll('.session-tag')].map(el => el.textContent);
       if (existing.includes(val)) return;
       const newTags = [...existing, val];
-      await saveTags(sessionId, newTags, row, btn);
+      await saveTags(sessionId, newTags, row);
     };
     inp.addEventListener('keydown', e => {
       if (e.key === 'Enter') commit();
@@ -345,11 +350,10 @@ window.Sessions = (function () {
 
   async function removeTagById(sessionId, tag, el) {
     const row = el.closest('.session-tags-row');
-    const addBtn = row.querySelector('.add-tag-btn');
     // Read tag text from first child text node to exclude the × span
     const existing = [...row.querySelectorAll('.session-tag')].map(c => c.firstChild.textContent.trim());
     const newTags = existing.filter(t => t !== tag);
-    await saveTags(sessionId, newTags, row, addBtn);
+    await saveTags(sessionId, newTags, row);
   }
 
   function makeTagChip(sessionId, tag) {
@@ -368,7 +372,7 @@ window.Sessions = (function () {
     return chip;
   }
 
-  async function saveTags(sessionId, tags, row, addBtn) {
+  async function saveTags(sessionId, tags, row) {
     try {
       await fetch(`/api/sessions/${sessionId}/tags`, {
         method: 'PATCH',
@@ -376,7 +380,7 @@ window.Sessions = (function () {
         body: JSON.stringify({ tags }),
       });
       row.querySelectorAll('.session-tag').forEach(c => c.remove());
-      tags.forEach(t => row.insertBefore(makeTagChip(sessionId, t), addBtn));
+      tags.forEach(t => row.appendChild(makeTagChip(sessionId, t)));
     } catch (e) {
       /* silent */
     }
