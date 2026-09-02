@@ -55,6 +55,7 @@ const {
   isPassTurn,
   buildSpeakerSystemPrompt,
   buildSpeakerUserMessage,
+  shouldNudgeTangent,
   callSpeakerTurn,
   stripInternalBlankLines,
   mergeResidue,
@@ -812,6 +813,9 @@ async function runRound({
       remainingBudgetWords: remainingBudget,
       unheardCount,
       interruptingName: interruptedMember?.name || null,
+      // #513: a per-beat coin flip, independent of budget/persona — see
+      // tuning.js's TANGENT_NUDGE_CHANCE.
+      tangentNudge: shouldNudgeTangent(),
     });
 
     const result = await generateBeat({ memberId, member, userMessage, dispositionContext: roundSoFar, thread: null });

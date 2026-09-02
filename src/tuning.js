@@ -164,6 +164,30 @@ const CROWDED_WORDS_PER_VOICE = 220;
 // the 2026-08-19 follow-up.
 const SPEAKER_MAX_TOKENS = 1100;
 
+// #513: the chosen phase-2 lever — a tuning-level nudge, not a weight and
+// not a new beat type. lodge-context.md already *permits* a short, tangent,
+// or citation-free turn (Drift, Convivialities, Silence), but nothing in the
+// pipeline made that reading materially likelier: the citation instruction
+// below (buildSpeakerSystemPrompt) fires unconditionally on every beat, and
+// the phase-1 baseline — 88 words/turn average, docs/status/fragments/
+// 513-brevity-baseline.md — reflects exactly that asymmetry. Chosen over the
+// issue's other two candidate levers: widening LENGTH_TENDENCY_OVERRIDES
+// would mean hand-tagging more of the 38-member roster the same week #512
+// asks whether that hand-tagging should keep happening at all; a structural
+// "banter beat" the director can propose is a bigger, higher-risk addition —
+// a new beat type on the order of the splinter mechanism (#196/#458) — worth
+// reaching for only if this lighter, reversible nudge proves insufficient
+// once the baseline script is re-run against sessions that carry it. #512
+// was still Backlog/unstarted when this shipped, so this doesn't build on
+// its outcome; if #512 later derives real per-member tendencies, that's a
+// second, independent lever layered on top, not a replacement for this one.
+//
+// Rate chosen to match SPLINTER_CHANCE's "rare but real" spirit: common
+// enough across a passage's several beats to actually move the average,
+// rare enough that most turns still read as themselves rather than
+// performing brevity on cue because the prompt asked for it this time.
+const TANGENT_NUDGE_CHANCE = 0.3;
+
 // A few hundred words, per the issue — enough to carry a cadence, cheap
 // enough to pay per speaker call (input tokens, uncached until #190). Sized
 // against the real corpus and still holding as it grows: 30 of the 36
@@ -282,6 +306,7 @@ module.exports = {
   MAX_UNDER_HEARD_DEFICIT,
   CROWDED_WORDS_PER_VOICE,
   SPEAKER_MAX_TOKENS,
+  TANGENT_NUDGE_CHANCE,
   VOICE_EXEMPLAR_WORD_BUDGET,
   SECONDARY_VOICE_EXEMPLAR_WORD_BUDGET,
   RESIDUE_MAX_CHARS,

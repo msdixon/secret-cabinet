@@ -44,6 +44,7 @@ const {
   buildResidueSection,
   buildSpeakerSystemPrompt,
   buildSpeakerUserMessage,
+  shouldNudgeTangent,
   makeMetric,
   buildCachedSystem,
   withHistoryCacheControl,
@@ -80,6 +81,7 @@ const {
   SPLINTER_CHANCE,
   SPLINTER_MIN_BUDGET_WORDS,
   MAX_SPLINTERS_PER_PASSAGE,
+  TANGENT_NUDGE_CHANCE,
 } = require('../src/tuning.js');
 
 // #352's ledger lives in lodge-prompts.js (see its own comment for why) but
@@ -825,6 +827,63 @@ test('buildSpeakerUserMessage', async t => {
     assert.match(message, /unfinished business with Aleister Crowley, who just spoke/);
     assert.match(message, /mid-stride/);
     assert.match(message, /fine to let it pass/);
+  });
+
+  // #513: the tangent/brevity nudge is off by default and only appears when
+  // the caller explicitly rolls true — buildSpeakerUserMessage itself does
+  // not roll the coin, shouldNudgeTangent (tested below) does.
+  await t.test('adds no tangent note when tangentNudge is absent', () => {
+    const message = buildSpeakerUserMessage({ roundPrompt: 'Discuss.', roundSoFarText: '', member });
+    assert.doesNotMatch(message, /doesn't need to build a case/);
+  });
+
+  await t.test('invites a short/tangent/citation-free turn when tangentNudge is true', () => {
+    const message = buildSpeakerUserMessage({
+      roundPrompt: 'Discuss.',
+      roundSoFarText: '',
+      member,
+      tangentNudge: true,
+    });
+    assert.match(message, /doesn't need to build a case or reach for a citation/);
+    assert.match(message, /tangent/);
+  });
+
+  await t.test('stacks with the interruption note rather than replacing it', () => {
+    const message = buildSpeakerUserMessage({
+      roundPrompt: 'Discuss.',
+      roundSoFarText: 'Crowley\nSome point.',
+      member,
+      interruptingName: 'Aleister Crowley',
+      tangentNudge: true,
+    });
+    assert.match(message, /doesn't need to build a case/);
+    assert.match(message, /unfinished business with Aleister Crowley/);
+  });
+});
+
+// #513: a per-beat coin flip, deliberately independent of budget/persona —
+// see tuning.js's TANGENT_NUDGE_CHANCE for the rationale. Swept the same way
+// pickNextSpeaker's weighted draws are above: a deterministic rng sweep
+// stands in for a distribution check without seeding a real PRNG.
+test('shouldNudgeTangent', async t => {
+  await t.test('true below the configured chance, false at or above it', () => {
+    assert.equal(shouldNudgeTangent({ rng: () => TANGENT_NUDGE_CHANCE - 0.001 }), true);
+    assert.equal(shouldNudgeTangent({ rng: () => TANGENT_NUDGE_CHANCE }), false);
+    assert.equal(shouldNudgeTangent({ rng: () => 0.999 }), false);
+  });
+
+  await t.test('lands true roughly TANGENT_NUDGE_CHANCE of the time across a swept range', () => {
+    const samples = 1000;
+    let hits = 0;
+    for (let i = 0; i < samples; i++) {
+      const rng = () => (i + 0.5) / samples;
+      if (shouldNudgeTangent({ rng })) hits++;
+    }
+    assert.equal(hits / samples, TANGENT_NUDGE_CHANCE);
+  });
+
+  await t.test('defaults to Math.random when no rng is supplied', () => {
+    assert.doesNotThrow(() => shouldNudgeTangent());
   });
 });
 
@@ -3618,13 +3677,18 @@ function fakeSplinterClient() {
 
 test('runRound — a splinter exchange interleaves into the passage record (#196)', async t => {
   await t.test('two members granted a private exchange, folded into the record and the rolled-up text', async () => {
-    // rng script: pick crowley (beat 1, roll 0 → first candidate), pick
-    // scholem (beat 2 — heavily interrupt-boosted already, 0.5 lands there
+    // rng script: pick crowley (beat 1, roll 0 → first candidate), #513's
+    // tangent-nudge roll for that same beat (well above TANGENT_NUDGE_CHANCE
+    // — irrelevant to this test, just consuming its slot), pick scholem
+    // (beat 2 — heavily interrupt-boosted already, 0.5 lands there
     // regardless of exact weights), shouldSplinter's own roll (well under
-    // SPLINTER_CHANCE), then pick scholem again (beat 4 — crowley is at cap
-    // by then, so this is deterministic regardless of the roll's value).
+    // SPLINTER_CHANCE — the splinter path `continue`s before ever reaching
+    // the tangent-nudge roll, so beat 2 gets no slot for it), then pick
+    // scholem again (beat 4 — crowley is at cap by then, so this is
+    // deterministic regardless of the roll's value) and its own
+    // tangent-nudge roll.
     const client = fakeSplinterClient();
-    const result = await withScriptedRandom([0, 0.5, 0.01, 0.5], () =>
+    const result = await withScriptedRandom([0, 0.9, 0.5, 0.01, 0.5, 0.9], () =>
       runRound({
         client,
         model: 'test-model',

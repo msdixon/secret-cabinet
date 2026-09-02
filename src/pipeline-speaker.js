@@ -19,6 +19,7 @@ const {
   MAX_UNDER_HEARD_DEFICIT,
   CROWDED_WORDS_PER_VOICE,
   SPEAKER_MAX_TOKENS,
+  TANGENT_NUDGE_CHANCE,
   VOICE_EXEMPLAR_WORD_BUDGET,
   SECONDARY_VOICE_EXEMPLAR_WORD_BUDGET,
   RESIDUE_MAX_CHARS,
@@ -452,6 +453,22 @@ function stripInternalBlankLines(text) {
 // #364: CROWDED_WORDS_PER_VOICE moved to tuning.js (imported above) — see
 // that file for the value and rationale.
 
+// ── Tangent/brevity nudge (#513) ────────────────────────────────────────────
+//
+// #513 phase 2: budgetHint below already *permits* a short beat, but only
+// when the round is actually crowded — it's a scheduling accommodation, not
+// a standing counterweight to the citation instruction that fires on every
+// beat regardless of budget. This is that counterweight: a per-beat coin
+// flip, independent of budget or persona, that — when it lands — tells this
+// speaker specifically that a short reaction, a real tangent, or an
+// unfinished thought is what's wanted from them right now, not a lesser
+// version of a fuller turn they didn't have room for. See tuning.js's
+// TANGENT_NUDGE_CHANCE for why this shape and rate were chosen over the
+// issue's other two candidate levers.
+function shouldNudgeTangent({ rng = Math.random } = {}) {
+  return rng() < TANGENT_NUDGE_CHANCE;
+}
+
 // `interruptingName`, when set, is the just-spoken member this pick's own
 // disposition named as unfinished business (see pickNextSpeaker's
 // INTERRUPT_INTENT_WEIGHT, #203) — told to the speaker as an option, not an
@@ -464,6 +481,7 @@ function buildSpeakerUserMessage({
   remainingBudgetWords,
   unheardCount,
   interruptingName,
+  tangentNudge,
 }) {
   const soFar = roundSoFarText?.trim() ? `\n\n--- THE ROUND SO FAR ---\n${roundSoFarText.trim()}\n` : '';
   let budgetHint = '';
@@ -476,10 +494,16 @@ function buildSpeakerUserMessage({
       ? `\n\n(Roughly ${remainingBudgetWords} words of room left in the round, and ${unheardCount} other${unheardCount === 1 ? '' : 's'} who haven't spoken yet still waiting on it. If everyone's going to fit, this is a moment where a line lands harder than a paragraph — but read the room; don't cut yourself off if something genuinely needs the space.)`
       : `\n\n(The round has roughly ${remainingBudgetWords} words of room left before it should start wrapping up — a felt sense of how much space remains, not a hard limit. A short reaction is as valid a turn as a long one.)`;
   }
+  // #513: unconditional on budget — this is a register nudge, not a
+  // scheduling one, so it can land in the same beat as budgetHint above
+  // without contradicting it.
+  const tangentNote = tangentNudge
+    ? `\n\n(This turn doesn't need to build a case or reach for a citation. A short reaction, a genuine tangent, an unfinished thought, or a Convivial gesture is a complete turn tonight — not a placeholder for a fuller one you didn't have time for.)`
+    : '';
   const interruptNote = interruptingName
     ? `\n\n(You have unfinished business with ${interruptingName}, who just spoke — this is your moment for it. Take the thought mid-stride if it's still hot, or let the room settle a beat first and strike after. Your call; it's fine to let it pass.)`
     : '';
-  return `${roundPrompt}${soFar}${budgetHint}${interruptNote}
+  return `${roundPrompt}${soFar}${budgetHint}${tangentNote}${interruptNote}
 
 --- YOUR TURN ---
 Generate ${member.name}'s contribution now.`;
@@ -537,6 +561,7 @@ module.exports = {
   buildResidueSection,
   buildSpeakerSystemPrompt,
   buildSpeakerUserMessage,
+  shouldNudgeTangent,
   stripInternalBlankLines,
   callSpeakerTurn,
 };
