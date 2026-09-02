@@ -102,17 +102,20 @@ const PASSAGE_END_CAUSES = ['budget', 'lull', 'closed'];
 // runs dry before the budget is spent, or the round has gone on long
 // enough to want fresh judgment.
 //
-// Known accepted risk: onChunk forwards each speaker's text live as it
-// streams. If a first attempt fails partway through (after some chunks
-// already reached the client) and the retry succeeds, the live view during
-// generation could show a garbled interleaving of the failed attempt's
-// partial text and the successful retry's full text. The *stored* result
-// is unaffected (each attempt's `text` is self-contained, not accumulated
-// across attempts), and the client's existing finalize() flow re-renders
-// from that authoritative stored text once the round completes — so this
-// is a cosmetic, self-correcting glitch during live viewing only, not a
-// data-integrity issue. Not solving for it now; revisit if it's ever
-// actually visible in practice.
+// #521: onChunk forwards each speaker's text live as it streams, and a
+// retried attempt (withOneRetry, pipeline-core.js) reuses that same onChunk
+// across both the failed first try and the successful retry — so the raw
+// chunk stream itself still glues the abandoned attempt's partial text to
+// the retry's full text with no gap. What used to be dismissed here as
+// "cosmetic, self-correcting" wasn't: a real session left a member's turn
+// stuck on a blinking cursor forever, because app.js's live buffer has no
+// way to tell where one attempt ends and the next begins, and the client
+// never re-renders from the authoritative settled text until the *round*
+// finishes, not the turn. Fixed by re-firing onSpeakerStart before each
+// retry attempt (below), not just once before the first — the client
+// already treats a `speaking` event as "discard whatever I had and start
+// fresh" (see app.js's onSpeaking and witness.js's liveTypingStart), so
+// this reuses that existing reset instead of adding a new signal.
 async function runRound({
   client,
   model,
@@ -470,9 +473,18 @@ async function runRound({
     onSpeakerStart?.(memberId);
     let outcome;
     try {
-      const { result, attempts } = await withOneRetry(() =>
-        callSpeakerTurn({ client, model, system, conversationHistory, userMessage, onChunk, lodgeContext })
-      );
+      // #521: withOneRetry calls this closure up to twice for one beat. The
+      // first call is the attempt onSpeakerStart above already announced;
+      // any call after that is a retry starting fresh after a mid-stream
+      // failure, so it re-fires onSpeakerStart to tell the client to discard
+      // whatever the abandoned attempt already streamed before this
+      // attempt's own chunks start arriving on the same onChunk callback.
+      let attemptNumber = 0;
+      const { result, attempts } = await withOneRetry(() => {
+        attemptNumber++;
+        if (attemptNumber > 1) onSpeakerStart?.(memberId);
+        return callSpeakerTurn({ client, model, system, conversationHistory, userMessage, onChunk, lodgeContext });
+      });
       const settledText = stripInternalBlankLines(result.text);
       // #362: a pass is still a real, successful call — it just declined the
       // turn via the room's own action-only idiom (see isPassTurn). Detected

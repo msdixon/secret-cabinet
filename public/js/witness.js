@@ -833,6 +833,21 @@ window.Witness = (function () {
   let liveTypingEl = null;
 
   function liveTypingStart(name, memberId) {
+    // #521: pipeline.js now re-fires onSpeakerStart (-> here, via app.js's
+    // onSpeaking) before a retry's own attempt, not just once before the
+    // first -- the reset signal the client needs to stop gluing an
+    // abandoned attempt's text to the retry's. But the abandoned attempt's
+    // own queue entry, if its `block` never got set (liveSpeech never
+    // settled it, because the failure struck before onSpeakerEnd), would
+    // otherwise still be sitting in the queue right where this call is
+    // about to push a fresh one -- and advanceLiveTurnQueue's `if
+    // (!turn.block) return` guard means nothing pushed after it, including
+    // this retry, would ever get its moment. It's always the most recently
+    // pushed entry (app.js streams exactly one turn at a time -- see the
+    // comment above liveTurnQueue), so evict it the same way a whole-round
+    // failure does via liveAbortTurn.
+    const stale = liveTurnQueue[liveTurnQueue.length - 1];
+    if (stale && !stale.block) evictUnsettledTurn(stale);
     liveTurnQueue.push({
       name,
       memberId: memberId || null,
@@ -875,28 +890,23 @@ window.Witness = (function () {
     }
   }
 
-  // #423: a thrown mid-stream error (streamPost failing before onSpeakerDone
-  // fires) means the turn app.js opened via liveTypingStart never reaches
-  // liveSpeech -- its `block` stays null forever. advanceLiveTurnQueue's
-  // guard (`if (!turn.block) return`) means nothing after it in the queue,
-  // not even a successful retry, would ever get its moment again -- the
-  // stage/camera would stay frozen on that turn until a full
-  // resetLiveTurnQueue() (fresh convene or collapseStage). Called from
-  // app.js's abort() on the error path: if the turn at the front of the
-  // queue is still unsettled, evict it and let the next one (typically the
-  // retry) advance. A no-op if the front turn already settled (or there is
-  // no front turn) -- advanceLiveTurnQueue already owns that case.
-  function liveAbortTurn() {
-    const turn = liveTurnQueue[0];
-    if (!turn || turn.block) return;
-    liveTurnQueue.shift();
-    // Room mode's own typing entry for this turn was never settled or
-    // reused (liveClearTyping() is deliberately a no-op there, since it
-    // assumes this same turn's liveSpeech() will reuse the entry -- an
-    // assumption that doesn't hold for a turn being evicted instead). Left
-    // alone, it would sit orphaned in the card, and openTypingEntry's
-    // querySelector would hand the retry's settled text to this stale entry
-    // instead of the fresh one the retry actually opens.
+  // Discards `turn`'s own queue entry and, if it had reached the front and
+  // rendered a scene-mode typing entry, that too -- shared by liveAbortTurn
+  // (a whole-round rejection) and liveTypingStart's #521 stale-turn check
+  // below (a mid-stream failure the server papers over with a retry, so the
+  // round never rejects at all). Room mode's own typing entry for `turn` was
+  // never settled or reused (liveClearTyping() is deliberately a no-op
+  // there, since it assumes this same turn's liveSpeech() will reuse the
+  // entry -- an assumption that doesn't hold for a turn being evicted
+  // instead). Left alone, it would sit orphaned in the card, and
+  // openTypingEntry's querySelector would hand a later turn's settled text
+  // to this stale entry instead of the fresh one that turn actually opens.
+  // A no-op if `turn` isn't queued at all (already spliced out, or never
+  // pushed).
+  function evictUnsettledTurn(turn) {
+    const idx = liveTurnQueue.indexOf(turn);
+    if (idx === -1) return;
+    liveTurnQueue.splice(idx, 1);
     if (sceneAvailable && turn.memberId) {
       const card = roomCards.get(turn.memberId);
       const typing = card && openTypingEntry(card);
@@ -912,6 +922,23 @@ window.Witness = (function () {
       if (sceneAvailable) window.LodgeScene?.setSpeaking(null);
       resolveDrainWaiters();
     }
+  }
+
+  // #423: a thrown mid-stream error (streamPost failing before onSpeakerDone
+  // fires) means the turn app.js opened via liveTypingStart never reaches
+  // liveSpeech -- its `block` stays null forever. advanceLiveTurnQueue's
+  // guard (`if (!turn.block) return`) means nothing after it in the queue,
+  // not even a successful retry, would ever get its moment again -- the
+  // stage/camera would stay frozen on that turn until a full
+  // resetLiveTurnQueue() (fresh convene or collapseStage). Called from
+  // app.js's abort() on the error path: if the turn at the front of the
+  // queue is still unsettled, evict it and let the next one (typically the
+  // retry) advance. A no-op if the front turn already settled (or there is
+  // no front turn) -- advanceLiveTurnQueue already owns that case.
+  function liveAbortTurn() {
+    const turn = liveTurnQueue[0];
+    if (!turn || turn.block) return;
+    evictUnsettledTurn(turn);
     advanceLiveTurnQueue();
   }
 

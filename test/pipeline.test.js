@@ -2778,6 +2778,221 @@ test('runRound — passage end-causes and beats (#244)', async t => {
   });
 });
 
+// runRound's own top-of-file comment (#164, just above this function) already
+// names this as a "known accepted risk": onChunk forwards each speaker's
+// text live as it streams, so a first attempt that fails partway through
+// (after some chunks already reached the client) followed by a successful
+// retry can show the live view a garbled interleaving of the failed
+// attempt's partial text and the retry's full text. The comment calls this
+// "cosmetic and self-correcting ... not a data-integrity issue," on the
+// theory that the client's finalize() flow re-renders from the authoritative
+// settled text once the round completes. That theory was never actually
+// exercised by a test -- every existing withOneRetry test (above, "records a
+// failed speaker turn...") fails the first attempt before it ever yields a
+// single chunk, so onChunk never sees the partial text this comment is about.
+//
+// Filed after a real session (2026-09-01) left a member's turn stuck on a
+// blinking cursor with no text or voice, transcript otherwise clean --
+// exactly the shape this comment predicts, but described as impossible to
+// reach silently. This proves the premise is real and the "self-correcting"
+// half doesn't hold in general: app.js's startStreamEntry (public/js/app.js,
+// append()/onSpeakerDone()) tracks how many beats it already closed live
+// against window.Beats.splitIntoBeats(buffer) -- the corrupted, growing
+// buffer -- then on the server's speakerDone event slices that many beats
+// off the *true* settled text and flushes only the remainder. That only
+// produces the right result if the corrupted buffer's beats are a prefix of
+// the true beats. They aren't: the corrupted buffer starts with the
+// abandoned first attempt's own words, which appear nowhere in the retry.
+test('runRound — a retried speaker turn streams corrupted content to onChunk (#521)', async t => {
+  await t.test(
+    "onChunk sees the failed first attempt's text glued to the retry's text, not just the retry",
+    async () => {
+      // Representative of a real mid-stream cutoff: the first attempt gets
+      // partway through a sentence before the connection drops. Long enough
+      // (>BEAT_WORD_THRESHOLD) that a real turn like this would already be
+      // splitting into more than one beat by the time it dies.
+      const abandonedFirstAttempt =
+        'The first thing to understand about the wanga is that it predates every attempt to Christianize its power, and Hesketh-Bell himself could never decide whether he was describing sorcery or simply fear given a';
+      // What the retry actually, successfully produces -- the only text
+      // that ends up in the persisted transcript.
+      const retryText =
+        "Word for word, the true account is this: the wanga is neither purely African nor purely Christian in Hesketh-Bell's telling -- it is the argument itself, staged as an object.";
+
+      let streamCalls = 0;
+      const client = {
+        messages: {
+          create: async req => {
+            const toolName = req.tools?.[0]?.name;
+            if (toolName === 'select_speakers') {
+              return {
+                content: [
+                  { type: 'tool_use', input: { speakers: ['crowley'], reasoning: 'r', windingDown: true, lullNote: null } },
+                ],
+                usage: { input_tokens: 10, output_tokens: 5 },
+              };
+            }
+            return {
+              content: [{ type: 'tool_use', input: { reflection: 'Considering.', waitingOnMemberId: 'none' } }],
+              usage: { input_tokens: 8, output_tokens: 4 },
+            };
+          },
+          stream: () => {
+            streamCalls++;
+            if (streamCalls === 1) {
+              // First attempt: streams a real chunk (reaching onChunk, and
+              // so the client's live buffer) before the connection dies --
+              // not the zero-chunks-ever-sent case the existing retry test
+              // covers.
+              return {
+                [Symbol.asyncIterator]: async function* () {
+                  yield { type: 'content_block_delta', delta: { type: 'text_delta', text: abandonedFirstAttempt } };
+                  throw new Error('connection reset mid-stream');
+                },
+                finalMessage: async () => {
+                  throw new Error('connection reset mid-stream');
+                },
+              };
+            }
+            // Retry: succeeds outright.
+            return {
+              [Symbol.asyncIterator]: async function* () {
+                yield { type: 'content_block_delta', delta: { type: 'text_delta', text: retryText } };
+              },
+              finalMessage: async () => ({ usage: { input_tokens: 20, output_tokens: 10 } }),
+            };
+          },
+        },
+      };
+
+      const chunks = [];
+      const result = await runRound({ ...RUNROUND_BASE_ARGS, client, onChunk: chunk => chunks.push(chunk) });
+
+      // The persisted beat is clean -- only the retry's text, exactly as
+      // the pipeline.js comment claims.
+      assert.equal(result.beats[0].text, retryText);
+      assert.equal(result.beats[0].failed, undefined);
+
+      // But what actually reached onChunk -- what app.js's buffer sees --
+      // contains the abandoned first attempt's words too. This is the part
+      // the "cosmetic, self-correcting" framing misses: nothing tells the
+      // client to discard what it already has before the retry's chunks
+      // start arriving.
+      const liveBuffer = chunks.join('');
+      assert.ok(
+        liveBuffer.includes(abandonedFirstAttempt),
+        "the abandoned first attempt's text reached the client via onChunk"
+      );
+      assert.ok(liveBuffer.includes(retryText), "the retry's text also reached the client via onChunk");
+
+      // The mechanism that turns "garbled" into "permanently stuck": app.js
+      // closes every beat but the last live by counting
+      // window.Beats.splitIntoBeats(buffer) against this same corrupted
+      // buffer, then on speakerDone slices that many beats off the *true*
+      // settled text and flushes only what's left (public/js/app.js's
+      // append()/onSpeakerDone, ~lines 872-916). That scheme only produces
+      // the right result if the corrupted buffer's beats are a prefix of
+      // the true beats. Prove they aren't: the corrupted buffer's beats
+      // don't even start with the same words as the true beats, since the
+      // abandoned attempt's sentence appears nowhere in the retry.
+      const corruptedBeats = splitIntoBeats(liveBuffer);
+      const trueBeats = splitIntoBeats(retryText);
+      assert.notEqual(
+        corruptedBeats[0],
+        trueBeats[0],
+        "the corrupted buffer's first beat is not a prefix of the true settled text's first beat -- " +
+          'there is no closedBeats count that makes slicing the true beats produce the right remainder'
+      );
+    }
+  );
+});
+
+// #521 fix: onSpeakerStart used to fire once per beat, before any attempt --
+// so a retry's chunks arrived on the same onChunk stream as the abandoned
+// first attempt's, with no signal telling the client to discard what it had.
+// The fix re-fires onSpeakerStart before every attempt after the first, not
+// just once per beat -- reusing the same `speaking` signal the client
+// already treats as "reset the live buffer and start fresh" (see app.js's
+// onSpeaking and witness.js's liveTypingStart). This test only checks the
+// server side of that contract -- that onSpeakerStart is called once per
+// attempt, in order, before that attempt's own onChunk output -- since
+// asserting the client actually resets on it belongs to witness.test.js's
+// own #521 coverage of liveTypingStart's self-eviction.
+test('runRound — onSpeakerStart re-fires before a retry attempt, not just once per beat (#521)', async t => {
+  await t.test('one onSpeakerStart call per attempt, each strictly before that attempt\'s own onChunk output', async () => {
+    // #521: a single-member pool still gets picked a second time after its
+    // first beat (REPEAT_BACK_TO_BACK_WEIGHT is a discount, not a zero, and
+    // MAX_TURNS_PER_POOL_MEMBER is 2 -- see pipeline-speaker.js), so a short
+    // reply here would let the round run a second, unrelated beat and add a
+    // third onSpeakerStart this test isn't about. Long enough to exhaust
+    // BREATH_BUDGET_WORDS (1000) below MIN_WORDS_FOR_ANOTHER_BEAT (40) in one
+    // beat instead, so the round ends right after the retried beat resolves.
+    const retriedText = `Retried.${' word'.repeat(965)}`;
+    let streamCalls = 0;
+    const client = {
+      messages: {
+        create: async req => {
+          const toolName = req.tools?.[0]?.name;
+          if (toolName === 'select_speakers') {
+            return {
+              content: [
+                { type: 'tool_use', input: { speakers: ['crowley'], reasoning: 'r', windingDown: true, lullNote: null } },
+              ],
+              usage: { input_tokens: 10, output_tokens: 5 },
+            };
+          }
+          return {
+            content: [{ type: 'tool_use', input: { reflection: 'Considering.', waitingOnMemberId: 'none' } }],
+            usage: { input_tokens: 8, output_tokens: 4 },
+          };
+        },
+        stream: () => {
+          streamCalls++;
+          if (streamCalls === 1) {
+            return {
+              [Symbol.asyncIterator]: async function* () {
+                yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'Abandoned.' } };
+                throw new Error('connection reset mid-stream');
+              },
+              finalMessage: async () => {
+                throw new Error('connection reset mid-stream');
+              },
+            };
+          }
+          return {
+            [Symbol.asyncIterator]: async function* () {
+              yield { type: 'content_block_delta', delta: { type: 'text_delta', text: retriedText } };
+            },
+            finalMessage: async () => ({ usage: { input_tokens: 20, output_tokens: 10 } }),
+          };
+        },
+      },
+    };
+
+    const events = []; // interleaved log of both callbacks, in call order
+    const result = await runRound({
+      ...RUNROUND_BASE_ARGS,
+      client,
+      onChunk: chunk => events.push({ type: 'chunk', chunk }),
+      onSpeakerStart: memberId => events.push({ type: 'speaking', memberId }),
+    });
+
+    assert.equal(result.beats.length, 1, 'the retried beat exhausts the budget -- no second beat to muddy the count');
+    assert.equal(result.beats[0].text, retriedText);
+
+    const speakingIndices = events.map((e, i) => (e.type === 'speaking' ? i : -1)).filter(i => i !== -1);
+    assert.equal(speakingIndices.length, 2, 'one onSpeakerStart per attempt -- the original and the retry');
+    assert.equal(events[speakingIndices[0]].memberId, 'crowley');
+    assert.equal(events[speakingIndices[1]].memberId, 'crowley');
+
+    // The second onSpeakerStart must land before the retry's own chunk --
+    // that ordering is what lets the client discard the abandoned attempt's
+    // partial text before the retry's replacement text starts arriving on
+    // the same onChunk callback, rather than racing it.
+    const retriedChunkIndex = events.findIndex(e => e.type === 'chunk' && e.chunk === retriedText);
+    assert.ok(retriedChunkIndex > speakingIndices[1], "the retry's own chunk must arrive after its onSpeakerStart, not before");
+  });
+});
+
 // #355 — always-on citation capture, piggybacked on the same disposition
 // call runRound already makes after every successful beat. A dedicated fake
 // client (rather than fakePassageClient) so the disposition tool_use input
