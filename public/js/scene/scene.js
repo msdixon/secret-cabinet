@@ -97,6 +97,17 @@ window.LodgeScene = (function () {
   // single sconce blowing out its own stretch of wall (verified live).
   const SCONCE_INTENSITY = 2.6;
   const SCONCE_RANGE = 8.5;
+  // #520: the bay directly opposite the hearth (HEARTH_ANGLE + PI, which is
+  // exactly PORTRAIT_ANGLES[3]) sits at its two nearest ring sconces'
+  // ~22.5deg/37.5deg reach and gets zero hearth spill -- the single
+  // farthest point in the room from every other light source, and the one
+  // bay that read visibly dimmer once the room became explorable (#504).
+  // A dedicated fixture at that exact angle rather than a global
+  // sconce/ambient retune, since every other bay already reads fine; it's
+  // pushed above SCONCE_INTENSITY/SCONCE_RANGE because unlike a ring
+  // sconce it has no neighboring fixture's pool to overlap with.
+  const DARK_BAY_ACCENT_INTENSITY = 4.2;
+  const DARK_BAY_ACCENT_RANGE = 9.5;
 
   // #304: trim/molding + furnishings, the dressing pass #294 deliberately
   // deferred. Everything below is placed by the same polar convention as
@@ -430,6 +441,44 @@ window.LodgeScene = (function () {
       // intensity 6 with no range turned the whole wall near-white).
       sconce.range = SCONCE_RANGE;
     }
+
+    // #520: dedicated accent fixture for the dark bay opposite the hearth
+    // (see DARK_BAY_ACCENT_INTENSITY/RANGE above) -- same backplate+cup+
+    // PointLight construction as the ambient ring, just at one fixed angle
+    // instead of the SCONCE_COUNT loop.
+    const darkBayAngle = HEARTH_ANGLE + Math.PI;
+    const darkBayBackSpot = wallSpot(darkBayAngle, SCONCE_RADIUS);
+    const darkBayBulbSpot = wallSpot(darkBayAngle, SCONCE_BULB_RADIUS);
+
+    const darkBayBackplate = BABYLON.MeshBuilder.CreateBox(
+      'darkBayAccentBack',
+      { width: 0.3, height: 0.5, depth: 0.06 },
+      scene
+    );
+    darkBayBackplate.position.set(darkBayBackSpot.x, SCONCE_HEIGHT, darkBayBackSpot.z);
+    darkBayBackplate.rotation.y = darkBayBackSpot.rotationY;
+    const darkBayBackMat = new BABYLON.StandardMaterial('darkBayAccentBackMat', scene);
+    darkBayBackMat.diffuseColor = BABYLON.Color3.FromHexString(LODGE_AMBER_DIM);
+    darkBayBackMat.emissiveColor = BABYLON.Color3.FromHexString(LODGE_AMBER_DIM).scale(0.1);
+    darkBayBackMat.specularColor = new BABYLON.Color3(0.05, 0.04, 0.02);
+    darkBayBackplate.material = darkBayBackMat;
+
+    const darkBayCup = BABYLON.MeshBuilder.CreateSphere('darkBayAccentCup', { diameter: 0.24 }, scene);
+    darkBayCup.position.set(darkBayBulbSpot.x, SCONCE_HEIGHT, darkBayBulbSpot.z);
+    const darkBayCupMat = new BABYLON.StandardMaterial('darkBayAccentCupMat', scene);
+    darkBayCupMat.emissiveColor = BABYLON.Color3.FromHexString(LODGE_GOLD);
+    darkBayCupMat.disableLighting = true;
+    darkBayCup.material = darkBayCupMat;
+
+    const darkBayLight = new BABYLON.PointLight(
+      'darkBayAccentLight',
+      new BABYLON.Vector3(darkBayBulbSpot.x, SCONCE_HEIGHT, darkBayBulbSpot.z),
+      scene
+    );
+    darkBayLight.diffuse = BABYLON.Color3.FromHexString(LODGE_AMBER);
+    darkBayLight.specular = BABYLON.Color3.FromHexString(LODGE_GOLD);
+    darkBayLight.intensity = DARK_BAY_ACCENT_INTENSITY;
+    darkBayLight.range = DARK_BAY_ACCENT_RANGE;
   }
 
   // Position + facing for a mesh mounted flush against the cylindrical wall
@@ -484,12 +533,19 @@ window.LodgeScene = (function () {
     }
   }
 
-  // #479: the one bay that hangs an actual image -- the rest stay the empty
+  // #479/#520: the bays that hang an actual image -- the rest stay the empty
   // gilt-frame-over-dark-panel furnishing described below. PORTRAIT_ANGLES[0]
   // and [2] are the two bays immediately flanking the hearth (each PI/2 --
   // one pilaster-bay -- from HEARTH_ANGLE; [3] is the far side of the room,
-  // PI away). Picking [0] as "near the fireplace" is an arbitrary tiebreak
-  // between two equally-adjacent bays. The images themselves
+  // PI away). Picking [0] as "near the fireplace" was an arbitrary tiebreak
+  // between two equally-adjacent bays (#479); [3] was added by #520 once
+  // that bay's blank dark panel read as an unfinished placeholder rather
+  // than the "intentional lodge furnishing" this comment used to claim for
+  // every non-[0] bay -- true enough for [2], but [3] additionally sat in
+  // the room's dimmest corner (see DARK_BAY_ACCENT_INTENSITY above), so an
+  // empty frame there had nothing to soften the effect. [2] stays a plain
+  // panel; only one bay needs to demonstrate the "empty frame is deliberate"
+  // reading. The images themselves
   // (public/portraits/decor/dorian-gray-01.png..08.png) are static room decor
   // only -- generated against STYLE_GUIDE.md's baseline register, not a
   // roster member portrait, and deliberately kept out of public/portraits/'s
@@ -499,9 +555,10 @@ window.LodgeScene = (function () {
   // Literary easter egg (still #479): 8 variants trace the same face across
   // the novel's central conceit -- the portrait visibly aging/corrupting
   // while the man stays young -- from unmarked (01) to ruinous (08). One is
-  // picked at random each time the scene builds; deliberately not tied to
-  // any room state, session, or persistence, just a fresh roll per load.
-  const DORIAN_FRAME_INDEX = 0;
+  // picked at random, independently per frame, each time the scene builds;
+  // deliberately not tied to any room state, session, or persistence, just a
+  // fresh roll per load.
+  const DORIAN_FRAME_INDICES = new Set([0, 3]);
   const DORIAN_PORTRAIT_COUNT = 8;
   function pickDorianPortraitPath() {
     const n = 1 + Math.floor(Math.random() * DORIAN_PORTRAIT_COUNT);
@@ -529,8 +586,8 @@ window.LodgeScene = (function () {
   // own amber/gold molding gradient (public/css/style.css's #fmG-equivalent
   // tokens) rather than a per-member image -- no ancestor art exists to
   // render here, and an empty gilt frame reads as intentional lodge
-  // furnishing rather than a placeholder. DORIAN_FRAME_INDEX above is the
-  // sole exception (#479).
+  // furnishing rather than a placeholder. DORIAN_FRAME_INDICES above are
+  // the exceptions (#479, #520).
   //
   // #357: skips the bay at HEARTH_ANGLE -- that's PORTRAIT_ANGLES[1]
   // exactly (both PI/8 + PI/2), since the hearth took over that mid-bay
@@ -554,7 +611,7 @@ window.LodgeScene = (function () {
       panel.position.set(panelSpot.x, 3.2, panelSpot.z);
       panel.rotation.y = panelSpot.rotationY;
       const panelMat = new BABYLON.StandardMaterial(`portraitPanelMat-${i}`, scene);
-      if (i === DORIAN_FRAME_INDEX) {
+      if (DORIAN_FRAME_INDICES.has(i)) {
         // emissiveTexture, not diffuseTexture: with disableLighting true the
         // diffuse channel never contributes (same #217 reasoning as the
         // member avatar billboards above), so emissiveTexture is what
