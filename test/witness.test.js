@@ -1604,6 +1604,75 @@ test("live turn queue (#400): only one member's turn is ever on screen at a time
       'the settled turn must survive an abort that arrives too late to matter'
     );
   });
+
+  await t.test(
+    '#521: liveTypingStart itself evicts a stale unsettled turn, unlike #423 which needed an explicit liveAbortTurn call',
+    async t2 => {
+      t2.mock.timers.enable({ apis: ['setTimeout'] });
+      const { document, window, module: Witness } = boot(t2);
+      stubScene(window, { crowley: { x: 10, y: 10, visible: true } });
+      Witness.configure(makeDeps());
+      Witness.enableRoom();
+
+      // pipeline.js's fix for #521 re-fires onSpeakerStart before a retry
+      // attempt -- app.js's onSpeaking handler turns that into another
+      // liveTypingStart call for the same member, with no error and no
+      // liveAbortTurn in between (the round never rejects; the server retry
+      // is invisible to the client except for this second `speaking`
+      // event). The first attempt's turn never reached liveSpeech, so its
+      // `block` is still null when the second liveTypingStart arrives.
+      Witness.liveTypingStart('Crowley', 'crowley');
+      Witness.liveTypingStart('Crowley', 'crowley');
+      Witness.liveSpeech({ speaker: 'Crowley', text: 'Retried line.', memberId: 'crowley' });
+
+      const cards = document.querySelectorAll('#room-speech-layer .room-speech-card');
+      assert.equal(cards.length, 1, 'the abandoned first attempt must not leave a second, stuck card behind');
+      assert.match(
+        latestEntryText(cards[0]),
+        /Retried line\./,
+        "without self-eviction, advanceLiveTurnQueue's guard on the abandoned attempt's turn would block the retry forever"
+      );
+      assert.equal(
+        document.querySelectorAll('#room-speech-layer .room-card-entry-typing').length,
+        0,
+        'no stray typing entry left over from the abandoned first attempt'
+      );
+    }
+  );
+
+  await t.test('#521: the same self-eviction unwedges stage mode (no scene)', async t2 => {
+    t2.mock.timers.enable({ apis: ['setTimeout'] });
+    const { document, module: Witness } = boot(t2);
+    Witness.configure(makeDeps());
+
+    Witness.liveTypingStart('Crowley', 'crowley');
+    Witness.liveTypingStart('Crowley', 'crowley');
+    Witness.liveSpeech({ speaker: 'Crowley', text: 'Retried line.', memberId: 'crowley' });
+
+    assert.match(
+      document.querySelector('#witness-stage .transcript-entry .speech-text')?.textContent || '',
+      /Retried line\./
+    );
+    assert.equal(document.querySelectorAll('#witness-stage .transcript-entry').length, 1);
+  });
+
+  await t.test('#521: liveTypingStart does not evict a prior turn that already settled', async t2 => {
+    t2.mock.timers.enable({ apis: ['setTimeout'] });
+    const { document, module: Witness } = boot(t2);
+    Witness.configure(makeDeps());
+
+    // Ordinary back-to-back beats: the first settles via liveSpeech before
+    // the second's liveTypingStart ever arrives -- nothing stale to evict.
+    Witness.liveSpeech({ speaker: 'Crowley', text: 'One.', memberId: 'crowley' });
+    Witness.liveTypingStart('Blavatsky', 'blavatsky');
+    Witness.liveSpeech({ speaker: 'Blavatsky', text: 'Two.', memberId: 'blavatsky' });
+
+    await advancePastLiveTurn(t2);
+    const entries = document.querySelectorAll('#witness-stage .transcript-entry .speech-text');
+    assert.equal(entries.length, 2, "a settled turn must survive a later, unrelated speaker's liveTypingStart");
+    assert.match(entries[0].textContent, /One\./);
+    assert.match(entries[1].textContent, /Two\./);
+  });
 });
 
 test('playback speed (#288): one multiplier reaches room-mode holds, replay, and the old stage alike', async t => {
