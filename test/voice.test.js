@@ -408,6 +408,8 @@ test('voice.js', async t => {
     class FakeAudio {
       constructor() {
         events.push({ type: 'audio-construct' });
+        this._defaultPlaybackRate = 1;
+        this._playbackRate = 1;
       }
       // #400: a plain field assignment (audio.playbackRate = x) can't be
       // intercepted without an explicit accessor -- add one so tests can
@@ -419,8 +421,28 @@ test('voice.js', async t => {
       get playbackRate() {
         return this._playbackRate;
       }
+      set defaultPlaybackRate(v) {
+        this._defaultPlaybackRate = v;
+        events.push({ type: 'defaultPlaybackRate-set', value: v });
+      }
+      get defaultPlaybackRate() {
+        return this._defaultPlaybackRate;
+      }
+      // #518: mirrors the real HTML media-element load algorithm -- assigning
+      // .src resets playbackRate back to defaultPlaybackRate. Without this,
+      // the fake can't reproduce the bug #518 fixed: playbackRate set once at
+      // element creation (before src exists) silently got wiped the moment
+      // the real audio source loaded, and nothing here caught it.
+      set src(v) {
+        this._src = v;
+        this._playbackRate = this._defaultPlaybackRate;
+        events.push({ type: 'src-set', value: v });
+      }
+      get src() {
+        return this._src;
+      }
       play() {
-        events.push({ type: 'audio-play', src: this.src });
+        events.push({ type: 'audio-play', src: this.src, playbackRate: this.playbackRate });
         return Promise.resolve();
       }
       pause() {
@@ -595,6 +617,31 @@ test('voice.js', async t => {
       assert.equal(rateEvent.value, 3, 'clamped to the same sane maximum the Web Speech rate uses');
     }
   );
+
+  // #518: #400 above set audio.playbackRate at element creation, before
+  // audio.src was ever assigned -- the real HTML media-element load
+  // algorithm resets playbackRate to defaultPlaybackRate the moment .src is
+  // set, silently wiping that assignment out. The FakeAudio stub's `src`
+  // setter now mirrors that reset (see stubElevenLabs above), so this test
+  // checks the rate actually in effect when play() is called, not just that
+  // playbackRate was assigned at some point during the call.
+  await t.test('#518: playbackRate survives the src assignment and is correct when play() is called', async t2 => {
+    let events;
+    const loaded = loadPublicModule('voice.js', FIXTURE, window => {
+      stubSpeech(window, [{ name: 'A', lang: 'en-US' }]);
+      events = stubElevenLabs(window);
+    });
+    t2.after(loaded.cleanup);
+    await flushMicrotasks();
+
+    loaded.window.Voice.setEnabled(true);
+    loaded.window.Voice.speak('Hello there.', 'crowley', 2);
+    await flushMicrotasks();
+
+    const playEvent = events.find(e => e.type === 'audio-play');
+    assert.ok(playEvent, 'expected the resolved audio to be played');
+    assert.equal(playEvent.playbackRate, 2, 'expected playbackRate to still be 2 at play(), after the src-assignment reset');
+  });
 
   // #477: playbackRate was only ever set once, at audio-element creation
   // (#400 above) -- a mid-utterance speed change had no effect on the clip
