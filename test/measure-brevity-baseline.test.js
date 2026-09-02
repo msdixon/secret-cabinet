@@ -99,7 +99,7 @@ test('parseLegacyRoundTurns', async t => {
     assert.deepEqual(turns, [{ memberId: 'yeats', text: 'I speak.' }]);
   });
 
-  await t.test('a pure-action turn under a known speaker is kept as that speaker\'s turn', () => {
+  await t.test("a pure-action turn under a known speaker is kept as that speaker's turn", () => {
     const text = ['Yeats', '*He falls silent.*'].join('\n');
     const turns = parseLegacyRoundTurns(text, index);
     assert.deepEqual(turns, [{ memberId: 'yeats', text: '*He falls silent.*' }]);
@@ -158,7 +158,13 @@ test('turnsForRound', async t => {
     };
     const turns = turnsForRound(round, index);
     assert.deepEqual(turns, [
-      { memberId: 'crowley', text: 'A grand pronouncement.', passed: false, citationSource: 'structured', hasCitation: true },
+      {
+        memberId: 'crowley',
+        text: 'A grand pronouncement.',
+        passed: false,
+        citationSource: 'structured',
+        hasCitation: true,
+      },
       { memberId: 'yeats', text: '*nods*', passed: true, citationSource: 'structured', hasCitation: false },
     ]);
   });
@@ -188,7 +194,10 @@ test('turnsForSession', async t => {
     };
     const turns = turnsForSession(session, index);
     assert.equal(turns.length, 2);
-    assert.deepEqual(turns.map(t => t.memberId), ['crowley', 'yeats']);
+    assert.deepEqual(
+      turns.map(t => t.memberId),
+      ['crowley', 'yeats']
+    );
   });
 });
 

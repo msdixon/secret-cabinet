@@ -2826,7 +2826,10 @@ test('runRound — a retried speaker turn streams corrupted content to onChunk (
             if (toolName === 'select_speakers') {
               return {
                 content: [
-                  { type: 'tool_use', input: { speakers: ['crowley'], reasoning: 'r', windingDown: true, lullNote: null } },
+                  {
+                    type: 'tool_use',
+                    input: { speakers: ['crowley'], reasoning: 'r', windingDown: true, lullNote: null },
+                  },
                 ],
                 usage: { input_tokens: 10, output_tokens: 5 },
               };
@@ -2918,79 +2921,88 @@ test('runRound — a retried speaker turn streams corrupted content to onChunk (
 // asserting the client actually resets on it belongs to witness.test.js's
 // own #521 coverage of liveTypingStart's self-eviction.
 test('runRound — onSpeakerStart re-fires before a retry attempt, not just once per beat (#521)', async t => {
-  await t.test('one onSpeakerStart call per attempt, each strictly before that attempt\'s own onChunk output', async () => {
-    // #521: a single-member pool still gets picked a second time after its
-    // first beat (REPEAT_BACK_TO_BACK_WEIGHT is a discount, not a zero, and
-    // MAX_TURNS_PER_POOL_MEMBER is 2 -- see pipeline-speaker.js), so a short
-    // reply here would let the round run a second, unrelated beat and add a
-    // third onSpeakerStart this test isn't about. Long enough to exhaust
-    // BREATH_BUDGET_WORDS (1000) below MIN_WORDS_FOR_ANOTHER_BEAT (40) in one
-    // beat instead, so the round ends right after the retried beat resolves.
-    const retriedText = `Retried.${' word'.repeat(965)}`;
-    let streamCalls = 0;
-    const client = {
-      messages: {
-        create: async req => {
-          const toolName = req.tools?.[0]?.name;
-          if (toolName === 'select_speakers') {
+  await t.test(
+    "one onSpeakerStart call per attempt, each strictly before that attempt's own onChunk output",
+    async () => {
+      // #521: a single-member pool still gets picked a second time after its
+      // first beat (REPEAT_BACK_TO_BACK_WEIGHT is a discount, not a zero, and
+      // MAX_TURNS_PER_POOL_MEMBER is 2 -- see pipeline-speaker.js), so a short
+      // reply here would let the round run a second, unrelated beat and add a
+      // third onSpeakerStart this test isn't about. Long enough to exhaust
+      // BREATH_BUDGET_WORDS (1000) below MIN_WORDS_FOR_ANOTHER_BEAT (40) in one
+      // beat instead, so the round ends right after the retried beat resolves.
+      const retriedText = `Retried.${' word'.repeat(965)}`;
+      let streamCalls = 0;
+      const client = {
+        messages: {
+          create: async req => {
+            const toolName = req.tools?.[0]?.name;
+            if (toolName === 'select_speakers') {
+              return {
+                content: [
+                  {
+                    type: 'tool_use',
+                    input: { speakers: ['crowley'], reasoning: 'r', windingDown: true, lullNote: null },
+                  },
+                ],
+                usage: { input_tokens: 10, output_tokens: 5 },
+              };
+            }
             return {
-              content: [
-                { type: 'tool_use', input: { speakers: ['crowley'], reasoning: 'r', windingDown: true, lullNote: null } },
-              ],
-              usage: { input_tokens: 10, output_tokens: 5 },
+              content: [{ type: 'tool_use', input: { reflection: 'Considering.', waitingOnMemberId: 'none' } }],
+              usage: { input_tokens: 8, output_tokens: 4 },
             };
-          }
-          return {
-            content: [{ type: 'tool_use', input: { reflection: 'Considering.', waitingOnMemberId: 'none' } }],
-            usage: { input_tokens: 8, output_tokens: 4 },
-          };
-        },
-        stream: () => {
-          streamCalls++;
-          if (streamCalls === 1) {
+          },
+          stream: () => {
+            streamCalls++;
+            if (streamCalls === 1) {
+              return {
+                [Symbol.asyncIterator]: async function* () {
+                  yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'Abandoned.' } };
+                  throw new Error('connection reset mid-stream');
+                },
+                finalMessage: async () => {
+                  throw new Error('connection reset mid-stream');
+                },
+              };
+            }
             return {
               [Symbol.asyncIterator]: async function* () {
-                yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'Abandoned.' } };
-                throw new Error('connection reset mid-stream');
+                yield { type: 'content_block_delta', delta: { type: 'text_delta', text: retriedText } };
               },
-              finalMessage: async () => {
-                throw new Error('connection reset mid-stream');
-              },
+              finalMessage: async () => ({ usage: { input_tokens: 20, output_tokens: 10 } }),
             };
-          }
-          return {
-            [Symbol.asyncIterator]: async function* () {
-              yield { type: 'content_block_delta', delta: { type: 'text_delta', text: retriedText } };
-            },
-            finalMessage: async () => ({ usage: { input_tokens: 20, output_tokens: 10 } }),
-          };
+          },
         },
-      },
-    };
+      };
 
-    const events = []; // interleaved log of both callbacks, in call order
-    const result = await runRound({
-      ...RUNROUND_BASE_ARGS,
-      client,
-      onChunk: chunk => events.push({ type: 'chunk', chunk }),
-      onSpeakerStart: memberId => events.push({ type: 'speaking', memberId }),
-    });
+      const events = []; // interleaved log of both callbacks, in call order
+      const result = await runRound({
+        ...RUNROUND_BASE_ARGS,
+        client,
+        onChunk: chunk => events.push({ type: 'chunk', chunk }),
+        onSpeakerStart: memberId => events.push({ type: 'speaking', memberId }),
+      });
 
-    assert.equal(result.beats.length, 1, 'the retried beat exhausts the budget -- no second beat to muddy the count');
-    assert.equal(result.beats[0].text, retriedText);
+      assert.equal(result.beats.length, 1, 'the retried beat exhausts the budget -- no second beat to muddy the count');
+      assert.equal(result.beats[0].text, retriedText);
 
-    const speakingIndices = events.map((e, i) => (e.type === 'speaking' ? i : -1)).filter(i => i !== -1);
-    assert.equal(speakingIndices.length, 2, 'one onSpeakerStart per attempt -- the original and the retry');
-    assert.equal(events[speakingIndices[0]].memberId, 'crowley');
-    assert.equal(events[speakingIndices[1]].memberId, 'crowley');
+      const speakingIndices = events.map((e, i) => (e.type === 'speaking' ? i : -1)).filter(i => i !== -1);
+      assert.equal(speakingIndices.length, 2, 'one onSpeakerStart per attempt -- the original and the retry');
+      assert.equal(events[speakingIndices[0]].memberId, 'crowley');
+      assert.equal(events[speakingIndices[1]].memberId, 'crowley');
 
-    // The second onSpeakerStart must land before the retry's own chunk --
-    // that ordering is what lets the client discard the abandoned attempt's
-    // partial text before the retry's replacement text starts arriving on
-    // the same onChunk callback, rather than racing it.
-    const retriedChunkIndex = events.findIndex(e => e.type === 'chunk' && e.chunk === retriedText);
-    assert.ok(retriedChunkIndex > speakingIndices[1], "the retry's own chunk must arrive after its onSpeakerStart, not before");
-  });
+      // The second onSpeakerStart must land before the retry's own chunk --
+      // that ordering is what lets the client discard the abandoned attempt's
+      // partial text before the retry's replacement text starts arriving on
+      // the same onChunk callback, rather than racing it.
+      const retriedChunkIndex = events.findIndex(e => e.type === 'chunk' && e.chunk === retriedText);
+      assert.ok(
+        retriedChunkIndex > speakingIndices[1],
+        "the retry's own chunk must arrive after its onSpeakerStart, not before"
+      );
+    }
+  );
 });
 
 // #355 — always-on citation capture, piggybacked on the same disposition

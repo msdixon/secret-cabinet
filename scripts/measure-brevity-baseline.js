@@ -282,7 +282,7 @@ function buildReport({ sessions, roster, turns }) {
 
   if (!anyStructured) {
     lines.push(
-      "**Data-availability caveat:** every session measured here predates [#355](https://github.com/msdixon/secret-cabinet/issues/355) (always-on per-beat citation capture, shipped 2026-08-20) — none carry a `beats` array or usable `citationFlags`. Citation figures below come from a conservative text heuristic (`looksLikeCitation`), not the real per-beat model verdict — treat them as a lower bound, not an exact count. Turn length and passed-proportion are exact regardless. Re-run this script once sessions generated after 2026-08-20 accumulate — it will use the real structured data automatically wherever a round carries `beats`.",
+      '**Data-availability caveat:** every session measured here predates [#355](https://github.com/msdixon/secret-cabinet/issues/355) (always-on per-beat citation capture, shipped 2026-08-20) — none carry a `beats` array or usable `citationFlags`. Citation figures below come from a conservative text heuristic (`looksLikeCitation`), not the real per-beat model verdict — treat them as a lower bound, not an exact count. Turn length and passed-proportion are exact regardless. Re-run this script once sessions generated after 2026-08-20 accumulate — it will use the real structured data automatically wherever a round carries `beats`.',
       ''
     );
   }
