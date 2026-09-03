@@ -824,6 +824,9 @@ a.archival-image-link:hover { border-color:var(--lodge-amber-dim); cursor:pointe
 .witness-exit-btn:hover { border-color:var(--lodge-ash); color:var(--lodge-muted); }
 .witness-speed-btn { background:transparent; border:1px solid var(--lodge-border); color:var(--lodge-ash); font-family:'IM Fell English',serif; font-size:11px; padding:3px 10px; border-radius:2px; cursor:pointer; letter-spacing:1px; min-width:34px; }
 .witness-speed-btn:hover { border-color:var(--lodge-ash); color:var(--lodge-muted); }
+/* #506 */
+.witness-recap-btn { background:transparent; border:1px solid var(--lodge-border); color:var(--lodge-ash); font-family:'IM Fell English',serif; font-size:11px; padding:3px 10px; border-radius:2px; cursor:pointer; letter-spacing:1px; }
+.witness-recap-btn:hover { border-color:var(--lodge-ash); color:var(--lodge-muted); }
 /* #29 */
 .witness-voice-btn { background:transparent; border:1px solid var(--lodge-border); color:var(--lodge-ash); font-family:'IM Fell English',serif; font-size:11px; padding:3px 10px; border-radius:2px; cursor:pointer; letter-spacing:1px; }
 .witness-voice-btn:hover { border-color:var(--lodge-ash); color:var(--lodge-muted); }
