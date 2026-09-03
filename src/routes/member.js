@@ -220,7 +220,7 @@ ${relationships || '(not specified — infer from historical record)'}`;
             try {
               const reactionBuffer = await generatePortraitImage({
                 apiKey: geminiApiKey,
-                prompt: portraitGeneration.buildReactionPrompt(reaction),
+                prompt: portraitGeneration.buildReactionPrompt(reaction, id),
                 referenceImages: [{ mimeType: 'image/png', data: imageBuffer }],
               });
               const reactionId = `${id}-${reaction}`;

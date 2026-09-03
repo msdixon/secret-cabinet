@@ -380,6 +380,7 @@ window.Witness = (function () {
     const tLayer = threadLayer();
     if (tLayer) tLayer.innerHTML = '';
     liveTypingMemberId = null;
+    lastLiveSpeechTurn = null; // #506: a fresh stage has nothing of its own to recap yet
     stopRoomLoop();
     resetLiveTurnQueue(); // #400: a fresh stage shouldn't inherit a queued-but-not-yet-spoken turn from whatever came before
   }
@@ -732,6 +733,15 @@ window.Witness = (function () {
   // same one-thing-at-a-time backbone, just fed by a live stream.
   let liveTurnQueue = [];
   let liveTurnGeneration = 0;
+  // #506: the most recently rendered live speech block ("what did he just
+  // say") -- captured the instant advanceLiveTurnQueue commits to rendering
+  // a turn (see there), not once it finishes, so recapLastTurn() always has
+  // something to replay even while that turn's own audio is still playing.
+  // Deliberately a single slot, not a history: the queue itself discards
+  // each turn via .shift() once played (see the comment above liveTurnQueue),
+  // and a scrubbable multi-turn timeline is real, harder follow-up work
+  // #506 leaves open rather than something this v1 attempts.
+  let lastLiveSpeechTurn = null;
   // #475: awaitLull() has nothing of its own to check the queue against -- it
   // just resolves a promise as soon as it's called, and app.js was calling it
   // (via runLullLoop) the instant streamPost resolved, which per the #400
@@ -811,6 +821,7 @@ window.Witness = (function () {
     if (!turn.block) return; // still being typed -- liveTypingSet/liveSpeech will call back in
     turn.settling = true;
     maybePrefetchUpcoming();
+    lastLiveSpeechTurn = turn.block; // #506: recapLastTurn() replays exactly this
     const myGeneration = liveTurnGeneration;
     const { delay } = renderWitnessBlock(turn.block);
     // Same two-step as replay's advance(): Promise.resolve(delay) is
@@ -955,6 +966,31 @@ window.Witness = (function () {
       liveTypingEl.remove();
       liveTypingEl = null;
     }
+  }
+
+  // #506 v1: "what did he just say" -- a single-step recap of only the most
+  // recently rendered live turn, not a scrubbable multi-turn history and not
+  // a rewind of the live queue itself. The issue leaves both a discrete
+  // previous-turn jump and a continuous Roku-style rewind open as "worth
+  // prototyping"; this ships the discrete jump's smallest possible slice
+  // (recap the one turn, not step back through several) because the queue
+  // has nothing else addressable to jump between -- liveTurnQueue discards
+  // each turn via .shift() the instant it plays (see that var's own
+  // comment), and Voice.speak() has no persisted/replayable audio object to
+  // resume, only a fresh synthesis to re-trigger. Reusing renderWitnessBlock
+  // -- the same seam live mirroring and replay both already render through --
+  // gets a fresh room-card entry (or stage bubble), a fresh Voice.speak()
+  // call, and correct fade scheduling for free, with no new rendering path.
+  //
+  // No-ops during replay (goBack() already covers that surface) or before
+  // anything has been said yet. Known rough edge, left as-is rather than
+  // engineered around: if a new live turn starts speaking while this recap
+  // is still narrating, Voice.speak()'s single-slot playback (every call
+  // interrupts whatever is currently playing -- see voice.js) means the live
+  // turn wins and cuts the recap short.
+  function recapLastTurn() {
+    if (witnessActive || !lastLiveSpeechTurn) return;
+    renderWitnessBlock(lastLiveSpeechTurn);
   }
 
   // Discards `turn`'s own queue entry and, if it had reached the front and
@@ -1625,6 +1661,7 @@ window.Witness = (function () {
     liveTypingSet,
     liveClearTyping,
     liveAbortTurn,
+    recapLastTurn,
     waitForLiveQueueDrain,
     collapseStage,
     reopenStage,
