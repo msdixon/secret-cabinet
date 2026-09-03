@@ -74,13 +74,37 @@ async function generatePortraitImage({
 // instead of re-copying the wording a fourth time.
 const REACTION_TYPES = ['happy', 'thinking', 'angry'];
 
+// #483 — the original `angry` text below (kept as the "snarl" variant) reads
+// wrong applied uniformly across the roster: Rachel's batch-3 review couldn't
+// picture Adorno baring his teeth, and Sun Ra's came out looking like a joke
+// rather than genuinely angry. `ANGRY_EXPRESSION_ICY` is a second register —
+// controlled, closed-mouth, cold — for reserved/cerebral figures the snarl
+// doesn't suit. Selecting between them is a per-member human judgment call
+// (see ANGRY_VARIANT_BY_MEMBER below), not something inferred automatically,
+// so the default stays "snarl" and existing callers are unaffected.
+const ANGRY_EXPRESSION_SNARL =
+  'Expression: a hard, aggressive scowl — eyebrows sharply lowered and pulled together into a deep vertical crease, eyes narrowed to slits in a hard glare, mouth pulled into a tight snarl or bared teeth, jaw thrust forward — an unmistakably hostile, confrontational face.';
+
+const ANGRY_EXPRESSION_ICY =
+  'Expression: a controlled, icy anger — eyes narrowed and fixed in a cold, unblinking glare, brow drawn low and tight but without a deep aggressive crease, mouth and jaw held firmly closed (no bared teeth, no open snarl), lips pressed into a thin flat line, only the faintest hard tightening at the corners of the mouth and eyes betraying the fury underneath — a contained, quietly dangerous hostility, not a loss of composure.';
+
 const REACTION_EXPRESSIONS = {
   happy:
     'Expression: a broad, unmistakable open-mouthed smile, teeth showing, cheeks pushed up high, eyes crinkled almost shut with genuine delighted laughter — an exuberant, joyful face, the opposite of a neutral or reserved expression.',
   thinking:
     'Expression: strongly inward and distracted — eyes unfocused and cast far into the middle distance (not toward the viewer at all), one eyebrow raised or brow deeply furrowed, mouth slightly open or twisted to one side as if murmuring — an obviously distracted, not-present face, the opposite of direct engagement with the viewer.',
-  angry:
-    'Expression: a hard, aggressive scowl — eyebrows sharply lowered and pulled together into a deep vertical crease, eyes narrowed to slits in a hard glare, mouth pulled into a tight snarl or bared teeth, jaw thrust forward — an unmistakably hostile, confrontational face.',
+  angry: ANGRY_EXPRESSION_SNARL,
+};
+
+// Seed entry only — the one member Rachel named explicitly (#483) as not
+// suiting the bared-teeth default. Not an audit of the wider roster: picking
+// "icy" vs. "snarl" for anyone else is exactly the human-review judgment call
+// STYLE_GUIDE.md already requires before promoting a candidate, so extend
+// this table at that review point (a future batch or fixup script, same
+// pattern as scripts/batch3-reaction-portraits-fixup.js's THINKING_FIXUPS
+// tiers) rather than guessing more entries in ahead of time.
+const ANGRY_VARIANT_BY_MEMBER = {
+  adorno: 'icy',
 };
 
 const REACTION_EXPRESSION_OVERRIDE_META =
@@ -99,8 +123,16 @@ const REACTION_STYLE_SUFFIX =
 // instruction below if reused here. The reference image + override meta is
 // what actually anchors likeness (confirmed by batch 2/3's own findings), so
 // omitting a redundant subject clause avoids that conflict.
-function buildReactionPrompt(reaction) {
-  return `${REACTION_EXPRESSION_OVERRIDE_META} ${REACTION_EXPRESSIONS[reaction]} ${REACTION_STYLE_SUFFIX}`;
+//
+// `memberId` is optional and only consulted for the `angry` reaction, to
+// look up a curated register override (#483) — omit it (or leave the member
+// unlisted) to get the default snarl/bared-teeth text unchanged.
+function buildReactionPrompt(reaction, memberId = null) {
+  let expression = REACTION_EXPRESSIONS[reaction];
+  if (reaction === 'angry' && memberId && ANGRY_VARIANT_BY_MEMBER[memberId] === 'icy') {
+    expression = ANGRY_EXPRESSION_ICY;
+  }
+  return `${REACTION_EXPRESSION_OVERRIDE_META} ${expression} ${REACTION_STYLE_SUFFIX}`;
 }
 
 module.exports = {
@@ -108,5 +140,8 @@ module.exports = {
   GEMINI_IMAGE_MODEL,
   DEFAULT_ASPECT_RATIO,
   REACTION_TYPES,
+  ANGRY_EXPRESSION_SNARL,
+  ANGRY_EXPRESSION_ICY,
+  ANGRY_VARIANT_BY_MEMBER,
   buildReactionPrompt,
 };

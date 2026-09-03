@@ -5,7 +5,15 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { generatePortraitImage, GEMINI_IMAGE_MODEL, DEFAULT_ASPECT_RATIO } = require('../src/portrait-generation.js');
+const {
+  generatePortraitImage,
+  GEMINI_IMAGE_MODEL,
+  DEFAULT_ASPECT_RATIO,
+  buildReactionPrompt,
+  ANGRY_EXPRESSION_SNARL,
+  ANGRY_EXPRESSION_ICY,
+  ANGRY_VARIANT_BY_MEMBER,
+} = require('../src/portrait-generation.js');
 
 function fakeFetch({ ok = true, status = 200, json = {}, text = '' } = {}) {
   const calls = [];
@@ -105,5 +113,30 @@ test('generatePortraitImage', async t => {
       json: { candidates: [{ content: { parts: [{ text: 'no image, just talk' }] } }] },
     });
     await assert.rejects(() => generatePortraitImage({ apiKey: 'k', prompt: 'p', fetchImpl }), /no image data/);
+  });
+});
+
+// #483 — angry reaction now has two registers (default bared-teeth snarl,
+// and an opt-in controlled/icy alternative), selected per-member.
+test('buildReactionPrompt', async t => {
+  await t.test('happy/thinking are unaffected by the memberId argument', () => {
+    assert.equal(buildReactionPrompt('happy'), buildReactionPrompt('happy', 'adorno'));
+    assert.equal(buildReactionPrompt('thinking'), buildReactionPrompt('thinking', 'adorno'));
+  });
+
+  await t.test('angry defaults to the snarl register when no memberId is given', () => {
+    assert.ok(buildReactionPrompt('angry').includes(ANGRY_EXPRESSION_SNARL));
+    assert.ok(!buildReactionPrompt('angry').includes(ANGRY_EXPRESSION_ICY));
+  });
+
+  await t.test('angry defaults to the snarl register for a member not in the override table', () => {
+    assert.ok(buildReactionPrompt('angry', 'crowley').includes(ANGRY_EXPRESSION_SNARL));
+  });
+
+  await t.test('angry uses the icy register for a member listed in ANGRY_VARIANT_BY_MEMBER', () => {
+    assert.equal(ANGRY_VARIANT_BY_MEMBER.adorno, 'icy');
+    const prompt = buildReactionPrompt('angry', 'adorno');
+    assert.ok(prompt.includes(ANGRY_EXPRESSION_ICY));
+    assert.ok(!prompt.includes(ANGRY_EXPRESSION_SNARL));
   });
 });
