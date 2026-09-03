@@ -34,3 +34,32 @@
 ---
 
 _Repeatable — run `node scripts/measure-brevity-baseline.js` again once more sessions accumulate, especially post-#355 ones with real per-beat citation data. This script does not modify `tuning.js` or any pipeline behavior; picking a lever (director-prompt nudge, widening `LENGTH_TENDENCY_OVERRIDES`, a structural banter beat) is deferred to a follow-up per the issue._
+
+---
+
+## Phase 3 — real-session re-measurement (2026-09-03)
+
+Phase 2 shipped `TANGENT_NUDGE_CHANCE` (PR #530) with its own live A/B on individual beats (269→17, 247→31 words). This phase asks the question phase 2 left open: does that per-beat effect actually move a full, real live session?
+
+**3 new local sessions, 85 beats (all post-#355, real per-beat citation flags — no text-heuristic caveat).** Ran against current `main` with the nudge live: **146 words/turn average**, up from phase 1's 88-word baseline — the opposite of what a working nudge should do at face value.
+
+**Confound found before concluding the nudge is broken:** `server.js`'s default model changed from `claude-sonnet-4-6` to `claude-sonnet-5` on 2026-08-24 ([#406](https://github.com/msdixon/secret-cabinet/issues/406)) — after every phase-1 baseline session was recorded (last: 2026-08-05), and just before PR #530 merged (2026-09-02). Phase 1's 88-word number and today's 146-word number are not measuring the same model.
+
+**Controlled nudge-on/off A/B against the current production model**, mirroring PR #530's own methodology (identical context, `tangentNudge: true` vs. `false`, same member) but with 3 trials per condition instead of 1, to separate a real effect from single-sample noise:
+
+| Case | OFF avg (3 trials) | ON avg (3 trials) | Δ |
+|---|---|---|---|
+| Crowley — vault/Golden Dawn dispute | 137w | 69w | −49% |
+| Yeats — automatic writing / *A Vision* | 261w | 85w | −68% |
+| Teresa — interior castle / obedience | 202w | 109w | −46% |
+| **Grand average** | **200w** | **88w** | **−56%** |
+
+Two things fall out of this table:
+
+1. **The nudge still works, undiminished, on the current model.** −56% average is in the same direction and same order of magnitude as PR #530's own single-shot numbers. The lever isn't the problem.
+2. **The un-nudged floor roughly doubled.** OFF averages 200 words here vs. phase 1's 88-word *aggregate* (which was effectively an all-off measurement — the nudge didn't exist yet). That's not a citation/tangent regression; it's `claude-sonnet-5` running more verbose by default than `claude-sonnet-4-6` did, independent of anything #513 touches. (Note `tuning.js`'s own comment on `SPEAKER_MAX_TOKENS`, written before the switch: "the model's baseline verbosity for this salon's philosophical-debate register runs long across the board... expect this to need more tuning.")
+3. Worth flagging: the ON average here (88w) lands almost exactly on phase 1's original 88-word target — small sample (n=9), so treat the precision as coincidental, not proof, but directionally the nudge is pulling nudged beats back down to roughly where the room used to sit before either the nudge or the model switch existed.
+
+**Reading the 146-word aggregate against this:** at `TANGENT_NUDGE_CHANCE = 0.3`, a session mixing ~70% off-beats (~200w) and ~30% on-beats (~88w) predicts an aggregate around 165w — close to the measured 146w given the small sample and topic variance. The lever is doing real, measured work against a floor that rose for reasons outside #513's scope.
+
+**Conclusion:** `TANGENT_NUDGE_CHANCE` is not under-tuned — it cuts turn length by roughly half whenever it fires, on the model actually in production today, matching phase 2's original validation. Raising the rate further would be tuning against the wrong variable: the residual essayism the aggregate still shows is downstream of #406's model swap raising the un-nudged floor for *every* turn, nudged or not, not of the coin-flip rate being too low. Closing #513 on this record rather than raising the rate on unmeasured guesswork; the model-verbosity question gets its own follow-up ([#539](https://github.com/msdixon/secret-cabinet/issues/539)) since it's a different variable with a different fix (`SPEAKER_MAX_TOKENS`, length tendencies) than anything #513 was ever scoped to touch.
