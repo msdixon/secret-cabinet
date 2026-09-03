@@ -1520,6 +1520,90 @@ test('room card fade (#529): a card does not fade while its own audio is still p
   });
 });
 
+test('recap (#506): "what did he just say" replays only the most recently spoken live turn', async t => {
+  await t.test('is a no-op before anything has been said', t2 => {
+    const { module: Witness } = boot(t2);
+    assert.doesNotThrow(() => Witness.recapLastTurn());
+  });
+
+  await t.test(
+    're-renders the most recently spoken turn as a fresh card entry and re-triggers Voice.speak()',
+    async t2 => {
+      t2.mock.timers.enable({ apis: ['setTimeout'] });
+      let speakCalls = 0;
+      const loaded = loadPublicModule('witness.js', FIXTURE, window => {
+        window.Voice = {
+          speak: () => {
+            speakCalls++;
+            return Promise.resolve();
+          },
+          stop: () => {},
+        };
+      });
+      t2.after(loaded.cleanup);
+      const { document, window, module: Witness } = loaded;
+      stubScene(window, { crowley: { x: 10, y: 10, visible: true } });
+      Witness.configure(makeDeps());
+      Witness.enableRoom();
+
+      Witness.liveSpeech({ speaker: 'Crowley', text: 'The book is not the point.', memberId: 'crowley' });
+      await flushMicrotasks();
+      assert.equal(speakCalls, 1);
+
+      Witness.recapLastTurn();
+      assert.equal(speakCalls, 2, 'recap re-triggers Voice.speak() for the same block');
+
+      const card = document.querySelector('#room-speech-layer .room-speech-card');
+      assert.equal(
+        card.querySelectorAll('.room-card-entry').length,
+        2,
+        'recap appends a fresh entry (#287 stack) rather than mutating the original'
+      );
+      assert.match(latestEntryText(card), /not the point/);
+    }
+  );
+
+  await t.test('is a no-op while replay is active -- goBack() already covers that surface', async t2 => {
+    const { document, module: Witness } = boot(t2);
+    await Witness.start({ id: 's1', rounds: [{ label: 'Round I', text: 'Crowley:\nOne.' }] }, makeDeps());
+    const before = document.getElementById('witness-stage').innerHTML;
+
+    Witness.recapLastTurn();
+    assert.equal(
+      document.getElementById('witness-stage').innerHTML,
+      before,
+      'replay owns the stage; recap must not render into it'
+    );
+  });
+
+  await t.test('clearing the room (liveReset) drops what there was to recap', async t2 => {
+    t2.mock.timers.enable({ apis: ['setTimeout'] });
+    let speakCalls = 0;
+    const loaded = loadPublicModule('witness.js', FIXTURE, window => {
+      window.Voice = {
+        speak: () => {
+          speakCalls++;
+          return Promise.resolve();
+        },
+        stop: () => {},
+      };
+    });
+    t2.after(loaded.cleanup);
+    const { window, module: Witness } = loaded;
+    stubScene(window, { crowley: { x: 10, y: 10, visible: true } });
+    Witness.configure(makeDeps());
+    Witness.enableRoom();
+
+    Witness.liveSpeech({ speaker: 'Crowley', text: 'One.', memberId: 'crowley' });
+    await flushMicrotasks();
+    assert.equal(speakCalls, 1);
+
+    Witness.liveReset();
+    Witness.recapLastTurn();
+    assert.equal(speakCalls, 1, 'a fresh stage has nothing left to recap');
+  });
+});
+
 // #279's original per-member, WPM-only room hold is gone -- superseded by
 // #400's global live turn queue (see that section's own comment in
 // witness.js). #279 held one member's card back from clobbering *itself*
