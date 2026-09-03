@@ -1,1 +1,0 @@
-[#483](https://github.com/msdixon/secret-cabinet/issues/483) vary the `angry` reaction expression — one fixed bared-teeth description reads wrong for reserved/cerebral figures (Adorno); apply next time `angry` candidates are generated, not a re-do of already-reviewed batches
