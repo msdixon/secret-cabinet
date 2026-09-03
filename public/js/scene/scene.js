@@ -128,6 +128,18 @@ window.LodgeScene = (function () {
   const PORTRAIT_ANGLES = [0, 1, 2, 3].map(i => Math.PI / 8 + i * (Math.PI / 2));
   const BOOKSHELF_ANGLES = [0, 1].map(i => (3 * Math.PI) / 8 + i * Math.PI);
   const BOOK_COLORS = ['#5c2a1e', '#2e4a2e', '#1e2e4a', '#5c4520', '#3a2e1e'];
+  // #519: of the room's 8 mid-bay slots (i*PI/4 + PI/8), 6 are spoken for --
+  // 4 portraits, 2 bookshelves, with the hearth having taken over
+  // PORTRAIT_ANGLES[1]'s slot (#357). 7PI/8 and 15PI/8 are the only two left
+  // bare. #504's free-drag orbit made that bare-wall emptiness read as more
+  // surreal than intended (issue's own framing) -- this fills one of them
+  // with a sealed door rather than leaving it blank. SEALED_DOOR_ANGLE picks
+  // 15PI/8 over 7PI/8 specifically for being the harder one to stumble onto
+  // (further from CAMERA_DEFAULT_ALPHA's centre-frame direction, nearer the
+  // side the camera itself starts at) -- something you find by going
+  // looking, not something the default framing hands you, matching what
+  // #504 actually changed (players now *can* go looking).
+  const SEALED_DOOR_ANGLE = (15 * Math.PI) / 8;
 
   // #305: shadow map resolution. 1024 is a common "small scene" default --
   // low enough that the cube-map cost (below) stays bounded, high enough
@@ -718,6 +730,112 @@ window.LodgeScene = (function () {
     });
   }
 
+  // #519: a door, deliberately built as sealed rather than functional --
+  // resolved the issue's own open question ("does a literal door undermine
+  // the secret-cabinet framing?") by making the door itself the answer: a
+  // once-real doorway that's been paneled shut, not an ordinary point of
+  // entry/exit. No gap at the floor, no handle, no hinge -- the architrave
+  // and two door-leaf panels are flush-mounted the same way a portrait frame
+  // is (wallSpot() convention), and the brass escutcheon has no keyhole
+  // aperture, just a solid disc. That's deliberate: this room has never had
+  // a mesh-picking/click layer for individual objects (the only click
+  // handler in the scene is the table-wide document-inspect trigger in
+  // openDocumentInspect, unrelated to what's clicked), so a "sealed" door
+  // reads the same as every other inert piece of dressing here -- it never
+  // promises a function the room doesn't deliver, the same restraint
+  // #294/#304 already apply to the fireplace and bookshelves.
+  const SEALED_DOOR_WIDTH = 1.3;
+  const SEALED_DOOR_HEIGHT = 2.5;
+  const SEALED_DOOR_FRAME_MARGIN = 0.14; // architrave overhang beyond the leaf edges
+  function buildSealedDoor(scene) {
+    // backFaceCulling off on both, same reasoning as buildPortraitFrames'
+    // frame/panel pair: these planes are viewed from inside WALL_RADIUS, on
+    // their default-facing-outward side, which is otherwise culled.
+    //
+    // Deliberately NOT LODGE_BORDER (the wall's own diffuse color): a first
+    // pass used it for the door leaf and it visually vanished into the wall
+    // -- same hue, near-identical emissive baseline, no edge to read as "a
+    // door" at all under the sconces' raking light (verified live via pixel
+    // sampling: the leaf's rendered color was within a few RGB values of the
+    // bare wall a few units away). The whole point is a *visible* sealed
+    // door, not a literally invisible one, so the leaf gets its own darker
+    // aged-wood tone (echoing the document's book-cover brown) and the trim
+    // gets the same brighter gilt as the portrait frames, both distinct from
+    // LODGE_BORDER/LODGE_AMBER_DIM's wall-and-pilaster register.
+    const doorMat = new BABYLON.StandardMaterial('sealedDoorMat', scene);
+    doorMat.diffuseColor = BABYLON.Color3.FromHexString(DOCUMENT_COVER_COLOR);
+    doorMat.emissiveColor = BABYLON.Color3.FromHexString(DOCUMENT_COVER_COLOR).scale(0.35);
+    doorMat.specularColor = new BABYLON.Color3(0.04, 0.03, 0.02);
+    doorMat.backFaceCulling = false;
+
+    const frameMat = new BABYLON.StandardMaterial('sealedDoorFrameMat', scene);
+    frameMat.diffuseColor = BABYLON.Color3.FromHexString(LODGE_AMBER);
+    frameMat.emissiveColor = BABYLON.Color3.FromHexString(LODGE_GOLD).scale(0.25);
+    frameMat.specularColor = new BABYLON.Color3(0.05, 0.04, 0.02);
+    frameMat.backFaceCulling = false;
+
+    // Architrave: a slightly larger flush plane behind the leaves, same
+    // "gilt frame behind the picture" layering buildPortraitFrames uses.
+    const frameSpot = wallSpot(SEALED_DOOR_ANGLE, DRESSING_RADIUS);
+    const frame = BABYLON.MeshBuilder.CreatePlane(
+      'sealedDoorFrame',
+      { width: SEALED_DOOR_WIDTH + SEALED_DOOR_FRAME_MARGIN, height: SEALED_DOOR_HEIGHT + SEALED_DOOR_FRAME_MARGIN },
+      scene
+    );
+    frame.position.set(frameSpot.x, (SEALED_DOOR_HEIGHT + SEALED_DOOR_FRAME_MARGIN) / 2, frameSpot.z);
+    frame.rotation.y = frameSpot.rotationY;
+    frame.material = frameMat;
+
+    // Two door leaves, each a two-panel plane (a raised muntin rail splits
+    // high/low panels) -- reads as a shut double door, not a single slab.
+    const leafSpot = wallSpot(SEALED_DOOR_ANGLE, DRESSING_RADIUS - 0.02);
+    const tangentAngle = SEALED_DOOR_ANGLE + Math.PI / 2;
+    const leafWidth = SEALED_DOOR_WIDTH / 2 - 0.02;
+    [-1, 1].forEach(side => {
+      const offset = side * (SEALED_DOOR_WIDTH / 4);
+      const lx = leafSpot.x + Math.cos(tangentAngle) * offset;
+      const lz = leafSpot.z + Math.sin(tangentAngle) * offset;
+      const leaf = BABYLON.MeshBuilder.CreatePlane(
+        `sealedDoorLeaf-${side}`,
+        { width: leafWidth, height: SEALED_DOOR_HEIGHT },
+        scene
+      );
+      leaf.position.set(lx, SEALED_DOOR_HEIGHT / 2, lz);
+      leaf.rotation.y = leafSpot.rotationY;
+      leaf.material = doorMat;
+
+      // Raised muntin rail at ~40% height, same box-strip approach as the
+      // bookshelf boards -- just enough relief to read as a panel seam under
+      // the sconces' raking light, not a flat texture.
+      const rail = BABYLON.MeshBuilder.CreateBox(
+        `sealedDoorRail-${side}`,
+        { width: leafWidth - 0.06, height: 0.05, depth: 0.03 },
+        scene
+      );
+      rail.position.set(
+        leafSpot.x + Math.cos(tangentAngle) * offset,
+        SEALED_DOOR_HEIGHT * 0.4,
+        leafSpot.z + Math.sin(tangentAngle) * offset
+      );
+      rail.rotation.y = leafSpot.rotationY;
+      rail.material = frameMat;
+    });
+
+    // Brass escutcheon at handle height, centred on the seam between the two
+    // leaves -- a solid disc, deliberately no keyhole cut/aperture, so it
+    // reads as hardware on a door that doesn't open rather than an
+    // invitation to try.
+    const plateSpot = wallSpot(SEALED_DOOR_ANGLE, DRESSING_RADIUS - 0.03);
+    const escutcheon = BABYLON.MeshBuilder.CreateDisc('sealedDoorEscutcheon', { radius: 0.055 }, scene);
+    escutcheon.position.set(plateSpot.x, 1.0, plateSpot.z);
+    escutcheon.rotation.y = plateSpot.rotationY;
+    const escutcheonMat = new BABYLON.StandardMaterial('sealedDoorEscutcheonMat', scene);
+    escutcheonMat.emissiveColor = BABYLON.Color3.FromHexString(LODGE_GOLD).scale(0.6);
+    escutcheonMat.disableLighting = true;
+    escutcheonMat.backFaceCulling = false;
+    escutcheon.material = escutcheonMat;
+  }
+
   function buildWallDressing(scene) {
     buildTrimRing(scene, 'baseboard', 0.15, 0.3, LODGE_AMBER_DIM, 0.08);
     buildTrimRing(scene, 'chairRail', 1.3, 0.14, LODGE_GOLD, 0.15);
@@ -725,6 +843,7 @@ window.LodgeScene = (function () {
     buildPilasters(scene);
     buildPortraitFrames(scene);
     buildBookshelves(scene);
+    buildSealedDoor(scene);
   }
 
   // #34: "the document as object" -- the source provocation rendered as a
