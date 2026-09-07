@@ -26,6 +26,7 @@ window.Metrics = (function () {
     casting: 'Pre-convene casting',
     'citation-extraction': 'Citation extraction',
     'citation-grounding': 'Citation grounding',
+    'grounding-verify': 'Source verification (your uploads)',
   };
 
   function formatNum(n) {

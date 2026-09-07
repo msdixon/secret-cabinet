@@ -213,6 +213,26 @@
         </div>
 
         <button class="lodge-btn" id="verify-citations-btn" onclick="verifyCitations()">Verify Citations ⚑</button>
+
+        <!-- #514: user-supplied grounding -- a fourth citation-checking
+             tier, using material the researcher uploads for this session
+             only (never merged into the shared library; see
+             src/grounding.js's header). Folded behind its own menu, same as
+             Continue/Preserve, rather than sitting always-visible -- there's
+             nothing to act on until sources are actually uploaded. -->
+        <div class="menu-wrap">
+          <button class="lodge-btn" id="sources-btn" onclick="toggleAfterMenu('sources-menu')">Sources ▾</button>
+          <div class="lodge-menu" id="sources-menu">
+            <p class="export-dest-desc">Upload your own research material to check this meeting's citations against. Stays in this session only — never added to the shared library.</p>
+            <input type="file" id="grounding-file-input" accept=".txt,.md,.pdf" style="display:none;" onchange="handleGroundingFileSelect(this)" />
+            <button class="lodge-btn" data-keep-menu-open onclick="document.getElementById('grounding-file-input').click()">+ Add Source</button>
+            <div id="grounding-source-list" data-keep-menu-open></div>
+            <button class="lodge-btn" id="verify-grounding-btn" data-keep-menu-open onclick="verifyGrounding()" disabled>Verify Against My Sources ⚑</button>
+            <button class="lodge-btn" id="clear-grounding-btn" data-keep-menu-open onclick="clearGroundingSources()" disabled title="Remove all uploaded sources from this session" style="border-color:var(--lodge-ash);color:var(--lodge-ash);">Clear Sources</button>
+            <span class="source-tag" id="grounding-status"></span>
+          </div>
+        </div>
+
         <button class="lodge-btn" style="border-color:var(--lodge-ash);color:var(--lodge-ash);" onclick="startWitness()" title="Replay this meeting again from the start, paced by reading time">◎ Watch Again</button>
         <button class="lodge-btn" style="border-color:var(--lodge-ash);color:var(--lodge-ash);" onclick="window.Metrics.toggle()" title="Tokens, cost, and the director's casting rationale for this session">⚙ Metrics</button>
 

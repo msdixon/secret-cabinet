@@ -1198,6 +1198,7 @@ function showSessionControls() {
   document.getElementById('reveal-player-turns-btn').className =
     'lodge-btn' + (sessionPlayerTurns.length ? ' visible' : '');
   hideCitationVerifyResult();
+  refreshGroundingSummary();
   window.Export.updateScholarlyExportButton();
 }
 
@@ -1214,6 +1215,7 @@ function hideSessionControls() {
   document.getElementById('interject-form').style.display = 'none';
   closeAllAfterMenus();
   hideCitationVerifyResult();
+  hideGroundingUI();
 }
 
 // ── Citation verification ────────────────────────────────────────────────────
@@ -1232,6 +1234,7 @@ const CITATION_SOURCE_LABEL = {
   library: 'checked against curated text',
   web: 'checked via live lookup',
   'model-knowledge': "Claude's own knowledge",
+  'user-grounding': 'checked against your uploaded sources',
 };
 
 function applyCitationFlags(citations) {
@@ -1330,7 +1333,7 @@ function showCitationVerifyResult(citations) {
     el.hidden = true;
     return;
   }
-  const grounded = citations.filter(c => c.source === 'library' || c.source === 'web').length;
+  const grounded = citations.filter(c => c.source === 'library' || c.source === 'web' || c.source === 'user-grounding').length;
   el.innerHTML =
     `${grounded} of ${citations.length} citation${citations.length === 1 ? '' : 's'} grounded to a source` +
     ` — <button type="button" class="citation-verify-link" data-keep-menu-open onclick="openScholarlyExport()">Export Source Notes →</button>`;
@@ -1353,6 +1356,120 @@ function openScholarlyExport() {
   }
   window.Export.selectDestination('scholarly');
   document.getElementById('export-scholarly-btn')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
+// ── User-supplied grounding (#514) ───────────────────────────────────────────
+// A fourth, on-demand citation-checking tier alongside Verify Citations'
+// library/web grounding: the researcher's own uploaded material, kept
+// session-scoped and ephemeral entirely server-side (src/grounding.js).
+// Same client-side extraction split as export.js's handleFileSelect — .txt/
+// .md read locally, .pdf sent through the existing /api/upload route —
+// rather than a second extraction path here.
+
+async function handleGroundingFileSelect(input) {
+  const file = input.files[0];
+  if (!file) return;
+  if (!currentSessionId) {
+    input.value = '';
+    return;
+  }
+  const statusEl = document.getElementById('grounding-status');
+  statusEl.textContent = 'Reading…';
+
+  const ext = file.name.split('.').pop().toLowerCase();
+  try {
+    let text;
+    if (ext === 'pdf') {
+      const form = new FormData();
+      form.append('file', file);
+      const res = await fetch('/api/upload', { method: 'POST', body: form });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Upload failed');
+      text = data.text;
+    } else {
+      text = (await file.text()).trim();
+    }
+    await addGroundingSource(file.name, text);
+  } catch (e) {
+    statusEl.textContent = `Error: ${e.message}`;
+  } finally {
+    input.value = '';
+  }
+}
+
+async function addGroundingSource(filename, text) {
+  const statusEl = document.getElementById('grounding-status');
+  try {
+    const res = await fetch(`/api/sessions/${currentSessionId}/grounding`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename, text }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Could not add source');
+    statusEl.textContent = data.truncated ? `${filename} added (truncated to fit this session's cap).` : '';
+    renderGroundingSummary(data.summary);
+  } catch (e) {
+    statusEl.textContent = `Error: ${e.message}`;
+  }
+}
+
+async function refreshGroundingSummary() {
+  if (!currentSessionId) return;
+  try {
+    const summary = await fetch(`/api/sessions/${currentSessionId}/grounding`).then(r => r.json());
+    renderGroundingSummary(summary);
+  } catch (e) {
+    console.error('Could not load grounding summary', e);
+  }
+}
+
+function renderGroundingSummary(summary) {
+  const list = document.getElementById('grounding-source-list');
+  const verifyBtn = document.getElementById('verify-grounding-btn');
+  const clearBtn = document.getElementById('clear-grounding-btn');
+  if (!list) return;
+  const sources = summary?.sources || [];
+  list.innerHTML = sources
+    .map(s => `<div class="source-tag">${escapeHTML(s.filename)} (${s.chars.toLocaleString()} chars${s.truncated ? ', truncated' : ''})</div>`)
+    .join('');
+  verifyBtn.disabled = sources.length === 0;
+  clearBtn.disabled = sources.length === 0;
+}
+
+function hideGroundingUI() {
+  const list = document.getElementById('grounding-source-list');
+  const status = document.getElementById('grounding-status');
+  if (list) list.innerHTML = '';
+  if (status) status.textContent = '';
+  document.getElementById('verify-grounding-btn').disabled = true;
+  document.getElementById('clear-grounding-btn').disabled = true;
+}
+
+async function clearGroundingSources() {
+  if (!currentSessionId) return;
+  await fetch(`/api/sessions/${currentSessionId}/grounding`, { method: 'DELETE' });
+  hideGroundingUI();
+}
+
+async function verifyGrounding() {
+  if (!currentSessionId) return;
+  const btn = document.getElementById('verify-grounding-btn');
+  btn.disabled = true;
+  setStatus('Checking citations against your sources...', true);
+  try {
+    const res = await fetch(`/api/sessions/${currentSessionId}/verify-grounding`, { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Verification failed');
+    applyCitationFlags(data.citations);
+    window.Export.updateScholarlyExportButton();
+    setStatus(`${data.citations.length} citation${data.citations.length === 1 ? '' : 's'} reviewed.`, false);
+    showCitationVerifyResult(data.citations);
+  } catch (err) {
+    setError('Verification against your sources failed.', verifyGrounding);
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 // ── Player turn markers ──────────────────────────────────────────────────────

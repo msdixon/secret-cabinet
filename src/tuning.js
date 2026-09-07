@@ -238,6 +238,60 @@ const MAX_INVOKED_PER_BEAT = 6;
 const INVOKED_WORK_MAX_CHARS = 160;
 const INVOKED_NOTE_MAX_CHARS = 240;
 
+// ── User-supplied grounding (src/grounding.js) ─────────────────────────────
+
+// #514: guardrail-by-default, session-scoped — a researcher's own uploaded
+// bibliography only ever narrows/corrects a citation the model already made,
+// never grows the material a member's turn is generated from. Caps below are
+// this ticket's five cost levers made concrete; see grounding.js's header for
+// how they fit together.
+
+// A hard ceiling on total uploaded material per session, not per file — a
+// Zotero export is realistically dozens of PDFs, and this is meant to bound
+// worst-case memory/search cost (everything lives in-process, per #514's
+// ephemeral-not-persisted decision) rather than accommodate any one
+// document's full length. ~600K chars is generously a few hundred pages of
+// plain text; well past that, per-claim keyword/TF-IDF search over it stops
+// being "midline cost" and starts being the full-corpus RAG the issue
+// explicitly ruled out.
+const MAX_GROUNDING_CHARS_PER_SESSION = 600000;
+const MAX_GROUNDING_SOURCES_PER_SESSION = 40; // a generous bibliography's worth of separate files, not an open-ended pile
+
+// #514 cost lever 5 — size-gated retrieval. Below this many total characters
+// of uploaded material, a claim is checked with plain keyword/containment
+// search directly over chunked text (cheap, no precomputation); at or above
+// it, a session-scoped chunk index is built once (with per-term document
+// frequencies) and scored by TF-IDF instead, so retrieval quality doesn't
+// collapse once a corpus is big enough that most chunks contain at least one
+// query word. No embeddings provider is wired into this codebase (Anthropic
+// doesn't offer one directly, and adding a separate provider/key is its own
+// infrastructure decision) — TF-IDF over a session-scoped index is the
+// concrete stand-in for the issue's "embedding-based retrieval" tier, same
+// build-once/score-per-claim/discard-at-session-end shape.
+const GROUNDING_KEYWORD_SEARCH_CHAR_THRESHOLD = 40000;
+const GROUNDING_CHUNK_CHARS = 1200; // similar order of magnitude to a curated library excerpt (citations.js's groundAgainstLibraryText)
+const GROUNDING_RETRIEVAL_TOP_K = 3; // passages shown per claim being checked — enough to give the model real context, not the whole corpus
+
+// #514 cost lever 2 — triage before spending a call. A citation needs a real
+// quote of some length to be checkable against retrieved text at all; below
+// this, there's nothing substantive to search for (a bare name or a few
+// words matches too much or too little to mean anything).
+const GROUNDING_MIN_QUOTE_CHARS_FOR_CHECK = 20;
+
+// #514 cost lever 3 — a hard cap on verification calls per session, counted
+// as claims actually sent to the model for a judgment (a claim that comes up
+// empty on retrieval is triaged out before this, and costs nothing). Same
+// order of magnitude as MAX_WEB_ESCALATIONS (citations.js) — a bibliography
+// upload is the user's own material, not a shared public resource, so the
+// constraint here is model spend rather than rate-limiting someone else's
+// API, but "keep it midline" argues for the same rough ceiling.
+const MAX_GROUNDING_VERIFICATIONS_PER_SESSION = 30;
+// Per invocation of the verify action, batched into one call (same "one
+// batched call, not one each" discipline as groundAgainstLibraryText) —
+// separate from the cumulative per-session cap above so one run can't spend
+// the whole session's budget on a single burst of citations.
+const MAX_GROUNDING_RESULTS_PER_VERIFY_CALL = 10;
+
 // ── Splinter exchanges (pipeline-splinter.js) ──────────────────────────────
 
 // #196: a splinter is the other resolution of the same interrupt-intent
@@ -318,6 +372,14 @@ module.exports = {
   MAX_INVOKED_PER_BEAT,
   INVOKED_WORK_MAX_CHARS,
   INVOKED_NOTE_MAX_CHARS,
+  MAX_GROUNDING_CHARS_PER_SESSION,
+  MAX_GROUNDING_SOURCES_PER_SESSION,
+  GROUNDING_KEYWORD_SEARCH_CHAR_THRESHOLD,
+  GROUNDING_CHUNK_CHARS,
+  GROUNDING_RETRIEVAL_TOP_K,
+  GROUNDING_MIN_QUOTE_CHARS_FOR_CHECK,
+  MAX_GROUNDING_VERIFICATIONS_PER_SESSION,
+  MAX_GROUNDING_RESULTS_PER_VERIFY_CALL,
   DEFAULT_POOL_SIZE,
   INTERJECT_SPEAKER_COUNT,
   ARC_STAGE_BOUNDARIES,
