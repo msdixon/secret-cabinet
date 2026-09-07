@@ -74,7 +74,7 @@ test('addGroundingSource / getGroundingSummary / hasGrounding', async t => {
 });
 
 test('clearGrounding', async t => {
-  await t.test('removes a session\'s uploaded material entirely', () => {
+  await t.test("removes a session's uploaded material entirely", () => {
     const sid = freshSid();
     g.addGroundingSource(sid, 'notes.txt', 'Some content.');
     assert.equal(g.hasGrounding(sid), true);
@@ -274,7 +274,12 @@ test('verifyClaimsAgainstGrounding', async t => {
     };
     const citation = { quote: 'the ritual dagger gleamed under candlelight', work: 'Some Work' };
     for (let i = 0; i < tuning.MAX_GROUNDING_VERIFICATIONS_PER_SESSION; i += 1) {
-      await g.verifyClaimsAgainstGrounding({ client: fakeClient, model: 'test-model', sessionId: sid, citations: [citation] });
+      await g.verifyClaimsAgainstGrounding({
+        client: fakeClient,
+        model: 'test-model',
+        sessionId: sid,
+        citations: [citation],
+      });
     }
     assert.equal(g.getGroundingSummary(sid).verificationsRemaining, 0);
     let calledAfterCap = false;

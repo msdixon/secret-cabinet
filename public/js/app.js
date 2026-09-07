@@ -1333,7 +1333,9 @@ function showCitationVerifyResult(citations) {
     el.hidden = true;
     return;
   }
-  const grounded = citations.filter(c => c.source === 'library' || c.source === 'web' || c.source === 'user-grounding').length;
+  const grounded = citations.filter(
+    c => c.source === 'library' || c.source === 'web' || c.source === 'user-grounding'
+  ).length;
   el.innerHTML =
     `${grounded} of ${citations.length} citation${citations.length === 1 ? '' : 's'} grounded to a source` +
     ` — <button type="button" class="citation-verify-link" data-keep-menu-open onclick="openScholarlyExport()">Export Source Notes →</button>`;
@@ -1431,7 +1433,10 @@ function renderGroundingSummary(summary) {
   if (!list) return;
   const sources = summary?.sources || [];
   list.innerHTML = sources
-    .map(s => `<div class="source-tag">${escapeHTML(s.filename)} (${s.chars.toLocaleString()} chars${s.truncated ? ', truncated' : ''})</div>`)
+    .map(
+      s =>
+        `<div class="source-tag">${escapeHTML(s.filename)} (${s.chars.toLocaleString()} chars${s.truncated ? ', truncated' : ''})</div>`
+    )
     .join('');
   verifyBtn.disabled = sources.length === 0;
   clearBtn.disabled = sources.length === 0;

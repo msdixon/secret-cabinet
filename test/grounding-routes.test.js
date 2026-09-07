@@ -149,7 +149,7 @@ test('GET /api/sessions/:id/grounding', async t => {
 });
 
 test('DELETE /api/sessions/:id/grounding', async t => {
-  await t.test('clears an existing session\'s uploaded sources', () => {
+  await t.test("clears an existing session's uploaded sources", () => {
     const dir = makeFixtureDir();
     t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
     store.saveSession(dir, baseSession('s3'));
@@ -206,7 +206,9 @@ test('POST /api/sessions/:id/verify-grounding', async t => {
               {
                 memberId: 'crowley',
                 text: 'Hello.',
-                citations: [{ quote: 'the ritual dagger gleamed under candlelight', work: 'A Work', libraryMatch: null }],
+                citations: [
+                  { quote: 'the ritual dagger gleamed under candlelight', work: 'A Work', libraryMatch: null },
+                ],
               },
             ],
           },
@@ -218,9 +220,7 @@ test('POST /api/sessions/:id/verify-grounding', async t => {
       messages: {
         create: async () => ({
           usage: { input_tokens: 1, output_tokens: 1 },
-          content: [
-            { type: 'tool_use', input: { verdicts: [{ index: 0, verdict: 'confirmed', note: 'Matches.' }] } },
-          ],
+          content: [{ type: 'tool_use', input: { verdicts: [{ index: 0, verdict: 'confirmed', note: 'Matches.' }] } }],
         }),
       },
     };
@@ -256,7 +256,9 @@ test('POST /api/sessions/:id/verify-grounding', async t => {
             label: 'First Movement',
             text: 'Crowley\nHello.',
             historyLength: 2,
-            beats: [{ memberId: 'crowley', text: 'Hello.', citations: [{ quote: 'unrelated quote here', work: 'A Work' }] }],
+            beats: [
+              { memberId: 'crowley', text: 'Hello.', citations: [{ quote: 'unrelated quote here', work: 'A Work' }] },
+            ],
           },
         ],
         citationFlags: [{ quote: 'unrelated quote here', work: 'A Work', verdict: 'verified', source: 'web' }],
@@ -265,7 +267,10 @@ test('POST /api/sessions/:id/verify-grounding', async t => {
     const app = fakeApp();
     registerGroundingRoutes(app, makeDeps(dir));
     app.routes['POST /api/sessions/:id/grounding'](
-      fakeReq({ params: { id: 's6' }, body: { filename: 'notes.txt', text: 'Completely unrelated gardening content.' } }),
+      fakeReq({
+        params: { id: 's6' },
+        body: { filename: 'notes.txt', text: 'Completely unrelated gardening content.' },
+      }),
       fakeRes()
     );
 
@@ -290,7 +295,11 @@ test('POST /api/sessions/:id/verify-grounding', async t => {
             text: 'Crowley\nHello.',
             historyLength: 2,
             beats: [
-              { memberId: 'crowley', text: 'Hello.', citations: [{ quote: 'the ritual dagger gleamed under candlelight', work: 'A Work' }] },
+              {
+                memberId: 'crowley',
+                text: 'Hello.',
+                citations: [{ quote: 'the ritual dagger gleamed under candlelight', work: 'A Work' }],
+              },
             ],
           },
         ],

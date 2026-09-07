@@ -77,11 +77,14 @@ function addGroundingSource(sessionId, filename, text) {
 
   const entry = getOrInit(sessionId);
   if (entry.sources.length >= MAX_GROUNDING_SOURCES_PER_SESSION) {
-    return { added: false, error: `This session already has ${MAX_GROUNDING_SOURCES_PER_SESSION} sources — that's the cap` };
+    return {
+      added: false,
+      error: `This session already has ${MAX_GROUNDING_SOURCES_PER_SESSION} sources — that's the cap`,
+    };
   }
   const remaining = MAX_GROUNDING_CHARS_PER_SESSION - entry.text.length;
   if (remaining <= 0) {
-    return { added: false, error: 'This session\'s uploaded material is already at its size cap' };
+    return { added: false, error: "This session's uploaded material is already at its size cap" };
   }
 
   const truncated = clean.length > remaining;
@@ -139,9 +142,37 @@ function buildChunks(text) {
 }
 
 const STOPWORDS = new Set([
-  'the', 'and', 'of', 'a', 'an', 'to', 'in', 'on', 'by', 'or', 'from', 'with',
-  'his', 'her', 'their', 'is', 'was', 'were', 'that', 'this', 'as', 'at', 'it',
-  'be', 'are', 'for', 'not', 'but', 'had', 'has', 'have',
+  'the',
+  'and',
+  'of',
+  'a',
+  'an',
+  'to',
+  'in',
+  'on',
+  'by',
+  'or',
+  'from',
+  'with',
+  'his',
+  'her',
+  'their',
+  'is',
+  'was',
+  'were',
+  'that',
+  'this',
+  'as',
+  'at',
+  'it',
+  'be',
+  'are',
+  'for',
+  'not',
+  'but',
+  'had',
+  'has',
+  'have',
 ]);
 function tokenize(s) {
   return (s || '')
