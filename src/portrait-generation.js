@@ -119,7 +119,7 @@ const ANGRY_VARIANT_BY_MEMBER = {
 // — the same referenceImages mechanism the reaction prompts above already
 // use, but anchoring physical accuracy rather than overriding expression.
 const BASE_LIKENESS_ANCHOR_META =
-  "The attached photograph is a real, documented archival likeness reference for this person. Render this exact individual — match their actual facial structure, build, proportions, and distinguishing features (age, weight, hairline, etc.) as shown in the reference — rather than a generic or idealized version of them. Do not slim, de-age, or otherwise flatter the subject relative to the reference photo. Use the reference only for likeness/physical accuracy; render in the style described below, not as a direct photographic reproduction of the reference image itself.";
+  'The attached photograph is a real, documented archival likeness reference for this person. Render this exact individual — match their actual facial structure, build, proportions, and distinguishing features (age, weight, hairline, etc.) as shown in the reference — rather than a generic or idealized version of them. Do not slim, de-age, or otherwise flatter the subject relative to the reference photo. Use the reference only for likeness/physical accuracy; render in the style described below, not as a direct photographic reproduction of the reference image itself.';
 
 function buildLikenessAnchoredBasePrompt(promptText) {
   return `${BASE_LIKENESS_ANCHOR_META} ${promptText}`;
