@@ -18,6 +18,10 @@ const record = require('../../public/js/record.js');
 // out of a session — see citations.js's own header for the rest of the
 // module, which this route still uses for the deliberate grounding pass.
 const { flattenBeatCitations } = require('../citations');
+// #514: a deleted session's uploaded grounding material has nowhere left to
+// live — see grounding.js's header for why it's never persisted to disk in
+// the first place, so this is the one place it needs an explicit cleanup.
+const { clearGrounding } = require('../grounding');
 
 // #178: validates a requested publishedRounds selection down to the
 // in-bounds integer indices it actually contains, deduped and sorted so
@@ -308,6 +312,7 @@ function registerSessionRoutes(
     if (!fs.existsSync(p)) return res.status(404).json({ error: 'Session not found' });
     try {
       fs.unlinkSync(p);
+      clearGrounding(req.params.id);
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ error: 'Failed to delete session' });

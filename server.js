@@ -52,6 +52,7 @@ const { registerUploadRoutes } = require('./src/routes/upload');
 const { registerMemberRoutes } = require('./src/routes/member');
 const { registerExportRoutes } = require('./src/routes/export');
 const { registerSessionRoutes } = require('./src/routes/session');
+const { registerGroundingRoutes } = require('./src/routes/grounding');
 const { registerConveneRoutes } = require('./src/routes/convene');
 const { registerVoiceRoutes } = require('./src/routes/voice');
 
@@ -501,6 +502,14 @@ registerSessionRoutes(app, {
   buildBibliography: sessions => bibliography.buildBibliography(sessions, ROSTER, loadBibliographyLibraryEntries()),
   renderBibliographyPage: sessions =>
     bibliography.renderBibliographyPage(sessions, ROSTER, loadBibliographyLibraryEntries()),
+});
+
+registerGroundingRoutes(app, {
+  client,
+  model: MODEL,
+  loadSession,
+  saveSession,
+  roster: ROSTER,
 });
 
 registerVoiceRoutes(app, {
