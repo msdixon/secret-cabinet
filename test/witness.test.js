@@ -604,15 +604,16 @@ test('replay: prefetch (#527) — the next speech beat starts loading while this
   await t.test('start() prefetches the first speech beat, and each advance() prefetches the one after', async t2 => {
     const calls = [];
     const loaded = loadPublicModule('witness.js', FIXTURE, window => {
-      window.Voice = { speak: () => undefined, prefetch: (text, memberId) => calls.push({ text, memberId }), stop: () => {} };
+      window.Voice = {
+        speak: () => undefined,
+        prefetch: (text, memberId) => calls.push({ text, memberId }),
+        stop: () => {},
+      };
     });
     t2.after(loaded.cleanup);
     const { module: Witness } = loaded;
 
-    await Witness.start(
-      { rounds: [{ label: 'Round I', text: 'Crowley:\nOne.\n\nBlavatsky:\nTwo.' }] },
-      makeDeps()
-    );
+    await Witness.start({ rounds: [{ label: 'Round I', text: 'Crowley:\nOne.\n\nBlavatsky:\nTwo.' }] }, makeDeps());
     // start() renders block 0 (the "Round I" header) and, per advance()'s own
     // #527 comment, immediately prefetches block 1 -- the header is on
     // screen well before Crowley's line is due.
@@ -638,7 +639,11 @@ test('replay: prefetch (#527) — the next speech beat starts loading while this
   await t.test('a non-speech block (a round header) coming up next is not passed to prefetch()', async t2 => {
     const calls = [];
     const loaded = loadPublicModule('witness.js', FIXTURE, window => {
-      window.Voice = { speak: () => undefined, prefetch: (text, memberId) => calls.push({ text, memberId }), stop: () => {} };
+      window.Voice = {
+        speak: () => undefined,
+        prefetch: (text, memberId) => calls.push({ text, memberId }),
+        stop: () => {},
+      };
     });
     t2.after(loaded.cleanup);
     const { module: Witness } = loaded;
@@ -1934,7 +1939,11 @@ test('live prefetch (#527): the turn one behind the one now playing starts loadi
       t2.mock.timers.enable({ apis: ['setTimeout'] });
       const calls = [];
       const loaded = loadPublicModule('witness.js', FIXTURE, window => {
-        window.Voice = { speak: () => undefined, prefetch: (text, memberId) => calls.push({ text, memberId }), stop: () => {} };
+        window.Voice = {
+          speak: () => undefined,
+          prefetch: (text, memberId) => calls.push({ text, memberId }),
+          stop: () => {},
+        };
       });
       t2.after(loaded.cleanup);
       const { module: Witness } = loaded;
@@ -1961,7 +1970,11 @@ test('live prefetch (#527): the turn one behind the one now playing starts loadi
       t2.mock.timers.enable({ apis: ['setTimeout'] });
       const calls = [];
       const loaded = loadPublicModule('witness.js', FIXTURE, window => {
-        window.Voice = { speak: () => undefined, prefetch: (text, memberId) => calls.push({ text, memberId }), stop: () => {} };
+        window.Voice = {
+          speak: () => undefined,
+          prefetch: (text, memberId) => calls.push({ text, memberId }),
+          stop: () => {},
+        };
       });
       t2.after(loaded.cleanup);
       const { document, module: Witness } = loaded;
@@ -1976,7 +1989,7 @@ test('live prefetch (#527): the turn one behind the one now playing starts loadi
       assert.deepEqual(
         calls,
         [{ text: 'Three.', memberId: 'crowley' }],
-        "once \"Two.\" takes the floor, \"Three.\" is now one behind it and should start loading -- this happens inside " +
+        'once "Two." takes the floor, "Three." is now one behind it and should start loading -- this happens inside ' +
           'advanceLiveTurnQueue() as the queue shifts, with no liveSpeech() call of its own to trigger it'
       );
       const entries = document.querySelectorAll('#witness-stage .transcript-entry .speech-text');
