@@ -249,6 +249,77 @@ test('POST /api/members', async t => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
+  await t.test(
+    '#541: with no sourced likeness reference for the new member, the baseline call is unchanged (prompt-only)',
+    async () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'member-routes-test-'));
+      const rosterFile = path.join(dir, 'roster.json');
+      const pendingPortraitPromptsFile = path.join(dir, 'PENDING-PROMPTS.md');
+      const portraitCandidatesDir = path.join(dir, 'candidates');
+      const likenessRefsDir = path.join(dir, 'likeness-refs'); // deliberately never created
+      const app = fakeApp();
+      const calls = [];
+      const deps = makeDeps({
+        membersDir: dir,
+        rosterFile,
+        pendingPortraitPromptsFile,
+        portraitCandidatesDir,
+        likenessRefsDir,
+        geminiApiKey: 'test-gemini-key',
+        generatePortraitImage: async ({ prompt, referenceImages }) => {
+          calls.push({ prompt, referenceImages });
+          return Buffer.from('fake-png-bytes');
+        },
+      });
+      registerMemberRoutes(app, deps);
+      const res = fakeRes();
+      await app.routes['POST /api/members'](fakeReq({ body: { name: 'No Reference Member', bio: 'A bio.' } }), res);
+
+      assert.equal(calls[0].prompt, 'GENERATED FILE');
+      assert.equal(calls[0].referenceImages, undefined);
+
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  );
+
+  await t.test(
+    '#541: with a sourced likeness reference for the new member, anchors the baseline call to it',
+    async () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'member-routes-test-'));
+      const rosterFile = path.join(dir, 'roster.json');
+      const pendingPortraitPromptsFile = path.join(dir, 'PENDING-PROMPTS.md');
+      const portraitCandidatesDir = path.join(dir, 'candidates');
+      const likenessRefsDir = path.join(dir, 'likeness-refs');
+      fs.mkdirSync(likenessRefsDir, { recursive: true });
+      fs.writeFileSync(path.join(likenessRefsDir, 'referenced-member.jpg'), 'fake-reference-jpeg-bytes');
+      const app = fakeApp();
+      const calls = [];
+      const deps = makeDeps({
+        membersDir: dir,
+        rosterFile,
+        pendingPortraitPromptsFile,
+        portraitCandidatesDir,
+        likenessRefsDir,
+        geminiApiKey: 'test-gemini-key',
+        generatePortraitImage: async ({ prompt, referenceImages }) => {
+          calls.push({ prompt, referenceImages });
+          return Buffer.from('fake-png-bytes');
+        },
+      });
+      registerMemberRoutes(app, deps);
+      const res = fakeRes();
+      await app.routes['POST /api/members'](fakeReq({ body: { name: 'Referenced Member', bio: 'A bio.' } }), res);
+
+      assert.match(calls[0].prompt, /GENERATED FILE$/);
+      assert.match(calls[0].prompt, /do not slim, de-age/i);
+      assert.deepEqual(calls[0].referenceImages, [
+        { mimeType: 'image/jpeg', data: Buffer.from('fake-reference-jpeg-bytes') },
+      ]);
+
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  );
+
   await t.test('#450: also drafts a reaction candidate per reaction, anchored on the baseline image', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'member-routes-test-'));
     const rosterFile = path.join(dir, 'roster.json');

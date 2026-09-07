@@ -219,6 +219,11 @@ const PENDING_PORTRAIT_PROMPTS_FILE = path.join(PORTRAITS_DIR, 'PENDING-PROMPTS.
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || null;
 const PORTRAIT_CANDIDATES_DIR = path.join(PORTRAITS_DIR, 'candidates');
 
+// #541 — plain archival likeness photos, sourced per-member as a
+// referenceImages anchor for base-portrait generation. See
+// public/portraits/likeness-refs/metadata.json.
+const LIKENESS_REFS_DIR = path.join(PORTRAITS_DIR, 'likeness-refs');
+
 function loadMemberFile(filename) {
   return roster.loadMemberFile(MEMBERS_DIR, filename);
 }
@@ -468,6 +473,7 @@ registerMemberRoutes(app, {
   pendingPortraitPromptsFile: PENDING_PORTRAIT_PROMPTS_FILE,
   geminiApiKey: GEMINI_API_KEY,
   portraitCandidatesDir: PORTRAIT_CANDIDATES_DIR,
+  likenessRefsDir: LIKENESS_REFS_DIR,
 });
 
 registerExportRoutes(app, {

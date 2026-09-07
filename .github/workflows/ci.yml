@@ -54,18 +54,20 @@ jobs:
         if: steps.filter.outputs.library == 'true'
         run: node scripts/verify-library-sources.js
 
-      # Report-only on purpose: the first real `npm run lint` pass found 13
-      # pre-existing findings (dead exports, unused params, one already-known
-      # bug in public/export.js flagged in a code comment). continue-on-error
-      # stays here until a few consecutive clean weeks confirm no backlog is
-      # accumulating — then drop it so lint/format actually gate merges.
-      - name: Lint (report-only)
+      # Hard gate as of #496/#544: continue-on-error stayed on since #35's
+      # 2026-08-12 baseline (13 findings) but the backlog oscillated instead
+      # of shrinking -- three manual resets in the week before this change,
+      # each regrowing within 1-4 days (see #496's history table). The root
+      # cause was this flag itself: continue-on-error means the step reports
+      # success regardless of its actual exit code, so a PR reintroducing
+      # drift still showed a green CI run with nothing prompting a fix
+      # before merge. Confirmed clean against a fresh CI run on #544 before
+      # removing it here.
+      - name: Lint
         run: npm run lint
-        continue-on-error: true
 
-      - name: Format check (report-only)
+      - name: Format check
         run: npm run format:check
-        continue-on-error: true
 
       # #137 — unit suite (node:test + jsdom). No server, no API key; runs
       # before the smoke test so a logic regression fails fast and reports as

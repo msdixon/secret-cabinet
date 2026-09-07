@@ -1,0 +1,14 @@
+{
+  "_comment": "Plain archival photographic likeness references, one entry per roster member id, used as a `referenceImages` anchor when generating or regenerating that member's base portrait (#541) — a different purpose from public/archive/metadata.json, which anchors book-cover thumbnails to library citations (#30). A reference here must be a plain, reasonably representative likeness photo (not a stylized/staged/costumed image) so the model has real visual ground truth to correct against, per public/portraits/STYLE_GUIDE.md's 'Photographed' likeness tier. Not every roster member will have an entry — only 'Photographed'-tier members for whom a suitable plain photo has been sourced and confirmed; the rest is a deliberately deferred audit (see the STYLE_GUIDE.md Changelog).",
+  "license": "Public domain or no-known-restrictions per the source item's own listing; verify per-item before any use outside this app.",
+  "entries": {
+    "crowley": {
+      "image": "portraits/likeness-refs/crowley.jpg",
+      "source": "Wikimedia Commons",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File:Aleister_Crowley,_thinker.jpg",
+      "license": "Public domain (PD-old-70-expired / CC-PD-Mark, per the file's own Commons listing)",
+      "credit": "Aleister Crowley, self-portrait, circa 1925",
+      "notes": "Chosen over the existing public/archive/crowley-golden-dawn-1900.jpg (a stylized Penguin book-cover photo of a ~25-year-old Crowley in ritual hood, 1900) because that image is staged/costumed, not a plain likeness reference, and predates the heavier, jowlier 'Great Beast' era (1920s-30s Abbey of Thelema) Rachel's 2026-09-03 critique of the generated base portrait specifically called out as under-represented. This photo (circa 1925) is a plain studio headshot in ordinary dress showing exactly that later build and face."
+    }
+  }
+}
