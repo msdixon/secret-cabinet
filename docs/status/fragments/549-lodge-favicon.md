@@ -1,0 +1,1 @@
+Added a browser-tab favicon — a single watching eye in the app's warm sepia/etching register, chosen over hearth-flame/sigil/monogram alternatives as classic esoteric-society iconography that reads as "secret" at a glance. See [#549](https://github.com/msdixon/secret-cabinet/pull/549).
