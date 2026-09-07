@@ -27,6 +27,7 @@ function registerMemberRoutes(
     pendingPortraitPromptsFile,
     geminiApiKey,
     portraitCandidatesDir,
+    likenessRefsDir = null,
     generatePortraitImage = portraitGeneration.generatePortraitImage,
   }
 ) {
@@ -201,7 +202,28 @@ ${relationships || '(not specified — infer from historical record)'}`;
       const reactionCandidatePaths = {};
       if (geminiApiKey && portraitPromptText) {
         try {
-          const imageBuffer = await generatePortraitImage({ apiKey: geminiApiKey, prompt: portraitPromptText });
+          // #541 — if a plain archival likeness photo has already been sourced
+          // for this member (public/portraits/likeness-refs/<id>.*, per that
+          // directory's metadata.json), anchor the base-portrait generation to
+          // it via referenceImages instead of relying on the drafted prompt's
+          // prose alone — the same gap that let Crowley's base portrait drift
+          // toward a young, over-romanticized likeness with no verified source
+          // to correct it. No sourced reference is the common case for a
+          // brand-new member (sourcing one isn't something this endpoint can
+          // do unattended), so this is opportunistic: falls back to the prior
+          // text-only behavior when nothing is found.
+          const likenessRefPath = findLikenessReference(likenessRefsDir, id);
+          const basePrompt = likenessRefPath
+            ? portraitGeneration.buildLikenessAnchoredBasePrompt(portraitPromptText)
+            : portraitPromptText;
+          const baseReferenceImages = likenessRefPath
+            ? [{ mimeType: mimeTypeForImagePath(likenessRefPath), data: fs.readFileSync(likenessRefPath) }]
+            : undefined;
+          const imageBuffer = await generatePortraitImage({
+            apiKey: geminiApiKey,
+            prompt: basePrompt,
+            ...(baseReferenceImages ? { referenceImages: baseReferenceImages } : {}),
+          });
           fs.mkdirSync(portraitCandidatesDir, { recursive: true });
           fs.writeFileSync(path.join(portraitCandidatesDir, `${id}.png`), imageBuffer);
           portraitCandidatePath = `public/portraits/candidates/${id}.png`;
@@ -327,6 +349,27 @@ function appendPendingPortraitPrompt(pendingPortraitPromptsFile, portraitPrompt)
     ? ''
     : `# Pending Portrait Prompts\n\nAuto-drafted, one entry per member added via the in-app "Add Member" flow ([#259](https://github.com/msdixon/secret-cabinet/issues/259)) — ready to paste into whatever image-generation tool is currently in use (Nano Banana, as of this writing), same convention as [BATCH-1-PROMPTS.md](BATCH-1-PROMPTS.md) and [WAVE-4-PROMPTS.md](WAVE-4-PROMPTS.md). Once an entry's image is generated, resized to 512px on the long edge, and placed at \`public/portraits/<id>.png\` per [STYLE_GUIDE.md](STYLE_GUIDE.md)'s Process, delete the entry here and log the placement in STYLE_GUIDE.md's Changelog, same as every prior batch.\n\n---\n\n`;
   fs.appendFileSync(pendingPortraitPromptsFile, `${header}${portraitPrompt}\n\n---\n\n`, 'utf8');
+}
+
+// #541 — looks for a sourced likeness reference photo at
+// <likenessRefsDir>/<id>.{jpg,jpeg,png}. Returns its path, or null if
+// likenessRefsDir wasn't configured or no matching file exists (the common
+// case — sourcing a reference is a manual step, not something this endpoint
+// does on its own).
+const LIKENESS_REF_EXTENSIONS = ['.jpg', '.jpeg', '.png'];
+
+function findLikenessReference(likenessRefsDir, id) {
+  if (!likenessRefsDir) return null;
+  for (const ext of LIKENESS_REF_EXTENSIONS) {
+    const candidate = path.join(likenessRefsDir, `${id}${ext}`);
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
+function mimeTypeForImagePath(imagePath) {
+  const ext = path.extname(imagePath).toLowerCase();
+  return ext === '.png' ? 'image/png' : 'image/jpeg';
 }
 
 module.exports = { registerMemberRoutes };

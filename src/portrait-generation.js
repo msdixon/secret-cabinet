@@ -107,6 +107,24 @@ const ANGRY_VARIANT_BY_MEMBER = {
   adorno: 'icy',
 };
 
+// #541 — every base portrait was generated from a text prompt only, with no
+// archival photo attached as a `referenceImages` anchor, so the model filled
+// in likeness from its own training association rather than a verified
+// source (confirmed concretely on Crowley: the generated base skewed young,
+// slim, and "over-romanticized" against the heavier, jowlier man his actual
+// 1920s-30s photographs show). This wraps a drafted base-portrait prompt with
+// an explicit anchoring instruction for the "Photographed" likeness tier,
+// once a real reference photo has been sourced to
+// public/portraits/likeness-refs/<id>.* (see that directory's metadata.json)
+// — the same referenceImages mechanism the reaction prompts above already
+// use, but anchoring physical accuracy rather than overriding expression.
+const BASE_LIKENESS_ANCHOR_META =
+  "The attached photograph is a real, documented archival likeness reference for this person. Render this exact individual — match their actual facial structure, build, proportions, and distinguishing features (age, weight, hairline, etc.) as shown in the reference — rather than a generic or idealized version of them. Do not slim, de-age, or otherwise flatter the subject relative to the reference photo. Use the reference only for likeness/physical accuracy; render in the style described below, not as a direct photographic reproduction of the reference image itself.";
+
+function buildLikenessAnchoredBasePrompt(promptText) {
+  return `${BASE_LIKENESS_ANCHOR_META} ${promptText}`;
+}
+
 const REACTION_EXPRESSION_OVERRIDE_META =
   "This is a photo-editing task. The attached reference photo shows this person with a neutral, resting expression. Match the reference image's exact facial structure, likeness, skin tone, headwear, and attire — do not alter identity, age, or ethnicity. You must NOT reuse or approximate the reference photo's facial expression under any circumstances — that neutral expression is the one thing you must change. Use the reference ONLY to match likeness/attire/background, including eye color and darkness exactly as in the reference (do not lighten, recolor, or add any glow to the eyes). His or her expression in your output must be a completely different, strongly and unmistakably expressed emotion, described below. If your output's face looks close to the reference's expression, you have failed the task.";
 
@@ -144,4 +162,6 @@ module.exports = {
   ANGRY_EXPRESSION_ICY,
   ANGRY_VARIANT_BY_MEMBER,
   buildReactionPrompt,
+  BASE_LIKENESS_ANCHOR_META,
+  buildLikenessAnchoredBasePrompt,
 };
