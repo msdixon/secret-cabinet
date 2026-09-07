@@ -33,7 +33,12 @@
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
-const { generatePortraitImage, buildLikenessAnchoredBasePrompt, buildReactionPrompt, REACTION_TYPES } = require('../src/portrait-generation');
+const {
+  generatePortraitImage,
+  buildLikenessAnchoredBasePrompt,
+  buildReactionPrompt,
+  REACTION_TYPES,
+} = require('../src/portrait-generation');
 
 const ROOT = path.join(__dirname, '..');
 const PORTRAITS_DIR = path.join(ROOT, 'public', 'portraits');
