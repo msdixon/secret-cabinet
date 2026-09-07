@@ -69,14 +69,54 @@ const PASS_TURN_CREDIT = 0.5;
 
 // ── Speaker-order weighting (pipeline-speaker.js) ──────────────────────────
 
-// Seed data, not a researched claim about every historical figure's real
-// prose style — only the two personas the #164 design doc named explicitly
-// as needing room to run long. Expand this as real sessions surface more
-// per-member tendencies (see the 2026-08-19 follow-up).
+// #512 phase 1: was hand-tagged seed data — only the two personas the #164
+// design doc named explicitly as needing room to run long, with the other
+// 36+ members defaulting to 'medium' regardless of who they actually are.
+// Replaced with a static, computed-once derivation from each member's own
+// #187 voice exemplar (their authored library excerpt): average words per
+// sentence, bucketed by quartile against the rest of the roster (bottom
+// quartile 'terse', top quartile 'expansive', interquartile middle half
+// left out of this map and so 'medium' by lengthTendencyOf's fallback
+// below). See scripts/derive-length-tendency.js for the full method and
+// rationale, and re-run it whenever the library changes — the object below
+// is its output, not hand-edited.
+//
+// Notably, this reshuffles both of the old hand-picked entries: Crowley's
+// own authored excerpt reads with short, declarative sentences (bottom
+// quartile — 'terse'), and Yeats's lands in the interquartile middle
+// ('medium'). That's the point of moving from a guess about reputation to
+// the actual authored text, not a bug to chase.
+//
+// Deliberately still static config, not runtime-adaptive: deriving from a
+// member's own *observed* turn lengths instead is a different, harder
+// design (a self-reinforcing feedback loop, since observed turns are
+// already shaped by the current weight, plus an unresolved interaction with
+// #506's turn-scrub design, which assumes tuning.js values are static) —
+// tracked separately as #542, not started.
+// DERIVED-LENGTH-TENDENCY:START
 const LENGTH_TENDENCY_OVERRIDES = {
-  crowley: 'expansive',
-  yeats: 'expansive',
+  'al-hallaj': 'terse',
+  arabi: 'terse',
+  bohme: 'expansive',
+  bruno: 'expansive',
+  crowley: 'terse',
+  'dion-fortune': 'expansive',
+  eckhart: 'terse',
+  gurdjieff: 'expansive',
+  hildegard: 'expansive',
+  khaldun: 'terse',
+  maud: 'terse',
+  'moina-mathers': 'expansive',
+  paracelsus: 'terse',
+  pauli: 'expansive',
+  pixie: 'terse',
+  randolph: 'expansive',
+  'sun-ra': 'expansive',
+  swedenborg: 'expansive',
+  teresa: 'terse',
+  'william-blake': 'terse',
 };
+// DERIVED-LENGTH-TENDENCY:END
 const LENGTH_WEIGHT = { terse: 0.7, medium: 1, expansive: 1.35 };
 
 const MAX_TURNS_PER_POOL_MEMBER = 2; // a 3rd turn for anyone needs a fresh director consult, not another local pick
