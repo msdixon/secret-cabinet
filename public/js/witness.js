@@ -469,7 +469,7 @@ window.Witness = (function () {
   // markup, same as it would in stage mode. Returns { undo } so replay's
   // go-back can reverse exactly this render.
   function renderRoomCard(block) {
-    const { text, memberId, speaker } = block;
+    const { memberId, speaker } = block;
     if (!memberId) {
       const el = document.createElement('div');
       el.className = 'transcript-entry room-event-entry';

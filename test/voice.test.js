@@ -751,7 +751,10 @@ test('voice.js', async t => {
       [],
       'speak() should reuse the prefetched audio instead of fetching it again'
     );
-    assert.ok(events.some(e => e.type === 'audio-play'), 'the prefetched audio should still get played');
+    assert.ok(
+      events.some(e => e.type === 'audio-play'),
+      'the prefetched audio should still get played'
+    );
   });
 
   await t.test('speak() for a beat that does not match the pending prefetch fetches fresh', async t2 => {
@@ -801,27 +804,29 @@ test('voice.js', async t => {
     }
   );
 
-  await t.test('a second prefetch() call replaces the first, revoking its unused blob URL rather than leaking it', async t2 => {
-    let events;
-    const revoked = [];
-    const loaded = loadPublicModule('voice.js', FIXTURE, window => {
-      stubSpeech(window, [{ name: 'A', lang: 'en-US' }]);
-      events = stubElevenLabs(window);
-      window.URL.revokeObjectURL = url => revoked.push(url);
-    });
-    t2.after(loaded.cleanup);
-    await flushMicrotasks();
+  await t.test(
+    'a second prefetch() call replaces the first, revoking its unused blob URL rather than leaking it',
+    async t2 => {
+      const revoked = [];
+      const loaded = loadPublicModule('voice.js', FIXTURE, window => {
+        stubSpeech(window, [{ name: 'A', lang: 'en-US' }]);
+        stubElevenLabs(window);
+        window.URL.revokeObjectURL = url => revoked.push(url);
+      });
+      t2.after(loaded.cleanup);
+      await flushMicrotasks();
 
-    const { Voice } = loaded.window;
-    Voice.setEnabled(true);
+      const { Voice } = loaded.window;
+      Voice.setEnabled(true);
 
-    Voice.prefetch('First upcoming beat.', 'crowley');
-    await flushMicrotasks();
-    Voice.prefetch('Second upcoming beat.', 'crowley'); // supersedes the first before it was ever spoken
-    await flushMicrotasks();
+      Voice.prefetch('First upcoming beat.', 'crowley');
+      await flushMicrotasks();
+      Voice.prefetch('Second upcoming beat.', 'crowley'); // supersedes the first before it was ever spoken
+      await flushMicrotasks();
 
-    assert.deepEqual(revoked, ['blob:fake'], 'the abandoned first prefetch should be revoked, not leaked');
-  });
+      assert.deepEqual(revoked, ['blob:fake'], 'the abandoned first prefetch should be revoked, not leaked');
+    }
+  );
 
   await t.test('stop() discards a pending prefetch, revoking its blob URL', async t2 => {
     const revoked = [];
