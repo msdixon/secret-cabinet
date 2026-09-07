@@ -13,6 +13,8 @@ const {
   ANGRY_EXPRESSION_SNARL,
   ANGRY_EXPRESSION_ICY,
   ANGRY_VARIANT_BY_MEMBER,
+  BASE_LIKENESS_ANCHOR_META,
+  buildLikenessAnchoredBasePrompt,
 } = require('../src/portrait-generation.js');
 
 function fakeFetch({ ok = true, status = 200, json = {}, text = '' } = {}) {
@@ -138,5 +140,18 @@ test('buildReactionPrompt', async t => {
     const prompt = buildReactionPrompt('angry', 'adorno');
     assert.ok(prompt.includes(ANGRY_EXPRESSION_ICY));
     assert.ok(!prompt.includes(ANGRY_EXPRESSION_SNARL));
+  });
+});
+
+// #541 — likeness-anchored base portrait prompt, used when a plain archival
+// reference photo has been sourced for a member (public/portraits/likeness-refs/).
+test('buildLikenessAnchoredBasePrompt', async t => {
+  await t.test('prepends the anchor instruction ahead of the drafted prompt text', () => {
+    const result = buildLikenessAnchoredBasePrompt('a drafted base portrait prompt');
+    assert.equal(result, `${BASE_LIKENESS_ANCHOR_META} a drafted base portrait prompt`);
+  });
+
+  await t.test('anchor instruction warns against idealizing/slimming the subject', () => {
+    assert.match(BASE_LIKENESS_ANCHOR_META, /do not slim, de-age, or otherwise flatter/i);
   });
 });
