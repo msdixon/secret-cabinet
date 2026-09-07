@@ -106,13 +106,20 @@ function shareOf(memberId, args, samples = 2000) {
 const counts = pairs => new Map(pairs);
 
 test('lengthTendencyOf', async t => {
-  await t.test('returns the seeded override for the two named personas', () => {
-    assert.equal(lengthTendencyOf('crowley'), 'expansive');
-    assert.equal(lengthTendencyOf('yeats'), 'expansive');
+  // #512 phase 1: values below are scripts/derive-length-tendency.js's
+  // output (average words/sentence in each member's #187 exemplar,
+  // bucketed by quartile) — pinned here, not hand-picked. Crowley reads
+  // 'terse' by that measure (short, declarative sentences in his own
+  // authored excerpt), which is why he's the terse example below rather
+  // than the pre-#512 'expansive' seed.
+  await t.test('returns the derived tendency for a terse and an expansive member', () => {
+    assert.equal(lengthTendencyOf('crowley'), 'terse');
+    assert.equal(lengthTendencyOf('bohme'), 'expansive');
   });
 
-  await t.test('defaults to medium for everyone else', () => {
+  await t.test('defaults to medium for everyone in the interquartile middle, and for an unknown id', () => {
     assert.equal(lengthTendencyOf('scholem'), 'medium');
+    assert.equal(lengthTendencyOf('yeats'), 'medium');
     assert.equal(lengthTendencyOf('nobody-by-this-id'), 'medium');
   });
 });
@@ -213,8 +220,10 @@ test('pickNextSpeaker', async t => {
   });
 
   await t.test('expansive voices are favoured while there is budget to spend', () => {
-    const share = shareOf('crowley', {
-      pool: ['crowley', 'scholem'],
+    // bohme is derived 'expansive' (see the lengthTendencyOf test above);
+    // scholem is 'medium'.
+    const share = shareOf('bohme', {
+      pool: ['bohme', 'scholem'],
       spokenCounts: counts([]),
       lastSpeakerId: null,
       remainingBudget: 500,
@@ -225,13 +234,13 @@ test('pickNextSpeaker', async t => {
 
   await t.test('below the low-budget threshold that preference inverts, so the round can close', () => {
     const args = {
-      pool: ['crowley', 'scholem'],
+      pool: ['bohme', 'scholem'],
       spokenCounts: counts([]),
       lastSpeakerId: null,
       remainingBudget: 100, // < LOW_BUDGET_WORDS (120)
     };
     // 1.35 * 0.4 = 0.54, against a medium voice's 1 * PRIORITY_RANK_DECAY
-    const share = shareOf('crowley', args);
+    const share = shareOf('bohme', args);
     assert.ok(Math.abs(share - 0.403) < 0.01, `low-budget expansive share was ${share}`);
     assert.ok(share < shareOf('scholem', args), 'terse-ish voices should win on a thin budget');
   });
@@ -339,9 +348,10 @@ test('pickNextSpeaker', async t => {
     };
     const topShare = shareOf('blavatsky', base); // rank 0
     const bottomShare = shareOf('waite', base); // rank 4
-    // yeats/crowley are seeded 'expansive' (LENGTH_WEIGHT), so rank alone
-    // isn't a clean signal against them — waite stays default 'medium' like
-    // blavatsky and scholem, isolating the rank effect from tendency.
+    // crowley is derived 'terse' (see the lengthTendencyOf test above), so
+    // rank alone isn't a clean signal against it — the two seats actually
+    // measured, blavatsky (rank 0) and waite (rank 4), are both 'medium',
+    // isolating the rank effect from tendency.
     assert.ok(
       Math.abs(topShare / bottomShare - 1 / Math.pow(PRIORITY_RANK_DECAY, 4)) < 0.15,
       `top-vs-bottom ratio was ${topShare / bottomShare}, expected ~${1 / Math.pow(PRIORITY_RANK_DECAY, 4)}`
