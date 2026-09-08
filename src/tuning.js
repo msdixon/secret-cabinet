@@ -117,6 +117,11 @@ const LENGTH_TENDENCY_OVERRIDES = {
   'william-blake': 'terse',
 };
 // DERIVED-LENGTH-TENDENCY:END
+// #539 note: this and LENGTH_TENDENCY_OVERRIDES above only weight *who* gets
+// picked to speak — they don't touch how long a turn runs once that member
+// is chosen. Not the lever for a floor-verbosity problem (see
+// TYPICAL_TURN_WORDS below, in "Speaker prompt budgets") even though both
+// live under the same "length" heading.
 const LENGTH_WEIGHT = { terse: 0.7, medium: 1, expansive: 1.35 };
 
 const MAX_TURNS_PER_POOL_MEMBER = 2; // a 3rd turn for anyone needs a fresh director consult, not another local pick
@@ -192,6 +197,35 @@ const MAX_UNDER_HEARD_DEFICIT = 3;
 // responsible for spending the budget) needs the pressure too, not just
 // whoever's left once it's already gone.
 const CROWDED_WORDS_PER_VOICE = 220;
+
+// #539: closes the gap #513's phase-3 re-measurement found — the un-nudged
+// floor roughly doubled (88w -> 200w average) when the model default
+// switched from claude-sonnet-4-6 to claude-sonnet-5 (#406), confirmed via
+// a controlled on/off A/B against the model actually in production. The
+// speaker prompt's only standing length guidance was permission-shaped
+// ("there is no default length... if you have a lot to say, say it") with
+// no concrete number for the model to react to in the common (uncrowded)
+// case — CROWDED_WORDS_PER_VOICE above only supplies one once the round is
+// already tight on room, which real sessions mostly aren't. Same finding as
+// that constant's own rationale (#164: a vague "leave room for others"
+// didn't move real turn length; naming the actual headcount did), applied
+// to the case it doesn't cover.
+//
+// Set near phase 1's own un-nudged aggregate/median baseline (88w/43w,
+// BREVITY-BASELINE-REPORT.md) — an anchor for "most turns," not a cap.
+// SPEAKER_MAX_TOKENS below is the hard ceiling and is deliberately left
+// alone by this change: the measured problem was the floor drifting up,
+// not turns hitting the ceiling. LENGTH_WEIGHT/LENGTH_TENDENCY_OVERRIDES
+// are a different lever entirely (who gets picked to speak, not how long a
+// given turn runs once picked) and are left alone for the same reason.
+//
+// Unverified against a live re-measurement as of this change: this
+// environment has no ANTHROPIC_API_KEY configured, so the controlled on/off
+// A/B #513 phase 3 used to isolate the model-swap confound couldn't be
+// re-run here. Before treating this number as calibrated rather than a
+// reasoned first guess, re-run a live A/B (same shape as phase 3's table)
+// against sessions generated after this change lands.
+const TYPICAL_TURN_WORDS = 90;
 
 // #164: still well under the pre-#164 1500-token cap, but raised from an
 // initial 900 after a live convene showed 900 gets hit routinely — not just
@@ -399,6 +433,7 @@ module.exports = {
   UNDER_HEARD_BOOST,
   MAX_UNDER_HEARD_DEFICIT,
   CROWDED_WORDS_PER_VOICE,
+  TYPICAL_TURN_WORDS,
   SPEAKER_MAX_TOKENS,
   TANGENT_NUDGE_CHANCE,
   VOICE_EXEMPLAR_WORD_BUDGET,

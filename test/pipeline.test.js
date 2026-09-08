@@ -82,6 +82,7 @@ const {
   SPLINTER_MIN_BUDGET_WORDS,
   MAX_SPLINTERS_PER_PASSAGE,
   TANGENT_NUDGE_CHANCE,
+  TYPICAL_TURN_WORDS,
 } = require('../src/tuning.js');
 
 // #352's ledger lives in lodge-prompts.js (see its own comment for why) but
@@ -868,6 +869,21 @@ test('buildSpeakerUserMessage', async t => {
     });
     assert.match(message, /doesn't need to build a case/);
     assert.match(message, /unfinished business with Aleister Crowley/);
+  });
+
+  // #539: the uncrowded budget hint used to leave "how long" entirely
+  // unconstrained ("as valid a turn as a long one" with no number). Names
+  // TYPICAL_TURN_WORDS explicitly, same "concrete number beats vague
+  // abstraction" precedent as CROWDED_WORDS_PER_VOICE's own rationale.
+  await t.test('names TYPICAL_TURN_WORDS in the uncrowded budget hint', () => {
+    const message = buildSpeakerUserMessage({
+      roundPrompt: 'Discuss.',
+      roundSoFarText: '',
+      member,
+      remainingBudgetWords: 900,
+      unheardCount: 0,
+    });
+    assert.match(message, new RegExp(`Most turns land around ${TYPICAL_TURN_WORDS} words`));
   });
 });
 
@@ -2065,6 +2081,34 @@ test('buildSpeakerSystemPrompt — voice exemplar wiring', async t => {
       relationshipEdges: [{ source: 'william-blake', target: 'sun-ra', type: 'influence', label: 'A cosmic lineage' }],
     });
     assert.ok(prompt.indexOf('OTHERS IN THE ROOM TONIGHT') < prompt.indexOf('HOW YOU ACTUALLY WRITE'));
+  });
+});
+
+// #539: the standing turn-length guidance used to be pure permission ("there
+// is no default length... if you have a lot to say, say it") with no number
+// for the model to react to — found to matter once claude-sonnet-5's higher
+// baseline verbosity (#406) roughly doubled the un-nudged floor (#513 phase
+// 3's re-measurement). Confirms TYPICAL_TURN_WORDS actually lands in the
+// prompt and that the "long turns still allowed when earned" escape hatch
+// survives alongside it.
+test('buildSpeakerSystemPrompt — turn-length guidance (#539)', async t => {
+  const base = {
+    lodgeContext: 'LODGE CONTEXT',
+    member: { id: 'william-blake', name: 'Blake', file: 'william-blake.md' },
+    artifact: null,
+    notes: {},
+    loadMemberFile: () => '# BLAKE\n\n## HOW YOU SPEAK\n\nAphoristic.',
+  };
+
+  await t.test('names TYPICAL_TURN_WORDS as the default anchor', () => {
+    const prompt = buildSpeakerSystemPrompt(base);
+    assert.match(prompt, new RegExp(`Most turns are short, on the order of ${TYPICAL_TURN_WORDS} words`));
+  });
+
+  await t.test('still permits a longer turn when the moment earns it', () => {
+    const prompt = buildSpeakerSystemPrompt(base);
+    assert.match(prompt, /think out loud at length once something has actually engaged them/);
+    assert.match(prompt, /one-line interjection is not a lesser contribution/);
   });
 });
 
