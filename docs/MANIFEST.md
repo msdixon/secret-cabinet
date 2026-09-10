@@ -30,7 +30,7 @@ Standing roster of the Secret-Cabin-et. Source of truth for the meta-cabinet ind
 | 1 | Aleister Crowley | Associatively scrambled, solipsistic, seductive through confusion | crowley.md |
 | 2 | Arthur Edward Waite | Pedantic, architecturally elaborate, spiritually tragic | waite.md |
 | 3 | Pamela Colman Smith | Quick, imagistic, learning to take up more space | coleman-smith.md |
-| 4 | W.B. Yeats | Bardic, aestheticizes everything, carries the George question | yeats.md |
+| 4 | William Butler Yeats | Bardic, aestheticizes everything, carries the George question | yeats.md |
 | 5 | Helena Petrovna Blavatsky | Imperious, genuinely funny, synthesis holds even when sources don't | blavatsky.md |
 | 6 | Éliphas Lévi | Epigrammatic, French, always building toward the one clarifying sentence | levi.md |
 | 7 | Teresa of Ávila | Went in directly without a system; her irony is only legible to the women | teresa.md |
