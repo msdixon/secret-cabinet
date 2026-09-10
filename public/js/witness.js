@@ -380,7 +380,8 @@ window.Witness = (function () {
     const tLayer = threadLayer();
     if (tLayer) tLayer.innerHTML = '';
     liveTypingMemberId = null;
-    lastLiveSpeechTurn = null; // #506: a fresh stage has nothing of its own to recap yet
+    liveSpeechHistory = []; // #506: a fresh stage has nothing of its own to recap yet
+    recapCursor = null;
     stopRoomLoop();
     resetLiveTurnQueue(); // #400: a fresh stage shouldn't inherit a queued-but-not-yet-spoken turn from whatever came before
   }
@@ -733,15 +734,28 @@ window.Witness = (function () {
   // same one-thing-at-a-time backbone, just fed by a live stream.
   let liveTurnQueue = [];
   let liveTurnGeneration = 0;
-  // #506: the most recently rendered live speech block ("what did he just
-  // say") -- captured the instant advanceLiveTurnQueue commits to rendering
-  // a turn (see there), not once it finishes, so recapLastTurn() always has
-  // something to replay even while that turn's own audio is still playing.
-  // Deliberately a single slot, not a history: the queue itself discards
-  // each turn via .shift() once played (see the comment above liveTurnQueue),
-  // and a scrubbable multi-turn timeline is real, harder follow-up work
-  // #506 leaves open rather than something this v1 attempts.
-  let lastLiveSpeechTurn = null;
+  // #506: a bounded, append-only record of live speech blocks in the order
+  // they were rendered ("what did he just say," and now "what did she say
+  // before that") -- pushed the instant advanceLiveTurnQueue commits to
+  // rendering a turn (see there), not once it finishes, so recapBack()
+  // always has something to replay even while that turn's own audio is
+  // still playing. Unlike liveTurnQueue (which .shift()s a turn the moment
+  // it's played -- see the comment above that var), this never drops an
+  // entry on its own; only the HISTORY_LIMIT cap below trims it, from the
+  // front, oldest first. Chosen over the issue's other named option --
+  // continuous Roku-style rewind -- because Voice.speak() has no
+  // persisted/replayable audio object (voice.js: every call is a fresh
+  // synthesis), so there is no audio timeline to scrub; a discrete jump
+  // between already-known turn boundaries is the only rewind this app can
+  // actually do without a much bigger change to how audio is produced and
+  // held. recapCursor is this history's read head: null means "at the live
+  // edge, nothing recapped," otherwise an index into liveSpeechHistory.
+  let liveSpeechHistory = [];
+  let recapCursor = null;
+  // Comfortably past any session anyone will actually want to step back
+  // through by hand -- this bounds memory for a long-running live stage, not
+  // real usage (see recapBack's comment for the click-count reality).
+  const RECAP_HISTORY_LIMIT = 30;
   // #475: awaitLull() has nothing of its own to check the queue against -- it
   // just resolves a promise as soon as it's called, and app.js was calling it
   // (via runLullLoop) the instant streamPost resolved, which per the #400
@@ -821,7 +835,15 @@ window.Witness = (function () {
     if (!turn.block) return; // still being typed -- liveTypingSet/liveSpeech will call back in
     turn.settling = true;
     maybePrefetchUpcoming();
-    lastLiveSpeechTurn = turn.block; // #506: recapLastTurn() replays exactly this
+    // #506: record this turn in the recap history before capping it -- see
+    // that array's own comment above for why this is append-only and bounded
+    // rather than the single slot the v1 recap shipped with.
+    liveSpeechHistory.push(turn.block);
+    if (liveSpeechHistory.length > RECAP_HISTORY_LIMIT) {
+      liveSpeechHistory.shift();
+      // Everything the cursor could be pointing at just shifted down one.
+      if (recapCursor !== null) recapCursor = recapCursor === 0 ? null : recapCursor - 1;
+    }
     const myGeneration = liveTurnGeneration;
     const { delay } = renderWitnessBlock(turn.block);
     // Same two-step as replay's advance(): Promise.resolve(delay) is
@@ -968,29 +990,49 @@ window.Witness = (function () {
     }
   }
 
-  // #506 v1: "what did he just say" -- a single-step recap of only the most
-  // recently rendered live turn, not a scrubbable multi-turn history and not
-  // a rewind of the live queue itself. The issue leaves both a discrete
-  // previous-turn jump and a continuous Roku-style rewind open as "worth
-  // prototyping"; this ships the discrete jump's smallest possible slice
-  // (recap the one turn, not step back through several) because the queue
-  // has nothing else addressable to jump between -- liveTurnQueue discards
-  // each turn via .shift() the instant it plays (see that var's own
-  // comment), and Voice.speak() has no persisted/replayable audio object to
-  // resume, only a fresh synthesis to re-trigger. Reusing renderWitnessBlock
-  // -- the same seam live mirroring and replay both already render through --
-  // gets a fresh room-card entry (or stage bubble), a fresh Voice.speak()
-  // call, and correct fade scheduling for free, with no new rendering path.
+  // #506: "what did he just say" -- and, on repeated presses, "...and what
+  // did she say before that." A discrete previous-turn jump (DVD-chapter-
+  // style) through liveSpeechHistory, not a continuous Roku-style rewind --
+  // see that array's own comment above for why: there's no persisted audio
+  // to scrub, only turn boundaries to jump between. Each press steps the
+  // read head (recapCursor) one turn further from the live edge; recapForward
+  // walks it back. Reuses renderWitnessBlock -- the same seam live mirroring
+  // and replay both already render through -- so every jump gets a fresh
+  // room-card entry (or stage bubble), a fresh Voice.speak() call, and
+  // correct fade scheduling for free, with no new rendering path.
   //
-  // No-ops during replay (goBack() already covers that surface) or before
-  // anything has been said yet. Known rough edge, left as-is rather than
-  // engineered around: if a new live turn starts speaking while this recap
-  // is still narrating, Voice.speak()'s single-slot playback (every call
+  // Deliberately doesn't pause or rewind the live queue itself -- a recap is
+  // a glance backward, not a mode switch, matching the issue's "without
+  // derailing the session" framing. In practice this is expected to be
+  // pressed once or twice, not walked deep into a long session's history;
+  // RECAP_HISTORY_LIMIT bounds memory for that, not the UX.
+  //
+  // Both no-op during replay (goBack() already covers that surface). Known
+  // rough edge, unchanged from the v1 recap and left as-is rather than
+  // engineered around: if a new live turn starts speaking while a recap is
+  // still narrating, Voice.speak()'s single-slot playback (every call
   // interrupts whatever is currently playing -- see voice.js) means the live
   // turn wins and cuts the recap short.
-  function recapLastTurn() {
-    if (witnessActive || !lastLiveSpeechTurn) return;
-    renderWitnessBlock(lastLiveSpeechTurn);
+  function recapBack() {
+    if (witnessActive || !liveSpeechHistory.length) return;
+    if (recapCursor === null) {
+      recapCursor = liveSpeechHistory.length - 1;
+    } else if (recapCursor > 0) {
+      recapCursor--;
+    } else {
+      return; // already at the oldest turn this history still holds
+    }
+    renderWitnessBlock(liveSpeechHistory[recapCursor]);
+  }
+
+  function recapForward() {
+    if (witnessActive || recapCursor === null) return; // nothing to step forward from
+    if (recapCursor < liveSpeechHistory.length - 1) {
+      recapCursor++;
+      renderWitnessBlock(liveSpeechHistory[recapCursor]);
+    } else {
+      recapCursor = null; // back at the live edge -- nothing further forward to show
+    }
   }
 
   // Discards `turn`'s own queue entry and, if it had reached the front and
@@ -1661,7 +1703,8 @@ window.Witness = (function () {
     liveTypingSet,
     liveClearTyping,
     liveAbortTurn,
-    recapLastTurn,
+    recapBack,
+    recapForward,
     waitForLiveQueueDrain,
     collapseStage,
     reopenStage,
