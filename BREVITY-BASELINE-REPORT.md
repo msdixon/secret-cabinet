@@ -62,4 +62,24 @@ Two things fall out of this table:
 
 **Reading the 146-word aggregate against this:** at `TANGENT_NUDGE_CHANCE = 0.3`, a session mixing ~70% off-beats (~200w) and ~30% on-beats (~88w) predicts an aggregate around 165w — close to the measured 146w given the small sample and topic variance. The lever is doing real, measured work against a floor that rose for reasons outside #513's scope.
 
+---
+
+## Phase 4 — live verification of the #539 anchor fix (2026-09-09)
+
+Phase 3 found the floor problem but PR #552 (which added `tuning.js`'s `TYPICAL_TURN_WORDS` anchor to the speaker prompt) shipped without a live re-measurement — no `ANTHROPIC_API_KEY` in that session's environment. This phase re-runs phase 3's exact methodology (same 3 member/topic pairs, un-nudged, 3 trials each, live against `claude-sonnet-5`) now that a key is available, to answer the question #552 left open: does the anchor actually pull the floor back down?
+
+| Case | Phase 3 (no anchor) | Anchor = 90 (shipped) | Anchor = 60 (test only) |
+|---|---|---|---|
+| Crowley — vault/Golden Dawn dispute | 137w | 201w | 154w |
+| Yeats — automatic writing / *A Vision* | 261w | 141w | 169w |
+| Teresa — interior castle / obedience | 202w | 129w | 130w |
+| **Grand average** | **200w** | **157w** | **151w** |
+
+Two things fall out of this table:
+
+1. **The anchor is a real, measured effect.** 200w → 157w (−21.5%) with `TYPICAL_TURN_WORDS = 90` live — #552 wasn't a no-op, and the shipped value is now empirically grounded rather than a first guess.
+2. **It's a partial fix, and pushing it harder doesn't help.** 157w is still ~1.8x phase 1's 88w baseline. A test at 60 (not shipped, reverted after this measurement) produced 151w — within trial-to-trial noise of the 90 result, not a further reduction — while per-case variance widened (Crowley ranged 17w–264w across those 3 trials). Naming a smaller number doesn't make the model track it more closely; this specific lever has hit its ceiling.
+
+**Decision:** keep `TYPICAL_TURN_WORDS = 90` (the validated value, not the untested 60). Filed [#561](https://github.com/msdixon/secret-cabinet/issues/561) to carry the residual gap forward as a "what lever, not what number" question, separate from #539 (which asked whether the floor needed fixing at all — answered: yes, partially fixed, remainder tracked separately). Closing #539 on this measured record rather than leaving it open as an indefinite tuning chase.
+
 **Conclusion:** `TANGENT_NUDGE_CHANCE` is not under-tuned — it cuts turn length by roughly half whenever it fires, on the model actually in production today, matching phase 2's original validation. Raising the rate further would be tuning against the wrong variable: the residual essayism the aggregate still shows is downstream of #406's model swap raising the un-nudged floor for *every* turn, nudged or not, not of the coin-flip rate being too low. Closing #513 on this record rather than raising the rate on unmeasured guesswork; the model-verbosity question gets its own follow-up ([#539](https://github.com/msdixon/secret-cabinet/issues/539)) since it's a different variable with a different fix (`SPEAKER_MAX_TOKENS`, length tendencies) than anything #513 was ever scoped to touch.
