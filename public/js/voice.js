@@ -88,7 +88,9 @@ window.Voice = (function () {
         // keeps trying it per-beat same as always -- this is purely a
         // console signal, not a behavior change.
         if (cfg.degraded) {
-          console.warn(`[voice] ElevenLabs has been failing recently (${cfg.reason || 'unknown reason'}) -- beats are falling back to the Web Speech API.`);
+          console.warn(
+            `[voice] ElevenLabs has been failing recently (${cfg.reason || 'unknown reason'}) -- beats are falling back to the Web Speech API.`
+          );
         }
       })
       .catch(() => {}); // no server, offline, etc. -- stay on the Web Speech fallback

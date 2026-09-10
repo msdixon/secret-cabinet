@@ -69,7 +69,9 @@ function registerVoiceRoutes(app, { roster, voiceCacheDir, apiKey, modelId }) {
   app.get('/api/voice/config', (req, res) => {
     if (!available) return res.json({ available: false });
     const degraded = consecutiveFailures >= DEGRADED_THRESHOLD;
-    res.json(degraded ? { available: true, degraded: true, reason: lastFailureReason } : { available: true, degraded: false });
+    res.json(
+      degraded ? { available: true, degraded: true, reason: lastFailureReason } : { available: true, degraded: false }
+    );
   });
 
   app.post('/api/voice/speak', async (req, res) => {
