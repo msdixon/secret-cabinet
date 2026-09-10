@@ -131,9 +131,7 @@ async function main() {
   }
   console.log(
     '\nNext: review each candidate in public/portraits/candidates/ against public/portraits/teresa.png and STYLE_GUIDE.md, then promote the good ones with:\n' +
-      reactionsToRun
-        .map(r => `  node scripts/promote-portrait.js teresa-${r}`)
-        .join('\n')
+      reactionsToRun.map(r => `  node scripts/promote-portrait.js teresa-${r}`).join('\n')
   );
 
   process.exit(results.every(r => r.ok) ? 0 : 1);
