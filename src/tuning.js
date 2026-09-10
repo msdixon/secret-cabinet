@@ -87,12 +87,19 @@ const PASS_TURN_CREDIT = 0.5;
 // ('medium'). That's the point of moving from a guess about reputation to
 // the actual authored text, not a bug to chase.
 //
-// Deliberately still static config, not runtime-adaptive: deriving from a
-// member's own *observed* turn lengths instead is a different, harder
-// design (a self-reinforcing feedback loop, since observed turns are
-// already shaped by the current weight, plus an unresolved interaction with
-// #506's turn-scrub design, which assumes tuning.js values are static) —
-// tracked separately as #542, not started.
+// Deliberately still static config, not runtime-adaptive: this object stays
+// hand-derived from #187 exemplar text, not from observed turn length. #542
+// (phase 2 of #512) added scripts/report-observed-length-tendency.js, which
+// compares each member's observed average turn length against this map, but
+// only as an advisory report a person reads — it never writes here. Both of
+// the design questions this comment used to flag turned out moot: the #539
+// note below confirms LENGTH_WEIGHT only affects who gets picked, not how
+// long their turn runs, so deriving from observed length isn't circular via
+// that mechanism; and #506 shipped without depending on tuning.js staying
+// static. What's left is cold start — a member needs real accumulated
+// turns before their observed average means anything — which is exactly
+// why this stays a report to read, not a value to auto-apply. When/whether
+// to promote it is an open question, not yet decided.
 // DERIVED-LENGTH-TENDENCY:START
 const LENGTH_TENDENCY_OVERRIDES = {
   'al-hallaj': 'terse',
