@@ -96,11 +96,16 @@
           <!-- #506: "what did he just say" -- steps backward/forward through
                already-spoken live turns (each a fresh room-card entry / stage
                bubble plus a fresh Voice.speak() call), a discrete jump rather
-               than a scrubbable audio timeline. Both no-op during replay
-               (goBack already covers that) or before anyone's spoken yet --
-               see recapBack()'s own comment in witness.js. -->
-          <button class="witness-recap-btn" id="witness-recap-back-btn" onclick="window.Witness.recapBack()" title="Recap — step back to an earlier turn">‹ Recap</button>
-          <button class="witness-recap-btn" id="witness-recap-fwd-btn" onclick="window.Witness.recapForward()" title="Recap — step forward toward the live turn">Recap ›</button>
+               than a scrubbable audio timeline. Each click moves exactly one
+               turn -- there's no hold-to-rewind gesture, since there's no
+               continuous audio to rewind through (see recapBack()'s own
+               comment in witness.js). Labeled/iconed as DVD-style chapter
+               skip (prev/next turn), not Audible/Roku-style "back 15s" --
+               that wording implies a time offset this doesn't do. Both no-op
+               during replay (goBack already covers that) or before anyone's
+               spoken yet. -->
+          <button class="witness-recap-btn" id="witness-recap-back-btn" onclick="window.Witness.recapBack()" title="Previous turn — click to step back one turn at a time">⏮ Prev turn</button>
+          <button class="witness-recap-btn" id="witness-recap-fwd-btn" onclick="window.Witness.recapForward()" title="Next turn — click to step forward one turn at a time, back toward live">Next turn ⏭</button>
           <button class="witness-exit-btn" id="witness-exit-btn" onclick="window.Witness.exitClicked()" style="display:none;">✕ Exit</button>
         </div>
         <div class="witness-stage" id="witness-stage" onclick="window.Witness.advance()"></div>
