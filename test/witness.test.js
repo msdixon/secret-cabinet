@@ -1525,10 +1525,11 @@ test('room card fade (#529): a card does not fade while its own audio is still p
   });
 });
 
-test('recap (#506): "what did he just say" replays only the most recently spoken live turn', async t => {
+test('recap (#506): "what did he just say" steps backward/forward through already-spoken live turns', async t => {
   await t.test('is a no-op before anything has been said', t2 => {
     const { module: Witness } = boot(t2);
-    assert.doesNotThrow(() => Witness.recapLastTurn());
+    assert.doesNotThrow(() => Witness.recapBack());
+    assert.doesNotThrow(() => Witness.recapForward());
   });
 
   await t.test(
@@ -1555,7 +1556,7 @@ test('recap (#506): "what did he just say" replays only the most recently spoken
       await flushMicrotasks();
       assert.equal(speakCalls, 1);
 
-      Witness.recapLastTurn();
+      Witness.recapBack();
       assert.equal(speakCalls, 2, 'recap re-triggers Voice.speak() for the same block');
 
       const card = document.querySelector('#room-speech-layer .room-speech-card');
@@ -1568,12 +1569,60 @@ test('recap (#506): "what did he just say" replays only the most recently spoken
     }
   );
 
+  await t.test('repeated recapBack() presses walk further back through multi-turn history', async t2 => {
+    t2.mock.timers.enable({ apis: ['setTimeout'] });
+    const loaded = loadPublicModule('witness.js', FIXTURE, window => {
+      window.Voice = { speak: () => Promise.resolve(), stop: () => {} };
+    });
+    t2.after(loaded.cleanup);
+    const { document, window, module: Witness } = loaded;
+    stubScene(window, { crowley: { x: 10, y: 10, visible: true } });
+    Witness.configure(makeDeps());
+    Witness.enableRoom();
+
+    Witness.liveSpeech({ speaker: 'Crowley', text: 'First turn.', memberId: 'crowley' });
+    await advancePastLiveTurn(t2);
+    Witness.liveSpeech({ speaker: 'Crowley', text: 'Second turn.', memberId: 'crowley' });
+    await advancePastLiveTurn(t2);
+    Witness.liveSpeech({ speaker: 'Crowley', text: 'Third turn.', memberId: 'crowley' });
+    await advancePastLiveTurn(t2);
+
+    const card = () => document.querySelector('#room-speech-layer .room-speech-card');
+
+    Witness.recapBack();
+    assert.match(latestEntryText(card()), /Third turn/, 'first press recaps the most recent turn');
+
+    Witness.recapBack();
+    assert.match(latestEntryText(card()), /Second turn/, 'second press steps one turn further back');
+
+    Witness.recapBack();
+    assert.match(latestEntryText(card()), /First turn/, 'third press reaches the oldest turn in history');
+
+    Witness.recapBack();
+    assert.match(latestEntryText(card()), /First turn/, 'pressing back again at the oldest turn is a no-op');
+
+    Witness.recapForward();
+    assert.match(latestEntryText(card()), /Second turn/, 'forward steps back toward the live edge');
+
+    Witness.recapForward();
+    assert.match(latestEntryText(card()), /Third turn/, 'forward reaches the most recent turn');
+
+    const entriesBefore = card().querySelectorAll('.room-card-entry').length;
+    Witness.recapForward();
+    assert.equal(
+      card().querySelectorAll('.room-card-entry').length,
+      entriesBefore,
+      'forward past the most recent turn returns to the live edge without rendering anything'
+    );
+  });
+
   await t.test('is a no-op while replay is active -- goBack() already covers that surface', async t2 => {
     const { document, module: Witness } = boot(t2);
     await Witness.start({ id: 's1', rounds: [{ label: 'Round I', text: 'Crowley:\nOne.' }] }, makeDeps());
     const before = document.getElementById('witness-stage').innerHTML;
 
-    Witness.recapLastTurn();
+    Witness.recapBack();
+    Witness.recapForward();
     assert.equal(
       document.getElementById('witness-stage').innerHTML,
       before,
@@ -1604,7 +1653,7 @@ test('recap (#506): "what did he just say" replays only the most recently spoken
     assert.equal(speakCalls, 1);
 
     Witness.liveReset();
-    Witness.recapLastTurn();
+    Witness.recapBack();
     assert.equal(speakCalls, 1, 'a fresh stage has nothing left to recap');
   });
 });
