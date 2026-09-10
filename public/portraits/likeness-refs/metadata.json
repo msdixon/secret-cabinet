@@ -9,6 +9,62 @@
       "license": "Public domain (PD-old-70-expired / CC-PD-Mark, per the file's own Commons listing)",
       "credit": "Aleister Crowley, self-portrait, circa 1925",
       "notes": "Chosen over the existing public/archive/crowley-golden-dawn-1900.jpg (a stylized Penguin book-cover photo of a ~25-year-old Crowley in ritual hood, 1900) because that image is staged/costumed, not a plain likeness reference, and predates the heavier, jowlier 'Great Beast' era (1920s-30s Abbey of Thelema) Rachel's 2026-09-03 critique of the generated base portrait specifically called out as under-represented. This photo (circa 1925) is a plain studio headshot in ordinary dress showing exactly that later build and face."
+    },
+    "blavatsky": {
+      "image": "portraits/likeness-refs/blavatsky.jpg",
+      "source": "Wikimedia Commons",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File:Helena-Blavatsky-c.1875.jpg",
+      "license": "Public domain (CC-PD-Mark, free of known copyright restrictions per the file's own Commons listing)",
+      "credit": "Helena Blavatsky, photographer unknown, circa 1875",
+      "notes": "Part of the #546 roster-wide audit (same text-only likeness gap #541 found and fixed for Crowley). Plain studio portrait, no costuming."
+    },
+    "warburg": {
+      "image": "portraits/likeness-refs/warburg.jpg",
+      "source": "Wikimedia Commons",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File:Aby_Warburg.jpg",
+      "license": "Public domain (CC-PD-Mark, free of known copyright restrictions per the file's own Commons listing)",
+      "credit": "Aby Warburg, photographer unknown, circa 1900 — Fotoarchiv Marburg / Warburg Institute",
+      "notes": "Part of the #546 roster-wide audit. Plain photograph, seated reading with hand to forehead; shows a receding hairline and mustache — no glasses (corrected 2026-09-09; an earlier version of this note wrongly claimed glasses, which led the round-1 portrait prompt to invent a pair not actually in the photo)."
+    },
+    "pauli": {
+      "image": "portraits/likeness-refs/pauli.jpg",
+      "source": "Wikimedia Commons",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File:Wolfgang_Pauli_ETH-Bib_Portr_01042_(cropped).jpg",
+      "license": "CC BY-SA 3.0",
+      "credit": "Bettina Katzenstein / ETH Zürich — ETH-Bibliothek Zürich, Bildarchiv, Portr_01042",
+      "notes": "Part of the #546 roster-wide audit. Plain studio portrait."
+    },
+    "sun-ra": {
+      "image": "portraits/likeness-refs/sun-ra.jpg",
+      "source": "Wikimedia Commons",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File:SunRa_in_1992.jpg",
+      "license": "CC BY-SA 3.0",
+      "credit": "Photo by Pandelis Karayorgis — Sun Ra at New England Conservatory, 27 February 1992",
+      "notes": "Part of the #546 roster-wide audit. Chosen specifically because it is plain and unstaged — Sun Ra's self-mythologized public image (Egyptian-inspired regalia, headdresses) risks pulling a text-only prompt toward costume rather than his actual face; this photo isolates likeness from costume."
+    },
+    "randolph": {
+      "image": "portraits/likeness-refs/randolph.jpg",
+      "source": "Wikimedia Commons",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File:Photograph_of_Paschal_Beverly_Randolph.jpg",
+      "license": "Public domain (PD-old-70-expired / CC-PD-Mark, per the file's own Commons listing)",
+      "credit": "Paschal Beverly Randolph, photographed by Rodney Poole of Nashville, Tennessee, 1874",
+      "notes": "Part of the #546 roster-wide audit. The only known photograph of Randolph — corroborated independently across two research passes (this file and the Devenish biography scan it's credited to) before use. Full likeness anchor, same treatment as Blavatsky/Warburg/Pauli."
+    },
+    "levi": {
+      "image": "portraits/likeness-refs/levi.jpg",
+      "source": "Wikimedia Commons",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File:Eliphas_Levi_1874.jpg",
+      "license": "Public domain (PD Old / CC-PD-Mark, per the file's own Commons listing)",
+      "credit": "Éliphas Lévi, photographed by Charles Revel, 1874 — given by M. Henri Chenevier, Lévi's descendant",
+      "notes": "Part of the #546 roster-wide audit, but deliberately NOT a full anchor — Rachel's call was a ~50%-blended, lighter-touch treatment (see scripts/fix-546-levi-pixie.js), moving the current generated base toward this photo's documented age/beard/balding rather than replacing it outright, to preserve age diversity in the generated portrait's face relative to the reference photo's very elderly likeness."
+    },
+    "pixie": {
+      "image": "portraits/likeness-refs/pixie.jpg",
+      "source": "Wikimedia Commons",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File:Pamela_Colman_Smith_circa_1912.jpg",
+      "license": "Public domain (PD-US, per the file's own Commons listing)",
+      "credit": "Pamela Colman Smith, from the October 1912 issue of The Craftsman magazine",
+      "notes": "Part of the #546 roster-wide audit, but used for ATTIRE ONLY, not face — Rachel's call was that the current generated face is close enough, but the current outfit (patterned folk vest, scarf) reads as costume next to this photo's real attire (satin dress, layered beads, simple headwrap). See scripts/fix-546-levi-pixie.js."
     }
   }
 }
