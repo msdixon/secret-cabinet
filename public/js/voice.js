@@ -78,7 +78,20 @@ window.Voice = (function () {
     fetch('/api/voice/config')
       .then(r => (r.ok ? r.json() : null))
       .then(cfg => {
-        if (cfg) elevenLabsAvailable = !!cfg.available;
+        if (!cfg) return;
+        elevenLabsAvailable = !!cfg.available;
+        // #29 quota-exhaustion incident (2026-09-09): recent ElevenLabs
+        // failures used to be invisible -- every beat just silently fell
+        // back to Web Speech, and the only way to notice was hearing the
+        // wrong voice. `degraded` still leaves elevenLabsAvailable true (the
+        // key is configured and may recover, e.g. quota resetting) so speak()
+        // keeps trying it per-beat same as always -- this is purely a
+        // console signal, not a behavior change.
+        if (cfg.degraded) {
+          console.warn(
+            `[voice] ElevenLabs has been failing recently (${cfg.reason || 'unknown reason'}) -- beats are falling back to the Web Speech API.`
+          );
+        }
       })
       .catch(() => {}); // no server, offline, etc. -- stay on the Web Speech fallback
   }

@@ -37,11 +37,41 @@ const crypto = require('crypto');
 // short of the top edge where docs warn quality degrades.
 const DEFAULT_VOICE_SPEED = 1.1;
 
+// A live ElevenLabs call failing (quota exhausted, bad key, an outage) used
+// to be invisible: every beat just fell back to the Web Speech API with
+// nothing logged anywhere a listener would see, so the only way to notice
+// was hearing the wrong voice mid-session (see the quota-exhaustion incident
+// this was added for, 2026-09-09). Tracked here as module-level state per
+// server process -- there's one ElevenLabs account behind this whole
+// service, so "is it currently working" is a global fact, not a per-request
+// one. Only counts *live* calls (the `if (!cached)` branch below); a cache
+// hit says nothing about whether the API would work right now if asked, so
+// it neither sets nor clears this.
+let consecutiveFailures = 0;
+let lastFailureReason = null;
+// A single failed request could be a one-off network blip; two in a row is
+// enough to stop assuming that and start telling the client something is
+// actually wrong.
+const DEGRADED_THRESHOLD = 2;
+
+function extractFailureReason(bodyText) {
+  try {
+    const parsed = JSON.parse(bodyText);
+    return parsed?.detail?.code || parsed?.detail?.status || null;
+  } catch (_) {
+    return null;
+  }
+}
+
 function registerVoiceRoutes(app, { roster, voiceCacheDir, apiKey, modelId }) {
   const available = !!apiKey;
 
   app.get('/api/voice/config', (req, res) => {
-    res.json({ available });
+    if (!available) return res.json({ available: false });
+    const degraded = consecutiveFailures >= DEGRADED_THRESHOLD;
+    res.json(
+      degraded ? { available: true, degraded: true, reason: lastFailureReason } : { available: true, degraded: false }
+    );
   });
 
   app.post('/api/voice/speak', async (req, res) => {
@@ -87,16 +117,22 @@ function registerVoiceRoutes(app, { roster, voiceCacheDir, apiKey, modelId }) {
         if (!response.ok) {
           const detail = await response.text().catch(() => '');
           console.error('[voice] ElevenLabs TTS request failed:', response.status, detail.slice(0, 300));
+          consecutiveFailures++;
+          lastFailureReason = extractFailureReason(detail) || `http_${response.status}`;
           return res.status(502).json({ error: 'TTS request failed' });
         }
         const buf = Buffer.from(await response.arrayBuffer());
         fs.writeFileSync(cachePath, buf);
+        consecutiveFailures = 0;
+        lastFailureReason = null;
       }
       res.setHeader('Content-Type', 'audio/mpeg');
       res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
       fs.createReadStream(cachePath).pipe(res);
     } catch (err) {
       console.error('[voice] synthesis error:', err.message);
+      consecutiveFailures++;
+      lastFailureReason = 'synthesis_error';
       res.status(502).json({ error: 'TTS request failed' });
     }
   });

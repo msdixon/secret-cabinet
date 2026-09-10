@@ -113,7 +113,43 @@ test('GET /api/voice/config', async t => {
     registerVoiceRoutes(app, { roster: ROSTER, voiceCacheDir: makeCacheDir(), apiKey: 'sk-test', modelId: 'model' });
     const res = fakeRes();
     app.routes['GET /api/voice/config'](fakeReq(), res);
-    assert.deepEqual(res.body, { available: true });
+    assert.deepEqual(res.body, { available: true, degraded: false });
+  });
+
+  // Failure-tracking state lives at module scope (one ElevenLabs account
+  // behind the whole process), so these exercise it through the same
+  // registerVoiceRoutes app the other tests use rather than reaching in
+  // directly.
+  await t.test('flips to degraded after two consecutive live failures, and clears on the next success', async t2 => {
+    const cacheDir = makeCacheDir();
+    t2.after(() => fs.rmSync(cacheDir, { recursive: true, force: true }));
+    const app = fakeApp();
+    registerVoiceRoutes(app, { roster: ROSTER, voiceCacheDir: cacheDir, apiKey: 'sk-test', modelId: 'model' });
+
+    const failStub = stubFetch(async () => ({
+      ok: false,
+      status: 401,
+      text: async () => JSON.stringify({ detail: { code: 'quota_exceeded' } }),
+    }));
+    await app.routes['POST /api/voice/speak'](fakeReq({ body: { memberId: 'crowley', text: 'One.' } }), fakeRes());
+    const firstRes = fakeRes();
+    app.routes['GET /api/voice/config'](fakeReq(), firstRes);
+    assert.deepEqual(firstRes.body, { available: true, degraded: false });
+
+    await app.routes['POST /api/voice/speak'](fakeReq({ body: { memberId: 'crowley', text: 'Two.' } }), fakeRes());
+    const degradedRes = fakeRes();
+    app.routes['GET /api/voice/config'](fakeReq(), degradedRes);
+    assert.deepEqual(degradedRes.body, { available: true, degraded: true, reason: 'quota_exceeded' });
+    failStub.restore();
+
+    const successStub = stubFetch(async () => ({ ok: true, arrayBuffer: async () => Buffer.from('fake-mp3-bytes') }));
+    t2.after(successStub.restore);
+    const res = fakeRes();
+    await app.routes['POST /api/voice/speak'](fakeReq({ body: { memberId: 'crowley', text: 'Recovered.' } }), res);
+    await waitForFinish(res);
+    const recoveredRes = fakeRes();
+    app.routes['GET /api/voice/config'](fakeReq(), recoveredRes);
+    assert.deepEqual(recoveredRes.body, { available: true, degraded: false });
   });
 });
 
