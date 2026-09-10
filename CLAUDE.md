@@ -35,6 +35,10 @@ gh project item-add 2 --owner msdixon --url <the issue URL just created>
 
 New items land in whatever Status the project's default assigns (observed as **Backlog** as of 2026-08-08) — that's fine as a landing spot; deciding whether it's actually Backlog-worthy vs. Icebox vs. something more urgent is what triage is for, not something to guess at the moment of filing.
 
+**A session without the `gh` CLI can't run the `gh project item-add` step above.** Claude Code on the web, and any other session limited to the GitHub MCP server, has no `gh` binary and no MCP tool that adds an item to a Projects v2 board — `list_issue_fields` comes back empty for this repo, so there's no field-based path either. Create the issue anyway with whatever's available (the MCP server's issue-creation tool), then say explicitly, to whoever's driving the session, that it still needs to be added to the board by hand — don't skip filing the issue just because the board step isn't reachable, and don't silently leave it off the board without saying so.
+
+**Why:** confirmed 2026-09-08 when a web session filed four dependency-bump issues (#553–#556) through GitHub MCP tools with no `gh` CLI in the environment. It flagged the gap to the user instead of either failing the whole request or leaving the issues off the board unremarked.
+
 ## Worktree hygiene
 
 This project accumulates a git worktree per task under `.claude/worktrees/`. Left alone, they silently pile up — some have sat for months with real uncommitted work nobody circled back to.

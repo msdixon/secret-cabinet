@@ -18,6 +18,7 @@ const {
   UNDER_HEARD_BOOST,
   MAX_UNDER_HEARD_DEFICIT,
   CROWDED_WORDS_PER_VOICE,
+  TYPICAL_TURN_WORDS,
   SPEAKER_MAX_TOKENS,
   TANGENT_NUDGE_CHANCE,
   VOICE_EXEMPLAR_WORD_BUDGET,
@@ -425,7 +426,7 @@ Do not sign your own name at the start of your response — that is handled auto
 
 Write your entire turn as one continuous block — no blank line anywhere inside it, even across multiple sentences or beats. A blank line marks a change of speaker to whoever reads this afterward; leaving one in the middle of your own turn would read as someone else taking over mid-thought. If you need a pause or a shift, use a single line break, never a blank one.
 
-There is no default length for a turn — let who you are and what's just happened decide it. Some members think out loud at length once something has actually engaged them; others cut in with a single line and let it land. Both are complete turns. If you have a lot to say, say it — but the round has a shared, finite amount of room, so notice you're leaving less of it for whoever speaks after you. A one-line interjection is not a lesser contribution than a paragraph.
+There is no fixed length for a turn — let who you are and what's just happened decide it. Most turns are short, on the order of ${TYPICAL_TURN_WORDS} words or well under. Some members think out loud at length once something has actually engaged them; when that's genuinely true tonight, say what needs saying — but that length has to be earned by the moment, not the default reach for any turn. A one-line interjection is not a lesser contribution than a paragraph; more often it's the harder, more disciplined choice.
 
 You do not have to speak. If nothing in the room has actually moved you — someone else has already said the truer version of your point, or you are simply not there yet — you may pass instead of manufacturing a reaction. To pass, write nothing but a single action in *asterisks*, and stop: a look, a stillness, a hand gone still around a glass. No dialogue, no second line, nothing after it. This is a real choice with its own weight, not an escape from a turn that's merely hard — reach for it because the silence is the truer thing tonight, not because speaking would cost you more effort. Being called on and staying quiet is itself something that happened in the room; use it rarely enough that it still means something when you do.
 
@@ -492,7 +493,7 @@ function buildSpeakerUserMessage({
       remainingBudgetWords / (unheardCount + 1) < CROWDED_WORDS_PER_VOICE;
     budgetHint = crowded
       ? `\n\n(Roughly ${remainingBudgetWords} words of room left in the round, and ${unheardCount} other${unheardCount === 1 ? '' : 's'} who haven't spoken yet still waiting on it. If everyone's going to fit, this is a moment where a line lands harder than a paragraph — but read the room; don't cut yourself off if something genuinely needs the space.)`
-      : `\n\n(The round has roughly ${remainingBudgetWords} words of room left before it should start wrapping up — a felt sense of how much space remains, not a hard limit. A short reaction is as valid a turn as a long one.)`;
+      : `\n\n(The round has roughly ${remainingBudgetWords} words of room left before it should start wrapping up — a felt sense of how much space remains, not a hard limit. Most turns land around ${TYPICAL_TURN_WORDS} words regardless of how much room is technically available; a short reaction is as valid a turn as a long one.)`;
   }
   // #513: unconditional on budget — this is a register nudge, not a
   // scheduling one, so it can land in the same beat as budgetHint above

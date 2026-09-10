@@ -282,6 +282,7 @@ window.LodgeScene = (function () {
   let fireStirTimer = null;
   let reducedMotion = false;
 
+  // ── Fire & atmosphere ──────────────────────────────────────────────────────
   function prefersReducedMotion() {
     return typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   }
@@ -357,6 +358,7 @@ window.LodgeScene = (function () {
   // and furnishings followed in #304 (buildWallDressing, below); dynamic
   // shadow casting followed in #305 (init(), below -- table/seats/floor
   // only, not the wall dressing here).
+  // ── Room shell: walls, trim, pilasters ─────────────────────────────────────
   function buildWalls(scene) {
     // Open cylindrical tube (no caps -- floor/ceiling cover top and bottom
     // separately). backFaceCulling off because the camera sits *inside*
@@ -545,6 +547,7 @@ window.LodgeScene = (function () {
     }
   }
 
+  // ── Wall dressing: portraits, bookshelves, sealed door ─────────────────────
   // #479/#520: the bays that hang an actual image -- the rest stay the empty
   // gilt-frame-over-dark-panel furnishing described below. PORTRAIT_ANGLES[0]
   // and [2] are the two bays immediately flanking the hearth (each PI/2 --
@@ -846,6 +849,7 @@ window.LodgeScene = (function () {
     buildSealedDoor(scene);
   }
 
+  // ── The document object (#34) ──────────────────────────────────────────────
   // #34: "the document as object" -- the source provocation rendered as a
   // physical artifact on the table rather than only living in a textarea.
   // Scoped deliberately narrow, same discipline #357/#304 took for their own
@@ -1097,6 +1101,7 @@ window.LodgeScene = (function () {
     else openDocumentInspect();
   }
 
+  // ── The hearth (#357) ──────────────────────────────────────────────────────
   // #357: the fireplace -- surround geometry, the fire itself, and the two
   // PointLights that replace the old floating 'hearth' + 'ember' sphere
   // (see HEARTH_RANGE's comment above for why those old numbers can't just
@@ -1317,6 +1322,7 @@ window.LodgeScene = (function () {
     fireGlowLight.intensity = FIRE_GLOW_INTENSITY_LIT;
   }
 
+  // ── Table & seats ──────────────────────────────────────────────────────────
   function buildTableAndSeats(scene) {
     const table = BABYLON.MeshBuilder.CreateCylinder(
       'table',
@@ -1500,6 +1506,7 @@ window.LodgeScene = (function () {
     animateSeatProp(seat.avatar, 'scaling', new BABYLON.Vector3(spec.scale, spec.scale, spec.scale), 'scaling');
   }
 
+  // ── Portrait textures ──────────────────────────────────────────────────────
   // #474: the one generic, non-likeness image used everywhere a seat has no
   // real portrait to show -- see NON_LIKENESS_REACTION_MEMBERS above for the
   // full rationale. Same vScale/vOffset flip as every other portrait texture
@@ -1560,6 +1567,7 @@ window.LodgeScene = (function () {
     return portraitTextures[memberId];
   }
 
+  // ── Camera ─────────────────────────────────────────────────────────────────
   // Shortest angular delta from `from` to `to`, wrapped to (-PI, PI] --
   // camera.alpha is unbounded (same as the old auto-rotate's `+=`), so the
   // animation target is `from + delta`, never a raw `to`, to guarantee the
@@ -1677,6 +1685,7 @@ window.LodgeScene = (function () {
     animateCameraProp(cameraRef, 'radius', targetRadius);
   }
 
+  // ── Seat state, pool & reactions ───────────────────────────────────────────
   let currentSpeakingId = null;
   // #360: the director's current candidate pool (null until the first
   // passage's consult resolves -- distinguishes "no signal yet" from "an
@@ -1911,6 +1920,7 @@ window.LodgeScene = (function () {
     return { x: projected.x, y: projected.y, visible };
   }
 
+  // ── Init ───────────────────────────────────────────────────────────────────
   function init(canvas, options = {}) {
     try {
       const engine = new BABYLON.Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true });
