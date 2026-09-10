@@ -93,12 +93,14 @@
                browser has no SpeechSynthesis support at all. -->
           <button class="witness-voice-btn" id="witness-voice-btn" onclick="window.Voice.toggle()" title="Voice playback (Web Speech API) — click to toggle">🔈 Voice</button>
           <button class="witness-speed-btn" id="witness-speed-btn" onclick="window.Witness.cycleSpeed()" title="Playback speed — click to cycle">1×</button>
-          <!-- #506: "what did he just say" -- replays only the most recently
-               spoken live turn (a fresh room-card entry / stage bubble plus a
-               fresh Voice.speak() call), not a scrubbable history. A no-op
-               during replay (goBack already covers that) or before anyone's
-               spoken yet -- see recapLastTurn()'s own comment in witness.js. -->
-          <button class="witness-recap-btn" id="witness-recap-btn" onclick="window.Witness.recapLastTurn()" title="Recap the last thing said">↻ Recap</button>
+          <!-- #506: "what did he just say" -- steps backward/forward through
+               already-spoken live turns (each a fresh room-card entry / stage
+               bubble plus a fresh Voice.speak() call), a discrete jump rather
+               than a scrubbable audio timeline. Both no-op during replay
+               (goBack already covers that) or before anyone's spoken yet --
+               see recapBack()'s own comment in witness.js. -->
+          <button class="witness-recap-btn" id="witness-recap-back-btn" onclick="window.Witness.recapBack()" title="Recap — step back to an earlier turn">‹ Recap</button>
+          <button class="witness-recap-btn" id="witness-recap-fwd-btn" onclick="window.Witness.recapForward()" title="Recap — step forward toward the live turn">Recap ›</button>
           <button class="witness-exit-btn" id="witness-exit-btn" onclick="window.Witness.exitClicked()" style="display:none;">✕ Exit</button>
         </div>
         <div class="witness-stage" id="witness-stage" onclick="window.Witness.advance()"></div>
