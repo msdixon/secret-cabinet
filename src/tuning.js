@@ -219,12 +219,17 @@ const CROWDED_WORDS_PER_VOICE = 220;
 // are a different lever entirely (who gets picked to speak, not how long a
 // given turn runs once picked) and are left alone for the same reason.
 //
-// Unverified against a live re-measurement as of this change: this
-// environment has no ANTHROPIC_API_KEY configured, so the controlled on/off
-// A/B #513 phase 3 used to isolate the model-swap confound couldn't be
-// re-run here. Before treating this number as calibrated rather than a
-// reasoned first guess, re-run a live A/B (same shape as phase 3's table)
-// against sessions generated after this change lands.
+// Live-verified 2026-09-09 (phase 4, BREVITY-BASELINE-REPORT.md): same 3
+// member/topic pairs and trial count as phase 3's table, un-nudged, against
+// claude-sonnet-5 with this anchor live. Grand average came down from phase
+// 3's 200w to 157w (-21.5%) — a real, measured effect, not just a reasoned
+// guess anymore. But it's a partial fix, not a full one: 157w is still ~1.8x
+// phase 1's 88w baseline, and a follow-up test at 60 plateaued (151w grand
+// average, within trial-to-trial noise of the 90 result) rather than
+// tracking the lower number down — this specific lever has hit its ceiling.
+// Don't reach for a further reduction here expecting it to move the average;
+// the residual gap needs a different lever (#561) rather than more turns of
+// this same knob.
 const TYPICAL_TURN_WORDS = 90;
 
 // #164: still well under the pre-#164 1500-token cap, but raised from an
