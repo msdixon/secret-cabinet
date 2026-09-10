@@ -91,7 +91,7 @@ const MEMBERS = {
     // textured attire instead of either extreme (invented regalia, or an
     // overcorrected plain shirt).
     subject:
-      'Warm, etching-adjacent portrait of Sun Ra, American musician and cosmic philosopher, mid-20th century — head-and-shoulders. Match the reference photo\'s actual attire closely: a dark patterned/textured knit sweater (not a plain button shirt) and a small, close-fitting round embroidered or beaded cap — plain everyday dress with real texture and pattern, not sequined robes or elaborate ceremonial regalia, and not a bare headdress-free look either. The distinctiveness should come from his face, bearing, and this specific plain cap and sweater, not from invented ceremonial clothing.',
+      "Warm, etching-adjacent portrait of Sun Ra, American musician and cosmic philosopher, mid-20th century — head-and-shoulders. Match the reference photo's actual attire closely: a dark patterned/textured knit sweater (not a plain button shirt) and a small, close-fitting round embroidered or beaded cap — plain everyday dress with real texture and pattern, not sequined robes or elaborate ceremonial regalia, and not a bare headdress-free look either. The distinctiveness should come from his face, bearing, and this specific plain cap and sweater, not from invented ceremonial clothing.",
   },
   randolph: {
     // Revised 2026-09-09 (round 2) per Rachel's pass-3 review: round 1's
@@ -99,7 +99,7 @@ const MEMBERS = {
     // than the reference photo shows. Added explicit correction language for
     // both, same pattern as the rest of this file's likeness-anchor prompts.
     subject:
-      'Warm, etching-adjacent portrait of Paschal Beverly Randolph, American Rosicrucian founder and physician, mid-19th century — head-and-shoulders, formal mid-Victorian dress (dark coat, cravat) appropriate to a Black American professional man of the period, direct dignified gaze. Match the reference photo\'s actual facial structure, complexion, and hair exactly — this is the only known photograph of Randolph, so it is the sole ground truth for his likeness. In particular: match the reference photo\'s lighter, medium-brown complexion (do not render him darker-skinned than the photo shows), and its narrower, slightly taller nose with less flare at the nostrils than a generic rendering would default to.',
+      "Warm, etching-adjacent portrait of Paschal Beverly Randolph, American Rosicrucian founder and physician, mid-19th century — head-and-shoulders, formal mid-Victorian dress (dark coat, cravat) appropriate to a Black American professional man of the period, direct dignified gaze. Match the reference photo's actual facial structure, complexion, and hair exactly — this is the only known photograph of Randolph, so it is the sole ground truth for his likeness. In particular: match the reference photo's lighter, medium-brown complexion (do not render him darker-skinned than the photo shows), and its narrower, slightly taller nose with less flare at the nostrils than a generic rendering would default to.",
   },
 };
 
@@ -157,7 +157,9 @@ async function main() {
     await generateMember(apiKey, id);
   }
 
-  console.log('\nNext: review each candidate in public/portraits/candidates/ against its reference photo and STYLE_GUIDE.md, then promote with:');
+  console.log(
+    '\nNext: review each candidate in public/portraits/candidates/ against its reference photo and STYLE_GUIDE.md, then promote with:'
+  );
   for (const id of ids) {
     console.log(`  node scripts/promote-portrait.js ${id} --force`);
     for (const reaction of REACTION_TYPES) {

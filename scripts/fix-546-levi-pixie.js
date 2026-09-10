@@ -33,11 +33,7 @@
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
-const {
-  generatePortraitImage,
-  buildReactionPrompt,
-  REACTION_TYPES,
-} = require('../src/portrait-generation');
+const { generatePortraitImage, buildReactionPrompt, REACTION_TYPES } = require('../src/portrait-generation');
 
 const ROOT = path.join(__dirname, '..');
 const PORTRAITS_DIR = path.join(ROOT, 'public', 'portraits');
@@ -45,7 +41,7 @@ const CANDIDATES_DIR = path.join(PORTRAITS_DIR, 'candidates');
 const LIKENESS_REFS_DIR = path.join(PORTRAITS_DIR, 'likeness-refs');
 
 const STYLE_SUFFIX =
-  'Visible linework and texture (engraving/ink-wash register), not photorealistic or cartoon/flat-vector. Limited warm sepia/candlelit palette matching the first reference image\'s exact tone. Plain dark unornamented background matching the first reference image — no scene elements, no vignette. Head-and-shoulders, portrait orientation, thumbnail resolution.';
+  "Visible linework and texture (engraving/ink-wash register), not photorealistic or cartoon/flat-vector. Limited warm sepia/candlelit palette matching the first reference image's exact tone. Plain dark unornamented background matching the first reference image — no scene elements, no vignette. Head-and-shoulders, portrait orientation, thumbnail resolution.";
 
 const MEMBERS = {
   levi: {
@@ -116,7 +112,9 @@ async function main() {
     await generateMember(apiKey, id);
   }
 
-  console.log('\nNext: review each candidate in public/portraits/candidates/ against its reference photo and STYLE_GUIDE.md, then promote with:');
+  console.log(
+    '\nNext: review each candidate in public/portraits/candidates/ against its reference photo and STYLE_GUIDE.md, then promote with:'
+  );
   for (const id of ids) {
     console.log(`  node scripts/promote-portrait.js ${id} --force`);
     for (const reaction of REACTION_TYPES) {
