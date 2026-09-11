@@ -1,8 +1,11 @@
 [
   {
     "id": "crowley",
-    "name": "Crowley",
+    "name": "Aleister Crowley",
     "file": "crowley.md",
+    "aliases": [
+      "Crowley"
+    ],
     "glyph": "☿",
     "voiceGender": "male",
     "voiceDemeanor": "intense",
@@ -11,8 +14,11 @@
   },
   {
     "id": "waite",
-    "name": "Waite",
+    "name": "Arthur Edward Waite",
     "file": "waite.md",
+    "aliases": [
+      "Waite"
+    ],
     "glyph": "✡",
     "voiceGender": "male",
     "voiceDemeanor": "stately",
@@ -21,11 +27,12 @@
   },
   {
     "id": "pixie",
-    "name": "Coleman-Smith",
+    "name": "Pamela Colman Smith",
     "file": "coleman-smith.md",
     "aliases": [
       "Pamela",
-      "Pamela Colman Smith"
+      "Pamela Colman Smith",
+      "Coleman-Smith"
     ],
     "glyph": "♃",
     "voiceId": "FGY2WhTYpPnrIDTdsKH5",
@@ -34,8 +41,11 @@
   },
   {
     "id": "yeats",
-    "name": "Yeats",
+    "name": "William Butler Yeats",
     "file": "yeats.md",
+    "aliases": [
+      "Yeats"
+    ],
     "glyph": "☽",
     "voiceGender": "male",
     "voiceDemeanor": "stately",
@@ -44,8 +54,11 @@
   },
   {
     "id": "blavatsky",
-    "name": "Blavatsky",
+    "name": "Helena Petrovna Blavatsky",
     "file": "blavatsky.md",
+    "aliases": [
+      "Blavatsky"
+    ],
     "glyph": "☸",
     "voiceGender": "female",
     "voiceDemeanor": "stately",
@@ -54,8 +67,11 @@
   },
   {
     "id": "levi",
-    "name": "Lévi",
+    "name": "Éliphas Lévi",
     "file": "levi.md",
+    "aliases": [
+      "Lévi"
+    ],
     "glyph": "△",
     "voiceGender": "male",
     "voiceDemeanor": "intense",
@@ -93,8 +109,11 @@
   },
   {
     "id": "llull",
-    "name": "Llull",
+    "name": "Ramon Llull",
     "file": "llull.md",
+    "aliases": [
+      "Llull"
+    ],
     "glyph": "✺",
     "voiceId": "CwhRBWXzGAHq8TQ4Fs17",
     "voiceGender": "male",

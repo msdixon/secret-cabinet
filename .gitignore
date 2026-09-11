@@ -12,6 +12,7 @@ BIBLIOGRAPHY.md
 METRICS-ROLLUP.md
 EVAL-HARNESS-REPORT.md
 CITATION-GROUNDING-EVAL-REPORT.md
+OBSERVED-LENGTH-TENDENCY.md
 visits.json
 .DS_Store
 public/portraits/candidates/*.png

@@ -67,7 +67,12 @@ const MODEL = process.env.MODEL || 'claude-sonnet-5';
 // you've checked which voices actually exist in the target account's Voice
 // Library.
 const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY || null;
-const ELEVENLABS_MODEL_ID = process.env.ELEVENLABS_MODEL_ID || 'eleven_turbo_v2_5';
+// #29 quota-exhaustion incident (2026-09-09) prompted a live side-by-side
+// listen of turbo vs. flash on the two most demeanor-distinct character
+// voices in the roster (Bruno/intense, Jung/stately, 2026-09-10) -- flash
+// held up on both, and it's ElevenLabs' cheaper/faster tier, so it's the
+// default now rather than something an operator has to opt into via env var.
+const ELEVENLABS_MODEL_ID = process.env.ELEVENLABS_MODEL_ID || 'eleven_flash_v2_5';
 const ELEVENLABS_VOICE_POOL = process.env.ELEVENLABS_VOICE_POOL
   ? process.env.ELEVENLABS_VOICE_POOL.split(',')
       .map(s => s.trim())
