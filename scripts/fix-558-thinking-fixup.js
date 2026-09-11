@@ -22,7 +22,11 @@
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
-const { generatePortraitImage, REACTION_EXPRESSION_OVERRIDE_META, REACTION_STYLE_SUFFIX } = require('../src/portrait-generation');
+const {
+  generatePortraitImage,
+  REACTION_EXPRESSION_OVERRIDE_META,
+  REACTION_STYLE_SUFFIX,
+} = require('../src/portrait-generation');
 
 const ROOT = path.join(__dirname, '..');
 const CANDIDATES_DIR = path.join(ROOT, 'public', 'portraits', 'candidates');
