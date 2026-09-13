@@ -6,6 +6,10 @@
 // 6 of the original 10 hand-curated entries had fabricated archive.org
 // identifiers that 404 — exactly the links /verify-citations (#36) presents
 // to users as "grounded in" provenance, never previously checked.
+// Structured identifier checks exist for archive.org, doi.org, and Google
+// Books; anything else — a publisher page, JSTOR, a library catalog — only
+// gets the weaker checkGeneric HTTP-200 check, which a plausible-but-wrong
+// URL can still pass.
 // No test framework exists in this repo — matches its existing ad hoc
 // script style (see scripts/test-director.js). Run with:
 //   node scripts/verify-library-sources.js
@@ -49,6 +53,40 @@ async function checkDoi(doi) {
   return { ok: true };
 }
 
+// archive.org and Crossref cover public-domain-era and academic sources well,
+// but a commercially published, in-copyright, non-journal 20th/21st-century
+// book has no archive.org identifier and no DOI — its source_url falls
+// through to checkGeneric below, which only confirms the URL resolves, not
+// that it resolves to the cited work. Google Books' per-edition id closes
+// that gap the same way: a fabricated id 404s, a real one returns a
+// volumeInfo with an actual title.
+async function checkGoogleBooks(id) {
+  const res = await fetch(`https://www.googleapis.com/books/v1/volumes/${id}`);
+  if (!res.ok) return { ok: false, reason: `HTTP ${res.status}` };
+  const data = await res.json();
+  if (!data?.volumeInfo?.title) return { ok: false, reason: 'Google Books has no title for this id' };
+  return { ok: true };
+}
+
+// Google Books' per-edition id shows up in two URL shapes:
+// books.google.com/books?id=<id> and google.com/books/edition/<slug>/<id>.
+function extractGoogleBooksId(url) {
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+  if (parsed.hostname === 'books.google.com' && parsed.pathname === '/books') {
+    return parsed.searchParams.get('id');
+  }
+  if (parsed.hostname === 'www.google.com' && parsed.pathname.startsWith('/books/edition/')) {
+    const segments = parsed.pathname.split('/').filter(Boolean);
+    return segments[3] || null;
+  }
+  return null;
+}
+
 async function checkGeneric(url) {
   try {
     const res = await fetch(url);
@@ -63,6 +101,8 @@ async function verifyOne(source_url) {
   if (archiveMatch) return checkArchiveOrg(archiveMatch[1]);
   const doiMatch = source_url.match(/^https:\/\/doi\.org\/(.+)$/);
   if (doiMatch) return checkDoi(doiMatch[1]);
+  const googleBooksId = extractGoogleBooksId(source_url);
+  if (googleBooksId) return checkGoogleBooks(googleBooksId);
   return checkGeneric(source_url);
 }
 
