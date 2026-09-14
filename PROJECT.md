@@ -57,7 +57,6 @@ Current Todo-status backlog (no ranking implied — pick next tranche with Rache
 <!-- TODO-FRAGMENTS:START -->
 - [#35](https://github.com/msdixon/secret-cabinet/issues/35) archival ingestion pipeline (35b — bulk OCR tooling), deferred; 35a hand-curated growth split out to [#316](https://github.com/msdixon/secret-cabinet/issues/316)
 - [#195](https://github.com/msdixon/secret-cabinet/issues/195) amnesia spike — rungs (b)/(c), deliberately deferred (see "Other open decisions" above); Todo on the board but not being actively picked up
-- [#576](https://github.com/msdixon/secret-cabinet/issues/576) reframe the room's core instruction from "citation as combat" to "conviction over proof" — first part of the citation-as-combat redesign
 - [#581](https://github.com/msdixon/secret-cabinet/issues/581) give "what is this" a persistent, non-modal home instead of the one-shot preamble dismissal
 - [#582](https://github.com/msdixon/secret-cabinet/issues/582) fix inside-baseball UI copy: "Reveal/Hide Player Turns ◆" and the stale voice-backend tooltip
 <!-- TODO-FRAGMENTS:END -->

@@ -31,7 +31,7 @@ const ARC_NOTES = {
   opening:
     "The room stirs. Initial reactions to whatever the provocation woke up — not every member need engage with it directly; some may respond to the room's reaction to it before responding to it themselves. There is no author to address.",
   crosstalk:
-    'The provocation recedes. The conversation follows what it raised. Members are now talking to each other about the actual question that has surfaced — disagreements crystallize, alliances form, citations come out, someone is irritated, someone is more interested than they wanted to be. References to the provocation are welcome but not required; the room is no longer obliged to it. Receipts may be deployed. Actions in asterisks.',
+    'The provocation recedes. The conversation follows what it raised. Members are now talking to each other about the actual question that has surfaced — disagreements crystallize, alliances form, someone is irritated, someone is more interested than they wanted to be. References to the provocation are welcome but not required; the room is no longer obliged to it. A citation may surface when it is genuinely the sharpest thing at hand, but conviction carries a position on its own. Actions in asterisks.',
   embers:
     'The conversation has gone where it has gone. It may have left the provocation entirely. The room may be arriving somewhere, or it may not. Someone may say the thing that persists as an ember. Someone may push back hard at a point that has been allowed to stand too long. Someone may simply observe the fire.',
   extended:
