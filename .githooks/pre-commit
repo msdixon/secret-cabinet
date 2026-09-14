@@ -1,0 +1,27 @@
+#!/bin/sh
+# Runs Prettier on staged .js files before a commit lands, so formatting
+# drift is caught here instead of first surfacing in CI (#568). CI's
+# lint/format steps used to run with `continue-on-error` (silently passing
+# on drift) until #544 removed it, which just moved the failure later
+# instead of preventing it -- #565/#566 (2026-09-10) both still needed a
+# same-day follow-up formatting-fix commit after that change. This hook
+# closes the gap at commit time instead.
+#
+# Unlike post-checkout (see CLAUDE.md's "Dependencies in new worktrees"),
+# this fires on `git commit` itself, which every worktree performs
+# regardless of how it was created -- so it isn't skipped for worktrees
+# the Claude Code harness creates without a checkout step.
+
+staged_js=$(git diff --cached --name-only --diff-filter=ACMR -z -- '*.js' | tr '\0' '\n')
+
+if [ -z "$staged_js" ]; then
+  exit 0
+fi
+
+if [ ! -x node_modules/.bin/prettier ]; then
+  echo "pre-commit: node_modules missing, running npm install..."
+  npm install --no-audit --no-fund || exit 1
+fi
+
+echo "$staged_js" | tr '\n' '\0' | xargs -0 node_modules/.bin/prettier --write || exit 1
+echo "$staged_js" | tr '\n' '\0' | xargs -0 git add
