@@ -68,10 +68,7 @@ test('classifyGatedVisit', async t => {
     assert.equal(visits.classifyGatedVisit(fakeReq({ path: '/api/convene', method: 'POST' })), 'POST /api/convene');
     assert.equal(visits.classifyGatedVisit(fakeReq({ path: '/api/cast', method: 'POST' })), 'POST /api/cast');
     assert.equal(visits.classifyGatedVisit(fakeReq({ path: '/api/round', method: 'POST' })), 'POST /api/round');
-    assert.equal(
-      visits.classifyGatedVisit(fakeReq({ path: '/api/interject', method: 'POST' })),
-      'POST /api/interject'
-    );
+    assert.equal(visits.classifyGatedVisit(fakeReq({ path: '/api/interject', method: 'POST' })), 'POST /api/interject');
   });
 
   await t.test('does not label the local-only prototype route', () => {
