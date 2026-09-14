@@ -165,11 +165,22 @@ app.use(auth.createRequireAuth(PASSPHRASE));
 // auth guard so req.authed is already set; before express.static so it
 // still sees the app-shell paths static ends up serving. Only counts
 // `!req.authed` requests — see visits.js's header for why.
+//
+// #583 extends this to the gated side in the `else` branch below: convene/
+// cast/round/interject calls made once a session has authenticated past
+// applyConveneGate(). Excludes IS_LOCAL — with no passphrase set, local dev
+// requests are always req.authed (auth.js's isAuthedRequest), so without
+// this guard every local request while developing would count, drowning
+// out the real signal (deployed, shared-credential usage like a colleague
+// demo) this exists to surface.
 const visitStore = visits.loadStore(VISITS_FILE);
 app.use((req, res, next) => {
   if (!req.authed) {
     const label = visits.recordVisit(VISITS_FILE, visitStore, req);
     if (label) console.log(`[visit] ${label}`);
+  } else if (!IS_LOCAL) {
+    const label = visits.recordGatedVisit(VISITS_FILE, visitStore, req);
+    if (label) console.log(`[gated-visit] ${label}`);
   }
   next();
 });
@@ -429,7 +440,10 @@ app.get('/api/config', (req, res) => {
 
 // GET /api/admin/visits — #422: unauthenticated-visitor traffic to the
 // public read tier (#379/#380), so the invite-only pool can be watched
-// instead of assumed. Same requireAuth gate as the rest of /api/* — no
+// instead of assumed. #583 adds the gated side to the same report: convene/
+// cast/round/interject calls from authenticated (deployed, non-local)
+// sessions, e.g. a colleague demo through shared credentials — see
+// visits.js's buildReport. Same requireAuth gate as the rest of /api/* — no
 // separate admin auth layer, matching the two existing /api/admin/* routes
 // in routes/session.js.
 app.get('/api/admin/visits', (req, res) => {
