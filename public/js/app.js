@@ -1,5 +1,7 @@
 'use strict';
 
+// ── Core state & roster ──────────────────────────────────────────────────────
+
 let currentJournal = JSON.parse(localStorage.getItem('sc-journal') || 'null') || { id: null, name: null };
 
 // Roster is fetched from the server so newly added members appear without reload.
