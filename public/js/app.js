@@ -1496,8 +1496,8 @@ function togglePlayerTurnReveal() {
   playerTurnsRevealed = !playerTurnsRevealed;
   document.getElementById('transcript-panel').classList.toggle('reveal-player-turns', playerTurnsRevealed);
   document.getElementById('reveal-player-turns-btn').textContent = playerTurnsRevealed
-    ? 'Hide Player Turns ◆'
-    : 'Reveal Player Turns ◆';
+    ? 'Hide Your Turns ◆'
+    : 'Reveal Your Turns ◆';
 }
 
 // ── Stir the room again ──────────────────────────────────────────────────────

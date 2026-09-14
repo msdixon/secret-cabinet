@@ -80,6 +80,10 @@ window.Voice = (function () {
       .then(cfg => {
         if (!cfg) return;
         elevenLabsAvailable = !!cfg.available;
+        // #582: the toggle button's tooltip names whichever backend this
+        // resolves to, so it needs to be re-derived once we actually know
+        // (this fetch is async and resolves after the button's first paint).
+        updateButton();
         // #29 quota-exhaustion incident (2026-09-09): recent ElevenLabs
         // failures used to be invisible -- every beat just silently fell
         // back to Web Speech, and the only way to notice was hearing the
@@ -130,6 +134,15 @@ window.Voice = (function () {
 
   let enabled = loadEnabled();
 
+  // #582: the tooltip used to hardcode "(Web Speech API)" regardless of
+  // which backend was actually live -- wrong most of the time once
+  // ElevenLabs (above) became the primary path. Naming it here instead
+  // keeps the label truthful without the caller needing to know which
+  // backend speak() will actually pick for a given beat.
+  function backendLabel() {
+    return elevenLabsAvailable ? 'AI voices' : "your browser's built-in voice";
+  }
+
   function updateButton() {
     const btn = document.getElementById('witness-voice-btn');
     if (!btn) return;
@@ -139,6 +152,7 @@ window.Voice = (function () {
     }
     btn.textContent = enabled ? '🔊 Voice' : '🔈 Voice';
     btn.classList.toggle('voice-on', enabled);
+    btn.title = `Voice playback (${backendLabel()}) — click to toggle`;
   }
   updateButton();
 
