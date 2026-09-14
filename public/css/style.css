@@ -440,6 +440,14 @@ a.lodge-btn { display:inline-block; text-decoration:none; }
 .status-retry-btn { font-size:11px; padding:3px 12px; border-color:#5a2a2a; color:#a06060; font-style:normal; }
 .status-retry-btn:hover { background:rgba(120,40,40,0.15); border-color:#a06060; color:#d09090; }
 @keyframes flicker { 0%,100%{opacity:1} 50%{opacity:0.6} }
+
+/* #581: a quiet, permanent way back to the preamble content -- text-link
+   weight, not a bordered lodge-btn, so it doesn't compete with the header's
+   functional buttons. No color cue beyond the site's existing muted/cream
+   pairing; italic plus the underline on hover is affordance enough. */
+.lodge-footer { text-align:center; padding:2px 10px 16px; }
+.footer-orient-btn { background:none; border:none; padding:2px 4px; font-family:'IM Fell English',serif; font-style:italic; font-size:12px; letter-spacing:0.5px; color:var(--lodge-ash); cursor:pointer; }
+.footer-orient-btn:hover { color:var(--lodge-muted); text-decoration:underline; }
 .tooltip-tag { font-size:12px; background:rgba(200,146,42,0.15); border:1px solid var(--lodge-amber-dim); color:var(--lodge-amber); padding:2px 7px; border-radius:2px; font-family:'IM Fell English',serif; letter-spacing:1px; }
 .source-tag { font-size:12px; color:var(--lodge-muted); font-family:'IM Fell English',serif; font-style:italic; margin-left:6px; }
 #verify-citations-btn { display:none; }

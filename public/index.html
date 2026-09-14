@@ -542,6 +542,16 @@
     </div>
 
     <div class="status-bar" id="status-bar">The room waits.</div>
+
+    <!-- #581: the preamble banner above is a one-shot dismissal -- once
+         gone, there was no way back short of clearing site data. This is
+         the persistent second door to the same content: a quiet, permanent
+         line at the foot of the page rather than another dismissible
+         overlay, and out of the way of the header's functional buttons
+         (Past Meetings / Lodge Members / Bibliography). -->
+    <div class="lodge-footer" id="lodge-footer">
+      <button type="button" class="footer-orient-btn" onclick="showPreamble()">What is this? ⓘ</button>
+    </div>
   </div>
 </div>
 <!-- Sessions drawer -->
