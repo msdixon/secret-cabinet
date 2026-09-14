@@ -1983,7 +1983,7 @@ function initPreamble() {
 
 // #581: PREAMBLE_DISMISSED_KEY makes the banner above a permanent one-shot --
 // once dismissed there was no persistent way back to it short of clearing
-// site data. "What is this?" in the mantel nav calls this to reopen the same
+// site data. "What is this?" in the page footer calls this to reopen the same
 // content on demand; it deliberately doesn't touch the dismissed flag, so
 // the affordance keeps working no matter how many times it's used.
 function showPreamble() {

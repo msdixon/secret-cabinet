@@ -52,11 +52,6 @@
     </div>
     </div>
     <div class="mantel-nav">
-      <!-- #581: the preamble banner below is a one-shot dismissal -- once
-           gone, there was no way back short of clearing site data. This is
-           the persistent second door to the same content: always present in
-           the header, not another dismissible overlay. -->
-      <button class="lodge-btn sessions-btn mantel-sessions-btn" onclick="showPreamble()" title="Re-show the orientation message">What is this? ⓘ</button>
       <button class="lodge-btn sessions-btn mantel-sessions-btn" onclick="window.Sessions.openSessionsDrawer()">Past Meetings <span id="sessions-count" class="sessions-count"></span></button>
       <a class="lodge-btn sessions-btn mantel-sessions-btn" href="/lodge">Lodge Members ↗</a>
       <a class="lodge-btn sessions-btn mantel-sessions-btn" href="/bibliography">Bibliography ↗</a>
@@ -547,6 +542,16 @@
     </div>
 
     <div class="status-bar" id="status-bar">The room waits.</div>
+
+    <!-- #581: the preamble banner above is a one-shot dismissal -- once
+         gone, there was no way back short of clearing site data. This is
+         the persistent second door to the same content: a quiet, permanent
+         line at the foot of the page rather than another dismissible
+         overlay, and out of the way of the header's functional buttons
+         (Past Meetings / Lodge Members / Bibliography). -->
+    <div class="lodge-footer" id="lodge-footer">
+      <button type="button" class="footer-orient-btn" onclick="showPreamble()">What is this? ⓘ</button>
+    </div>
   </div>
 </div>
 <!-- Sessions drawer -->
