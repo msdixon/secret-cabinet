@@ -73,6 +73,14 @@ A tracked `post-checkout` hook at `.githooks/post-checkout` also runs `npm insta
 
 If a worktree ever turns up with 3D/scene features silently not working, check that `node_modules/babylonjs` exists before assuming it's a code bug — `npm install` in that worktree is the fix.
 
+## Pre-commit formatting hook
+
+A tracked `pre-commit` hook at `.githooks/pre-commit` runs `prettier --write` on whatever `.js` files are staged, then re-stages the result, before the commit is allowed to complete — added for [#568](https://github.com/msdixon/secret-cabinet/issues/568) so formatting drift is caught at commit time instead of first surfacing in CI (`npm run format:check`, a hard gate since PR #544 dropped `continue-on-error`). No staged `.js` files, or nothing to reformat, and it's a no-op in well under 50ms.
+
+**Unlike `post-checkout` above, this one does not have the harness-worktree gap.** `post-checkout` only runs on a checkout event, which the harness's worktree creation skips; `pre-commit` runs on `git commit` itself, which every worktree performs regardless of how it came to exist — verified 2026-09-14 by staging a badly-formatted file and committing it in a harness-created worktree.
+
+**`core.hooksPath` resolves to an absolute path in the *primary checkout*, not each worktree's own `.githooks/`.** Confirmed 2026-09-14: `git config core.hooksPath` inside a worktree prints `/…/secret-cabinet/.githooks` (the main checkout's path), not a path under the worktree itself — both the shared repo config and this worktree's own `config.worktree` carry that same absolute value. Practically, this means a hook change only takes effect once it's merged to `main` *and* the primary checkout's working directory has actually been refreshed (`git pull`) — the hook file is read straight off disk at commit time, not out of git's object store, so an in-flight worktree still on an old branch is running whatever hook code currently sits in the primary checkout, not what its own branch has staged. This is the same reason `post-checkout` has worked reliably for manual `git worktree add` since before the harness-gap above was found: it was already live in the primary checkout, so every new worktree inherited it immediately. A newly-added hook (like this one) doesn't get that for free — expect a lag between merge and the primary checkout catching up.
+
 ## Closing issues via the PR body
 
 GitHub only auto-closes an issue on merge when the PR body contains a **bare** closing keyword directly adjacent to the issue number — `Closes #445`, `Fixes #445`, or `Resolves #445` (case-insensitive, all equivalent). A markdown link (`Closes [#445](url)`) or any words between the keyword and the number (`Closes the coverage gap for #445`) breaks GitHub's parser — it will not auto-close, and nothing errors or warns that it didn't.
