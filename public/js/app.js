@@ -1970,12 +1970,27 @@ const PREAMBLE_DISMISSED_KEY = 'sc-preamble-dismissed';
 function initPreamble() {
   const banner = document.getElementById('preamble-banner');
   if (!banner) return;
-  if (localStorage.getItem(PREAMBLE_DISMISSED_KEY)) return;
-  banner.hidden = false;
+  // Wire the dismiss button regardless of dismissed state -- showPreamble()
+  // (#581) can reopen the banner on a visit where it was already dismissed,
+  // and it needs to be dismissible again from there.
   document.getElementById('preamble-dismiss-btn')?.addEventListener('click', () => {
     banner.hidden = true;
     localStorage.setItem(PREAMBLE_DISMISSED_KEY, '1');
   });
+  if (localStorage.getItem(PREAMBLE_DISMISSED_KEY)) return;
+  banner.hidden = false;
+}
+
+// #581: PREAMBLE_DISMISSED_KEY makes the banner above a permanent one-shot --
+// once dismissed there was no persistent way back to it short of clearing
+// site data. "What is this?" in the mantel nav calls this to reopen the same
+// content on demand; it deliberately doesn't touch the dismissed flag, so
+// the affordance keeps working no matter how many times it's used.
+function showPreamble() {
+  const banner = document.getElementById('preamble-banner');
+  if (!banner) return;
+  banner.hidden = false;
+  banner.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 function initStepperNav() {
