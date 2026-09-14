@@ -1,0 +1,1 @@
+Added a "What is this?" button to the persistent mantel nav that reopens the same preamble banner content, since once `PREAMBLE_DISMISSED_KEY` was set there was previously no way back short of clearing site data. See [#581](https://github.com/msdixon/secret-cabinet/issues/581).
