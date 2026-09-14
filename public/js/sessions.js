@@ -503,7 +503,8 @@ window.Sessions = (function () {
       deps.renderMembers();
       buildDossier(session.members || []);
 
-      // Restore citation flags after render (matches by speaker+quote content)
+      // Restore citation flags after render (matches by speaker+quote content,
+      // falling back to speaker+position when the quote wasn't spoken aloud)
       if (session.citationFlags?.length) deps.applyCitationFlags(session.citationFlags);
 
       // Restore player-turn markers after render (matches by exact round index)

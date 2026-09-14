@@ -103,13 +103,13 @@ function buildDispositionToolSchema(presentIds, libraryIds = []) {
           type: 'array',
           maxItems: MAX_CITATIONS_PER_BEAT,
           description:
-            'Every citation of a real (or purportedly real) text, author, or historical/scholarly claim made in the turn you just spoke — not this reflection. Most turns cite nothing; leave this empty then.',
+            'Every citation of a real (or purportedly real) text, author, or historical/scholarly claim your turn invoked or leaned on — not this reflection, and not limited to what you actually recited aloud. Most turns cite nothing; leave this empty then.',
           items: {
             type: 'object',
             properties: {
               quote: {
                 type: 'string',
-                description: `Verbatim ~10-25 word excerpt from your own turn's text containing the citation, copied exactly. Under ${CITATION_QUOTE_MAX_CHARS} characters.`,
+                description: `The real ~10-25 word passage from the cited work itself that grounds this citation, quoted accurately from the actual text — whether or not you spoke it aloud in your turn. If your turn only named or gestured at the work without reciting from it, supply the passage you were actually leaning on from your own knowledge of the work. Under ${CITATION_QUOTE_MAX_CHARS} characters.`,
               },
               work: {
                 type: 'string',
@@ -206,7 +206,7 @@ Separately again, using the reaction tool field: tag the one emotional reaction 
 
 Separately again, and rarer still: name whether tonight left something that should genuinely outlast this evening — not tonight's mood, a durable turn. Most turns, there is nothing here either.
 
-Separately from all of the above, and using the citations tool field rather than any of this private prose: extract every citation of a real (or purportedly real) text, author, or historical/scholarly claim from the turn you just spoke aloud (not this reflection). For each one, judge from your own knowledge whether it's a real work/claim and whether it's represented accurately — "verified", "unverified", or "uncertain".${libraryBlock} Most turns cite nothing; leave the citations field empty then.
+Separately from all of the above, and using the citations tool field rather than any of this private prose: extract every citation of a real (or purportedly real) text, author, or historical/scholarly claim that the turn you just spoke (not this reflection) invoked or leaned on — whether you recited it in full or only named or gestured at it. Either way, the quote field should carry the real grounding passage from the actual work, from your own knowledge of it, not a transcript excerpt of what you happened to say aloud. For each one, judge from your own knowledge whether it's a real work/claim and whether it's represented accurately — "verified", "unverified", or "uncertain".${libraryBlock} Most turns cite nothing; leave the citations field empty then.
 
 One more thing, separately again, using the invokedWorks tool field: name any text, author, or tradition you gestured at by name or unmistakable allusion in that same turn without quoting or citing it directly — reaching for a reading without quoting it, or naming a tradition rather than a title. Most turns invoke nothing beyond what's already in citations; leave invokedWorks empty then.`;
 }

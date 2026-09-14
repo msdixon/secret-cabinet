@@ -1250,14 +1250,26 @@ function applyCitationFlags(citations) {
     // formatTranscriptText() appends " —" to speaker header lines; the
     // client's dataset.speaker never has that suffix — strip it before matching.
     const speaker = flag.speaker.replace(/\s*—\s*$/, '').trim();
-    const candidates = [...document.querySelectorAll('.transcript-entry')]
-      .filter(e => e.dataset.speaker === speaker)
-      .filter(e => norm(e.querySelector('.speech-text')?.textContent || '').includes(norm(flag.quote)));
-    if (candidates.length !== 1) {
+    const speakerEntries = [...document.querySelectorAll('.transcript-entry')].filter(
+      e => e.dataset.speaker === speaker
+    );
+    const candidates = speakerEntries.filter(e =>
+      norm(e.querySelector('.speech-text')?.textContent || '').includes(norm(flag.quote))
+    );
+    // #577: a citation's quote is no longer guaranteed to appear verbatim in
+    // the spoken turn — a member may ground a claim via the citation tool
+    // call without narrating it in dialogue. When the quote isn't found (or
+    // isn't unique) in this speaker's entries, fall back to speakerEntryIndex
+    // (this speaker's Nth non-failed beat, computed server-side in the same
+    // order these entries render in) to still locate the right bubble.
+    let entry = candidates.length === 1 ? candidates[0] : null;
+    if (!entry && Number.isInteger(flag.speakerEntryIndex)) {
+      entry = speakerEntries[flag.speakerEntryIndex] || null;
+    }
+    if (!entry) {
       console.warn('Citation flag did not match exactly one entry:', flag, candidates.length);
       return;
     }
-    const entry = candidates[0];
     if (!byEntry.has(entry)) byEntry.set(entry, []);
     byEntry.get(entry).push(flag);
   });
