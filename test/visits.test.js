@@ -63,6 +63,34 @@ test('classifyVisit', async t => {
   });
 });
 
+test('classifyGatedVisit', async t => {
+  await t.test('labels convene/cast/round/interject', () => {
+    assert.equal(visits.classifyGatedVisit(fakeReq({ path: '/api/convene', method: 'POST' })), 'POST /api/convene');
+    assert.equal(visits.classifyGatedVisit(fakeReq({ path: '/api/cast', method: 'POST' })), 'POST /api/cast');
+    assert.equal(visits.classifyGatedVisit(fakeReq({ path: '/api/round', method: 'POST' })), 'POST /api/round');
+    assert.equal(visits.classifyGatedVisit(fakeReq({ path: '/api/interject', method: 'POST' })), 'POST /api/interject');
+  });
+
+  await t.test('does not label the local-only prototype route', () => {
+    assert.equal(visits.classifyGatedVisit(fakeReq({ path: '/api/prototype/round', method: 'POST' })), null);
+  });
+
+  await t.test('does not label public-tier or unrelated requests', () => {
+    for (const [method, p] of [
+      ['GET', '/'],
+      ['GET', '/api/sessions'],
+      ['GET', 'api/convene'],
+      ['DELETE', '/api/sessions/abc123'],
+    ]) {
+      assert.equal(
+        visits.classifyGatedVisit(fakeReq({ path: p, method })),
+        null,
+        `expected ${method} ${p} not to be counted`
+      );
+    }
+  });
+});
+
 test('recordVisit', async t => {
   let tmpDir;
   let filePath;
@@ -113,6 +141,58 @@ test('recordVisit', async t => {
   });
 });
 
+test('recordGatedVisit', async t => {
+  let tmpDir;
+  let filePath;
+
+  t.beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'visits-test-'));
+    filePath = path.join(tmpDir, 'visits.json');
+  });
+
+  t.afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  await t.test('increments gatedTotal, gatedByDate, and gatedByRoute, and persists to disk', () => {
+    const store = visits.emptyStore();
+    const now = new Date('2026-08-25T12:00:00Z');
+    const label = visits.recordGatedVisit(filePath, store, fakeReq({ path: '/api/convene', method: 'POST' }), now);
+
+    assert.equal(label, 'POST /api/convene');
+    assert.equal(store.gatedTotal, 1);
+    assert.equal(store.gatedByDate['2026-08-25'], 1);
+    assert.equal(store.gatedByRoute['POST /api/convene'], 1);
+    // The public-tier fields are untouched by a gated-side record.
+    assert.equal(store.total, 0);
+
+    const onDisk = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    assert.equal(onDisk.gatedTotal, 1);
+  });
+
+  await t.test('returns null and leaves the store untouched for an uncountable request', () => {
+    const store = visits.emptyStore();
+    const label = visits.recordGatedVisit(filePath, store, fakeReq({ path: '/api/prototype/round', method: 'POST' }));
+    assert.equal(label, null);
+    assert.equal(store.gatedTotal, 0);
+    assert.equal(fs.existsSync(filePath), false);
+  });
+
+  await t.test('accumulates across multiple calls and routes', () => {
+    const store = visits.emptyStore();
+    const day1 = new Date('2026-08-25T12:00:00Z');
+    const day2 = new Date('2026-08-26T09:00:00Z');
+    visits.recordGatedVisit(filePath, store, fakeReq({ path: '/api/convene', method: 'POST' }), day1);
+    visits.recordGatedVisit(filePath, store, fakeReq({ path: '/api/round', method: 'POST' }), day1);
+    visits.recordGatedVisit(filePath, store, fakeReq({ path: '/api/convene', method: 'POST' }), day2);
+
+    assert.equal(store.gatedTotal, 3);
+    assert.deepEqual(store.gatedByDate, { '2026-08-25': 2, '2026-08-26': 1 });
+    assert.equal(store.gatedByRoute['POST /api/convene'], 2);
+    assert.equal(store.gatedByRoute['POST /api/round'], 1);
+  });
+});
+
 test('loadStore', async t => {
   let tmpDir;
 
@@ -131,7 +211,14 @@ test('loadStore', async t => {
 
   await t.test('round-trips a saved store', () => {
     const filePath = path.join(tmpDir, 'visits.json');
-    const store = { total: 5, byDate: { '2026-08-25': 5 }, byRoute: { 'GET /': 5 } };
+    const store = {
+      total: 5,
+      byDate: { '2026-08-25': 5 },
+      byRoute: { 'GET /': 5 },
+      gatedTotal: 2,
+      gatedByDate: { '2026-08-25': 2 },
+      gatedByRoute: { 'POST /api/convene': 2 },
+    };
     visits.saveStore(filePath, store);
     assert.deepEqual(visits.loadStore(filePath), store);
   });
@@ -185,5 +272,29 @@ test('buildReport', async t => {
     const report = visits.buildReport(visits.emptyStore());
     assert.match(report, /0 page view\(s\) recorded/);
     assert.match(report, /0 call\(s\) recorded/);
+    assert.match(report, /0 interaction\(s\) recorded/);
+  });
+
+  await t.test('renders the gated-interactions section from the gated* fields', () => {
+    const store = {
+      ...visits.emptyStore(),
+      gatedTotal: 3,
+      gatedByDate: { '2026-08-24': 1, '2026-08-25': 2 },
+      gatedByRoute: { 'POST /api/convene': 2, 'POST /api/round': 1 },
+    };
+    const report = visits.buildReport(store);
+    const gatedSection = report.split('## Gated interactions')[1];
+
+    assert.match(gatedSection, /3 interaction\(s\) recorded/);
+    assert.match(gatedSection, /\| POST \/api\/convene \| 2 \|/);
+    assert.match(gatedSection, /\| POST \/api\/round \| 1 \|/);
+    assert.match(gatedSection, /\| 2026-08-24 \| 1 \|/);
+    assert.match(gatedSection, /\| 2026-08-25 \| 2 \|/);
+  });
+
+  await t.test('is unaffected by a store missing the gated* fields (pre-#583 data)', () => {
+    const store = { total: 1, byDate: { '2026-08-25': 1 }, byRoute: { 'GET /': 1 } };
+    assert.doesNotThrow(() => visits.buildReport(store));
+    assert.match(visits.buildReport(store), /0 interaction\(s\) recorded/);
   });
 });
