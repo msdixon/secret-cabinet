@@ -354,6 +354,54 @@ test('flattenBeatCitations', async t => {
     assert.equal(flat[0].memberId, 'crowley');
   });
 
+  // #577: citations no longer need to have been spoken aloud to be
+  // matched back to a transcript entry, so each one carries its speaker's
+  // 0-based beat index (across the whole session, not reset per round) for
+  // positional matching — see public/js/app.js's applyCitationFlags.
+  await t.test("attaches speakerEntryIndex — this speaker's Nth non-failed beat, counting across rounds", () => {
+    const session = {
+      rounds: [
+        {
+          beats: [
+            { memberId: 'crowley', text: 'a', citations: [{ quote: 'q1', work: 'W1' }] }, // index 0
+            { memberId: 'crowley', text: 'b' }, // index 1, no citations
+          ],
+        },
+        {
+          beats: [{ memberId: 'crowley', text: 'c', citations: [{ quote: 'q2', work: 'W2' }] }], // index 2
+        },
+      ],
+    };
+    const flat = c.flattenBeatCitations(session, roster);
+    assert.deepEqual(
+      flat.map(f => f.speakerEntryIndex),
+      [0, 2]
+    );
+  });
+
+  await t.test('speakerEntryIndex counts independently per speaker and skips failed beats', () => {
+    const twoRoster = [
+      { id: 'crowley', name: 'Crowley' },
+      { id: 'waite', name: 'Waite' },
+    ];
+    const session = {
+      rounds: [
+        {
+          beats: [
+            { memberId: 'crowley', text: '', failed: true }, // not counted
+            { memberId: 'crowley', text: 'a', citations: [{ quote: 'q1', work: 'W1' }] }, // index 0
+            { memberId: 'waite', text: 'x', citations: [{ quote: 'q2', work: 'W2' }] }, // index 0
+          ],
+        },
+      ],
+    };
+    const flat = c.flattenBeatCitations(session, twoRoster);
+    assert.deepEqual(
+      flat.map(f => f.speakerEntryIndex),
+      [0, 0]
+    );
+  });
+
   await t.test('skips a failed beat even if it somehow carries a citations array', () => {
     const session = {
       rounds: [{ beats: [{ memberId: 'crowley', text: '', failed: true, citations: [{ quote: 'q', work: 'W' }] }] }],

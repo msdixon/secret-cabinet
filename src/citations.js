@@ -310,13 +310,39 @@ async function escalateCitationToWeb(citation) {
 // Shared by /verify-citations (src/routes/session.js) and the cumulative
 // manifest (scripts/build-citation-manifest.js) so both read the same
 // accumulated data instead of each re-deriving their own view of it.
+// #577: each non-failed beat renders as exactly one `.transcript-entry` on
+// the client (pipeline.js joins beats as `${name}\n${text}` blocks, one per
+// beat, and the client's parser flushes one entry per such block) — in
+// order, per speaker, across the whole session. This walks that same order
+// to give each beat a 0-based "this speaker's Nth entry" index, so a
+// citation whose quote was never spoken aloud (the point of #577 — a member
+// may cite via the tool call without narrating the citation in dialogue)
+// can still be matched back to its transcript entry positionally, as a
+// fallback when quote-substring matching finds no unique entry. See
+// public/js/app.js's applyCitationFlags.
+function computeBeatSpeakerIndex(session) {
+  const counters = new Map();
+  const indexByBeat = new Map();
+  (session.rounds || []).forEach(segment => {
+    (segment.beats || []).forEach(beat => {
+      if (beat.failed) return;
+      const n = counters.get(beat.memberId) || 0;
+      indexByBeat.set(beat, n);
+      counters.set(beat.memberId, n + 1);
+    });
+  });
+  return indexByBeat;
+}
+
 function flattenBeatCitations(session, roster = []) {
   const flat = [];
+  const beatIndex = computeBeatSpeakerIndex(session);
   (session.rounds || []).forEach(segment => {
     (segment.beats || []).forEach(beat => {
       if (beat.failed || !Array.isArray(beat.citations) || !beat.citations.length) return;
       const speaker = roster.find(m => m.id === beat.memberId)?.name || beat.speakerName || beat.memberId;
-      beat.citations.forEach(c => flat.push({ ...c, speaker, memberId: beat.memberId }));
+      const speakerEntryIndex = beatIndex.get(beat);
+      beat.citations.forEach(c => flat.push({ ...c, speaker, memberId: beat.memberId, speakerEntryIndex }));
     });
   });
   return flat;
