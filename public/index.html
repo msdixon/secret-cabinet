@@ -87,11 +87,14 @@
                funnel through witness.js's witnessReadingTime(). A cycling
                button rather than a slider: the stage's chrome is already
                tight (#257/#279). -->
-          <!-- #29: browser TTS (Web Speech API), off by default -- a per-member
-               voice is assigned deterministically since there's no hand-authored
-               voice profile yet, see voice.js. Hidden entirely by voice.js if the
-               browser has no SpeechSynthesis support at all. -->
-          <button class="witness-voice-btn" id="witness-voice-btn" onclick="window.Voice.toggle()" title="Voice playback (Web Speech API) — click to toggle">🔈 Voice</button>
+          <!-- #29: TTS, off by default -- a per-member voice is assigned
+               deterministically since there's no hand-authored voice profile
+               yet, see voice.js. Hidden entirely by voice.js if the browser
+               has no SpeechSynthesis support at all. #582: the title here is
+               just a placeholder until voice.js's updateButton() overwrites
+               it with whichever backend (ElevenLabs vs. the browser's own)
+               is actually live. -->
+          <button class="witness-voice-btn" id="witness-voice-btn" onclick="window.Voice.toggle()" title="Voice playback — click to toggle">🔈 Voice</button>
           <button class="witness-speed-btn" id="witness-speed-btn" onclick="window.Witness.cycleSpeed()" title="Playback speed — click to cycle">1×</button>
           <!-- #506: "what did he just say" -- steps backward/forward through
                already-spoken live turns (each a fresh room-card entry / stage
@@ -533,7 +536,7 @@
              pre-commitment re-imports the round frame through the side door.
              How long the room sits is decided in the room, at each lull. -->
         <button class="lodge-btn primary" id="convene-btn" onclick="convene()">Convene the Lodge</button>
-        <button class="lodge-btn" id="reveal-player-turns-btn" onclick="togglePlayerTurnReveal()">Reveal Player Turns ◆</button>
+        <button class="lodge-btn" id="reveal-player-turns-btn" onclick="togglePlayerTurnReveal()">Reveal Your Turns ◆</button>
         <button class="lodge-btn sessions-btn" id="dossier-btn" onclick="window.Sessions.toggleDossier()" style="display:none;">Review the assembly ↗</button>
       </div>
     </div>
