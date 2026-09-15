@@ -778,6 +778,7 @@ async function runRound({
       remainingBudget,
       disposition: currentDisposition,
       meetingTurns,
+      relationshipEdges: relationshipEdges(),
     });
     if (!memberId) break; // no viable candidate even after a fresh consult — end the round here
 
