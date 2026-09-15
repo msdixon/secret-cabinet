@@ -146,6 +146,24 @@ const LOW_BUDGET_WORDS = 120; // below this, favor members who tend to land a sh
 // every unspent intention the instant it becomes eligible.
 const INTERRUPT_INTENT_WEIGHT = 3;
 
+// #578: the room leans toward whoever's charged with the member who just
+// visibly landed — a rival, a lover, a collaborator, a debt — the same way
+// INTERRUPT_INTENT_WEIGHT above leans toward unfinished business. Reuses two
+// signals that already exist rather than adding new state: the just-spoken
+// member's own self-reported `reaction` (CHARGED_REACTIONS below; #449,
+// previously unconsumed downstream) and #268's relationship graph
+// (hasChargedTie in relationships.js). Sized just under
+// INTERRUPT_INTENT_WEIGHT — a real thumb on the scale, but named unspent
+// business (someone's actual disposition target) should still outweigh a
+// documented tie the room merely notices.
+const RELATIONAL_CALLBACK_WEIGHT = 2.2;
+
+// #578: the subset of REACTION_TAGS with enough charge to make a room lean
+// toward the reacted-to member's charged ties. 'thinking' and 'none' are
+// deliberately excluded — a cool or neutral turn isn't the "chemistry" this
+// is meant to notice.
+const CHARGED_REACTIONS = ['happy', 'angry'];
+
 // #330: `pool` arrives in the director's priority order (buildDirectorToolSchema
 // asks for the candidate pool "ordered by priority", and selectSpeakers
 // returns that order verbatim) but until this fix pickNextSpeaker never read
@@ -441,6 +459,8 @@ module.exports = {
   REPEAT_DECAY,
   LOW_BUDGET_WORDS,
   INTERRUPT_INTENT_WEIGHT,
+  RELATIONAL_CALLBACK_WEIGHT,
+  CHARGED_REACTIONS,
   PRIORITY_RANK_DECAY,
   UNDER_HEARD_BOOST,
   MAX_UNDER_HEARD_DEFICIT,

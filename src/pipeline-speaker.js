@@ -5,7 +5,7 @@
 // per-speaker call itself.
 
 const { buildCachedSystem, withHistoryCacheControl } = require('./pipeline-core');
-const { buildRelationshipSection } = require('./relationships');
+const { buildRelationshipSection, hasChargedTie } = require('./relationships');
 const {
   LENGTH_TENDENCY_OVERRIDES,
   LENGTH_WEIGHT,
@@ -14,6 +14,8 @@ const {
   REPEAT_DECAY,
   LOW_BUDGET_WORDS,
   INTERRUPT_INTENT_WEIGHT,
+  RELATIONAL_CALLBACK_WEIGHT,
+  CHARGED_REACTIONS,
   PRIORITY_RANK_DECAY,
   UNDER_HEARD_BOOST,
   MAX_UNDER_HEARD_DEFICIT,
@@ -91,6 +93,11 @@ function underHeardDeficit(id, meetingTurns, averageTurns) {
 // `meetingTurns`, if given, is the { [memberId]: turns } meeting-level
 // ledger from lodge-prompts.js's turnsSoFar (#352) — also read-only, and
 // omitting it is a supported no-op, not a degraded mode.
+// `relationshipEdges`, if given, is #268's full graph edge list (the same
+// data buildSpeakerSystemPrompt already threads through) — used only to
+// check a candidate's tie to `lastSpeakerId`, read-only, and omitting it
+// (or omitting `disposition`) is a supported no-op: RELATIONAL_CALLBACK_WEIGHT
+// simply never applies.
 function pickNextSpeaker({
   pool,
   spokenCounts,
@@ -98,9 +105,12 @@ function pickNextSpeaker({
   remainingBudget,
   disposition,
   meetingTurns,
+  relationshipEdges,
   rng = Math.random,
 }) {
   const averageTurns = poolAverageTurns(pool, meetingTurns);
+  const lastSpeakerReaction = lastSpeakerId ? disposition?.[lastSpeakerId]?.reaction : null;
+  const lastSpeakerRanRoomHot = CHARGED_REACTIONS.includes(lastSpeakerReaction);
   const weights = pool.map((id, rank) => {
     const timesSpoken = spokenCounts.get(id) || 0;
     if (timesSpoken >= MAX_TURNS_PER_POOL_MEMBER) return 0;
@@ -110,6 +120,8 @@ function pickNextSpeaker({
     else if (timesSpoken > 0) w *= Math.pow(REPEAT_DECAY, timesSpoken);
     if (remainingBudget < LOW_BUDGET_WORDS && tendency === 'expansive') w *= 0.4;
     if (lastSpeakerId && disposition?.[id]?.waitingOnMemberId === lastSpeakerId) w *= INTERRUPT_INTENT_WEIGHT;
+    else if (lastSpeakerRanRoomHot && id !== lastSpeakerId && hasChargedTie(relationshipEdges, id, lastSpeakerId))
+      w *= RELATIONAL_CALLBACK_WEIGHT;
     w *= Math.pow(UNDER_HEARD_BOOST, underHeardDeficit(id, meetingTurns, averageTurns));
     w *= Math.pow(PRIORITY_RANK_DECAY, rank);
     return w;

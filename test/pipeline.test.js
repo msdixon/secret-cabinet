@@ -336,6 +336,86 @@ test('pickNextSpeaker', async t => {
     assert.ok(Math.abs(share - 0.556) < 0.02);
   });
 
+  // #578: when the last speaker's own disposition reads as charged
+  // ('happy' or 'angry'), a candidate who holds a charged tie to them
+  // (rivalry/love/collaboration/intellectual-debt) is weighted up — the
+  // room leaning toward the rival/lover/collaborator once the temperature
+  // around the last speaker visibly spikes.
+  await t.test(
+    'a candidate with a charged tie to a charged last speaker is weighted up by RELATIONAL_CALLBACK_WEIGHT (2.2x)',
+    () => {
+      const args = {
+        pool: ['scholem', 'blavatsky'],
+        spokenCounts: counts([]),
+        lastSpeakerId: 'crowley',
+        remainingBudget: 500,
+        disposition: { crowley: { reaction: 'angry' } },
+        relationshipEdges: [{ source: 'scholem', target: 'crowley', type: 'rivalry', label: 'n/a' }],
+      };
+      // 2.2 / (2.2 + 1 * PRIORITY_RANK_DECAY)
+      const share = shareOf('scholem', args);
+      assert.ok(Math.abs(share - 0.733) < 0.02, `charged-tie share was ${share}`);
+    }
+  );
+
+  await t.test('a neutral or absent reaction from the last speaker never triggers the callback boost', () => {
+    const base = {
+      pool: ['scholem', 'blavatsky'],
+      spokenCounts: counts([]),
+      lastSpeakerId: 'crowley',
+      remainingBudget: 500,
+      relationshipEdges: [{ source: 'scholem', target: 'crowley', type: 'rivalry', label: 'n/a' }],
+    };
+    // 1 / (1 + 1 * PRIORITY_RANK_DECAY) in every case — no boost applied
+    assert.ok(
+      Math.abs(shareOf('scholem', { ...base, disposition: { crowley: { reaction: 'thinking' } } }) - 0.556) < 0.02
+    );
+    assert.ok(Math.abs(shareOf('scholem', { ...base, disposition: { crowley: { reaction: 'none' } } }) - 0.556) < 0.02);
+    assert.ok(Math.abs(shareOf('scholem', { ...base, disposition: {} }) - 0.556) < 0.02);
+    assert.ok(Math.abs(shareOf('scholem', base) - 0.556) < 0.02); // no disposition map at all
+  });
+
+  await t.test('a charged reaction with only a neutral/documentary tie never triggers the callback boost', () => {
+    const share = shareOf('scholem', {
+      pool: ['scholem', 'blavatsky'],
+      spokenCounts: counts([]),
+      lastSpeakerId: 'crowley',
+      remainingBudget: 500,
+      disposition: { crowley: { reaction: 'happy' } },
+      relationshipEdges: [{ source: 'scholem', target: 'crowley', type: 'parallel', label: 'n/a' }],
+    });
+    // 1 / (1 + 1 * PRIORITY_RANK_DECAY) — parallel isn't a charged type
+    assert.ok(Math.abs(share - 0.556) < 0.02, `neutral-tie share was ${share}`);
+  });
+
+  await t.test('degrades gracefully with no relationshipEdges given', () => {
+    const share = shareOf('scholem', {
+      pool: ['scholem', 'blavatsky'],
+      spokenCounts: counts([]),
+      lastSpeakerId: 'crowley',
+      remainingBudget: 500,
+      disposition: { crowley: { reaction: 'angry' } },
+    });
+    assert.ok(Math.abs(share - 0.556) < 0.02, `no-edges share was ${share}`);
+  });
+
+  await t.test(
+    'named unspent business (INTERRUPT_INTENT_WEIGHT) wins over a merely charged tie for the same candidate',
+    () => {
+      const share = shareOf('scholem', {
+        pool: ['scholem', 'blavatsky'],
+        spokenCounts: counts([]),
+        lastSpeakerId: 'crowley',
+        remainingBudget: 500,
+        disposition: { crowley: { reaction: 'angry' }, scholem: { waitingOnMemberId: 'crowley' } },
+        relationshipEdges: [{ source: 'scholem', target: 'crowley', type: 'rivalry', label: 'n/a' }],
+      });
+      // 3 / (3 + 1 * PRIORITY_RANK_DECAY) — same as the plain INTERRUPT_INTENT_WEIGHT
+      // case above, unmoved by the also-eligible callback boost.
+      assert.ok(Math.abs(share - 0.789) < 0.02, `interrupt-over-callback share was ${share}`);
+    }
+  );
+
   // #330: the director's own priority order (pool[0] = highest priority) is
   // now a real factor in the draw, not just a shortlist. Isolate it from
   // every other weighting factor — same tendency, no repeats, no interrupt —

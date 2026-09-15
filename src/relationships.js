@@ -66,6 +66,18 @@ function edgesForPair(allEdges, aId, bId) {
   return (allEdges || []).filter(e => (e.source === aId && e.target === bId) || (e.source === bId && e.target === aId));
 }
 
+// #578 — the subset of edge types with enough charge that a candidate's tie
+// to whoever the room's just-reacted-to member is worth the room noticing.
+// Deliberately excludes the documentary/neutral types (parallel, influence,
+// membership, co-convened) — those are real connections but not the kind a
+// room leans toward mid-argument.
+const CHARGED_RELATIONSHIP_TYPES = new Set(['rivalry', 'love', 'collaboration', 'intellectual-debt']);
+
+function hasChargedTie(allEdges, aId, bId) {
+  if (aId === bId) return false;
+  return edgesForPair(allEdges, aId, bId).some(e => CHARGED_RELATIONSHIP_TYPES.has(e.type));
+}
+
 function renderEdge(edge, otherName) {
   const register = REGISTER_BY_TYPE[edge.type] || 'a documented connection';
   if (edge.type === 'co-convened') {
@@ -107,4 +119,6 @@ module.exports = {
   renderEdge,
   buildRelationshipLines,
   buildRelationshipSection,
+  CHARGED_RELATIONSHIP_TYPES,
+  hasChargedTie,
 };

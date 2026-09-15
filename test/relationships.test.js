@@ -15,6 +15,7 @@ const {
   renderEdge,
   buildRelationshipLines,
   buildRelationshipSection,
+  hasChargedTie,
 } = require('../src/relationships.js');
 
 const CROWLEY_FILE = `# ALEISTER CROWLEY
@@ -89,6 +90,37 @@ test('edgesForPair', async t => {
 
   await t.test('handles an undefined edge list without throwing', () => {
     assert.deepEqual(edgesForPair(undefined, 'crowley', 'waite'), []);
+  });
+});
+
+test('hasChargedTie', async t => {
+  await t.test('true for a charged edge type regardless of source/target order', () => {
+    const edges = [{ source: 'crowley', target: 'waite', type: 'rivalry', label: 'Golden Dawn schism' }];
+    assert.ok(hasChargedTie(edges, 'crowley', 'waite'));
+    assert.ok(hasChargedTie(edges, 'waite', 'crowley'));
+  });
+
+  await t.test('false for a neutral/documentary edge type', () => {
+    const edges = [{ source: 'crowley', target: 'sun-ra', type: 'influence', label: 'A direct line of descent' }];
+    assert.ok(!hasChargedTie(edges, 'crowley', 'sun-ra'));
+  });
+
+  await t.test('false for a co-convened edge (session count, not a charged register)', () => {
+    const edges = [{ source: 'crowley', target: 'yeats', type: 'co-convened', weight: 3 }];
+    assert.ok(!hasChargedTie(edges, 'crowley', 'yeats'));
+  });
+
+  await t.test('false for a pair with no edge at all', () => {
+    assert.ok(!hasChargedTie([], 'crowley', 'sun-ra'));
+  });
+
+  await t.test('false for a self-pair even with a (malformed) self-edge', () => {
+    const edges = [{ source: 'crowley', target: 'crowley', type: 'rivalry', label: 'n/a' }];
+    assert.ok(!hasChargedTie(edges, 'crowley', 'crowley'));
+  });
+
+  await t.test('handles an undefined edge list without throwing', () => {
+    assert.ok(!hasChargedTie(undefined, 'crowley', 'waite'));
   });
 });
 
