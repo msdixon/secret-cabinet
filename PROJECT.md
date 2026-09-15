@@ -57,7 +57,6 @@ Current Todo-status backlog (no ranking implied — pick next tranche with Rache
 <!-- TODO-FRAGMENTS:START -->
 - [#35](https://github.com/msdixon/secret-cabinet/issues/35) archival ingestion pipeline (35b — bulk OCR tooling), deferred; 35a hand-curated growth split out to [#316](https://github.com/msdixon/secret-cabinet/issues/316)
 - [#195](https://github.com/msdixon/secret-cabinet/issues/195) amnesia spike — rungs (b)/(c), deliberately deferred (see "Other open decisions" above); Todo on the board but not being actively picked up
-- [#582](https://github.com/msdixon/secret-cabinet/issues/582) fix inside-baseball UI copy: "Reveal/Hide Player Turns ◆" and the stale voice-backend tooltip
 <!-- TODO-FRAGMENTS:END -->
 
 The full workflow/priority tracker — including Backlog-status items, bugs, and parked spikes — is the [GitHub Project board](https://github.com/msdixon/secret-cabinet/projects/2) ("Secret-Cabin-et Roadmap", project #2), which is the **authoritative source for per-item status**. A PR that ships, reprioritizes, or scopes work should update the board directly (`gh project item-edit`, or the board UI) — not hand-edit PROJECT.md. This doc's own view of that status only changes two ways: the flat Todo list above via fragment assembly (mechanical, any time a fragment changes), and the thread-status table above it via the periodic/weekly review pass (judgment-based, batched) — never as an inline per-PR edit to either. See "How this doc relates to everything else" below for why the table specifically works this way.
