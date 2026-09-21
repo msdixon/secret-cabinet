@@ -19,9 +19,9 @@ jobs:
       contents: read
       pull-requests: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           # Bumped from 20 with #137's suite: jsdom 29 requires ^20.19 || ^22.13
           # || >=24, so a bare `20` would have depended on setup-node happening
@@ -43,7 +43,7 @@ jobs:
       # coverage — so there's no pre-existing backlog to report-only around,
       # unlike lint/format below.
       - name: Filter changed paths
-        uses: dorny/paths-filter@v3
+        uses: dorny/paths-filter@v4
         id: filter
         with:
           filters: |
