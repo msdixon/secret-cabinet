@@ -1,0 +1,1 @@
+[#598](https://github.com/msdixon/secret-cabinet/issues/598): `scripts/test-web-escalation.js` now `require`s `escalateCitationToWeb` from `src/citations.js` instead of carrying its own verbatim copy of seven functions plus helpers (~165 fewer lines), so the one live-network check of the web-escalation tiers exercises shipping code rather than a frozen duplicate.
