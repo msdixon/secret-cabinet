@@ -1,0 +1,1 @@
+Commits made in Claude sessions now record Claude as the git author (Rachel stays committer) via `env` in a new project-level `.claude/settings.json`, instead of inheriting Rachel's `~/.gitconfig` identity; the `Co-Authored-By` trailer is unchanged. ([#604](https://github.com/msdixon/secret-cabinet/pull/604))
