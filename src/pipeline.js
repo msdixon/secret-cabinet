@@ -35,6 +35,7 @@ const speaker = require('./pipeline-speaker');
 const disposition = require('./pipeline-disposition');
 const lull = require('./pipeline-lull');
 const splinter = require('./pipeline-splinter');
+const confessional = require('./pipeline-confessional');
 const {
   BREATH_BUDGET_WORDS,
   MIN_WORDS_FOR_ANOTHER_BEAT,
@@ -44,6 +45,8 @@ const {
   MAX_TOTAL_BEATS,
   PASS_BUDGET_COST,
   PASS_TURN_CREDIT,
+  CONFESSIONAL_MAX_TOKENS,
+  CONFESSIONAL_BUDGET_COST_WORDS,
 } = require('./tuning');
 
 const { makeMetric, withOneRetry } = core;
@@ -63,6 +66,7 @@ const {
 const { buildDispositionSystemPrompt, buildDispositionUserMessage, callDispositionUpdate } = disposition;
 const { resolveLullNote } = lull;
 const { shouldSplinter, canOpenDirectorSplinter, buildSplinterUserMessage, formatSplinterBlock } = splinter;
+const { canOpenConfessional, buildConfessionalUserMessage, formatConfessionalBlock } = confessional;
 
 // ── Orchestrator ──────────────────────────────────────────────────────────
 
@@ -281,6 +285,16 @@ async function runRound({
   // subsequent speaker this round reacts to it exactly as they would react
   // to another AI speaker, via the same "THE ROUND SO FAR" mechanism.
   let roundSoFar = '';
+  // #579: the passage as the record shows it — roundSoFar plus any
+  // confessional blocks, which the room never hears and so never join
+  // roundSoFar itself (see pipeline-confessional.js's header). Every append
+  // to roundSoFar goes through appendToRoom so the two can't drift apart;
+  // a confessional appends to recordSoFar alone.
+  let recordSoFar = '';
+  const appendToRoom = text => {
+    roundSoFar += (roundSoFar ? '\n\n' : '') + text;
+    recordSoFar += (recordSoFar ? '\n\n' : '') + text;
+  };
   // #244: beats: [{memberId, text}] alongside the rolled-up roundSoFar —
   // persisted forward-provision for beat-level branching (#33 v2) and side
   // conversations (#196), so neither ever needs a second migration pass
@@ -346,6 +360,11 @@ async function runRound({
   // without the `thread` tag — but the tag is what lets a consumer identify
   // and single out a splinter's beats without re-parsing bracket syntax out
   // of prose.
+  //
+  // #579: a confessional beat carries `thread: { id, kind: 'confessional',
+  // participants: [memberId] }` — the same tag, one participant, and a
+  // `kind` so a consumer can tell it from a splinter (whose threads carry
+  // no `kind`). Its text is in beatsList and recordSoFar, never roundSoFar.
   const beatsList = [];
   if (precedingTurn) {
     const seed = `${precedingTurn.speakerName}\n${precedingTurn.text}`;
@@ -358,7 +377,7 @@ async function runRound({
     // presentation call to make deliberately, not a side effect of fixing
     // the record. The record and the live signal disagree on purpose here.
     onSpeakerEnd?.(null, precedingTurn.speakerName, precedingTurn.text);
-    roundSoFar = seed;
+    appendToRoom(seed);
     beatsList.push({
       // #354: the roster id when the player plays a member, record.js's
       // PLAYER_SPEAKER_ID sentinel when they play under their own name.
@@ -384,7 +403,11 @@ async function runRound({
     presentMembers.length,
     Math.max(effectiveCount, Math.min(effectiveCount + POOL_SLACK, budgetCapacity))
   );
-  const { speakers: initialPool, splinterPair: initialSplinterPair } = await selectSpeakers({
+  const {
+    speakers: initialPool,
+    splinterPair: initialSplinterPair,
+    confessional: initialConfessional,
+  } = await selectSpeakers({
     client,
     model,
     lodgeContext,
@@ -437,6 +460,8 @@ async function runRound({
   // toward Coleman-Smith," before anyone in the room has spoken) rather
   // than waiting for a reactive trigger that may never come.
   let pendingDirectorSplinterPair = initialSplinterPair || null;
+  // #579: gates MAX_CONFESSIONALS_PER_PASSAGE, same as splinterCount above.
+  let confessionalCount = 0;
 
   const speakerOrder = [];
 
@@ -452,7 +477,10 @@ async function runRound({
   // private exchange for a splinter beat (see pipeline-splinter.js's header
   // for why those must differ). `thread`, when given, is stamped onto the
   // pushed beat verbatim — see the beatsList comment above for its shape.
-  async function generateBeat({ memberId, member, userMessage, dispositionContext, thread }) {
+  // `maxTokens` and `budgetCost` are only ever set by a #579 confessional:
+  // more room to write, and a flat charge against the passage budget instead
+  // of its real length (see tuning.js's CONFESSIONAL_BUDGET_COST_WORDS).
+  async function generateBeat({ memberId, member, userMessage, dispositionContext, thread, maxTokens, budgetCost }) {
     const voiceExemplar = exemplarFor(memberId);
     const secondaryVoiceExemplars = secondaryExemplarsFor(memberId);
     const residue = residueFor(memberId);
@@ -484,7 +512,16 @@ async function runRound({
       const { result, attempts } = await withOneRetry(() => {
         attemptNumber++;
         if (attemptNumber > 1) onSpeakerStart?.(memberId);
-        return callSpeakerTurn({ client, model, system, conversationHistory, userMessage, onChunk, lodgeContext });
+        return callSpeakerTurn({
+          client,
+          model,
+          system,
+          conversationHistory,
+          userMessage,
+          onChunk,
+          lodgeContext,
+          ...(maxTokens ? { maxTokens } : {}),
+        });
       });
       const settledText = stripInternalBlankLines(result.text);
       // #362: a pass is still a real, successful call — it just declined the
@@ -542,7 +579,8 @@ async function runRound({
       // speaks next as if the beat had never happened. Floored at
       // PASS_BUDGET_COST so a pass still spends what the smallest real beat
       // would have.
-      remainingBudget -= passed ? Math.max(countWords(settledText), PASS_BUDGET_COST) : countWords(settledText);
+      if (budgetCost !== undefined) remainingBudget -= budgetCost;
+      else remainingBudget -= passed ? Math.max(countWords(settledText), PASS_BUDGET_COST) : countWords(settledText);
 
       // #188: best-effort, isolated from the speaker try/catch above — a
       // disposition failure must not get reported as a failed speaker turn
@@ -693,7 +731,7 @@ async function runRound({
     // spokenCounts/lastSpeakerId/beats were still updated, so the loop
     // doesn't retry the same broken speaker indefinitely.
     if (splinterBeats.length) {
-      roundSoFar += (roundSoFar ? '\n\n' : '') + formatSplinterBlock(initiator, other, splinterBeats);
+      appendToRoom(formatSplinterBlock(initiator, other, splinterBeats));
       speakerOrder.push(initiator.id, ...(splinterBeats.length > 1 ? [other.id] : []));
       splinterCount++;
     }
@@ -717,7 +755,38 @@ async function runRound({
     await runSplinterExchange({ initiator: a, other: b, triggeringText: lastMainBeatText });
   }
 
+  // #579: attempts a director-proposed confessional (already sanitized to
+  // one present id, or null) and consumes it either way, same as
+  // tryDirectorSplinter above. Tried after it at every consult point — a
+  // splinter and a confessional proposed together both get their chance,
+  // the splinter first since it's the room-facing one.
+  async function tryDirectorConfessional(memberId) {
+    const hasSpoken = !!memberId && ((meetingTurns?.[memberId] || 0) > 0 || speakerOrder.includes(memberId));
+    if (!canOpenConfessional({ memberId, hasSpoken, confessionalCount, remainingBudget })) return;
+    const member = presentMembers.find(m => m.id === memberId);
+    if (!member) return; // shouldn't happen — sanitizeConfessional validates against presentIds
+    const thread = { id: `confessional-${round}-${confessionalCount}`, kind: 'confessional', participants: [memberId] };
+    const result = await generateBeat({
+      memberId,
+      member,
+      userMessage: buildConfessionalUserMessage({ speaker: member, roundSoFarText: roundSoFar }),
+      dispositionContext: roundSoFar,
+      thread,
+      maxTokens: CONFESSIONAL_MAX_TOKENS,
+      budgetCost: CONFESSIONAL_BUDGET_COST_WORDS,
+    });
+    confessionalCount++;
+    // Record only — never roundSoFar, never lastMainBeatText. A failed
+    // confessional still spends the passage's one slot, like a failed
+    // splinter would have: the director's proposal was used up either way.
+    if (!result.failed) {
+      recordSoFar += (recordSoFar ? '\n\n' : '') + formatConfessionalBlock(member, result.text);
+      speakerOrder.push(memberId);
+    }
+  }
+
   await tryDirectorSplinter(pendingDirectorSplinterPair);
+  await tryDirectorConfessional(initialConfessional || null);
 
   while (remainingBudget >= MIN_WORDS_FOR_ANOTHER_BEAT && beats < MAX_TOTAL_BEATS) {
     const budgetSpentSinceConsult = budgetAtLastConsult - remainingBudget;
@@ -738,6 +807,7 @@ async function runRound({
         windingDown,
         lullNote,
         splinterPair,
+        confessional: proposedConfessional,
       } = await selectSpeakers({
         client,
         model,
@@ -769,6 +839,7 @@ async function runRound({
       budgetAtLastConsult = remainingBudget;
       if (!pool.length) break;
       await tryDirectorSplinter(splinterPair);
+      await tryDirectorConfessional(proposedConfessional);
     }
 
     const memberId = pickNextSpeaker({
@@ -821,13 +892,13 @@ async function runRound({
 
     const result = await generateBeat({ memberId, member, userMessage, dispositionContext: roundSoFar, thread: null });
     if (!result.failed) {
-      roundSoFar += (roundSoFar ? '\n\n' : '') + `${member.name}\n${result.text}`;
+      appendToRoom(`${member.name}\n${result.text}`);
       speakerOrder.push(memberId);
       lastMainBeatText = result.text;
     }
   }
 
-  if (!roundSoFar) {
+  if (!recordSoFar) {
     throw new Error('Every speaker failed this round — nothing to save.');
   }
 
@@ -838,7 +909,11 @@ async function runRound({
   const lullNote = resolveLullNote(directorLullNote, undefined, previousLullNote);
 
   return {
-    fullRoundText: roundSoFar,
+    // #579: the record, confessionals included — what every display surface
+    // renders. `historyText` is what the room heard, for conversationHistory;
+    // identical to fullRoundText on any passage without a confessional.
+    fullRoundText: recordSoFar,
+    historyText: roundSoFar,
     speakerOrder,
     disposition: currentDisposition,
     residueUpdates,
@@ -856,6 +931,7 @@ module.exports = {
   ...disposition,
   ...lull,
   ...splinter,
+  ...confessional,
   splitIntoBeats,
   BEAT_WORD_THRESHOLD,
   runRound,

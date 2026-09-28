@@ -124,6 +124,24 @@ test('parseLegacyRoundTurns', async t => {
       { memberId: 'yeats', text: 'After the aside.' },
     ]);
   });
+
+  await t.test('#579: drops a whole Confessional block — the room never heard it', () => {
+    const text = [
+      'Yeats',
+      'Before.',
+      '[Confessional — Crowley, apart from the room]',
+      'Crowley',
+      'A long private working-through.',
+      '[/Confessional]',
+      'Yeats',
+      'After.',
+    ].join('\n');
+    const turns = parseLegacyRoundTurns(text, index);
+    assert.deepEqual(turns, [
+      { memberId: 'yeats', text: 'Before.' },
+      { memberId: 'yeats', text: 'After.' },
+    ]);
+  });
 });
 
 test('looksLikeCitation', async t => {
@@ -167,6 +185,26 @@ test('turnsForRound', async t => {
       },
       { memberId: 'yeats', text: '*nods*', passed: true, citationSource: 'structured', hasCitation: false },
     ]);
+  });
+
+  await t.test('#579: excludes confessional beats from structured beats', () => {
+    const round = {
+      text: 'ignored',
+      beats: [
+        { memberId: 'crowley', text: 'Short.', passed: false },
+        {
+          memberId: 'crowley',
+          text: 'Very long.',
+          passed: false,
+          thread: { id: 'confessional-0-0', kind: 'confessional', participants: ['crowley'] },
+        },
+      ],
+    };
+    const turns = turnsForRound(round, index);
+    assert.deepEqual(
+      turns.map(x => x.text),
+      ['Short.']
+    );
   });
 
   await t.test('falls back to text parsing when no beats array is present', () => {

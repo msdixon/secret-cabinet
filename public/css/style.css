@@ -376,6 +376,8 @@ a.lodge-btn { display:inline-block; text-decoration:none; }
    dashed border plus the "aside" tag (speechBodyHtml) is the whole signal. */
 .transcript-entry.bubble-aside .bubble-body { border-style:dashed; }
 .transcript-entry.bubble-aside .speech-text { font-style:italic; color:var(--lodge-muted); }
+/* #579: the stage-fallback version of card-entry-confessional below. */
+.transcript-entry.bubble-confessional .bubble-body { border-left:3px double var(--lodge-border); }
 @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
 /* #266 — identity names (proper nouns) get their own typeface, distinct from
    .panel-label's IM Fell English (functional labels) and .lodge-title's
@@ -919,6 +921,13 @@ a.archival-image-link:hover { border-color:var(--lodge-amber-dim); cursor:pointe
    portrait rotation). */
 .room-card-entry.card-entry-aside { opacity:0.85; }
 .room-card-entry.card-entry-aside .speech-text { font-style:italic; color:var(--lodge-muted); }
+/* #579 — a confessional is one member thinking at length, apart from the
+   room: the "confessional" tag (speechBodyHtml) carries the meaning, and a
+   quiet double rule at the left edge sets it off as a different kind of
+   text from the room's exchange. Deliberately not the aside's dimmed
+   italic — this is the long form being read, not an overheard murmur — and
+   no accent color, since nothing here is clickable. */
+.room-card-entry.card-entry-confessional { border-left:3px double var(--lodge-border); padding-left:10px; }
 .thread-tag {
   font-family:'IM Fell English',serif; font-size:10px; letter-spacing:1.5px;
   text-transform:uppercase; color:var(--lodge-ash); opacity:0.75; margin-bottom:3px;
