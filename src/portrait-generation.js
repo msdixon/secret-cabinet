@@ -162,6 +162,14 @@ module.exports = {
   ANGRY_EXPRESSION_ICY,
   ANGRY_VARIANT_BY_MEMBER,
   buildReactionPrompt,
+  // #608 — exported for fixup scripts that layer a custom expression/pose
+  // between the two (scripts/fix-558-thinking-fixup.js,
+  // scripts/fix-569-thinking-fixup.js). Both destructured these for weeks
+  // while they were unexported, silently building prompts with a literal
+  // "undefined" in place of each; test/require-destructure.test.js now
+  // catches that class of miss.
+  REACTION_EXPRESSION_OVERRIDE_META,
+  REACTION_STYLE_SUFFIX,
   BASE_LIKENESS_ANCHOR_META,
   buildLikenessAnchoredBasePrompt,
 };
