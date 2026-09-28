@@ -45,6 +45,8 @@ const sessionsStore = require('./src/sessions-store');
 const citationManifest = require('./scripts/build-citation-manifest');
 const bibliography = require('./src/bibliography');
 const auth = require('./src/auth');
+const { createUserStore } = require('./src/users');
+const costLog = require('./src/cost-log');
 const visits = require('./src/visits');
 const { registerLibraryRoutes } = require('./src/routes/library');
 const { registerGraphRoutes } = require('./src/routes/graph');
@@ -85,7 +87,9 @@ const app = express();
 // connection as secure, so express-session's `cookie.secure: true` silently
 // refuses to send Set-Cookie at all. Harmless locally (no proxy in front).
 app.set('trust proxy', 1);
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+// #594: every messages.create/stream call on this shared client logs a
+// `[cost] user=...` line — see src/cost-log.js.
+const client = costLog.instrumentAnthropicClient(new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }));
 
 const PORT = Number(process.env.PORT) || 3132;
 // Railway auto-injects RAILWAY_VOLUME_MOUNT_PATH when a volume is attached to
@@ -114,6 +118,10 @@ const VOICE_CACHE_DIR = path.join(DATA_DIR, 'voice-cache');
 // per session/member; still lives on DATA_DIR so it survives a redeploy on
 // a Railway instance with a volume attached, same reasoning as the dirs above.
 const VISITS_FILE = path.join(DATA_DIR, 'visits.json');
+// #594 — the per-user identity store (src/users.js). On DATA_DIR for the
+// same survive-a-redeploy reason as everything above; losing it would mint
+// a new admin id and orphan whatever #595 later keys to the old one.
+const USERS_FILE = path.join(DATA_DIR, 'users.json');
 
 if (!fs.existsSync(SESSIONS_DIR)) fs.mkdirSync(SESSIONS_DIR, { recursive: true });
 if (!fs.existsSync(RESIDUE_DIR)) fs.mkdirSync(RESIDUE_DIR, { recursive: true });
@@ -150,6 +158,9 @@ app.use(
     secret: process.env.SESSION_SECRET || 'local-dev-secret-change-me',
     resave: false,
     saveUninitialized: false,
+    // #594: 30 days from the last request, not from sign-in — an active
+    // member shouldn't be bounced to /login mid-month.
+    rolling: true,
     cookie: {
       maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
       secure: !IS_LOCAL,
@@ -158,8 +169,20 @@ app.use(
   })
 );
 
-auth.registerAuthRoutes(app, PASSPHRASE);
-app.use(auth.createRequireAuth(PASSPHRASE));
+// #594: with a passphrase configured, guarantee the admin user it signs in
+// as. ADMIN_EMAIL (optional for now) is recorded on that user so chunk A's
+// emailed-code sign-in reaches the same account, not a second one. With no
+// passphrase (local dev) there are no stored users at all — every request
+// is auth.LOCAL_ADMIN — so users.json is never created.
+const users = createUserStore(USERS_FILE);
+if (PASSPHRASE) users.ensureAdmin({ email: process.env.ADMIN_EMAIL });
+
+auth.registerAuthRoutes(app, PASSPHRASE, { users });
+app.use(auth.createRequireAuth(PASSPHRASE, users));
+
+// #594: carry the signed-in user's id through the rest of the request so
+// the instrumented Anthropic client above can attribute each call to it.
+app.use((req, res, next) => costLog.runWithUser(req.user?.id, next));
 
 // #422 — count/log visits to the public read tier. Mounted right after the
 // auth guard so req.authed is already set; before express.static so it
@@ -434,8 +457,11 @@ function buildTranscriptHeader(entry, memberIds, date) {
 // is what public/js/app.js reads to decide whether the convene controls
 // render live or as a sign-in prompt — req.authed is already set by
 // requireAuth (auth.js) before any route handler runs, including this one.
+// #594: isAdmin drives hiding the admin-only controls (Day One, Add Member)
+// the same way — the server enforces it regardless; this is just so an
+// invitee isn't shown buttons that would only ever 403.
 app.get('/api/config', (req, res) => {
-  res.json({ isLocal: IS_LOCAL, authed: req.authed });
+  res.json({ isLocal: IS_LOCAL, authed: req.authed, isAdmin: req.isAdmin });
 });
 
 // GET /api/admin/visits — #422: unauthenticated-visitor traffic to the
@@ -443,9 +469,8 @@ app.get('/api/config', (req, res) => {
 // instead of assumed. #583 adds the gated side to the same report: convene/
 // cast/round/interject calls from authenticated (deployed, non-local)
 // sessions, e.g. a colleague demo through shared credentials — see
-// visits.js's buildReport. Same requireAuth gate as the rest of /api/* — no
-// separate admin auth layer, matching the two existing /api/admin/* routes
-// in routes/session.js.
+// visits.js's buildReport. Admin-only as of #594, along with every other
+// /api/admin/* route — see auth.js's ADMIN_API_ROUTES.
 app.get('/api/admin/visits', (req, res) => {
   res.type('text/markdown').send(visits.buildReport(visitStore));
 });

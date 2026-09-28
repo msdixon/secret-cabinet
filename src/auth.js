@@ -14,6 +14,36 @@
 //
 // passphrase is passed in explicitly rather than read from process.env here
 // — server.js stays the one place that reads env vars, same as MODEL/IS_LOCAL.
+//
+// #594 (chunk B, app-side identity): "authenticated" now means "this request
+// resolves to a user in users.js", not "this cookie once knew the shared
+// passphrase". The passphrase itself survives as the break-glass way to sign
+// in as the admin user (and, until chunk A's emailed codes land, the only
+// way), and every downstream check reads req.user / req.isAdmin, set once in
+// createRequireAuth below. A second tier, ADMIN_API_ROUTES, gates the routes
+// that touch Rachel's own machine or the shared roster — see that table.
+
+const crypto = require('crypto');
+const { createFailureLimiter } = require('./rate-limit');
+
+// With no passphrase configured (local dev), every request is this user:
+// exactly the pre-#594 "open mode", now with an identity attached so code
+// downstream can read req.user unconditionally. Never persisted to users.js.
+const LOCAL_ADMIN = Object.freeze({ id: 'local', email: null, name: 'Local', isAdmin: true });
+
+// 10 wrong passphrases per IP per 15 minutes. Generous for a person who
+// mistypes, useless for guessing a long passphrase.
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_MAX_FAILURES = 10;
+
+// Hash-then-timingSafeEqual so neither the comparison's timing nor a length
+// mismatch leaks anything about the configured passphrase.
+function passphraseMatches(candidate, passphrase) {
+  if (typeof candidate !== 'string' || !passphrase) return false;
+  const a = crypto.createHash('sha256').update(candidate).digest();
+  const b = crypto.createHash('sha256').update(passphrase).digest();
+  return crypto.timingSafeEqual(a, b);
+}
 
 function loginPageHtml(error) {
   return `<!DOCTYPE html>
@@ -46,7 +76,7 @@ function loginPageHtml(error) {
     <form method="POST" action="/login">
       <input type="password" name="passphrase" placeholder="Enter passphrase" autofocus>
       <button type="submit">Enter</button>
-      ${error ? '<p class="error">Incorrect passphrase.</p>' : ''}
+      ${error === 'rate' ? '<p class="error">Too many attempts. Try again later.</p>' : error ? '<p class="error">Incorrect passphrase.</p>' : ''}
     </form>
   </div>
 </body>
@@ -57,24 +87,60 @@ function loginPageHtml(error) {
 // must still apply the requireAuth middleware themselves afterward — see the
 // module comment above for why that ordering is left explicit at the call
 // site rather than folded into this function.
-function registerAuthRoutes(app, passphrase) {
+//
+// #594: a correct passphrase signs in as the admin user from users.js (the
+// break-glass path), rather than setting an identity-less `authed` flag.
+// Sessions from before #594 carry only that flag and no userId, so they
+// resolve to nobody and have to sign in once more — deliberately, rather
+// than mapping them to the admin, since the old shared passphrase was handed
+// to friends and their cookies shouldn't quietly become admin sessions.
+function registerAuthRoutes(
+  app,
+  passphrase,
+  { users, limiter = createFailureLimiter({ windowMs: LOGIN_WINDOW_MS, max: LOGIN_MAX_FAILURES }) } = {}
+) {
   // Login page — only served when a passphrase is set and session is not authenticated
   app.get('/login', (req, res) => {
-    if (!passphrase || req.session.authed) return res.redirect('/');
-    res.send(loginPageHtml(!!req.query.error));
+    if (!passphrase || resolveUser(req, passphrase, users)) return res.redirect('/');
+    res.send(loginPageHtml(req.query.error));
   });
 
   app.post('/login', (req, res) => {
-    if (req.body.passphrase === passphrase) {
-      req.session.authed = true;
-      return res.redirect('/');
+    const key = req.ip || 'unknown';
+    if (limiter.isBlocked(key)) return res.redirect('/login?error=rate');
+
+    const admin = users?.findAdmin();
+    if (!admin || !passphraseMatches(req.body.passphrase, passphrase)) {
+      limiter.recordFailure(key);
+      return res.redirect('/login?error=1');
     }
-    res.redirect('/login?error=1');
+
+    limiter.reset(key);
+    // A fresh session id on sign-in, so a cookie planted before login
+    // (session fixation) never becomes an authenticated one.
+    req.session.regenerate(err => {
+      if (err) return res.redirect('/login?error=1');
+      req.session.userId = admin.id;
+      users.recordLogin(admin.id);
+      res.redirect('/');
+    });
   });
 
   app.get('/logout', (req, res) => {
     req.session.destroy(() => res.redirect('/login'));
   });
+}
+
+// #594: the one place that decides who a request is. With no passphrase
+// configured every request is LOCAL_ADMIN (open mode, unchanged from before);
+// otherwise the session's userId has to name a user that still exists, so
+// removing someone from users.json cuts them off on their next request
+// rather than whenever their 30-day cookie happens to expire.
+function resolveUser(req, passphrase, users) {
+  if (!passphrase) return LOCAL_ADMIN;
+  const id = req.session && req.session.userId;
+  if (!id || !users) return null;
+  return users.findById(id);
 }
 
 // #378: whether this request should be treated as authenticated for gating
@@ -84,9 +150,10 @@ function registerAuthRoutes(app, passphrase) {
 // session.authed to true. A route that checked req.session.authed directly
 // would read every no-passphrase deploy (including all of local dev) as
 // unauthenticated and start filtering by published — exactly backwards. This
-// is the one place that reconciles the two.
-function isAuthedRequest(req, passphrase) {
-  return !passphrase || !!(req.session && req.session.authed);
+// is the one place that reconciles the two. (#594: now a thin wrapper over
+// resolveUser, which does the reconciling.)
+function isAuthedRequest(req, passphrase, users) {
+  return !!resolveUser(req, passphrase, users);
 }
 
 // #379: the public read tier. What's reachable without authentication now
@@ -142,29 +209,74 @@ function isPublicRoute(req) {
   return PUBLIC_API_ROUTES.some(([method, pattern]) => req.method === method && pattern.test(req.path));
 }
 
+// #594: the second authorization tier. Before per-user sign-in, "anyone
+// authenticated" meant Rachel, so these were gated only by requireAuth.
+// Once invitees can sign in they become admin-only:
+//
+// - Day One: reads and writes Rachel's own journals via the Day One MCP on
+//   whatever machine the server runs on. The one route family here with no
+//   local-only guard of its own, so this is its only protection.
+// - Ulysses/Obsidian export: act on the server's machine (`open` a URL
+//   scheme; write a file to a caller-supplied path), not the caller's.
+//   Already 404 on a deployed instance; gated here as well so a
+//   local instance reached by someone else can't use them either. Everyone
+//   keeps the browser-side downloads (.txt/.md/scholarly note).
+// - /api/admin/*: visits, the citation manifest, the raw bibliography
+//   aggregate — reports across every session, not the caller's own.
+// - POST /api/members: spends an Anthropic call and rewrites the roster
+//   every user shares.
+//
+// Prefix patterns are fine here (unlike PUBLIC_API_ROUTES): over-matching
+// an admin table only ever gates more, never less.
+const ADMIN_API_ROUTES = [
+  ['POST', /^\/api\/dayone\//],
+  ['POST', /^\/api\/ulysses\/export$/],
+  ['POST', /^\/api\/export\/obsidian$/],
+  ['*', /^\/api\/admin\//],
+  ['POST', /^\/api\/members$/],
+];
+
+function isAdminRoute(req) {
+  return ADMIN_API_ROUTES.some(
+    ([method, pattern]) => (method === '*' || req.method === method) && pattern.test(req.path)
+  );
+}
+
 // Auth guard — applied to all routes except login/logout
 // Must run before express.static: static previously short-circuited the gate,
 // serving index.html to anyone while only the API calls it made 401'd — moot
 // for the app shell now that #379 opens it deliberately, but the ordering
 // still matters for keeping every /api/ path gated by default.
-function createRequireAuth(passphrase) {
+function createRequireAuth(passphrase, users) {
   return function requireAuth(req, res, next) {
     // #378: set once, here, so route handlers downstream (e.g. the four
     // session read routes gated by published) can read req.authed directly
-    // instead of each re-deriving it from passphrase/session state.
-    req.authed = isAuthedRequest(req, passphrase);
-    if (!passphrase) return next(); // no passphrase set = open
+    // instead of each re-deriving it from passphrase/session state. #594
+    // adds req.user and req.isAdmin alongside it, same reasoning.
+    req.user = resolveUser(req, passphrase, users);
+    req.authed = !!req.user;
+    req.isAdmin = !!(req.user && req.user.isAdmin);
+    if (!passphrase) return next(); // no passphrase set = open, as LOCAL_ADMIN
     if (isPublicRoute(req)) return next();
-    if (req.session.authed) return next();
-    if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'Unauthorized' });
-    res.redirect('/login');
+    if (!req.user) {
+      if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'Unauthorized' });
+      return res.redirect('/login');
+    }
+    // 403, not 404: unlike an unpublished session, the existence of an
+    // admin route isn't a secret worth hiding from a signed-in invitee.
+    if (isAdminRoute(req) && !req.isAdmin) return res.status(403).json({ error: 'Forbidden' });
+    next();
   };
 }
 
 module.exports = {
+  LOCAL_ADMIN,
   loginPageHtml,
   registerAuthRoutes,
   createRequireAuth,
+  resolveUser,
   isAuthedRequest,
   isPublicRoute,
+  isAdminRoute,
+  passphraseMatches,
 };
