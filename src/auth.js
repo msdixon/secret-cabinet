@@ -17,14 +17,17 @@
 //
 // #594 (chunk B, app-side identity): "authenticated" now means "this request
 // resolves to a user in users.js", not "this cookie once knew the shared
-// passphrase". The passphrase itself survives as the break-glass way to sign
-// in as the admin user (and, until chunk A's emailed codes land, the only
-// way), and every downstream check reads req.user / req.isAdmin, set once in
-// createRequireAuth below. A second tier, ADMIN_API_ROUTES, gates the routes
-// that touch Rachel's own machine or the shared roster — see that table.
+// passphrase". Invitees sign in with a 6-digit code emailed to them (chunk
+// A); the passphrase survives only as the break-glass way to sign in as the
+// admin user. Every downstream check reads req.user / req.isAdmin, set once
+// in createRequireAuth below. A second tier, ADMIN_ROUTES, gates the routes
+// that touch Rachel's own machine, the shared roster, or the guest list.
 
 const crypto = require('crypto');
 const { createFailureLimiter } = require('./rate-limit');
+const { createLoginCodeStore } = require('./login-codes');
+const { loginCodeEmail } = require('./mailer');
+const { normalizeEmail } = require('./users');
 
 // With no passphrase configured (local dev), every request is this user:
 // exactly the pre-#594 "open mode", now with an identity attached so code
@@ -36,6 +39,11 @@ const LOCAL_ADMIN = Object.freeze({ id: 'local', email: null, name: 'Local', isA
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 const LOGIN_MAX_FAILURES = 10;
 
+// Code emails: 5 per IP and 3 per address per 15 minutes. Enough to
+// recover from a typo or a slow inbox; not enough to spam anyone with.
+const CODE_SENDS_PER_IP = 5;
+const CODE_SENDS_PER_EMAIL = 3;
+
 // Hash-then-timingSafeEqual so neither the comparison's timing nor a length
 // mismatch leaks anything about the configured passphrase.
 function passphraseMatches(candidate, passphrase) {
@@ -45,7 +53,17 @@ function passphraseMatches(candidate, passphrase) {
   return crypto.timingSafeEqual(a, b);
 }
 
-function loginPageHtml(error) {
+function escapeHtml(value) {
+  return String(value ?? '').replace(
+    /[&<>"']/g,
+    c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]
+  );
+}
+
+// Shared chrome for every server-rendered gate page (login steps, and the
+// admin guest list in routes/users.js). Plain HTML forms, no client JS: the
+// gate has to work before any of the app shell's scripts are trusted.
+function gatePageHtml(inner, { width = 320 } = {}) {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -55,35 +73,83 @@ function loginPageHtml(error) {
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { background: #1a1510; color: #c8b89a; font-family: 'Georgia', serif;
-           display: flex; align-items: center; justify-content: center; min-height: 100vh; }
-    .gate { text-align: center; width: 320px; }
+           display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 16px; }
+    .gate { text-align: center; width: 100%; max-width: ${width}px; }
     h1 { font-size: 1.1rem; letter-spacing: .2em; text-transform: uppercase;
          color: #8b7355; margin-bottom: 2rem; }
-    input[type=password] { width: 100%; padding: .75rem 1rem; background: #0d0b08;
+    p.note { font-size: .85rem; color: #8b7355; margin-bottom: 1rem; line-height: 1.5; }
+    input { width: 100%; padding: .75rem 1rem; background: #0d0b08;
       border: 1px solid #3a3228; color: #c8b89a; font-family: inherit; font-size: 1rem;
       border-radius: 2px; outline: none; text-align: center; letter-spacing: .15em; }
-    input[type=password]:focus { border-color: #8b7355; }
+    input + input { margin-top: .5rem; }
+    input:focus { border-color: #8b7355; }
     button { margin-top: 1rem; width: 100%; padding: .75rem; background: transparent;
       border: 1px solid #5a4a3a; color: #a89070; font-family: inherit; font-size: .85rem;
       letter-spacing: .15em; text-transform: uppercase; cursor: pointer; border-radius: 2px; }
     button:hover { border-color: #8b7355; color: #c8b89a; }
     .error { margin-top: 1rem; color: #a05050; font-size: .85rem; }
+    .flash { margin-bottom: 1rem; color: #a89070; font-size: .85rem; }
+    .alt { margin-top: 1.5rem; font-size: .8rem; }
+    a { color: #8b7355; }
+    a:hover { color: #c8b89a; }
   </style>
 </head>
 <body>
   <div class="gate">
     <h1>The Secret-Cabin-et</h1>
-    <form method="POST" action="/login">
-      <input type="password" name="passphrase" placeholder="Enter passphrase" autofocus>
-      <button type="submit">Enter</button>
-      ${error === 'rate' ? '<p class="error">Too many attempts. Try again later.</p>' : error ? '<p class="error">Incorrect passphrase.</p>' : ''}
-    </form>
+${inner}
   </div>
 </body>
 </html>`;
 }
 
-// Registers /login (GET+POST) and /logout on the given Express app. Callers
+const LOGIN_ERRORS = {
+  rate: 'Too many attempts. Try again later.',
+  passphrase: 'Incorrect passphrase.',
+  code: 'That code is wrong or has expired.',
+  email: 'Enter a valid email address.',
+};
+
+function errorHtml(error) {
+  if (!error) return '';
+  // Unknown values (including the pre-#594 `?error=1`) fall back to the
+  // step's own generic message rather than echoing the query string.
+  return `<p class="error">${escapeHtml(LOGIN_ERRORS[error] || 'Something went wrong. Try again.')}</p>`;
+}
+
+// #594 chunk A: three steps. `email` (the default when a mailer is
+// configured) asks for an address; `code` asks for the emailed code;
+// `passphrase` is the break-glass admin login, always reachable from a
+// small link and the only step when email sign-in isn't configured.
+function loginPageHtml({ step = 'passphrase', error = null, emailEnabled = false } = {}) {
+  const passphraseLink = '<p class="alt"><a href="/login/passphrase">Sign in with the passphrase</a></p>';
+  if (step === 'email') {
+    return gatePageHtml(`    <form method="POST" action="/login/code">
+      <p class="note">Enter the email you were invited with and we'll send you a sign-in code.</p>
+      <input type="email" name="email" placeholder="you@example.com" autocomplete="email" required autofocus>
+      <button type="submit">Send code</button>
+      ${errorHtml(error)}
+    </form>
+    ${passphraseLink}`);
+  }
+  if (step === 'code') {
+    return gatePageHtml(`    <form method="POST" action="/login/verify">
+      <p class="note">If that address is on the guest list, a 6-digit code is on its way. It expires in 10 minutes.</p>
+      <input type="text" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]*" maxlength="7" placeholder="000000" required autofocus>
+      <button type="submit">Enter</button>
+      ${errorHtml(error)}
+    </form>
+    <p class="alt"><a href="/login">Use a different email, or send a new code</a></p>`);
+  }
+  return gatePageHtml(`    <form method="POST" action="/login/passphrase">
+      <input type="password" name="passphrase" placeholder="Enter passphrase" autofocus>
+      <button type="submit">Enter</button>
+      ${errorHtml(error === '1' || error === true ? 'passphrase' : error)}
+    </form>
+    ${emailEnabled ? '<p class="alt"><a href="/login">Sign in with email instead</a></p>' : ''}`);
+}
+
+// Registers the /login steps and /logout on the given Express app. Callers
 // must still apply the requireAuth middleware themselves afterward — see the
 // module comment above for why that ordering is left explicit at the call
 // site rather than folded into this function.
@@ -94,36 +160,111 @@ function loginPageHtml(error) {
 // resolve to nobody and have to sign in once more — deliberately, rather
 // than mapping them to the admin, since the old shared passphrase was handed
 // to friends and their cookies shouldn't quietly become admin sessions.
+//
+// Chunk A adds emailed codes: POST /login/code always moves on to the code
+// step whether or not the address is invited, so the form can't be used to
+// learn who is on the guest list; a code is only generated and sent for an
+// address that is. The pending email lives in the session, never the URL.
+// Three limiters: wrong passphrases/codes per IP (`limiter`), and code sends
+// per IP and per email (`sendLimiter`, `emailLimiter`) so the form can't be
+// used to flood someone's inbox or burn Resend quota.
 function registerAuthRoutes(
   app,
   passphrase,
-  { users, limiter = createFailureLimiter({ windowMs: LOGIN_WINDOW_MS, max: LOGIN_MAX_FAILURES }) } = {}
+  {
+    users,
+    mailer = { enabled: false },
+    codes = createLoginCodeStore(),
+    limiter = createFailureLimiter({ windowMs: LOGIN_WINDOW_MS, max: LOGIN_MAX_FAILURES }),
+    sendLimiter = createFailureLimiter({ windowMs: LOGIN_WINDOW_MS, max: CODE_SENDS_PER_IP }),
+    emailLimiter = createFailureLimiter({ windowMs: LOGIN_WINDOW_MS, max: CODE_SENDS_PER_EMAIL }),
+    log = console,
+  } = {}
 ) {
-  // Login page — only served when a passphrase is set and session is not authenticated
+  const emailEnabled = !!mailer.enabled;
+  const alreadyIn = req => !passphrase || resolveUser(req, passphrase, users);
+
+  // A fresh session id on sign-in, so a cookie planted before login
+  // (session fixation) never becomes an authenticated one.
+  function signIn(req, res, user, errorUrl) {
+    req.session.regenerate(err => {
+      if (err) return res.redirect(errorUrl);
+      req.session.userId = user.id;
+      users.recordLogin(user.id);
+      res.redirect('/');
+    });
+  }
+
   app.get('/login', (req, res) => {
-    if (!passphrase || resolveUser(req, passphrase, users)) return res.redirect('/');
-    res.send(loginPageHtml(req.query.error));
+    if (alreadyIn(req)) return res.redirect('/');
+    res.send(loginPageHtml({ step: emailEnabled ? 'email' : 'passphrase', error: req.query.error, emailEnabled }));
   });
 
-  app.post('/login', (req, res) => {
+  app.get('/login/passphrase', (req, res) => {
+    if (alreadyIn(req)) return res.redirect('/');
+    res.send(loginPageHtml({ step: 'passphrase', error: req.query.error, emailEnabled }));
+  });
+
+  app.get('/login/code', (req, res) => {
+    if (alreadyIn(req)) return res.redirect('/');
+    if (!emailEnabled || !req.session.pendingLogin) return res.redirect('/login');
+    res.send(loginPageHtml({ step: 'code', error: req.query.error, emailEnabled }));
+  });
+
+  app.post('/login/passphrase', (req, res) => {
     const key = req.ip || 'unknown';
-    if (limiter.isBlocked(key)) return res.redirect('/login?error=rate');
+    if (limiter.isBlocked(key)) return res.redirect('/login/passphrase?error=rate');
 
     const admin = users?.findAdmin();
     if (!admin || !passphraseMatches(req.body.passphrase, passphrase)) {
       limiter.recordFailure(key);
-      return res.redirect('/login?error=1');
+      return res.redirect('/login/passphrase?error=passphrase');
     }
 
     limiter.reset(key);
-    // A fresh session id on sign-in, so a cookie planted before login
-    // (session fixation) never becomes an authenticated one.
-    req.session.regenerate(err => {
-      if (err) return res.redirect('/login?error=1');
-      req.session.userId = admin.id;
-      users.recordLogin(admin.id);
-      res.redirect('/');
-    });
+    signIn(req, res, admin, '/login/passphrase?error=passphrase');
+  });
+
+  app.post('/login/code', (req, res) => {
+    if (!passphrase || !emailEnabled) return res.redirect('/login');
+    const email = normalizeEmail(req.body.email);
+    if (!email || !email.includes('@')) return res.redirect('/login?error=email');
+
+    const ipKey = req.ip || 'unknown';
+    if (sendLimiter.isBlocked(ipKey)) return res.redirect('/login?error=rate');
+    sendLimiter.recordFailure(ipKey);
+
+    req.session.pendingLogin = { email };
+    const user = users?.findByEmail(email);
+    if (user && !emailLimiter.isBlocked(email)) {
+      emailLimiter.recordFailure(email);
+      const code = codes.issue(email);
+      // Not awaited: waiting on Resend only for listed addresses would make
+      // their redirect a network round-trip slower, which reveals who is
+      // invited. Failures are logged, not shown, for the same reason.
+      Promise.resolve()
+        .then(() => mailer.send({ to: email, ...loginCodeEmail(code) }))
+        .catch(err => log.error(`[auth] sign-in code email failed: ${err.message}`));
+    }
+    res.redirect('/login/code');
+  });
+
+  app.post('/login/verify', (req, res) => {
+    const pending = req.session.pendingLogin;
+    if (!passphrase || !emailEnabled || !pending) return res.redirect('/login');
+
+    const key = req.ip || 'unknown';
+    if (limiter.isBlocked(key)) return res.redirect('/login/code?error=rate');
+
+    const user = users?.findByEmail(pending.email);
+    if (!codes.verify(pending.email, req.body.code) || !user) {
+      limiter.recordFailure(key);
+      return res.redirect('/login/code?error=code');
+    }
+
+    limiter.reset(key);
+    emailLimiter.reset(pending.email);
+    signIn(req, res, user, '/login/code?error=code');
   });
 
   app.get('/logout', (req, res) => {
@@ -225,21 +366,23 @@ function isPublicRoute(req) {
 //   aggregate — reports across every session, not the caller's own.
 // - POST /api/members: spends an Anthropic call and rewrites the roster
 //   every user shares.
+// - /admin/*: the guest list (routes/users.js) — the only admin surface
+//   outside /api/, and the reason requireAuth checks this table *before*
+//   the public tier: a GET outside /api/ is otherwise public app shell.
 //
 // Prefix patterns are fine here (unlike PUBLIC_API_ROUTES): over-matching
 // an admin table only ever gates more, never less.
-const ADMIN_API_ROUTES = [
+const ADMIN_ROUTES = [
   ['POST', /^\/api\/dayone\//],
   ['POST', /^\/api\/ulysses\/export$/],
   ['POST', /^\/api\/export\/obsidian$/],
   ['*', /^\/api\/admin\//],
   ['POST', /^\/api\/members$/],
+  ['*', /^\/admin(\/|$)/],
 ];
 
 function isAdminRoute(req) {
-  return ADMIN_API_ROUTES.some(
-    ([method, pattern]) => (method === '*' || req.method === method) && pattern.test(req.path)
-  );
+  return ADMIN_ROUTES.some(([method, pattern]) => (method === '*' || req.method === method) && pattern.test(req.path));
 }
 
 // Auth guard — applied to all routes except login/logout
@@ -257,14 +400,17 @@ function createRequireAuth(passphrase, users) {
     req.authed = !!req.user;
     req.isAdmin = !!(req.user && req.user.isAdmin);
     if (!passphrase) return next(); // no passphrase set = open, as LOCAL_ADMIN
-    if (isPublicRoute(req)) return next();
+    // Admin tier first — see ADMIN_ROUTES for why it has to precede the
+    // public check.
+    const admin = isAdminRoute(req);
+    if (!admin && isPublicRoute(req)) return next();
     if (!req.user) {
       if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'Unauthorized' });
       return res.redirect('/login');
     }
     // 403, not 404: unlike an unpublished session, the existence of an
     // admin route isn't a secret worth hiding from a signed-in invitee.
-    if (isAdminRoute(req) && !req.isAdmin) return res.status(403).json({ error: 'Forbidden' });
+    if (admin && !req.isAdmin) return res.status(403).json({ error: 'Forbidden' });
     next();
   };
 }
@@ -272,6 +418,8 @@ function createRequireAuth(passphrase, users) {
 module.exports = {
   LOCAL_ADMIN,
   loginPageHtml,
+  gatePageHtml,
+  escapeHtml,
   registerAuthRoutes,
   createRequireAuth,
   resolveUser,

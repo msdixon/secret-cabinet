@@ -46,6 +46,7 @@ const citationManifest = require('./scripts/build-citation-manifest');
 const bibliography = require('./src/bibliography');
 const auth = require('./src/auth');
 const { createUserStore } = require('./src/users');
+const { createMailer } = require('./src/mailer');
 const costLog = require('./src/cost-log');
 const visits = require('./src/visits');
 const { registerLibraryRoutes } = require('./src/routes/library');
@@ -57,6 +58,7 @@ const { registerSessionRoutes } = require('./src/routes/session');
 const { registerGroundingRoutes } = require('./src/routes/grounding');
 const { registerConveneRoutes } = require('./src/routes/convene');
 const { registerVoiceRoutes } = require('./src/routes/voice');
+const { registerUserAdminRoutes } = require('./src/routes/users');
 
 // ─── Environment flags ────────────────────────────────────────────────────────
 const IS_LOCAL = process.env.LOCAL === 'true' || process.env.NODE_ENV !== 'production';
@@ -170,15 +172,31 @@ app.use(
 );
 
 // #594: with a passphrase configured, guarantee the admin user it signs in
-// as. ADMIN_EMAIL (optional for now) is recorded on that user so chunk A's
-// emailed-code sign-in reaches the same account, not a second one. With no
-// passphrase (local dev) there are no stored users at all — every request
-// is auth.LOCAL_ADMIN — so users.json is never created.
+// as. ADMIN_EMAIL is recorded on that user so emailed-code sign-in reaches
+// the same account as the passphrase, not a second one. With no passphrase
+// (local dev) there are no stored users at all — every request is
+// auth.LOCAL_ADMIN — so users.json is never created.
 const users = createUserStore(USERS_FILE);
 if (PASSPHRASE) users.ensureAdmin({ email: process.env.ADMIN_EMAIL });
 
-auth.registerAuthRoutes(app, PASSPHRASE, { users });
+// #594 chunk A: sign-in codes and guest-list invitations. With no
+// RESEND_API_KEY, local dev prints them to this console instead and a
+// deployed instance falls back to passphrase-only — see src/mailer.js.
+// EMAIL_FROM's domain has to be verified in Resend; APP_URL is the link
+// an invitation points at.
+const mailer = createMailer({
+  apiKey: process.env.RESEND_API_KEY,
+  from: process.env.EMAIL_FROM || 'The Secret-Cabin-et <lodge@mail.archon-salon.org>',
+  isLocal: IS_LOCAL,
+});
+const APP_URL = process.env.APP_URL || 'https://archon-salon.org';
+
+auth.registerAuthRoutes(app, PASSPHRASE, { users, mailer });
 app.use(auth.createRequireAuth(PASSPHRASE, users));
+
+// Registered after requireAuth so every /admin/ path is behind the admin
+// tier (auth.js's ADMIN_ROUTES) — unlike /login, nothing here is public.
+registerUserAdminRoutes(app, { users, mailer, appUrl: APP_URL });
 
 // #594: carry the signed-in user's id through the rest of the request so
 // the instrumented Anthropic client above can attribute each call to it.
@@ -459,9 +477,11 @@ function buildTranscriptHeader(entry, memberIds, date) {
 // requireAuth (auth.js) before any route handler runs, including this one.
 // #594: isAdmin drives hiding the admin-only controls (Day One, Add Member)
 // the same way — the server enforces it regardless; this is just so an
-// invitee isn't shown buttons that would only ever 403.
+// invitee isn't shown buttons that would only ever 403. signInEnabled says
+// whether sign-in exists at all (a passphrase is set), so the guest-list and
+// sign-out links only render where they mean something.
 app.get('/api/config', (req, res) => {
-  res.json({ isLocal: IS_LOCAL, authed: req.authed, isAdmin: req.isAdmin });
+  res.json({ isLocal: IS_LOCAL, authed: req.authed, isAdmin: req.isAdmin, signInEnabled: !!PASSPHRASE });
 });
 
 // GET /api/admin/visits — #422: unauthenticated-visitor traffic to the
@@ -470,7 +490,7 @@ app.get('/api/config', (req, res) => {
 // cast/round/interject calls from authenticated (deployed, non-local)
 // sessions, e.g. a colleague demo through shared credentials — see
 // visits.js's buildReport. Admin-only as of #594, along with every other
-// /api/admin/* route — see auth.js's ADMIN_API_ROUTES.
+// /api/admin/* route — see auth.js's ADMIN_ROUTES.
 app.get('/api/admin/visits', (req, res) => {
   res.type('text/markdown').send(visits.buildReport(visitStore));
 });

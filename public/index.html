@@ -55,6 +55,10 @@
       <button class="lodge-btn sessions-btn mantel-sessions-btn" onclick="window.Sessions.openSessionsDrawer()">Past Meetings <span id="sessions-count" class="sessions-count"></span></button>
       <a class="lodge-btn sessions-btn mantel-sessions-btn" href="/lodge">Lodge Members ↗</a>
       <a class="lodge-btn sessions-btn mantel-sessions-btn" href="/bibliography">Bibliography ↗</a>
+      <!-- #594: shown by export.js's applyEnvConfig only where sign-in exists;
+           the guest list additionally only for the admin. -->
+      <a class="lodge-btn sessions-btn mantel-sessions-btn guest-list-link" href="/admin/users" style="display:none">Guest List ↗</a>
+      <a class="lodge-btn sessions-btn mantel-sessions-btn sign-out-link" href="/logout" style="display:none">Sign Out</a>
     </div>
     </div>
     <div class="hearth-glow">

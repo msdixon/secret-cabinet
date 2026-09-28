@@ -11,9 +11,10 @@
 // emailed-code login against it) and is stored lowercased so lookups are
 // case-insensitive.
 //
-// This PR only ever creates one user — the admin, bootstrapped by
-// ensureAdmin() — which the passphrase login signs in as. Adding invitees
-// is chunk A's job, once there's a way for them to sign in at all.
+// The admin is bootstrapped by ensureAdmin(), and is who the break-glass
+// passphrase login signs in as. Everyone else is added by the admin from
+// the /admin/users guest list (chunk A) via addUser/removeUser, and signs
+// in with an emailed code.
 
 const fs = require('fs');
 const crypto = require('crypto');
@@ -83,6 +84,43 @@ function createUserStore(filePath) {
       users.push(admin);
       save();
       return admin;
+    },
+
+    // Throws on a missing/invalid or already-present email rather than
+    // returning null, so the guest-list form can show why nothing happened;
+    // err.code tells the two apart without parsing the message.
+    addUser({ email, name } = {}) {
+      const normalized = normalizeEmail(email);
+      if (!normalized || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
+        throw Object.assign(new Error('A valid email address is required.'), { code: 'invalid-email' });
+      }
+      if (users.some(u => u.email === normalized)) {
+        throw Object.assign(new Error(`${normalized} is already on the guest list.`), { code: 'duplicate-email' });
+      }
+      const trimmedName = typeof name === 'string' ? name.trim() : '';
+      const user = {
+        id: crypto.randomUUID(),
+        email: normalized,
+        name: trimmedName || normalized.split('@')[0],
+        isAdmin: false,
+        createdAt: new Date().toISOString(),
+        lastLoginAt: null,
+      };
+      users.push(user);
+      save();
+      return user;
+    },
+
+    // The admin can't be removed from here: it's the account the
+    // passphrase recovers, and losing it would lock the guest list itself.
+    // Returns whether anyone was removed. Their sessions stop resolving on
+    // the next request (auth.js's resolveUser), so removal is immediate.
+    removeUser(id) {
+      const index = users.findIndex(u => u.id === id);
+      if (index === -1 || users[index].isAdmin) return false;
+      users.splice(index, 1);
+      save();
+      return true;
     },
 
     recordLogin(id) {

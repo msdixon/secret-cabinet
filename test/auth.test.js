@@ -28,6 +28,7 @@ function fakeUsers(list = [ADMIN, MEMBER]) {
     logins,
     findById: id => list.find(u => u.id === id) || null,
     findAdmin: () => list.find(u => u.isAdmin) || null,
+    findByEmail: email => list.find(u => u.email === email) || null,
     recordLogin: id => logins.push(id),
   };
 }
@@ -311,6 +312,9 @@ test('#594: admin-only routes', async t => {
     ['POST', '/api/export/obsidian'],
     ['GET', '/api/admin/visits'],
     ['GET', '/api/admin/bibliography'],
+    ['GET', '/admin/users'],
+    ['POST', '/admin/users'],
+    ['POST', '/admin/users/member-id/remove'],
   ];
 
   await t.test('a signed-in non-admin gets 403 on each admin route', () => {
@@ -374,6 +378,24 @@ test('#594: admin-only routes', async t => {
     requireAuth(fakeReq({ path: '/api/admin/visits', session: {} }), res, () => {});
     assert.equal(res.statusCode, 401);
   });
+
+  // Chunk A: the guest list is the first admin page outside /api/, where
+  // every GET is otherwise public app shell — the admin check has to win.
+  await t.test('an unauthenticated GET /admin/users is redirected to /login, not served as app shell', () => {
+    const requireAuth = auth.createRequireAuth('secret', users);
+    const res = fakeRes();
+    let nextCalled = false;
+    requireAuth(fakeReq({ path: '/admin/users', session: {} }), res, () => {
+      nextCalled = true;
+    });
+    assert.equal(nextCalled, false);
+    assert.equal(res.redirectedTo, '/login');
+  });
+
+  await t.test('paths that merely start with "admin" are not swept into the admin tier', () => {
+    assert.equal(auth.isAdminRoute(fakeReq({ path: '/administer.html' })), false);
+    assert.equal(auth.isAdminRoute(fakeReq({ path: '/admin' })), true);
+  });
 });
 
 test('passphraseMatches', async t => {
@@ -390,20 +412,47 @@ test('passphraseMatches', async t => {
 });
 
 test('loginPageHtml', async t => {
-  await t.test('renders the login form', () => {
-    const html = auth.loginPageHtml(false);
-    assert.match(html, /<form method="POST" action="\/login">/);
+  await t.test('the passphrase step posts to /login/passphrase', () => {
+    const html = auth.loginPageHtml({ step: 'passphrase' });
+    assert.match(html, /<form method="POST" action="\/login\/passphrase">/);
     assert.match(html, /input type="password" name="passphrase"/);
+    assert.doesNotMatch(html, /Sign in with email instead/);
+  });
+
+  await t.test('the passphrase step links back to email sign-in only when email is enabled', () => {
+    assert.match(auth.loginPageHtml({ step: 'passphrase', emailEnabled: true }), /Sign in with email instead/);
+  });
+
+  await t.test('the email step posts to /login/code and links to the passphrase', () => {
+    const html = auth.loginPageHtml({ step: 'email', emailEnabled: true });
+    assert.match(html, /<form method="POST" action="\/login\/code">/);
+    assert.match(html, /input type="email" name="email"/);
+    assert.match(html, /href="\/login\/passphrase"/);
+  });
+
+  await t.test('the code step posts to /login/verify', () => {
+    const html = auth.loginPageHtml({ step: 'code', emailEnabled: true });
+    assert.match(html, /<form method="POST" action="\/login\/verify">/);
+    assert.match(html, /autocomplete="one-time-code"/);
   });
 
   await t.test('#594: shows a rate-limit message for error=rate', () => {
-    assert.match(auth.loginPageHtml('rate'), /Too many attempts/);
-    assert.doesNotMatch(auth.loginPageHtml('rate'), /Incorrect passphrase\./);
+    const html = auth.loginPageHtml({ step: 'passphrase', error: 'rate' });
+    assert.match(html, /Too many attempts/);
+    assert.doesNotMatch(html, /Incorrect passphrase\./);
   });
 
-  await t.test('shows an error message only when error is truthy', () => {
-    assert.match(auth.loginPageHtml(true), /Incorrect passphrase\./);
-    assert.doesNotMatch(auth.loginPageHtml(false), /Incorrect passphrase\./);
+  await t.test('shows an error message only when there is an error', () => {
+    assert.match(auth.loginPageHtml({ step: 'passphrase', error: 'passphrase' }), /Incorrect passphrase\./);
+    assert.match(auth.loginPageHtml({ step: 'passphrase', error: '1' }), /Incorrect passphrase\./);
+    assert.doesNotMatch(auth.loginPageHtml({ step: 'passphrase' }), /class="error"/);
+    assert.match(auth.loginPageHtml({ step: 'code', error: 'code' }), /wrong or has expired/);
+  });
+
+  await t.test('never echoes an unknown error value into the page', () => {
+    const html = auth.loginPageHtml({ step: 'email', error: '<script>x</script>' });
+    assert.doesNotMatch(html, /<script>x/);
+    assert.match(html, /Something went wrong/);
   });
 });
 
@@ -421,12 +470,20 @@ test('registerAuthRoutes', async t => {
     };
   }
 
-  await t.test('registers GET/POST /login and GET /logout', () => {
+  await t.test('registers the login steps and GET /logout', () => {
     const app = fakeApp();
     auth.registerAuthRoutes(app, 'secret', { users });
-    assert.equal(typeof app.routes['GET /login'], 'function');
-    assert.equal(typeof app.routes['POST /login'], 'function');
-    assert.equal(typeof app.routes['GET /logout'], 'function');
+    for (const route of [
+      'GET /login',
+      'GET /login/passphrase',
+      'GET /login/code',
+      'POST /login/passphrase',
+      'POST /login/code',
+      'POST /login/verify',
+      'GET /logout',
+    ]) {
+      assert.equal(typeof app.routes[route], 'function', route);
+    }
   });
 
   await t.test('GET /login redirects to / when no passphrase is configured', () => {
@@ -445,12 +502,20 @@ test('registerAuthRoutes', async t => {
     assert.equal(res.redirectedTo, '/');
   });
 
-  await t.test('GET /login serves the form when a passphrase is set and the session is not authed', () => {
+  await t.test('GET /login serves the passphrase form when email sign-in is not configured', () => {
     const app = fakeApp();
     auth.registerAuthRoutes(app, 'secret', { users });
     const res = fakeRes();
     app.routes['GET /login'](fakeReq({ session: {}, query: {} }), res);
-    assert.match(res.sentHtml, /<form method="POST" action="\/login">/);
+    assert.match(res.sentHtml, /<form method="POST" action="\/login\/passphrase">/);
+  });
+
+  await t.test('GET /login serves the email form when email sign-in is configured', () => {
+    const app = fakeApp();
+    auth.registerAuthRoutes(app, 'secret', { users, mailer: { enabled: true } });
+    const res = fakeRes();
+    app.routes['GET /login'](fakeReq({ session: {}, query: {} }), res);
+    assert.match(res.sentHtml, /<form method="POST" action="\/login\/code">/);
   });
 
   // express-session's regenerate() swaps req.session for a fresh object
@@ -465,56 +530,62 @@ test('registerAuthRoutes', async t => {
     return req;
   }
 
-  await t.test('POST /login with the correct passphrase signs in as the admin on a regenerated session', () => {
-    const app = fakeApp();
-    const store = fakeUsers();
-    auth.registerAuthRoutes(app, 'secret', { users: store });
-    const res = fakeRes();
-    const req = loginReq('secret');
-    app.routes['POST /login'](req, res);
-    assert.equal(req.session.userId, ADMIN.id);
-    assert.equal(req.session.planted, undefined, 'expected the pre-login session to be replaced');
-    assert.deepEqual(store.logins, [ADMIN.id]);
-    assert.equal(res.redirectedTo, '/');
-  });
+  await t.test(
+    'POST /login/passphrase with the correct passphrase signs in as the admin on a regenerated session',
+    () => {
+      const app = fakeApp();
+      const store = fakeUsers();
+      auth.registerAuthRoutes(app, 'secret', { users: store });
+      const res = fakeRes();
+      const req = loginReq('secret');
+      app.routes['POST /login/passphrase'](req, res);
+      assert.equal(req.session.userId, ADMIN.id);
+      assert.equal(req.session.planted, undefined, 'expected the pre-login session to be replaced');
+      assert.deepEqual(store.logins, [ADMIN.id]);
+      assert.equal(res.redirectedTo, '/');
+    }
+  );
 
-  await t.test('POST /login with the wrong passphrase does not authenticate and redirects to the error state', () => {
-    const app = fakeApp();
-    auth.registerAuthRoutes(app, 'secret', { users });
-    const res = fakeRes();
-    const req = loginReq('wrong');
-    app.routes['POST /login'](req, res);
-    assert.equal(req.session.userId, undefined);
-    assert.equal(res.redirectedTo, '/login?error=1');
-  });
+  await t.test(
+    'POST /login/passphrase with the wrong passphrase does not authenticate and redirects to the error state',
+    () => {
+      const app = fakeApp();
+      auth.registerAuthRoutes(app, 'secret', { users });
+      const res = fakeRes();
+      const req = loginReq('wrong');
+      app.routes['POST /login/passphrase'](req, res);
+      assert.equal(req.session.userId, undefined);
+      assert.equal(res.redirectedTo, '/login/passphrase?error=passphrase');
+    }
+  );
 
-  await t.test('POST /login fails closed when there is no admin user to sign in as', () => {
+  await t.test('POST /login/passphrase fails closed when there is no admin user to sign in as', () => {
     const app = fakeApp();
     auth.registerAuthRoutes(app, 'secret', { users: fakeUsers([]) });
     const res = fakeRes();
     const req = loginReq('secret');
-    app.routes['POST /login'](req, res);
+    app.routes['POST /login/passphrase'](req, res);
     assert.equal(req.session.userId, undefined);
-    assert.equal(res.redirectedTo, '/login?error=1');
+    assert.equal(res.redirectedTo, '/login/passphrase?error=passphrase');
   });
 
   await t.test(
-    '#594: POST /login blocks an IP after repeated failures, even for the right passphrase, and only that IP',
+    '#594: POST /login/passphrase blocks an IP after repeated failures, even for the right passphrase, and only that IP',
     () => {
       const app = fakeApp();
       const { createFailureLimiter } = require('../src/rate-limit.js');
       const limiter = createFailureLimiter({ windowMs: 60_000, max: 2 });
       auth.registerAuthRoutes(app, 'secret', { users: fakeUsers(), limiter });
-      for (let i = 0; i < 2; i++) app.routes['POST /login'](loginReq('wrong', '1.1.1.1'), fakeRes());
+      for (let i = 0; i < 2; i++) app.routes['POST /login/passphrase'](loginReq('wrong', '1.1.1.1'), fakeRes());
 
       const blocked = fakeRes();
       const blockedReq = loginReq('secret', '1.1.1.1');
-      app.routes['POST /login'](blockedReq, blocked);
-      assert.equal(blocked.redirectedTo, '/login?error=rate');
+      app.routes['POST /login/passphrase'](blockedReq, blocked);
+      assert.equal(blocked.redirectedTo, '/login/passphrase?error=rate');
       assert.equal(blockedReq.session.userId, undefined);
 
       const other = fakeRes();
-      app.routes['POST /login'](loginReq('secret', '2.2.2.2'), other);
+      app.routes['POST /login/passphrase'](loginReq('secret', '2.2.2.2'), other);
       assert.equal(other.redirectedTo, '/');
     }
   );
@@ -535,6 +606,172 @@ test('registerAuthRoutes', async t => {
     });
     app.routes['GET /logout'](req, res);
     assert.equal(destroyed, true);
+    assert.equal(res.redirectedTo, '/login');
+  });
+});
+
+// #594 chunk A: the emailed-code flow, end to end through the route
+// handlers, with a recording mailer and the real code store.
+test('emailed-code sign-in', async t => {
+  const { createLoginCodeStore } = require('../src/login-codes.js');
+  const { createFailureLimiter } = require('../src/rate-limit.js');
+
+  function setup(overrides = {}) {
+    const routes = {};
+    const app = {
+      get: (path, h) => (routes[`GET ${path}`] = h),
+      post: (path, h) => (routes[`POST ${path}`] = h),
+    };
+    const sent = [];
+    const mailer = {
+      enabled: true,
+      send: async msg => {
+        if (overrides.sendFails) throw new Error('boom');
+        sent.push(msg);
+        return true;
+      },
+    };
+    const store = fakeUsers();
+    const errors = [];
+    auth.registerAuthRoutes(app, 'secret', {
+      users: store,
+      mailer,
+      codes: createLoginCodeStore(),
+      log: { error: m => errors.push(m) },
+      ...overrides.deps,
+    });
+    return { routes, sent, store, errors };
+  }
+
+  const codeFrom = msg => msg.text.match(/\b(\d{6})\b/)[1];
+
+  function sessionReq(session, body, ip = '127.0.0.1') {
+    const req = fakeReq({ session, body, ip });
+    req.session.regenerate = cb => {
+      req.session = {};
+      cb();
+    };
+    return req;
+  }
+
+  await t.test('an invited address gets a code, and the right code signs them in', async () => {
+    const { routes, sent, store } = setup();
+    const session = {};
+    const res = fakeRes();
+    await routes['POST /login/code'](sessionReq(session, { email: '  Friend@Example.com ' }), res);
+    assert.equal(res.redirectedTo, '/login/code');
+    assert.deepEqual(session.pendingLogin, { email: MEMBER.email });
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].to, MEMBER.email);
+
+    const verifyReq = sessionReq(session, { code: codeFrom(sent[0]) });
+    const verifyRes = fakeRes();
+    routes['POST /login/verify'](verifyReq, verifyRes);
+    assert.equal(verifyRes.redirectedTo, '/');
+    assert.equal(verifyReq.session.userId, MEMBER.id);
+    assert.equal(verifyReq.session.pendingLogin, undefined, 'expected a fresh session');
+    assert.deepEqual(store.logins, [MEMBER.id]);
+  });
+
+  await t.test('an uninvited address sees the same code step but nothing is sent', async () => {
+    const { routes, sent } = setup();
+    const session = {};
+    const res = fakeRes();
+    await routes['POST /login/code'](sessionReq(session, { email: 'stranger@example.com' }), res);
+    assert.equal(res.redirectedTo, '/login/code');
+    assert.equal(sent.length, 0);
+
+    const verifyRes = fakeRes();
+    routes['POST /login/verify'](sessionReq(session, { code: '123456' }), verifyRes);
+    assert.equal(verifyRes.redirectedTo, '/login/code?error=code');
+  });
+
+  await t.test('a wrong code does not sign in, and a code is single-use', async () => {
+    const { routes, sent } = setup();
+    const session = {};
+    await routes['POST /login/code'](sessionReq(session, { email: MEMBER.email }), fakeRes());
+    const code = codeFrom(sent[0]);
+    const wrong = code === '000000' ? '000001' : '000000';
+
+    const wrongReq = sessionReq(session, { code: wrong });
+    const wrongRes = fakeRes();
+    routes['POST /login/verify'](wrongReq, wrongRes);
+    assert.equal(wrongRes.redirectedTo, '/login/code?error=code');
+    assert.equal(wrongReq.session.userId, undefined);
+
+    routes['POST /login/verify'](sessionReq(session, { code }), fakeRes());
+    const replay = fakeRes();
+    routes['POST /login/verify'](sessionReq({ pendingLogin: { email: MEMBER.email } }, { code }), replay);
+    assert.equal(replay.redirectedTo, '/login/code?error=code');
+  });
+
+  await t.test('a removed user cannot finish signing in with a code issued before removal', async () => {
+    const list = [ADMIN, { ...MEMBER }];
+    const store = fakeUsers(list);
+    const { routes, sent } = setup({ deps: { users: store } });
+    const session = {};
+    await routes['POST /login/code'](sessionReq(session, { email: MEMBER.email }), fakeRes());
+    list.splice(1, 1);
+    const res = fakeRes();
+    const req = sessionReq(session, { code: codeFrom(sent[0]) });
+    routes['POST /login/verify'](req, res);
+    assert.equal(res.redirectedTo, '/login/code?error=code');
+    assert.equal(req.session.userId, undefined);
+  });
+
+  await t.test('sends are capped per address, and the visitor still sees the code step', async () => {
+    const emailLimiter = createFailureLimiter({ windowMs: 60_000, max: 2 });
+    const sendLimiter = createFailureLimiter({ windowMs: 60_000, max: 100 });
+    const { routes, sent } = setup({ deps: { emailLimiter, sendLimiter } });
+    for (let i = 0; i < 4; i++) {
+      const res = fakeRes();
+      await routes['POST /login/code'](sessionReq({}, { email: MEMBER.email }), res);
+      assert.equal(res.redirectedTo, '/login/code');
+    }
+    assert.equal(sent.length, 2);
+  });
+
+  await t.test('sends are capped per IP with a visible rate-limit error', async () => {
+    const sendLimiter = createFailureLimiter({ windowMs: 60_000, max: 2 });
+    const { routes } = setup({ deps: { sendLimiter } });
+    for (let i = 0; i < 2; i++)
+      await routes['POST /login/code'](sessionReq({}, { email: `x${i}@example.com` }), fakeRes());
+    const res = fakeRes();
+    await routes['POST /login/code'](sessionReq({}, { email: 'y@example.com' }), res);
+    assert.equal(res.redirectedTo, '/login?error=rate');
+  });
+
+  await t.test('a failed send is logged, not revealed', async () => {
+    const { routes, errors } = setup({ sendFails: true });
+    const res = fakeRes();
+    routes['POST /login/code'](sessionReq({}, { email: MEMBER.email }), res);
+    assert.equal(res.redirectedTo, '/login/code', 'redirects without waiting on the send');
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(errors.length, 1);
+  });
+
+  await t.test('a malformed email goes back to the form with an error', async () => {
+    const { routes, sent } = setup();
+    const res = fakeRes();
+    await routes['POST /login/code'](sessionReq({}, { email: 'not-an-email' }), res);
+    assert.equal(res.redirectedTo, '/login?error=email');
+    assert.equal(sent.length, 0);
+  });
+
+  await t.test('with email disabled, the code routes send nobody anywhere but /login', async () => {
+    const { routes } = setup({ deps: { mailer: { enabled: false } } });
+    const res = fakeRes();
+    await routes['POST /login/code'](sessionReq({}, { email: MEMBER.email }), res);
+    assert.equal(res.redirectedTo, '/login');
+    const getRes = fakeRes();
+    routes['GET /login/code'](fakeReq({ session: { pendingLogin: { email: MEMBER.email } } }), getRes);
+    assert.equal(getRes.redirectedTo, '/login');
+  });
+
+  await t.test('GET /login/code without a pending login redirects to /login', () => {
+    const { routes } = setup();
+    const res = fakeRes();
+    routes['GET /login/code'](fakeReq({ session: {} }), res);
     assert.equal(res.redirectedTo, '/login');
   });
 });
