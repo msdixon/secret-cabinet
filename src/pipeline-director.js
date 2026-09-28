@@ -58,6 +58,16 @@ function buildDirectorToolSchema(presentIds, minCount, maxCount) {
           description:
             'Optional. Two present member ids you are opening a private aside between right now, apart from the room — "Crowley leans toward Coleman-Smith" as an opening move, not a reaction to anything either has said. Leave out almost every time; this is a rare directorial choice, not a per-passage default.',
         },
+        // #579: one member stepping out of the room to think at length —
+        // the splinterPair shape above with one participant. Runs through
+        // pipeline-confessional.js; see its header for why the room never
+        // hears it.
+        confessional: {
+          type: 'string',
+          enum: presentIds,
+          description:
+            'Optional. One present member id you are giving a confessional aside right now — a moment apart from the room to think something through at length, with the texts and evidence the quick exchange has left no room for. Only someone who has already spoken tonight. Leave out almost every time.',
+        },
       },
       required: ['speakers', 'reasoning', 'windingDown'],
     },
@@ -77,6 +87,16 @@ function sanitizeSplinterPair(pair, presentIds) {
   if (a === b) return null;
   if (!presentIds.includes(a) || !presentIds.includes(b)) return null;
   return [a, b];
+}
+
+// #579: same drop-don't-correct treatment as sanitizeSplinterPair above,
+// for the single id a confessional proposal carries. Whether that member
+// has actually spoken yet is runRound's check (canOpenConfessional), not
+// this one's — the director call doesn't hold the passage's live counts.
+function sanitizeConfessional(memberId, presentIds) {
+  if (typeof memberId !== 'string') return null;
+  if (!presentIds.includes(memberId)) return null;
+  return memberId;
 }
 
 // #352: the director's prompt has always asked it to weigh "who hasn't been
@@ -139,7 +159,9 @@ Choose between ${minCount} and ${maxCount} of the present members as this round'
 
 Separately — and this is a judgment about the whole evening, not just this pool — say whether the room is winding down: energy ebbing, threads settling, no one straining to speak. This is usually false; most consults, the room still has more in it. If it is genuinely true, you may also write one diegetic line marking the pause — an image or a small action in the room's register, not a summary of what just happened.
 
-Separately again: you may name a splinterPair — two present members you are opening a private aside between right now, apart from the room, independent of anything either has said or currently carries. This is the rare exception, not a per-passage habit — leave it out almost every time. Reach for it only when a pairing would read as genuinely alive right now: who they evidently are to each other, not a habit of pairing off whoever is present. It can be the opening move of the passage, before anyone has spoken at all.`;
+Separately again: you may name a splinterPair — two present members you are opening a private aside between right now, apart from the room, independent of anything either has said or currently carries. This is the rare exception, not a per-passage habit — leave it out almost every time. Reach for it only when a pairing would read as genuinely alive right now: who they evidently are to each other, not a habit of pairing off whoever is present. It can be the opening move of the passage, before anyone has spoken at all.
+
+And separately: you may name a confessional — one present member you are giving a moment apart from the room to think something through at length, working with the texts and evidence the quick back-and-forth hasn't left room for. The room does not hear it; it goes into the record only. Name only someone who has already spoken tonight and has evidently been carrying more than a turn could hold — an argument half-made, a text they keep circling. This too is the rare exception — leave it out almost every time.`;
 
   const userMessage = "Choose this round's candidate pool.";
 
@@ -178,11 +200,11 @@ async function callDirector({
   });
   const latencyMs = Date.now() - start;
   const block = response.content.find(b => b.type === 'tool_use');
-  // windingDown/lullNote/splinterPair are absent from the casting tool's
-  // schema (a different question, see buildCastingToolSchema) — undefined
-  // there degrades to false/null/null below, which proposeCast simply never
-  // reads.
-  const { speakers, reasoning, windingDown, lullNote, splinterPair } = block?.input || {};
+  // windingDown/lullNote/splinterPair/confessional are absent from the
+  // casting tool's schema (a different question, see buildCastingToolSchema)
+  // — undefined there degrades to false/null/null/null below, which
+  // proposeCast simply never reads.
+  const { speakers, reasoning, windingDown, lullNote, splinterPair, confessional } = block?.input || {};
   return {
     speakers,
     reasoning,
@@ -192,6 +214,7 @@ async function callDirector({
     // enum — every caller downstream (runDirectorSelection, selectSpeakers,
     // runRound) can treat a non-null splinterPair as already valid.
     splinterPair: sanitizeSplinterPair(splinterPair, presentIds),
+    confessional: sanitizeConfessional(confessional, presentIds),
     usage: response.usage,
     latencyMs,
   };
@@ -238,18 +261,19 @@ async function runDirectorSelection({
   let lastReasoning = null;
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
-      const { speakers, reasoning, windingDown, lullNote, splinterPair, usage, latencyMs } = await callDirector({
-        client,
-        model,
-        system,
-        conversationHistory,
-        userMessage: userMessage + (attempt === 2 ? correction : ''),
-        presentIds: candidateIds,
-        minCount,
-        maxCount,
-        tool,
-        lodgeContext,
-      });
+      const { speakers, reasoning, windingDown, lullNote, splinterPair, confessional, usage, latencyMs } =
+        await callDirector({
+          client,
+          model,
+          system,
+          conversationHistory,
+          userMessage: userMessage + (attempt === 2 ? correction : ''),
+          presentIds: candidateIds,
+          minCount,
+          maxCount,
+          tool,
+          lodgeContext,
+        });
       lastReasoning = reasoning || lastReasoning;
       onMetric?.(makeMetric(phase, { round, attempts: attempt, usage, latencyMs, reasoning }));
       if (isValidSelection(speakers, candidateIds, minCount, maxCount)) {
@@ -259,6 +283,7 @@ async function runDirectorSelection({
           windingDown,
           lullNote,
           splinterPair,
+          confessional,
           source: attempt === 1 ? 'director' : 'director-retry',
         };
       }
@@ -270,14 +295,16 @@ async function runDirectorSelection({
   onMetric?.(makeMetric(phase, { round, attempts: 2, skipped: true, error: fallbackNote, reasoning: lastReasoning }));
   // A director failure must never quietly read as an intentional lull —
   // the fallback always reports the room as not winding down, and never
-  // proposes a splinter (#458): a deterministic fallback pool is not the
-  // director exercising judgment, so it gets no discretionary calls at all.
+  // proposes a splinter (#458) or a confessional (#579): a deterministic
+  // fallback pool is not the director exercising judgment, so it gets no
+  // discretionary calls at all.
   return {
     speakers: fallbackIds,
     reasoning: lastReasoning,
     windingDown: false,
     lullNote: null,
     splinterPair: null,
+    confessional: null,
     source: 'fallback',
   };
 }
@@ -334,6 +361,7 @@ module.exports = {
   buildDirectorPrompt,
   buildTurnLedgerBlock,
   sanitizeSplinterPair,
+  sanitizeConfessional,
   callDirector,
   isValidSelection,
   runDirectorSelection,

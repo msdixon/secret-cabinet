@@ -419,6 +419,45 @@ test('replay: parsing a stored session into playback blocks', async t => {
     }
   );
 
+  // #579: formatConfessionalBlock's (pipeline-confessional.js) shape — one
+  // speaker, set apart from the room with its own bubble class and tag.
+  await t.test(
+    '#579: a [Confessional — ...] block tags its one beat as a confessional, distinct from an aside',
+    async t2 => {
+      const { document, module: Witness } = boot(t2);
+      await Witness.start(
+        {
+          rounds: [
+            {
+              label: 'Round I',
+              text:
+                'Crowley\nA claim for the whole table.\n\n' +
+                '[Confessional — Crowley, apart from the room]\n' +
+                'Crowley\nWhat I could not say there, taken the long way round.\n' +
+                '[/Confessional]\n\n' +
+                'Blavatsky\nAnd for the room, I stand by it.',
+            },
+          ],
+        },
+        makeDeps()
+      );
+      playToEnd(Witness, document);
+
+      const entries = [...document.getElementById('witness-stage').querySelectorAll('.transcript-entry')];
+      assert.equal(entries.length, 3);
+      assert.deepEqual(
+        entries.map(e => e.classList.contains('bubble-confessional')),
+        [false, true, false]
+      );
+      assert.ok(entries.every(e => !e.classList.contains('bubble-aside')));
+      const allText = entries.map(e => e.querySelector('.speech-text').textContent).join(' | ');
+      assert.doesNotMatch(allText, /\[Confessional|\[\/Confessional\]/);
+      assert.match(entries[1].querySelector('.speech-text').textContent, /the long way round/);
+      assert.match(entries[1].querySelector('.thread-tag').textContent, /confessional/);
+      assert.equal(entries[2].querySelector('.thread-tag'), null);
+    }
+  );
+
   await t.test('ignores a session with no rounds instead of opening an empty stage', async t2 => {
     const { document, module: Witness } = boot(t2);
     await Witness.start(null, makeDeps());
@@ -1296,6 +1335,27 @@ test('the room (#257): dialogue composited onto the scene, replacing the #202 to
       assert.equal(lines[0].getAttribute('x2'), '300');
     }
   );
+
+  // #579: a confessional is a one-participant thread — its own card
+  // treatment, and no connector (there's no second seat to draw to).
+  await t.test('a confessional (`thread.kind`) tags its entry distinctly and draws no connector', async t2 => {
+    t2.mock.timers.enable({ apis: ['setTimeout'] });
+    const { document, window, module: Witness } = boot(t2);
+    stubScene(window, {
+      crowley: { x: 100, y: 200, visible: true },
+      blavatsky: { x: 300, y: 200, visible: true },
+    });
+    Witness.configure(makeDeps());
+    Witness.enableRoom();
+
+    const thread = { id: 'confessional-1-0', kind: 'confessional', participants: ['crowley'] };
+    Witness.liveSpeech({ speaker: 'Crowley', text: 'Alone with it.', memberId: 'crowley', thread });
+
+    const entry = document.querySelector('#room-speech-layer .room-speech-card .room-card-entry');
+    assert.ok(entry.classList.contains('card-entry-confessional'));
+    assert.equal(entry.classList.contains('card-entry-aside'), false);
+    assert.equal(document.querySelectorAll('#room-thread-layer .room-thread-line').length, 0);
+  });
 });
 
 test("scrollback (#287): a member's card is a short-lived stack of recent beats, not just the latest", async t => {

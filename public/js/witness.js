@@ -159,6 +159,8 @@ window.Witness = (function () {
 
   function registerThread(thread) {
     if (!thread || !thread.id || !Array.isArray(thread.participants)) return;
+    // #579: a confessional's thread has one participant — nothing to connect.
+    if (thread.participants.length < 2) return;
     if (!activeThreads.has(thread.id)) activeThreads.set(thread.id, thread.participants);
   }
 
@@ -397,9 +399,24 @@ window.Witness = (function () {
   // relying only on the container's aside styling class (renderRoomCard/
   // renderSpeechBeat below) -- color/border alone isn't a reliable enough
   // signal for "the room doesn't hear this."
+  //
+  // #579: a confessional's thread carries `kind: 'confessional'` (a
+  // splinter's carries no kind) and gets its own tag word — see threadClass
+  // below for the matching container styling.
+  function isConfessional(thread) {
+    return thread?.kind === 'confessional';
+  }
+
+  // The container class suffix for a threaded beat: 'aside' for a splinter,
+  // 'confessional' for #579's one-member aside, null for an ordinary beat.
+  function threadClass(thread) {
+    if (!thread) return null;
+    return isConfessional(thread) ? 'confessional' : 'aside';
+  }
+
   function speechBodyHtml({ text, annotation, thread }) {
     let bodyHtml = '<div class="bubble-body">';
-    if (thread) bodyHtml += '<div class="thread-tag">aside</div>';
+    if (thread) bodyHtml += `<div class="thread-tag">${threadClass(thread)}</div>`;
     bodyHtml += `<div class="speech-text">${deps.renderActions(text)}</div>`;
     if (annotation) bodyHtml += `<div class="witness-annotation">↳ ${deps.escapeHTML(annotation)}</div>`;
     bodyHtml += '</div>';
@@ -515,7 +532,8 @@ window.Witness = (function () {
     // a member's card is a stack (#287) that can hold both ordinary and
     // splinter beats across one passage, so the card itself never gets a
     // fixed "this member is asiding" state.
-    entry.classList.toggle('card-entry-aside', !!block.thread);
+    entry.classList.toggle('card-entry-aside', threadClass(block.thread) === 'aside');
+    entry.classList.toggle('card-entry-confessional', threadClass(block.thread) === 'confessional');
     entry.innerHTML = speechBodyHtml(block);
     registerThread(block.thread);
     // typing: this entry's tail was already being followed as its text grew
@@ -1160,6 +1178,11 @@ window.Witness = (function () {
   // pipeline.js's beats, but both sides agree on the bracket text.
   const ASIDE_START_RE = /^\[Aside — .+ and .+, apart from the room\]$/;
   const ASIDE_END = '[/Aside]';
+  // #579: formatConfessionalBlock's bracket text (pipeline-confessional.js),
+  // handled the same way — one participant, filled in as the speaker line
+  // below it resolves.
+  const CONFESSIONAL_START_RE = /^\[Confessional — .+, apart from the room\]$/;
+  const CONFESSIONAL_END = '[/Confessional]';
 
   function parseWitnessBlocks(session) {
     const blocks = [];
@@ -1223,7 +1246,12 @@ window.Witness = (function () {
           thread = { id: `replay-aside-${threadSeq++}`, participants: [] };
           return;
         }
-        if (t === ASIDE_END) {
+        if (CONFESSIONAL_START_RE.test(t)) {
+          flush();
+          thread = { id: `replay-confessional-${threadSeq++}`, kind: 'confessional', participants: [] };
+          return;
+        }
+        if (t === ASIDE_END || t === CONFESSIONAL_END) {
           flush(); // settles the second participant's buffered text under the still-live thread
           thread = null;
           return;
@@ -1353,7 +1381,7 @@ window.Witness = (function () {
     // #457: the #witness-stage fallback has no seat geometry to connect, so
     // it gets only the distinct bubble styling (dashed border, muted/italic
     // text, the "aside" tag from speechBodyHtml) — no connector line.
-    e.className = `transcript-entry bubble-${side}${block.thread ? ' bubble-aside' : ''}`;
+    e.className = `transcript-entry bubble-${side}${block.thread ? ` bubble-${threadClass(block.thread)}` : ''}`;
     e.innerHTML = speechHtml(block);
     const stage = document.getElementById('witness-stage');
     stage.appendChild(e);

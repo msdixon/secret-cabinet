@@ -427,6 +427,37 @@ const SPLINTER_CHANCE = 0.35;
 // the exchange, one beat's worth of slack for whatever the room does next.
 const SPLINTER_MIN_BUDGET_WORDS = WORDS_PER_BEAT_ESTIMATE * 3;
 
+// ── Confessional asides (pipeline-confessional.js) ─────────────────────────
+
+// #579: the fourth part of the 2026-09-13 citation-as-combat redesign — one
+// member stepping out of the room to think at length, with the texts, where
+// the quick exchange (#561's brevity work) leaves no room for it. Same
+// director-proposed shape as #458's splinterPair, one participant instead
+// of two. Its own cap, not a share of MAX_SPLINTERS_PER_PASSAGE: the two
+// answer different needs (a barbed exchange vs. one member's long way
+// round), and a confessional doesn't spend the room's shared context the
+// way a splinter's folded-in block does — see pipeline-confessional.js's
+// header.
+const MAX_CONFESSIONALS_PER_PASSAGE = 1;
+
+// Room left for the main thread after a confessional. It's charged against
+// the passage budget as one ordinary beat (CONFESSIONAL_BUDGET_COST_WORDS
+// below), so the headroom is that beat plus one more for the room to go on
+// with — a passage shouldn't close on someone thinking alone.
+const CONFESSIONAL_MIN_BUDGET_WORDS = WORDS_PER_BEAT_ESTIMATE * 2;
+
+// A confessional is deliberately the long form, so it doesn't draw down the
+// passage's BREATH_BUDGET_WORDS at its real length — that would let one
+// member's aside end the passage for everyone. Charged as one estimated
+// beat instead: enough that the passage still registers something happened.
+const CONFESSIONAL_BUDGET_COST_WORDS = WORDS_PER_BEAT_ESTIMATE;
+
+// The room's turns are capped at SPEAKER_MAX_TOKENS; a confessional gets
+// more rope — roughly 1.5x — so the long way round isn't truncated mid-
+// citation. Still a ceiling, not a target: the prompt asks for length only
+// where the thinking needs it.
+const CONFESSIONAL_MAX_TOKENS = 1600;
+
 // ── Pool/arc sizing (lodge-prompts.js) ─────────────────────────────────────
 
 // #194 touchpoint 2: SPEAKER_COUNTS/speakerCountForRound retire — pool
@@ -494,4 +525,8 @@ module.exports = {
   MAX_SPLINTERS_PER_PASSAGE,
   SPLINTER_CHANCE,
   SPLINTER_MIN_BUDGET_WORDS,
+  MAX_CONFESSIONALS_PER_PASSAGE,
+  CONFESSIONAL_MIN_BUDGET_WORDS,
+  CONFESSIONAL_BUDGET_COST_WORDS,
+  CONFESSIONAL_MAX_TOKENS,
 };

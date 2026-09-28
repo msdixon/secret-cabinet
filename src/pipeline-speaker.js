@@ -528,12 +528,23 @@ Generate ${member.name}'s contribution now.`;
 // Streams the response (same delta shape streamClaude already forwards to
 // the client), and still captures usage/latency via stream.finalMessage() —
 // live streaming and per-call metrics are not mutually exclusive.
-async function callSpeakerTurn({ client, model, system, conversationHistory, userMessage, onChunk, lodgeContext }) {
+// `maxTokens` is only ever overridden by #579's confessional aside
+// (CONFESSIONAL_MAX_TOKENS); every room turn keeps SPEAKER_MAX_TOKENS.
+async function callSpeakerTurn({
+  client,
+  model,
+  system,
+  conversationHistory,
+  userMessage,
+  onChunk,
+  lodgeContext,
+  maxTokens = SPEAKER_MAX_TOKENS,
+}) {
   const start = Date.now();
   const messages = [...withHistoryCacheControl(conversationHistory), { role: 'user', content: userMessage }];
   const stream = client.messages.stream({
     model,
-    max_tokens: SPEAKER_MAX_TOKENS,
+    max_tokens: maxTokens,
     system: buildCachedSystem(system, lodgeContext),
     messages,
   });

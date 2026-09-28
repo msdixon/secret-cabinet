@@ -102,6 +102,12 @@ function resolveSpeakerId(line, aliasIndex) {
 
 const ASIDE_START_RE = /^\[Aside — .+ and .+, apart from the room\]$/;
 const ASIDE_END = '[/Aside]';
+// #579: a confessional is deliberately the long form, outside the room's
+// exchange — counting it would read as the very turn-length regression
+// this script watches for. Its whole block is dropped, not just its
+// brackets.
+const CONFESSIONAL_START_RE = /^\[Confessional — .+, apart from the room\]$/;
+const CONFESSIONAL_END = '[/Confessional]';
 
 // Splits one round's raw text blob into {memberId, text} turns. Faithful to
 // the app's own replay parser: a recognized speaker-name line opens a new
@@ -109,13 +115,15 @@ const ASIDE_END = '[/Aside]';
 // standalone `*action*` line before any speaker is scene-setting rather
 // than a member's beat and is dropped, and `[Aside ...]`/`[/Aside]` bracket
 // markers (#457 splinter exchanges) are stripped rather than mistaken for
-// prose. Unresolved lines glue onto whichever speaker is currently open,
+// prose. A `[Confessional ...]` block (#579) is dropped whole — see
+// CONFESSIONAL_START_RE above. Unresolved lines glue onto whichever speaker is currently open,
 // same as production — this is a text parser, not a structured record.
 function parseLegacyRoundTurns(text, aliasIndex) {
   const lines = (text || '').split('\n');
   const turns = [];
   let speakerId = null;
   let textLines = [];
+  let inConfessional = false;
 
   const flush = (keepSpeaker = false) => {
     if (speakerId && textLines.length) {
@@ -127,6 +135,15 @@ function parseLegacyRoundTurns(text, aliasIndex) {
 
   lines.forEach(line => {
     const t = line.trim();
+    if (inConfessional) {
+      if (t === CONFESSIONAL_END) inConfessional = false;
+      return;
+    }
+    if (CONFESSIONAL_START_RE.test(t)) {
+      flush();
+      inConfessional = true;
+      return;
+    }
     if (!t) {
       flush(true);
       return;
@@ -172,11 +189,12 @@ function looksLikeCitation(text) {
 // Prefers the real #355 structured record (round.beats) when present;
 // falls back to parsing round.text only when a round has no `beats` array
 // at all. `passed`/word-count are exact either way; `hasCitation` is only
-// as exact as its source (see the citationSource tag).
+// as exact as its source (see the citationSource tag). #579: confessional
+// beats are excluded on both paths — they're not room turns.
 function turnsForRound(round, aliasIndex) {
   if (Array.isArray(round.beats) && round.beats.length) {
     return round.beats
-      .filter(b => !b.failed && b.memberId)
+      .filter(b => !b.failed && b.memberId && b.thread?.kind !== 'confessional')
       .map(b => ({
         memberId: b.memberId,
         text: b.text || '',

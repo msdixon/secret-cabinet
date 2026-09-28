@@ -116,6 +116,7 @@ function registerConveneRoutes(
     try {
       const {
         fullRoundText: text,
+        historyText,
         disposition,
         residueUpdates,
         beats,
@@ -171,9 +172,13 @@ function registerConveneRoutes(
           if (m.skipped) console.warn('[degraded]', m.phase, m.memberId || '', '—', m.error);
         },
       });
+      // #579: history gets what the room heard — `historyText` leaves out
+      // any confessional, which the segment's `text` (the record) keeps. The
+      // fallback covers a passage whose only surviving text was a
+      // confessional, where an empty assistant turn would be worse.
       const history = [
         { role: 'user', content: passagePrompt },
-        { role: 'assistant', content: text },
+        { role: 'assistant', content: historyText || text },
       ];
       // #244: label is the passage's own lull note (director-authored or stock
       // fallback) rather than a fixed "First Movement" — see #194 touchpoint 4.
@@ -281,6 +286,7 @@ function registerConveneRoutes(
     try {
       const {
         fullRoundText: text,
+        historyText,
         disposition,
         residueUpdates,
         beats,
@@ -335,7 +341,8 @@ function registerConveneRoutes(
       });
 
       session.conversationHistory.push({ role: 'user', content: passagePrompt });
-      session.conversationHistory.push({ role: 'assistant', content: text });
+      // #579: see /api/convene above for why history gets historyText.
+      session.conversationHistory.push({ role: 'assistant', content: historyText || text });
       const segment = { label: lullNote, text, historyLength: session.conversationHistory.length, beats, endedBy };
       session.rounds.push(segment);
       session.transcriptText += composeSegmentText(segment);
@@ -374,6 +381,7 @@ function registerConveneRoutes(
     try {
       const {
         fullRoundText: response,
+        historyText,
         disposition,
         residueUpdates,
         beats,
@@ -423,7 +431,8 @@ function registerConveneRoutes(
       });
 
       session.conversationHistory.push({ role: 'user', content: prompt });
-      session.conversationHistory.push({ role: 'assistant', content: response });
+      // #579: see /api/convene above for why history gets historyText.
+      session.conversationHistory.push({ role: 'assistant', content: historyText || response });
 
       // #354 item 1: an interjection is now a real segment on session.rounds,
       // not prose appended straight to transcriptText.
