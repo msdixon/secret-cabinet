@@ -46,6 +46,10 @@ window.Export = (function () {
   // ── Day One ────────────────────────────────────────────────────────────────
   const entryCache = new Map(); // key: "dayone:journalId:idx" → { text, date, journalId, journalName }
   let sourceOptionsLoaded = false;
+  // #594: Day One is admin-only (it reads and writes the server machine's
+  // own journals). applyEnvConfig() clears this for anyone else, so the
+  // source picker never fetches journals it would only get a 403 for.
+  let dayOneAvailable = true;
 
   // ── Archival Library (#82) ─────────────────────────────────────────────────
   let libraryEntries = []; // full unfiltered index, fetched once in loadSourceOptions
@@ -113,80 +117,84 @@ window.Export = (function () {
     const sel = document.getElementById('source-select');
     const loadingGroup = document.getElementById('source-loading-group');
 
-    try {
-      const res = await fetch('/api/dayone/journals', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: '{}',
-      });
-      const data = await res.json();
-      const journals = data.journals || [];
-      if (!journals.length) {
-        if (loadingGroup) loadingGroup.label = 'No Day One journals found';
-      } else {
-        // Float PreSeedings to top
-        const isPreferred = j => /preseedings|secret.cabin/i.test(j.name);
-        const sorted = [...journals].sort((a, b) => isPreferred(b) - isPreferred(a));
-
-        // Remove the placeholder loading group
-        if (loadingGroup) loadingGroup.remove();
-
-        // Pre-create groups in sorted order so the DOM order is guaranteed
-        const groups = sorted.map(journal => {
-          const group = document.createElement('optgroup');
-          group.label = journal.name;
-          sel.appendChild(group);
-          return { journal, group };
+    if (!dayOneAvailable) {
+      if (loadingGroup) loadingGroup.remove();
+    } else {
+      try {
+        const res = await fetch('/api/dayone/journals', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: '{}',
         });
+        const data = await res.json();
+        const journals = data.journals || [];
+        if (!journals.length) {
+          if (loadingGroup) loadingGroup.label = 'No Day One journals found';
+        } else {
+          // Float PreSeedings to top
+          const isPreferred = j => /preseedings|secret.cabin/i.test(j.name);
+          const sorted = [...journals].sort((a, b) => isPreferred(b) - isPreferred(a));
 
-        // Load entries for each journal in parallel, fill the pre-created groups
-        await Promise.all(
-          groups.map(async ({ journal, group }) => {
-            try {
-              const er = await fetch('/api/dayone/entries', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ journalId: journal.id, limit: 3 }),
-              });
-              const ed = await er.json();
-              const entries = ed.entries || [];
+          // Remove the placeholder loading group
+          if (loadingGroup) loadingGroup.remove();
 
-              entries.forEach((entry, idx) => {
-                const key = `dayone:${journal.id}:${idx}`;
-                entryCache.set(key, { ...entry, journalId: journal.id, journalName: journal.name });
-                const opt = document.createElement('option');
-                opt.value = key;
-                opt.textContent = `${entry.date}  ${entry.preview}`;
-                group.appendChild(opt);
-              });
+          // Pre-create groups in sorted order so the DOM order is guaranteed
+          const groups = sorted.map(journal => {
+            const group = document.createElement('optgroup');
+            group.label = journal.name;
+            sel.appendChild(group);
+            return { journal, group };
+          });
 
-              if (!entries.length) {
+          // Load entries for each journal in parallel, fill the pre-created groups
+          await Promise.all(
+            groups.map(async ({ journal, group }) => {
+              try {
+                const er = await fetch('/api/dayone/entries', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ journalId: journal.id, limit: 3 }),
+                });
+                const ed = await er.json();
+                const entries = ed.entries || [];
+
+                entries.forEach((entry, idx) => {
+                  const key = `dayone:${journal.id}:${idx}`;
+                  entryCache.set(key, { ...entry, journalId: journal.id, journalName: journal.name });
+                  const opt = document.createElement('option');
+                  opt.value = key;
+                  opt.textContent = `${entry.date}  ${entry.preview}`;
+                  group.appendChild(opt);
+                });
+
+                if (!entries.length) {
+                  const opt = document.createElement('option');
+                  opt.disabled = true;
+                  opt.textContent = 'No entries found';
+                  group.appendChild(opt);
+                }
+              } catch {
                 const opt = document.createElement('option');
                 opt.disabled = true;
-                opt.textContent = 'No entries found';
+                opt.textContent = 'Could not load entries';
                 group.appendChild(opt);
               }
-            } catch {
-              const opt = document.createElement('option');
-              opt.disabled = true;
-              opt.textContent = 'Could not load entries';
-              group.appendChild(opt);
-            }
-          })
-        );
+            })
+          );
 
-        // If we had a saved journal preference, try to pre-select its first entry
-        const savedJournalId = deps.getCore().currentJournal.id;
-        if (savedJournalId) {
-          const key = `dayone:${savedJournalId}:0`;
-          if (entryCache.has(key)) {
-            sel.value = key;
-            handleSourceChange(); // load entry text into state
+          // If we had a saved journal preference, try to pre-select its first entry
+          const savedJournalId = deps.getCore().currentJournal.id;
+          if (savedJournalId) {
+            const key = `dayone:${savedJournalId}:0`;
+            if (entryCache.has(key)) {
+              sel.value = key;
+              handleSourceChange(); // load entry text into state
+            }
           }
         }
+      } catch (e) {
+        if (loadingGroup) loadingGroup.label = 'Could not connect to Day One';
       }
-    } catch (e) {
-      if (loadingGroup) loadingGroup.label = 'Could not connect to Day One';
     }
 
     // Add library entries as an optgroup
@@ -680,7 +688,7 @@ window.Export = (function () {
   }
 
   // ── Environment config ─────────────────────────────────────────────────────
-  // #379: returns the fetched config (isLocal, authed) rather than swallowing
+  // #379: returns the fetched config (isLocal, authed, isAdmin) rather than swallowing
   // it — app.js's boot sequence reads `authed` off the same call to decide
   // whether the convene controls render live or as a sign-in prompt, rather
   // than issuing a second /api/config request for it.
@@ -695,6 +703,16 @@ window.Export = (function () {
           document.getElementById(id)?.style.setProperty('display', 'none')
         );
         document.getElementById('export-md-row')?.style.setProperty('display', 'inline-flex');
+      }
+      // #594: the server 403s these for non-admins regardless (auth.js's
+      // ADMIN_API_ROUTES) — hiding them just means an invitee is never
+      // shown a control that can only fail. Same display:none treatment
+      // as the local-only exports above.
+      if (config.isAdmin === false) {
+        dayOneAvailable = false;
+        document.querySelectorAll('.export-dayone, .add-member-btn').forEach(el => {
+          el.style.setProperty('display', 'none');
+        });
       }
       return config;
     } catch (_) {

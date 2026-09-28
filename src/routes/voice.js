@@ -26,6 +26,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { logCost } = require('../cost-log');
 
 // #478: with no voice_settings.speed at all, ElevenLabs falls back to
 // whatever its bare per-voice default happens to be, which read as
@@ -121,6 +122,9 @@ function registerVoiceRoutes(app, { roster, voiceCacheDir, apiKey, modelId }) {
           lastFailureReason = extractFailureReason(detail) || `http_${response.status}`;
           return res.status(502).json({ error: 'TTS request failed' });
         }
+        // #594: ElevenLabs bills per character; one line per synthesized
+        // (uncached) clip, attributed to whoever asked for it.
+        logCost(req.user?.id, 'elevenlabs', { voice: voiceId, model: modelId, chars: text.length });
         const buf = Buffer.from(await response.arrayBuffer());
         fs.writeFileSync(cachePath, buf);
         consecutiveFailures = 0;

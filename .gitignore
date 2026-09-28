@@ -16,3 +16,5 @@ OBSERVED-LENGTH-TENDENCY.md
 visits.json
 .DS_Store
 public/portraits/candidates/*.png
+users.json
+users.json.tmp
