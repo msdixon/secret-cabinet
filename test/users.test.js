@@ -84,3 +84,44 @@ test('createUserStore', async t => {
     assert.ok(createUserStore(file).findAdmin().lastLoginAt);
   });
 });
+
+// #594 chunk A: the guest list's add/remove.
+test('addUser / removeUser', async t => {
+  await t.test('adds a non-admin guest with a normalized email, persisted', () => {
+    const file = tmpFile();
+    const store = createUserStore(file);
+    store.ensureAdmin({ email: 'rachel@example.com' });
+    const guest = store.addUser({ email: ' Friend@Example.com ', name: ' Friend ' });
+    assert.equal(guest.email, 'friend@example.com');
+    assert.equal(guest.name, 'Friend');
+    assert.equal(guest.isAdmin, false);
+    assert.equal(createUserStore(file).findByEmail('FRIEND@example.com').id, guest.id);
+  });
+
+  await t.test('defaults the name to the email local part', () => {
+    const store = createUserStore(tmpFile());
+    assert.equal(store.addUser({ email: 'ada@example.com' }).name, 'ada');
+  });
+
+  await t.test('rejects an invalid or duplicate email, including the admin one', () => {
+    const store = createUserStore(tmpFile());
+    store.ensureAdmin({ email: 'rachel@example.com' });
+    assert.throws(() => store.addUser({ email: 'nope' }), /valid email/);
+    assert.throws(() => store.addUser({}), /valid email/);
+    assert.throws(() => store.addUser({ email: 'Rachel@example.com' }), /already on the guest list/);
+    store.addUser({ email: 'friend@example.com' });
+    assert.throws(() => store.addUser({ email: 'friend@example.com' }), /already on the guest list/);
+  });
+
+  await t.test('removes a guest, persisted, but never the admin', () => {
+    const file = tmpFile();
+    const store = createUserStore(file);
+    const admin = store.ensureAdmin({ email: 'rachel@example.com' });
+    const guest = store.addUser({ email: 'friend@example.com' });
+    assert.equal(store.removeUser(admin.id), false);
+    assert.equal(store.removeUser(guest.id), true);
+    assert.equal(store.removeUser(guest.id), false);
+    assert.equal(createUserStore(file).findById(guest.id), null);
+    assert.ok(createUserStore(file).findById(admin.id));
+  });
+});

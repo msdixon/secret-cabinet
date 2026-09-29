@@ -688,8 +688,8 @@ window.Export = (function () {
   }
 
   // ── Environment config ─────────────────────────────────────────────────────
-  // #379: returns the fetched config (isLocal, authed, isAdmin) rather than swallowing
-  // it — app.js's boot sequence reads `authed` off the same call to decide
+  // #379: returns the fetched config (isLocal, authed, isAdmin,
+  // signInEnabled) rather than swallowing it — app.js's boot sequence reads `authed` off the same call to decide
   // whether the convene controls render live or as a sign-in prompt, rather
   // than issuing a second /api/config request for it.
   async function applyEnvConfig() {
@@ -705,7 +705,7 @@ window.Export = (function () {
         document.getElementById('export-md-row')?.style.setProperty('display', 'inline-flex');
       }
       // #594: the server 403s these for non-admins regardless (auth.js's
-      // ADMIN_API_ROUTES) — hiding them just means an invitee is never
+      // ADMIN_ROUTES) — hiding them just means an invitee is never
       // shown a control that can only fail. Same display:none treatment
       // as the local-only exports above.
       if (config.isAdmin === false) {
@@ -713,6 +713,10 @@ window.Export = (function () {
         document.querySelectorAll('.export-dayone, .add-member-btn').forEach(el => {
           el.style.setProperty('display', 'none');
         });
+      }
+      if (config.signInEnabled && config.authed) {
+        document.querySelector('.sign-out-link')?.style.removeProperty('display');
+        if (config.isAdmin) document.querySelector('.guest-list-link')?.style.removeProperty('display');
       }
       return config;
     } catch (_) {

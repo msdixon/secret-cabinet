@@ -70,7 +70,9 @@ which is the seam that exists to be tested. Splitting it further is
 | `export.test.js` | `export.js` — `buildAnnotatedTranscript` and the `deps.getCore()` seam |
 | `sessions.test.js` | `sessions.js` — `restoreSession`'s full hydration contract, comparative mode, session notes, dossier |
 | `helpers/dom.js` | The jsdom loader and the fixture-drift guard |
-| `auth.test.js` | `auth.js` — `createRequireAuth`'s gate logic, `registerAuthRoutes`, `loginPageHtml` |
+| `auth.test.js` | `auth.js` — `createRequireAuth`'s gate logic (public, signed-in and admin tiers), `registerAuthRoutes` including the #594 emailed-code flow end to end, `loginPageHtml` |
+| `users.test.js`, `login-codes.test.js`, `rate-limit.test.js`, `mailer.test.js`, `cost-log.test.js` | #594 — the per-user identity store (tmpdir), one-time sign-in codes and failure limiter (injected clock), the Resend mailer (fake `fetch`, never the network), and per-user cost logging |
+| `user-admin-routes.test.js` | #594 — `routes/users.js`, the admin guest list at `/admin/users`, with the real users store on a tmpdir |
 | `library-routes.test.js`, `graph-routes.test.js`, `upload-routes.test.js`, `member-routes.test.js`, `export-routes.test.js`, `session-routes.test.js`, `convene-routes.test.js` | #193's second pass — the `register<X>Routes(app, deps)` server-side route modules, same `fakeApp()`/`fakeReq()`/`fakeRes()` convention `auth.test.js` established: handlers are recorded, then invoked directly against fakes rather than a real server or `supertest`. `session-routes.test.js`/`convene-routes.test.js` use real `sessions-store.js` I/O against a tmpdir fixture where file persistence is the thing under test. |
 
 ## Conventions
