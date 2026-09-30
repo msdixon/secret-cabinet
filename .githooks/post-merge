@@ -1,0 +1,13 @@
+#!/bin/sh
+# Fires after `git pull` / `git merge` completes. Reinstalls dependencies
+# when the merge changed package.json or package-lock.json, so an existing
+# node_modules doesn't silently drift behind the lockfile (#609). post-checkout
+# only covers a missing node_modules, and a pull fires post-merge, not
+# post-checkout.
+if [ -f package.json ] && [ -n "$(git rev-parse --verify -q ORIG_HEAD)" ]; then
+  if ! git diff --quiet ORIG_HEAD HEAD -- package.json package-lock.json; then
+    echo "post-merge: package.json/package-lock.json changed, running npm install..."
+    npm install --no-audit --no-fund
+  fi
+fi
+exit 0

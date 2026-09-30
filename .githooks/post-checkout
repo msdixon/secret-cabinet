@@ -5,7 +5,19 @@
 # silently here (babylonjs missing => the 3D room just never renders, no
 # console error -- see STATUS.md 2026-07-30 and PR #152), so install
 # whenever node_modules isn't already present.
-if [ -f package.json ] && [ ! -d node_modules ]; then
-  echo "post-checkout: node_modules missing in $(pwd), running npm install..."
-  npm install
+#
+# Also reinstall when a branch switch changed package.json or
+# package-lock.json ($1/$2 are the old/new HEAD), so an existing
+# node_modules can't drift behind the lockfile (#609). $3 is 1 for a branch
+# checkout, 0 for a file checkout; only branch checkouts are compared.
+if [ -f package.json ]; then
+  if [ ! -d node_modules ]; then
+    echo "post-checkout: node_modules missing in $(pwd), running npm install..."
+    npm install
+  elif [ "$3" = "1" ] && [ "$1" != "$2" ] &&
+    ! git diff --quiet "$1" "$2" -- package.json package-lock.json 2>/dev/null; then
+    echo "post-checkout: package.json/package-lock.json changed, running npm install..."
+    npm install --no-audit --no-fund
+  fi
 fi
+exit 0
