@@ -23,9 +23,9 @@ The founding eight — cast per session like everyone else, not permanently seat
 | Teresa of Ávila | Went in directly without a system; depth for centuries |
 | Ibn Arabi | Radical clarity, few words, holds receipts and deploys once at the right moment |
 
-The roster keeps growing — every member is cast per session. See `docs/MANIFEST.md` for the current full list; it's the source of truth, so this README doesn't go stale every time a member is added.
+Every member is cast per session, and the roster has grown from this initial eight. See `docs/MANIFEST.md` for the current full list.
 
-The room exists outside time. ~~Members do not remember previous meetings. No one knows they are being observed.~~
+The room exists outside linear time.
 
 ---
 
@@ -42,7 +42,7 @@ The room exists outside time. ~~Members do not remember previous meetings. No on
 
 ### Sibling relationship
 
-This app is the main individual project of many collision room efforts - a full breakdown is available at  [dossier-placard](https://github.com/msdixon/dossier-placard) (the meta-cabinet / Journal Cabin'ét). They share no files, no state, and no characters - duplicates (such as Crowley) notwithstanding.
+This app is the main individual project of many collision room efforts - a full breakdown is available at  [dossier-placard](https://github.com/msdixon/dossier-placard) (including the meta-cabinet / Journal Cabin'ét). They share no files, no state, and no characters at this time - duplicate personas (such as Crowley) notwithstanding.
 
 ---
 
@@ -112,4 +112,4 @@ The `.env` file is never committed. On a fresh clone, create it manually or copy
 
 ---
 
-*The fire is lit. The room remembers nothing. The document waits.*
+*The fire is lit. The document waits.*
