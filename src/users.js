@@ -67,7 +67,10 @@ function createUserStore(filePath) {
       const normalized = normalizeEmail(email);
       const existing = users.find(u => u.isAdmin);
       if (existing) {
-        if (normalized && !existing.email) {
+        // ADMIN_EMAIL is the source of truth for the admin's address: a
+        // mistyped first value would otherwise be stuck on the volume with
+        // no UI to fix it. Skipped if a guest already holds that address.
+        if (normalized && existing.email !== normalized && !users.some(u => u !== existing && u.email === normalized)) {
           existing.email = normalized;
           save();
         }
