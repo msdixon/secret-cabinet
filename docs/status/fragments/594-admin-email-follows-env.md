@@ -1,0 +1,1 @@
+Follow-up to #594: `ADMIN_EMAIL` now updates the admin's stored address on restart (unless a guest already holds it) instead of only filling a blank one, so a mistyped first value no longer strands the admin with no way to receive a sign-in code. [PR #618](https://github.com/msdixon/secret-cabinet/pull/618)

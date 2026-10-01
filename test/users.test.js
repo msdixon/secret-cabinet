@@ -57,10 +57,20 @@ test('createUserStore', async t => {
     assert.equal(createUserStore(file).list().length, 1);
   });
 
-  await t.test('ensureAdmin never overwrites an email the admin already has', () => {
+  await t.test('ensureAdmin follows a changed ADMIN_EMAIL, and keeps the old one when none is given', () => {
     const file = tmpFile();
     createUserStore(file).ensureAdmin({ email: 'first@example.com' });
-    const admin = createUserStore(file).ensureAdmin({ email: 'second@example.com' });
+    const admin = createUserStore(file).ensureAdmin({ email: 'Second@example.com' });
+    assert.equal(admin.email, 'second@example.com');
+    assert.equal(createUserStore(file).ensureAdmin({}).email, 'second@example.com');
+  });
+
+  await t.test('ensureAdmin will not take an address a guest already holds', () => {
+    const file = tmpFile();
+    const store = createUserStore(file);
+    store.ensureAdmin({ email: 'first@example.com' });
+    store.addUser({ email: 'guest@example.com' });
+    const admin = createUserStore(file).ensureAdmin({ email: 'guest@example.com' });
     assert.equal(admin.email, 'first@example.com');
   });
 
