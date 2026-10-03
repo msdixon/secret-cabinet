@@ -17,6 +17,8 @@
 // bag below: roster-free, stateless constants and pure functions, the same
 // category as `path` in the sibling route modules.
 const record = require('../../public/js/record.js');
+// #595: session ownership — see sessions-store.js.
+const { canWrite } = require('../sessions-store');
 
 function openSSE(res) {
   res.writeHead(200, {
@@ -130,7 +132,8 @@ function registerConveneRoutes(
         loadMemberFile,
         loadVoiceExemplar,
         loadSecondaryVoiceExemplars,
-        loadResidue,
+        // #595: residue accumulates per user, not globally — see server.js.
+        loadResidue: memberId => loadResidue(memberId, req.user?.id),
         loadRelationshipEdges,
         loadLibraryCitationLookup,
         presentMemberIds: playerDirectorPool(members, effectivePlayerMode, effectivePlayerMemberId),
@@ -206,9 +209,11 @@ function registerConveneRoutes(
           ? [{ round: 0, speakerName: precedingTurn.speakerName, text: precedingTurn.text }]
           : [],
         disposition: disposition || {},
+        // #595: private to its creator unless they publish it.
+        ownerId: req.user?.id || null,
       };
       saveSession(session);
-      saveResidueUpdates(residueUpdates);
+      saveResidueUpdates(residueUpdates, req.user?.id);
       res.write(`data: ${JSON.stringify({ done: true, sessionId: id, round: 1, label: lullNote, text })}\n\n`);
     } catch (err) {
       console.error('Convene error:', err);
@@ -266,7 +271,9 @@ function registerConveneRoutes(
     if (!sessionId) return res.status(400).json({ error: 'sessionId required' });
 
     const session = loadSession(sessionId);
-    if (!session) return res.status(404).json({ error: 'Session not found' });
+    // #595: only the owner continues a session — 404, not 403, so another
+    // user's session id doesn't confirm it exists.
+    if (!session || !canWrite(session, req.user)) return res.status(404).json({ error: 'Session not found' });
 
     const roundIndex = session.rounds.length;
     const meetingNote = deriveMeetingNote(session);
@@ -300,7 +307,8 @@ function registerConveneRoutes(
         loadMemberFile,
         loadVoiceExemplar,
         loadSecondaryVoiceExemplars,
-        loadResidue,
+        // #595: residue accumulates per user, not globally — see server.js.
+        loadResidue: memberId => loadResidue(memberId, req.user?.id),
         loadRelationshipEdges,
         loadLibraryCitationLookup,
         presentMemberIds: playerDirectorPool(session.members, session.playerMode, session.playerMemberId),
@@ -357,7 +365,7 @@ function registerConveneRoutes(
       }
 
       saveSession(session);
-      saveResidueUpdates(residueUpdates);
+      saveResidueUpdates(residueUpdates, req.user?.id);
       res.write(`data: ${JSON.stringify({ done: true, round: roundIndex + 1, label: lullNote, text })}\n\n`);
     } catch (err) {
       console.error('Round error:', err);
@@ -372,7 +380,9 @@ function registerConveneRoutes(
     if (!sessionId || !text?.trim()) return res.status(400).json({ error: 'sessionId and text required' });
 
     const session = loadSession(sessionId);
-    if (!session) return res.status(404).json({ error: 'Session not found' });
+    // #595: only the owner continues a session — 404, not 403, so another
+    // user's session id doesn't confirm it exists.
+    if (!session || !canWrite(session, req.user)) return res.status(404).json({ error: 'Session not found' });
 
     const prompt = `A mysterious presence — an observer from outside time — has just spoken: "${text}"\n\nThe room reacts to what was said.`;
     session.generationMetrics = session.generationMetrics || [];
@@ -394,7 +404,8 @@ function registerConveneRoutes(
         loadMemberFile,
         loadVoiceExemplar,
         loadSecondaryVoiceExemplars,
-        loadResidue,
+        // #595: residue accumulates per user, not globally — see server.js.
+        loadResidue: memberId => loadResidue(memberId, req.user?.id),
         loadRelationshipEdges,
         loadLibraryCitationLookup,
         presentMemberIds: playerDirectorPool(session.members, session.playerMode, session.playerMemberId),
@@ -470,7 +481,7 @@ function registerConveneRoutes(
       session.disposition = disposition || {};
 
       saveSession(session);
-      saveResidueUpdates(residueUpdates);
+      saveResidueUpdates(residueUpdates, req.user?.id);
       res.write(`data: ${JSON.stringify({ done: true, label: 'A Presence Passes Through', text: response })}\n\n`);
     } catch (err) {
       console.error('Interject error:', err);
