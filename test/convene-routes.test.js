@@ -27,8 +27,8 @@ function fakeApp() {
   };
 }
 
-function fakeReq(body = {}) {
-  return { body };
+function fakeReq(body = {}, user = { id: 'local', isAdmin: true }) {
+  return { body, user };
 }
 
 // Captures SSE events the same way EventSource would parse them client-side:
@@ -322,6 +322,19 @@ test('POST /api/round', async t => {
     const res = fakeJSONRes();
     await app.routes['POST /api/round'](fakeReq({ sessionId: 'nope' }), res);
     assert.equal(res.statusCode, 404);
+  });
+
+  await t.test('404s for a session owned by someone else (#595)', async () => {
+    const app = fakeApp();
+    const deps = makeDeps();
+    registerConveneRoutes(app, deps);
+    deps.savedSessions.set('s1', { id: 's1', ownerId: 'bob', members: ['crowley'] });
+    const res = fakeJSONRes();
+    await app.routes['POST /api/round'](fakeReq({ sessionId: 's1' }, { id: 'alice' }), res);
+    assert.equal(res.statusCode, 404);
+    const res2 = fakeJSONRes();
+    await app.routes['POST /api/interject'](fakeReq({ sessionId: 's1', text: 'hi' }, { id: 'alice' }), res2);
+    assert.equal(res2.statusCode, 404);
   });
 
   await t.test('appends a new round to conversationHistory/rounds/transcriptText', async () => {

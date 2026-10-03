@@ -65,8 +65,10 @@ test('GET /api/graph', async t => {
       sessionsDir: '/sessions',
     });
     const res = fakeRes();
-    app.routes['GET /api/graph'](null, res);
-    assert.deepEqual(calledWith, [['crowley'], 'g.json', 'l.json', '/sessions']);
+    app.routes['GET /api/graph']({ user: { id: 'local' } }, res);
+    assert.deepEqual(calledWith.slice(0, 4), [['crowley'], 'g.json', 'l.json', '/sessions']);
+    // #595: the route scopes the graph to sessions the caller can read.
+    assert.equal(typeof calledWith[4].canSee, 'function');
     assert.deepEqual(res.body, { nodes: [1, 2], edges: [1] });
   });
 
