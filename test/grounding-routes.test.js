@@ -33,8 +33,8 @@ function fakeApp() {
   };
 }
 
-function fakeReq({ params = {}, body = {} } = {}) {
-  return { params, body };
+function fakeReq({ params = {}, body = {}, user = { id: 'local', isAdmin: true } } = {}) {
+  return { params, body, user };
 }
 
 function fakeRes() {

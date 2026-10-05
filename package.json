@@ -25,7 +25,7 @@
     "format:check": "prettier --check \"**/*.js\""
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.127.0",
+    "@anthropic-ai/sdk": "^0.131.0",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "babylonjs": "^9.27.1",
     "dotenv": "^18.0.1",

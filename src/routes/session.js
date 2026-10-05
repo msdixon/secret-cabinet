@@ -22,6 +22,8 @@ const { flattenBeatCitations } = require('../citations');
 // live — see grounding.js's header for why it's never persisted to disk in
 // the first place, so this is the one place it needs an explicit cleanup.
 const { clearGrounding } = require('../grounding');
+// #595: who may read or change a stored session — see sessions-store.js.
+const { canRead, canWrite, filterReadable } = require('../sessions-store');
 
 // #178: validates a requested publishedRounds selection down to the
 // in-bounds integer indices it actually contains, deduped and sorted so
@@ -57,8 +59,22 @@ function registerSessionRoutes(
     buildCitationManifest,
     buildBibliography,
     renderBibliographyPage,
+    users,
   }
 ) {
+  // #595: load a session for a route that changes it (or spends money on it)
+  // and answer 404 — not 403, matching #378's convention that a session you
+  // can't touch doesn't reveal that it exists — unless the caller owns it.
+  // Returns the session, or null after having already responded.
+  function loadWritable(req, res) {
+    const session = loadSession(req.params.id);
+    if (!session || !canWrite(session, req.user)) {
+      res.status(404).json({ error: 'Session not found' });
+      return null;
+    }
+    return session;
+  }
+
   // GET /api/sessions — list recent sessions, with optional ?q=, ?tag=, ?thread= filters
   app.get('/api/sessions', (req, res) => {
     const q = (req.query.q || '').trim().toLowerCase();
@@ -92,6 +108,7 @@ function registerSessionRoutes(
             parentId: d.parentId || null,
             branchRound: d.branchRound ?? null,
             published: !!d.published,
+            _owned: canWrite(d, req.user),
             _entry: (d.entry || '').toLowerCase(),
             _transcript: (d.transcriptText || '').toLowerCase(),
           };
@@ -103,9 +120,11 @@ function registerSessionRoutes(
       // Currently unreachable in practice (requireAuth already blocks an
       // unauthenticated /api/ request before it gets here whenever a
       // passphrase is set) — this is groundwork for #379, a no-op today.
-      if (!req.authed) {
-        sessions = sessions.filter(s => s.published);
-      }
+      // #595 widens that: a signed-in user's shelf is their own sessions
+      // only. (Others' published sessions stay reachable by link, via
+      // /reading-room/:id and GET /api/sessions/:id, but aren't mixed into
+      // someone's own history.) Open-mode local user owns everything.
+      sessions = req.authed ? sessions.filter(s => s._owned) : sessions.filter(s => s.published);
 
       if (thread) {
         sessions = sessions.filter(s => (s.threadId || '').toLowerCase() === thread);
@@ -126,7 +145,7 @@ function registerSessionRoutes(
         );
       }
 
-      res.json(sessions.slice(0, 40).map(({ _entry, _transcript, ...s }) => s));
+      res.json(sessions.slice(0, 40).map(({ _entry, _transcript, _owned, _readable, ...s }) => s));
     } catch (err) {
       res.status(500).json({ error: 'Failed to list sessions' });
     }
@@ -141,8 +160,9 @@ function registerSessionRoutes(
         .forEach(file => {
           const d = JSON.parse(fs.readFileSync(path.join(sessionsDir, file), 'utf8'));
           // #378: same published gate as GET /api/sessions — an unauthenticated
-          // caller shouldn't learn a thread exists solely from unpublished sessions.
-          if (!req.authed && !d.published) return;
+          // caller shouldn't learn a thread exists solely from unpublished
+          // sessions. #595: and a signed-in one sees only their own threads.
+          if (req.authed ? !canWrite(d, req.user) : !d.published) return;
           if (d.threadId && d.threadName) {
             if (!threads[d.threadId]) threads[d.threadId] = { id: d.threadId, name: d.threadName, count: 0 };
             threads[d.threadId].count++;
@@ -162,7 +182,7 @@ function registerSessionRoutes(
   // Returns the aggregate manifest only, never raw session/transcript data.
   app.get('/api/admin/citation-manifest', (req, res) => {
     try {
-      const sessions = loadManifestSessions(sessionsDir);
+      const sessions = filterReadable(loadManifestSessions(sessionsDir), req.user);
       res.type('text/markdown').send(buildCitationManifest(sessions));
     } catch (err) {
       res.status(500).json({ error: 'Failed to build citation manifest' });
@@ -175,10 +195,60 @@ function registerSessionRoutes(
   // same auth gate, same "aggregate document only" shape.
   app.get('/api/admin/bibliography', (req, res) => {
     try {
-      const sessions = loadManifestSessions(sessionsDir);
+      const sessions = filterReadable(loadManifestSessions(sessionsDir), req.user);
       res.type('text/markdown').send(buildBibliography(sessions));
     } catch (err) {
       res.status(500).json({ error: 'Failed to build bibliography' });
+    }
+  });
+
+  // GET /api/admin/sessions — #595's metadata-only admin view: every
+  // session's owner, timestamps and error state, never its content.
+  //
+  // Decided 2026-09-21/30: an admin can see that a session exists and whose
+  // it is, but not what was said unless the owner published it. So the
+  // `entry` excerpt (the owner's own draft text) is included only for a
+  // published session, and nothing here touches transcriptText, rounds,
+  // notes or annotations. Gated by ADMIN_ROUTES' /api/admin/ prefix.
+  //
+  // Cost is deliberately absent: it isn't stored on the session today (only
+  // the `[cost]` log lines from #594), and persisting a running total is its
+  // own change. `errorCount` is the generation phases that degraded
+  // (generationMetrics entries with `skipped`) — the same signal the server
+  // logs as `[degraded]`.
+  app.get('/api/admin/sessions', (req, res) => {
+    try {
+      const rows = fs
+        .readdirSync(sessionsDir)
+        .filter(f => f.endsWith('.json'))
+        .map(file => {
+          try {
+            const p = path.join(sessionsDir, file);
+            const d = JSON.parse(fs.readFileSync(p, 'utf8'));
+            const owner = users?.findById(d.ownerId);
+            return {
+              id: d.id,
+              ownerId: d.ownerId || null,
+              ownerName: owner?.name || null,
+              ownerEmail: owner?.email || null,
+              date: d.date || null,
+              updatedAt: new Date(fs.statSync(p).mtimeMs).toISOString(),
+              rounds: d.rounds?.length || 0,
+              members: d.members?.length || 0,
+              published: !!d.published,
+              publishedAt: d.publishedAt || null,
+              errorCount: (d.generationMetrics || []).filter(m => m && m.skipped).length,
+              ...(d.published ? { entry: d.entry?.slice(0, 100) } : {}),
+            };
+          } catch (err) {
+            return null;
+          }
+        })
+        .filter(Boolean)
+        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+      res.json({ sessions: rows });
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to list sessions' });
     }
   });
 
@@ -193,7 +263,7 @@ function registerSessionRoutes(
   // route-inventory precedent for that pattern.
   app.get('/bibliography', (req, res) => {
     try {
-      const sessions = loadManifestSessions(sessionsDir);
+      const sessions = filterReadable(loadManifestSessions(sessionsDir), req.user);
       res.send(renderBibliographyPage(sessions));
     } catch (err) {
       res.status(500).send('Failed to build bibliography.');
@@ -203,8 +273,8 @@ function registerSessionRoutes(
   // PATCH /api/sessions/:id/thread — set or clear thread on a session
   app.patch('/api/sessions/:id/thread', (req, res) => {
     const { threadId, threadName } = req.body;
-    const session = loadSession(req.params.id);
-    if (!session) return res.status(404).json({ error: 'Session not found' });
+    const session = loadWritable(req, res);
+    if (!session) return;
     if (threadId && threadName) {
       session.threadId = threadId
         .trim()
@@ -224,8 +294,8 @@ function registerSessionRoutes(
   app.patch('/api/sessions/:id/annotations', (req, res) => {
     const { annotations } = req.body;
     if (!Array.isArray(annotations)) return res.status(400).json({ error: 'annotations must be an array' });
-    const session = loadSession(req.params.id);
-    if (!session) return res.status(404).json({ error: 'Session not found' });
+    const session = loadWritable(req, res);
+    if (!session) return;
     session.annotations = annotations;
     saveSession(session);
     res.json({ count: annotations.length });
@@ -246,8 +316,8 @@ function registerSessionRoutes(
   // and so stay an explicit, re-runnable action rather than something that
   // happens on every beat.
   app.post('/api/sessions/:id/verify-citations', async (req, res) => {
-    const session = loadSession(req.params.id);
-    if (!session) return res.status(404).json({ error: 'Session not found' });
+    const session = loadWritable(req, res);
+    if (!session) return;
     session.generationMetrics = session.generationMetrics || [];
 
     try {
@@ -299,8 +369,8 @@ function registerSessionRoutes(
   app.patch('/api/sessions/:id/tags', (req, res) => {
     const { tags } = req.body;
     if (!Array.isArray(tags)) return res.status(400).json({ error: 'tags must be an array' });
-    const session = loadSession(req.params.id);
-    if (!session) return res.status(404).json({ error: 'Session not found' });
+    const session = loadWritable(req, res);
+    if (!session) return;
     session.tags = tags.map(t => t.trim()).filter(Boolean);
     saveSession(session);
     res.json({ tags: session.tags });
@@ -308,8 +378,9 @@ function registerSessionRoutes(
 
   // DELETE /api/sessions/:id — remove a session
   app.delete('/api/sessions/:id', (req, res) => {
+    const session = loadWritable(req, res);
+    if (!session) return;
     const p = path.join(sessionsDir, `${req.params.id}.json`);
-    if (!fs.existsSync(p)) return res.status(404).json({ error: 'Session not found' });
     try {
       fs.unlinkSync(p);
       clearGrounding(req.params.id);
@@ -325,7 +396,7 @@ function registerSessionRoutes(
     // #378: 404 (not 403) for an unpublished session to an unauthenticated
     // caller, matching /reading-room/:id's existing convention — an
     // unpublished session's existence isn't revealed either.
-    if (!session || (!req.authed && !session.published)) return res.status(404).json({ error: 'Session not found' });
+    if (!canRead(session, req.user)) return res.status(404).json({ error: 'Session not found' });
     res.json(session);
   });
 
@@ -338,8 +409,8 @@ function registerSessionRoutes(
   // tell "the room wound down and the user agreed" from "the user cut it off" —
   // the two look identical without it.
   app.post('/api/sessions/:id/close', (req, res) => {
-    const session = loadSession(req.params.id);
-    if (!session) return res.status(404).json({ error: 'Session not found' });
+    const session = loadWritable(req, res);
+    if (!session) return;
     // #354: interjections are segments now, so the last segment is no longer
     // necessarily a passage. "Let it end" is an answer to a lull, and only a
     // passage ends in one — marking an interjection `closed` would record the
@@ -357,7 +428,10 @@ function registerSessionRoutes(
   app.post('/api/sessions/:id/branch', (req, res) => {
     const { roundIndex } = req.body;
     const parent = loadSession(req.params.id);
-    if (!parent) return res.status(404).json({ error: 'Session not found' });
+    // #595: anyone who can read a session (the owner, or anyone for a
+    // published one) can branch their own copy of it; the branch belongs to
+    // whoever made it, not to the parent's owner.
+    if (!canRead(parent, req.user)) return res.status(404).json({ error: 'Session not found' });
     if (!Number.isInteger(roundIndex) || roundIndex < 0 || roundIndex >= (parent.rounds?.length || 0)) {
       return res.status(400).json({ error: 'roundIndex out of range' });
     }
@@ -404,6 +478,7 @@ function registerSessionRoutes(
       playerTurns: (parent.playerTurns || []).filter(pt => pt.round <= roundIndex).map(pt => ({ ...pt })),
       parentId: parent.id,
       branchRound: roundIndex,
+      ownerId: req.user?.id || null,
     };
     saveSession(branch);
     res.json({ sessionId: id });
@@ -414,7 +489,7 @@ function registerSessionRoutes(
   app.get('/api/sessions/:id/transcript', (req, res) => {
     const session = loadSession(req.params.id);
     // #378: same 404-not-403 gate as GET /api/sessions/:id.
-    if (!session || (!req.authed && !session.published)) return res.status(404).json({ error: 'Session not found' });
+    if (!canRead(session, req.user)) return res.status(404).json({ error: 'Session not found' });
 
     let transcript = session.transcriptText || '';
 
@@ -498,8 +573,8 @@ function registerSessionRoutes(
   // "every passage", which is also the default for a session that's never
   // been curated — see reading-room.js's own filtering.
   app.patch('/api/sessions/:id/publish', (req, res) => {
-    const session = loadSession(req.params.id);
-    if (!session) return res.status(404).json({ error: 'Session not found' });
+    const session = loadWritable(req, res);
+    if (!session) return;
     const wasPublished = session.published;
     session.published = !!req.body.published;
     if (session.published) {

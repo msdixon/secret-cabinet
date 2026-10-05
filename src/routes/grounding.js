@@ -19,13 +19,15 @@ const {
   clearGrounding,
   verifyClaimsAgainstGrounding,
 } = require('../grounding');
+// #595: grounding material is the owner's own uploads — only they touch it.
+const { canWrite } = require('../sessions-store');
 
 function registerGroundingRoutes(app, { client, model, loadSession, saveSession, roster }) {
   // POST /api/sessions/:id/grounding — add one source's already-extracted
   // text to this session's ephemeral corpus.
   app.post('/api/sessions/:id/grounding', (req, res) => {
     const session = loadSession(req.params.id);
-    if (!session) return res.status(404).json({ error: 'Session not found' });
+    if (!session || !canWrite(session, req.user)) return res.status(404).json({ error: 'Session not found' });
     const { filename, text } = req.body || {};
     if (typeof text !== 'string' || !text.trim()) {
       return res.status(400).json({ error: 'No text provided' });
@@ -38,7 +40,7 @@ function registerGroundingRoutes(app, { client, model, loadSession, saveSession,
   // GET /api/sessions/:id/grounding — this session's uploaded-source summary
   app.get('/api/sessions/:id/grounding', (req, res) => {
     const session = loadSession(req.params.id);
-    if (!session) return res.status(404).json({ error: 'Session not found' });
+    if (!session || !canWrite(session, req.user)) return res.status(404).json({ error: 'Session not found' });
     res.json(getGroundingSummary(req.params.id));
   });
 
@@ -46,6 +48,8 @@ function registerGroundingRoutes(app, { client, model, loadSession, saveSession,
   // sources (an explicit user action; also happens implicitly when the
   // session itself is deleted, see routes/session.js).
   app.delete('/api/sessions/:id/grounding', (req, res) => {
+    const session = loadSession(req.params.id);
+    if (!session || !canWrite(session, req.user)) return res.status(404).json({ error: 'Session not found' });
     clearGrounding(req.params.id);
     res.json({ ok: true, summary: getGroundingSummary(req.params.id) });
   });
@@ -58,7 +62,7 @@ function registerGroundingRoutes(app, { client, model, loadSession, saveSession,
   // retrieval hit (see grounding.js's "not-addressed" handling).
   app.post('/api/sessions/:id/verify-grounding', async (req, res) => {
     const session = loadSession(req.params.id);
-    if (!session) return res.status(404).json({ error: 'Session not found' });
+    if (!session || !canWrite(session, req.user)) return res.status(404).json({ error: 'Session not found' });
     if (!hasGrounding(req.params.id)) {
       return res.status(400).json({ error: 'No sources uploaded for this session yet' });
     }

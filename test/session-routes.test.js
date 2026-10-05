@@ -40,8 +40,16 @@ function fakeApp() {
 // since requireAuth already gates /api/ before these handlers run whenever a
 // passphrase is set). Tests for the unauthenticated published-filter pass
 // `authed: false` explicitly.
-function fakeReq({ params = {}, body = {}, query = {}, authed = true } = {}) {
-  return { params, body, query, authed };
+// #595: defaults to the open-mode local user, who owns everything, so tests
+// that aren't about ownership stay valid; pass `user` to act as someone else.
+function fakeReq({ params = {}, body = {}, query = {}, authed = true, user } = {}) {
+  return {
+    params,
+    body,
+    query,
+    authed,
+    user: user === undefined ? (authed ? { id: 'local', isAdmin: true } : null) : user,
+  };
 }
 
 function fakeRes() {
@@ -419,10 +427,12 @@ test('DELETE /api/sessions/:id', async t => {
   await t.test('an unlink failure is caught, returns 500 rather than throwing', () => {
     const dir = makeFixtureDir();
     t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
-    // A directory at the expected .json path passes the existsSync check but
-    // makes unlinkSync itself throw (EISDIR/EPERM) — a deterministic way to
-    // reach the catch without relying on filesystem permissions.
-    fs.mkdirSync(path.join(dir, 's1.json'));
+    // Make unlinkSync itself throw — a deterministic way to reach the catch
+    // without relying on filesystem permissions.
+    store.saveSession(dir, baseSession('s1'));
+    t.mock.method(fs, 'unlinkSync', () => {
+      throw new Error('EPERM');
+    });
     const app = fakeApp();
     registerSessionRoutes(app, makeDeps(dir));
     const res = fakeRes();
@@ -840,5 +850,71 @@ test('POST /api/sessions/:id/verify-citations', async t => {
     const res = fakeRes();
     await app.routes['POST /api/sessions/:id/verify-citations'](fakeReq({ params: { id: 's1' } }), res);
     assert.equal(res.statusCode, 500);
+  });
+});
+
+// #595 — sessions are private to their creator; `published` is the share.
+test('per-user session isolation (#595)', async t => {
+  const alice = { id: 'alice', name: 'Alice', email: 'a@x.org', isAdmin: false };
+  const bob = { id: 'bob', name: 'Bob', email: 'b@x.org', isAdmin: false };
+  const admin = { id: 'admin', name: 'Admin', email: 'r@x.org', isAdmin: true };
+  const setup = () => {
+    const dir = makeFixtureDir();
+    t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+    store.saveSession(dir, baseSession('mine', { ownerId: 'alice' }));
+    store.saveSession(dir, baseSession('theirs', { ownerId: 'bob' }));
+    store.saveSession(dir, baseSession('shared', { ownerId: 'bob', published: true }));
+    const app = fakeApp();
+    registerSessionRoutes(
+      app,
+      makeDeps(dir, { users: { findById: id => [alice, bob, admin].find(u => u.id === id) } })
+    );
+    return { dir, app };
+  };
+
+  await t.test('the shelf lists only the caller’s own sessions', () => {
+    const { app } = setup();
+    const res = fakeRes();
+    app.routes['GET /api/sessions'](fakeReq({ user: alice }), res);
+    assert.deepEqual(
+      res.body.map(s => s.id),
+      ['mine']
+    );
+  });
+
+  await t.test('another user’s private session is 404 to read, edit, or delete', () => {
+    const { app, dir } = setup();
+    for (const route of ['GET /api/sessions/:id', 'GET /api/sessions/:id/transcript']) {
+      const res = fakeRes();
+      app.routes[route](fakeReq({ params: { id: 'theirs' }, user: alice }), res);
+      assert.equal(res.statusCode, 404, route);
+    }
+    const res = fakeRes();
+    app.routes['DELETE /api/sessions/:id'](fakeReq({ params: { id: 'theirs' }, user: alice }), res);
+    assert.equal(res.statusCode, 404);
+    assert.ok(store.loadSession(dir, 'theirs'));
+  });
+
+  await t.test('a published session is readable but not writable by others', () => {
+    const { app, dir } = setup();
+    const read = fakeRes();
+    app.routes['GET /api/sessions/:id'](fakeReq({ params: { id: 'shared' }, user: alice }), read);
+    assert.equal(read.body.id, 'shared');
+    const del = fakeRes();
+    app.routes['DELETE /api/sessions/:id'](fakeReq({ params: { id: 'shared' }, user: alice }), del);
+    assert.equal(del.statusCode, 404);
+    assert.ok(store.loadSession(dir, 'shared'));
+  });
+
+  await t.test('admin metadata view lists owners and never entry text for unpublished sessions', () => {
+    const { app } = setup();
+    const res = fakeRes();
+    app.routes['GET /api/admin/sessions'](fakeReq({ user: admin }), res);
+    const rows = Object.fromEntries(res.body.sessions.map(r => [r.id, r]));
+    assert.equal(rows.mine.ownerEmail, 'a@x.org');
+    assert.equal(rows.theirs.ownerName, 'Bob');
+    assert.equal(rows.theirs.entry, undefined);
+    assert.equal(rows.shared.entry, 'The source entry');
+    assert.equal(JSON.stringify(res.body).includes('Hello.'), false);
   });
 });

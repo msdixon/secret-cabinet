@@ -81,3 +81,47 @@ test('saveSession / loadSession', async t => {
     assert.equal(store.loadSession(dir, 'sess-1').v, 2);
   });
 });
+
+// #595 — ownership predicates and the ownerless-session migration.
+test('ownership (#595)', async t => {
+  const alice = { id: 'alice' };
+  const bob = { id: 'bob' };
+  const local = { id: 'local' };
+
+  await t.test('the owner reads and writes; others do not', () => {
+    const s = { ownerId: 'alice' };
+    assert.equal(store.canRead(s, alice), true);
+    assert.equal(store.canWrite(s, alice), true);
+    assert.equal(store.canRead(s, bob), false);
+    assert.equal(store.canWrite(s, bob), false);
+  });
+
+  await t.test('published opens reading, never writing, to others', () => {
+    const s = { ownerId: 'alice', published: true };
+    assert.equal(store.canRead(s, bob), true);
+    assert.equal(store.canRead(s, null), true);
+    assert.equal(store.canWrite(s, bob), false);
+  });
+
+  await t.test('an ownerless session is nobody’s but the open-mode local user’s', () => {
+    assert.equal(store.canWrite({}, alice), false);
+    assert.equal(store.canWrite({}, local), true);
+    assert.equal(store.canRead({}, null), false);
+  });
+
+  await t.test('filterReadable keeps own and published only', () => {
+    const list = [{ ownerId: 'alice' }, { ownerId: 'bob' }, { ownerId: 'bob', published: true }];
+    assert.equal(store.filterReadable(list, alice).length, 2);
+  });
+
+  await t.test('claimOwnerlessSessions assigns only ownerless sessions, idempotently', () => {
+    const dir = makeFixtureDir();
+    t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+    store.saveSession(dir, { id: 'a' });
+    store.saveSession(dir, { id: 'b', ownerId: 'bob' });
+    assert.equal(store.claimOwnerlessSessions(dir, 'admin'), 1);
+    assert.equal(store.loadSession(dir, 'a').ownerId, 'admin');
+    assert.equal(store.loadSession(dir, 'b').ownerId, 'bob');
+    assert.equal(store.claimOwnerlessSessions(dir, 'admin'), 0);
+  });
+});

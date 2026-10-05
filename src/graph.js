@@ -18,7 +18,7 @@ const path = require('path');
  *
  * Returns { nodes: [...], edges: [...] }
  */
-function buildGraph(roster, graphFile, libraryFile, sessionsDir) {
+function buildGraph(roster, graphFile, libraryFile, sessionsDir, { canSee } = {}) {
   const edges = [];
   const nodeMap = new Map(); // id → node
 
@@ -82,6 +82,7 @@ function buildGraph(roster, graphFile, libraryFile, sessionsDir) {
       .forEach(f => {
         try {
           const s = JSON.parse(fs.readFileSync(path.join(sessionsDir, f), 'utf8'));
+          if (canSee && !canSee(s)) return;
           const members = s.members || [];
           const tags = s.tags || [];
           const sid = s.id;

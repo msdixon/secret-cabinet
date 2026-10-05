@@ -1,0 +1,1 @@
+[#623](https://github.com/msdixon/secret-cabinet/issues/623) starters on the empty stage — curated provocations tied to library excerpts, scoped 2–3 member live convenes, and a replayable sitting, so a guest never faces a blank "paste a document" form

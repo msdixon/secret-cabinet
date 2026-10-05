@@ -43,6 +43,7 @@ const library = require('./src/library');
 const citations = require('./src/citations');
 const graph = require('./src/graph');
 const sessionsStore = require('./src/sessions-store');
+const { claimLegacyResidue } = require('./src/residue');
 const citationManifest = require('./scripts/build-citation-manifest');
 const bibliography = require('./src/bibliography');
 const auth = require('./src/auth');
@@ -179,6 +180,17 @@ app.use(
 // auth.LOCAL_ADMIN — so users.json is never created.
 const users = createUserStore(USERS_FILE);
 if (PASSPHRASE) users.ensureAdmin({ email: process.env.ADMIN_EMAIL });
+
+// #595: everything saved before sessions had owners belongs to the admin
+// (decided 2026-09-21). Idempotent, so it runs on every startup. Skipped in
+// open mode, where the local user already owns every session.
+if (PASSPHRASE) {
+  const adminId = users.findAdmin()?.id;
+  const claimed = sessionsStore.claimOwnerlessSessions(SESSIONS_DIR, adminId);
+  if (claimed) console.log(`[sessions] assigned ${claimed} ownerless session(s) to the admin`);
+  const residueMoved = claimLegacyResidue(RESIDUE_DIR, path.join(RESIDUE_DIR, 'users', adminId));
+  if (residueMoved) console.log(`[residue] moved ${residueMoved} legacy file(s) to the admin`);
+}
 
 // #594 chunk A: sign-in codes and guest-list invitations. With no
 // RESEND_API_KEY, local dev prints them to this console instead and a
@@ -439,12 +451,24 @@ function escalateCitationsToWeb(citationsList) {
 // function, same dependency-injection pattern as loadMemberFile and
 // loadVoiceExemplar above — pipeline.js never touches the filesystem
 // directly, so it stays testable as pure functions (see test/pipeline.test.js).
-function residuePath(memberId) {
-  return path.join(RESIDUE_DIR, `${memberId}.json`);
+//
+// #595: residue is per user, so one person's meetings don't colour Crowley's
+// drift for another. Each signed-in user gets residue/users/<userId>/; the
+// open-mode local user (no userId, or 'local') keeps the original flat layout
+// unchanged. The admin's pre-existing flat files move into their directory at
+// startup (claimLegacyResidue below), same "existing data goes to Rachel"
+// rule as sessions.
+function residueDirFor(userId) {
+  if (!userId || userId === sessionsStore.LOCAL_USER_ID) return RESIDUE_DIR;
+  return path.join(RESIDUE_DIR, 'users', userId);
 }
 
-function loadResidue(memberId) {
-  const p = residuePath(memberId);
+function residuePath(memberId, userId) {
+  return path.join(residueDirFor(userId), `${memberId}.json`);
+}
+
+function loadResidue(memberId, userId) {
+  const p = residuePath(memberId, userId);
   if (!fs.existsSync(p)) return '';
   try {
     return JSON.parse(fs.readFileSync(p, 'utf8')).text || '';
@@ -458,10 +482,14 @@ function loadResidue(memberId) {
 // round — most rounds this object is empty (see buildDispositionToolSchema's
 // residueNote: "most turns, nothing belongs here"). A write failure must
 // never fail a round that has already streamed successfully to the client.
-function saveResidueUpdates(residueUpdates) {
+function saveResidueUpdates(residueUpdates, userId) {
   for (const [memberId, text] of Object.entries(residueUpdates || {})) {
     try {
-      fs.writeFileSync(residuePath(memberId), JSON.stringify({ text, updatedAt: new Date().toISOString() }, null, 2));
+      fs.mkdirSync(residueDirFor(userId), { recursive: true });
+      fs.writeFileSync(
+        residuePath(memberId, userId),
+        JSON.stringify({ text, updatedAt: new Date().toISOString() }, null, 2)
+      );
     } catch (err) {
       console.warn('[residue] failed to save', memberId, '—', err.message);
     }
@@ -551,6 +579,7 @@ registerExportRoutes(app, {
 
 registerSessionRoutes(app, {
   sessionsDir: SESSIONS_DIR,
+  users,
   loadSession,
   saveSession,
   roster: ROSTER,
