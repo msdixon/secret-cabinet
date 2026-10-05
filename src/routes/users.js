@@ -16,18 +16,64 @@
 
 const { gatePageHtml, escapeHtml } = require('../auth');
 const { inviteEmail } = require('../mailer');
+const { ALERT_FRACTION } = require('../spend');
 
 function formatDate(iso) {
   return iso ? iso.slice(0, 10) : 'never';
 }
 
-function guestListHtml({ users, mailerEnabled, flash, error }) {
+const usd = n => `$${n.toFixed(2)}`;
+
+// #624 — month-to-date spend per user, or null when no ledger is wired in.
+// The Anthropic budget and ElevenLabs rate are optional: without them the
+// page still shows spend, just no percentage or voice dollars.
+function spendView(spend, users) {
+  if (!spend?.ledger) return null;
+  const mtd = spend.ledger.monthToDate();
+  const voiceCell = chars => {
+    if (!chars) return '–';
+    const dollars = spend.elevenlabsUsdPer1kChars ? ` (≈${usd((chars / 1000) * spend.elevenlabsUsdPer1kChars)})` : '';
+    return `${chars.toLocaleString('en-US')} chars${dollars}`;
+  };
+  const byId = new Map(users.map(u => [u.id, u]));
+  const perUser = id => mtd.byUser.get(id) || { anthropicUsd: 0, elevenlabsChars: 0 };
+  const unattributed = [...mtd.byUser.keys()].filter(id => id === 'none' || !byId.has(id));
+  const pct = spend.budgetUsd > 0 ? mtd.anthropicUsd / spend.budgetUsd : null;
+  return { mtd, perUser, voiceCell, unattributed, pct, budgetUsd: spend.budgetUsd };
+}
+
+function spendSummaryHtml(sv) {
+  if (!sv) return '';
+  const budget = sv.pct === null ? '' : ` — ${Math.round(sv.pct * 100)}% of the ${usd(sv.budgetUsd)} monthly budget`;
+  const banner =
+    sv.pct !== null && sv.pct >= ALERT_FRACTION
+      ? `<p class="error">Anthropic spend has reached ${Math.round(ALERT_FRACTION * 100)}% of the monthly budget. Time to decide whether guests need a per-guest cap. Nothing is blocked.</p>`
+      : '';
+  return `${banner}<p class="note">${sv.mtd.month}: Anthropic ${usd(sv.mtd.anthropicUsd)}${budget}; voice ${sv.voiceCell(sv.mtd.elevenlabsChars)}. Estimated from token counts at list prices; the Anthropic console is authoritative.</p>`;
+}
+
+function guestListHtml({ users, mailerEnabled, flash, error, spend }) {
+  const sv = spendView(spend, users);
+  const spendCells = id => {
+    if (!sv) return '';
+    const t = sv.perUser(id);
+    return `<td>${usd(t.anthropicUsd)}</td><td>${sv.voiceCell(t.elevenlabsChars)}</td>`;
+  };
+  const unattributedRows = sv
+    ? sv.unattributed
+        .map(
+          id =>
+            `      <tr><td>${id === 'none' ? 'Unattributed' : 'Removed guest'}</td><td></td><td></td>${spendCells(id)}<td></td></tr>`
+        )
+        .join('\n')
+    : '';
   const rows = users
     .map(
       u => `      <tr>
         <td>${escapeHtml(u.name)}${u.isAdmin ? ' <span class="tag">admin</span>' : ''}</td>
         <td>${escapeHtml(u.email || '(no email set)')}</td>
         <td>${formatDate(u.lastLoginAt)}</td>
+        ${spendCells(u.id)}
         <td>${
           u.isAdmin
             ? ''
@@ -36,6 +82,7 @@ function guestListHtml({ users, mailerEnabled, flash, error }) {
       </tr>`
     )
     .join('\n');
+  const spendHeaders = sv ? '<th>Anthropic (month)</th><th>Voice (month)</th>' : '';
 
   return gatePageHtml(
     `    <style>
@@ -51,12 +98,14 @@ function guestListHtml({ users, mailerEnabled, flash, error }) {
     </style>
     ${flash ? `<p class="flash">${escapeHtml(flash)}</p>` : ''}
     ${error ? `<p class="error">${escapeHtml(error)}</p>` : ''}
+    ${spendSummaryHtml(sv)}
     <p class="note">Guest list: everyone here can sign in with a code emailed to their address.
       Until <a href="https://github.com/msdixon/secret-cabinet/issues/595">#595</a> gives meetings owners,
       every guest can see and delete every meeting.</p>
     <div class="wrap"><table>
-      <tr><th>Name</th><th>Email</th><th>Last sign-in</th><th></th></tr>
+      <tr><th>Name</th><th>Email</th><th>Last sign-in</th>${spendHeaders}<th></th></tr>
 ${rows}
+${unattributedRows}
     </table></div>
     <form class="add" method="POST" action="/admin/users">
       <input type="email" name="email" placeholder="guest@example.com" required>
@@ -88,10 +137,10 @@ const OUTCOMES = {
   'remove-failed': { error: 'That guest could not be removed.' },
 };
 
-function registerUserAdminRoutes(app, { users, mailer, appUrl, log = console }) {
+function registerUserAdminRoutes(app, { users, mailer, appUrl, spend, log = console }) {
   app.get('/admin/users', (req, res) => {
     const outcome = OUTCOMES[req.query?.done] || {};
-    res.send(guestListHtml({ users: users.list(), mailerEnabled: !!mailer?.enabled, ...outcome }));
+    res.send(guestListHtml({ users: users.list(), mailerEnabled: !!mailer?.enabled, spend, ...outcome }));
   });
 
   const done = (res, code) => res.redirect(`/admin/users?done=${code}`);
