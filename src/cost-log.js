@@ -34,8 +34,22 @@ function formatCostLine(userId, provider, fields) {
   return `[cost] user=${userId || 'none'} provider=${provider}${parts.length ? ' ' + parts.join(' ') : ''}`;
 }
 
+// #624: an optional second destination for each event, so spend can be
+// summed in-app (src/spend.js). A failing sink must never fail a billable call.
+let costSink = null;
+function setCostSink(fn) {
+  costSink = fn;
+}
+
 function logCost(userId, provider, fields, log = console.log) {
   log(formatCostLine(userId, provider, fields));
+  if (costSink) {
+    try {
+      costSink({ userId, provider, fields });
+    } catch (err) {
+      console.error(`[cost] sink failed: ${err.message}`);
+    }
+  }
 }
 
 function anthropicFields(model, usage) {
@@ -78,4 +92,4 @@ function instrumentAnthropicClient(client, log = console.log) {
   return client;
 }
 
-module.exports = { runWithUser, currentUserId, formatCostLine, logCost, instrumentAnthropicClient };
+module.exports = { setCostSink, runWithUser, currentUserId, formatCostLine, logCost, instrumentAnthropicClient };

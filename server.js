@@ -60,6 +60,7 @@ const { registerGroundingRoutes } = require('./src/routes/grounding');
 const { registerConveneRoutes } = require('./src/routes/convene');
 const { registerVoiceRoutes } = require('./src/routes/voice');
 const { registerUserAdminRoutes } = require('./src/routes/users');
+const { createSpendLedger, createBudgetAlert } = require('./src/spend');
 
 // ─── Environment flags ────────────────────────────────────────────────────────
 const IS_LOCAL = process.env.LOCAL === 'true' || process.env.NODE_ENV !== 'production';
@@ -125,6 +126,11 @@ const VISITS_FILE = path.join(DATA_DIR, 'visits.json');
 // same survive-a-redeploy reason as everything above; losing it would mint
 // a new admin id and orphan whatever #595 later keys to the old one.
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
+// #624 — month-to-date spend ledger and its once-a-month alert marker
+// (src/spend.js). Same survive-a-redeploy reasoning: a restart mid-month
+// must not zero the total or re-send the alert.
+const SPEND_FILE = path.join(DATA_DIR, 'spend.jsonl');
+const SPEND_ALERT_FILE = path.join(DATA_DIR, 'spend-alert.json');
 
 if (!fs.existsSync(SESSIONS_DIR)) fs.mkdirSync(SESSIONS_DIR, { recursive: true });
 if (!fs.existsSync(RESIDUE_DIR)) fs.mkdirSync(RESIDUE_DIR, { recursive: true });
@@ -203,12 +209,36 @@ const mailer = createMailer({
 });
 const APP_URL = process.env.APP_URL || 'https://archon-salon.org';
 
+// #624 — MONTHLY_BUDGET_USD is the Anthropic budget the 80% reassessment
+// alert is measured against. Unset means spend is shown but nothing alerts.
+const MONTHLY_BUDGET_USD = Number(process.env.MONTHLY_BUDGET_USD) || 0;
+const spendLedger = createSpendLedger(SPEND_FILE);
+const budgetAlert = createBudgetAlert({
+  ledger: spendLedger,
+  budgetUsd: MONTHLY_BUDGET_USD,
+  stateFile: SPEND_ALERT_FILE,
+  mailer,
+  adminEmail: users.findAdmin()?.email,
+});
+costLog.setCostSink(event => {
+  if (spendLedger.record(event)?.provider === 'anthropic') budgetAlert.check().catch(() => {});
+});
+
 auth.registerAuthRoutes(app, PASSPHRASE, { users, mailer });
 app.use(auth.createRequireAuth(PASSPHRASE, users));
 
 // Registered after requireAuth so every /admin/ path is behind the admin
 // tier (auth.js's ADMIN_ROUTES) — unlike /login, nothing here is public.
-registerUserAdminRoutes(app, { users, mailer, appUrl: APP_URL });
+registerUserAdminRoutes(app, {
+  users,
+  mailer,
+  appUrl: APP_URL,
+  spend: {
+    ledger: spendLedger,
+    budgetUsd: MONTHLY_BUDGET_USD,
+    elevenlabsUsdPer1kChars: Number(process.env.ELEVENLABS_USD_PER_1K_CHARS) || 0,
+  },
+});
 
 // #594: carry the signed-in user's id through the rest of the request so
 // the instrumented Anthropic client above can attribute each call to it.
