@@ -132,6 +132,13 @@ function makeDeps(overrides = {}) {
         lullNote: 'The room draws breath.',
       };
     },
+    runFollowUp: async ({ member, question, onChunk, onSpeakerStart, onSpeakerEnd, onMetric }) => {
+      onSpeakerStart?.(member.id);
+      onChunk?.('an answer');
+      onSpeakerEnd?.(member.id, member.name, 'an answer');
+      onMetric?.({ phase: 'followup', memberId: member.id });
+      return { memberId: member.id, name: member.name, text: `re: ${question}` };
+    },
     proposeCast: async () => ({ cast: ['crowley'], additions: ['crowley'], regulars: [], reasoning: 'fits the room' }),
     ...overrides,
   };
@@ -146,6 +153,7 @@ test('registerConveneRoutes', async t => {
       'POST /api/cast',
       'POST /api/round',
       'POST /api/interject',
+      'POST /api/followup',
       'POST /api/prototype/round',
     ].forEach(key => assert.equal(typeof app.routes[key], 'function', key));
   });
@@ -583,6 +591,78 @@ test('POST /api/interject', async t => {
     assert.equal(res.events()[0].error, 'Failed to interject');
     assert.equal(res.ended, true);
     assert.equal(deps.savedSessions.get('s1').rounds.length, 0, 'the failed interjection is never appended');
+  });
+});
+
+test('POST /api/followup', async t => {
+  const seed = () => ({
+    id: 's1',
+    members: ['crowley', 'jung'],
+    conversationHistory: [{ role: 'user', content: 'p' }],
+    rounds: [{ label: 'one', text: 'x', beats: [] }],
+    transcriptText: 'HEADER\n',
+    generationMetrics: [],
+    disposition: { crowley: { text: 'wary' } },
+  });
+
+  await t.test('400s without sessionId, text or addressedTo', async () => {
+    const app = fakeApp();
+    registerConveneRoutes(app, makeDeps());
+    const res = fakeJSONRes();
+    await app.routes['POST /api/followup'](fakeReq({ sessionId: 's1', text: 'hi' }), res);
+    assert.equal(res.statusCode, 400);
+  });
+
+  await t.test('404s for an unknown session', async () => {
+    const app = fakeApp();
+    registerConveneRoutes(app, makeDeps());
+    const res = fakeJSONRes();
+    await app.routes['POST /api/followup'](fakeReq({ sessionId: 'nope', text: 'hi', addressedTo: 'crowley' }), res);
+    assert.equal(res.statusCode, 404);
+  });
+
+  await t.test('400s when addressedTo is not in the session', async () => {
+    const app = fakeApp();
+    const deps = makeDeps();
+    registerConveneRoutes(app, deps);
+    deps.savedSessions.set('s1', { ...seed(), members: ['crowley'] });
+    const res = fakeJSONRes();
+    await app.routes['POST /api/followup'](fakeReq({ sessionId: 's1', text: 'hi', addressedTo: 'jung' }), res);
+    assert.equal(res.statusCode, 400);
+  });
+
+  await t.test('stores the exchange as a sidecar and leaves the record untouched', async () => {
+    const app = fakeApp();
+    const deps = makeDeps();
+    registerConveneRoutes(app, deps);
+    deps.savedSessions.set('s1', seed());
+    const res = fakeSSERes();
+    await app.routes['POST /api/followup'](fakeReq({ sessionId: 's1', text: ' Why? ', addressedTo: 'crowley' }), res);
+    const saved = deps.savedSessions.get('s1');
+    assert.equal(saved.followUps.length, 1);
+    assert.equal(saved.followUps[0].addressedTo, 'crowley');
+    assert.equal(saved.followUps[0].question, 'Why?');
+    assert.equal(saved.followUps[0].answer, 're: Why?');
+    assert.equal(saved.rounds.length, 1);
+    assert.equal(saved.transcriptText, 'HEADER\n');
+    assert.equal(saved.conversationHistory.length, 1);
+    assert.deepEqual(saved.disposition, { crowley: { text: 'wary' } });
+    assert.equal(deps.savedResidue.length, 0);
+  });
+
+  await t.test('a failure streams an error and stores nothing', async () => {
+    const app = fakeApp();
+    const deps = makeDeps({
+      runFollowUp: async () => {
+        throw new Error('boom');
+      },
+    });
+    registerConveneRoutes(app, deps);
+    deps.savedSessions.set('s1', seed());
+    const res = fakeSSERes();
+    await app.routes['POST /api/followup'](fakeReq({ sessionId: 's1', text: 'hi', addressedTo: 'crowley' }), res);
+    assert.equal(deps.savedSessions.get('s1').followUps, undefined);
+    assert.match(res.chunks.join(''), /Failed to answer follow-up/);
   });
 });
 

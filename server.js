@@ -33,6 +33,7 @@ const session = require('express-session');
 const FileStore = require('session-file-store')(session);
 
 const dayOne = require('./src/dayone');
+const { runFollowUp } = require('./src/pipeline-followup');
 const { runRound, stripInternalBlankLines, proposeCast, countWords, BREATH_BUDGET_WORDS } = require('./src/pipeline');
 const roster = require('./src/roster');
 const transcriptFormat = require('./src/transcript-format');
@@ -613,6 +614,7 @@ registerConveneRoutes(app, {
   buildTranscriptHeader,
   isLocal: IS_LOCAL,
   runRound,
+  runFollowUp,
   proposeCast,
 });
 

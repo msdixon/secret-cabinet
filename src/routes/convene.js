@@ -17,6 +17,7 @@
 // bag below: roster-free, stateless constants and pure functions, the same
 // category as `path` in the sibling route modules.
 const record = require('../../public/js/record.js');
+const { FOLLOWUP_HISTORY_MESSAGES } = require('../tuning');
 
 function openSSE(res) {
   res.writeHead(200, {
@@ -58,6 +59,7 @@ function registerConveneRoutes(
     buildTranscriptHeader,
     isLocal,
     runRound,
+    runFollowUp,
     proposeCast,
   }
 ) {
@@ -475,6 +477,87 @@ function registerConveneRoutes(
     } catch (err) {
       console.error('Interject error:', err);
       res.write(`data: ${JSON.stringify({ error: 'Failed to interject' })}\n\n`);
+    }
+    res.end();
+  });
+
+  // POST /api/followup — #165 Phase 1: after the meeting, the user asks one
+  // member a direct question and gets one direct answer.
+  //
+  // A sidecar, not canon: the exchange lands on session.followUps and
+  // nothing else. rounds, transcriptText, conversationHistory, disposition
+  // and residue are all left exactly as the meeting ended — residue is
+  // global per member (#595), so a follow-up must not be able to colour how
+  // that member speaks in anyone else's room.
+  app.post('/api/followup', async (req, res) => {
+    const { sessionId, text, addressedTo } = req.body;
+    if (!sessionId || !text?.trim() || !addressedTo)
+      return res.status(400).json({ error: 'sessionId, text and addressedTo required' });
+
+    const session = loadSession(sessionId);
+    if (!session) return res.status(404).json({ error: 'Session not found' });
+
+    const member = session.members.includes(addressedTo) ? roster.find(m => m.id === addressedTo) : null;
+    if (!member) return res.status(400).json({ error: 'addressedTo must be a member of this session' });
+
+    session.generationMetrics = session.generationMetrics || [];
+    const question = text.trim();
+
+    openSSE(res);
+    try {
+      let exemplar = null;
+      let secondary = [];
+      let residue = '';
+      // Same rule as runRound: a missing library entry or residue file must
+      // never cost the member their answer.
+      try {
+        exemplar = loadVoiceExemplar?.(member.id) || null;
+        secondary = loadSecondaryVoiceExemplars?.(member.id) || [];
+        residue = loadResidue?.(member.id) || '';
+      } catch (err) {
+        console.warn('[followup-context]', member.id, '—', err.message);
+      }
+      let edges = [];
+      try {
+        edges = loadRelationshipEdges?.() || [];
+      } catch (err) {
+        console.warn('[followup-edges]', err.message);
+      }
+
+      const answer = await runFollowUp({
+        client,
+        model,
+        lodgeContext,
+        member,
+        otherPresentMembers: roster.filter(m => session.members.includes(m.id) && m.id !== member.id),
+        loadMemberFile,
+        voiceExemplar: exemplar,
+        secondaryVoiceExemplars: secondary,
+        residue,
+        disposition: session.disposition?.[member.id],
+        relationshipEdges: edges,
+        conversationHistory: (session.conversationHistory || []).slice(-FOLLOWUP_HISTORY_MESSAGES),
+        question,
+        onChunk: chunk => res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`),
+        onSpeakerStart: memberId => res.write(`data: ${JSON.stringify({ speaking: memberId })}\n\n`),
+        onSpeakerEnd: (memberId, name, answerText) =>
+          res.write(`data: ${JSON.stringify({ speakerDone: { memberId, name, text: answerText } })}\n\n`),
+        onMetric: m => session.generationMetrics.push(m),
+      });
+
+      session.followUps = session.followUps || [];
+      session.followUps.push({
+        addressedTo: member.id,
+        name: member.name,
+        question,
+        answer: answer.text,
+        at: new Date().toISOString(),
+      });
+      saveSession(session);
+      res.write(`data: ${JSON.stringify({ done: true, text: answer.text })}\n\n`);
+    } catch (err) {
+      console.error('Followup error:', err);
+      res.write(`data: ${JSON.stringify({ error: 'Failed to answer follow-up' })}\n\n`);
     }
     res.end();
   });

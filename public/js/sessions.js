@@ -498,6 +498,8 @@ window.Sessions = (function () {
         }
       });
 
+      deps.setFollowUpThread(session.followUps || []);
+
       // Restore member selection
       deps.setActiveMembers(new Set(session.members || []));
       deps.renderMembers();

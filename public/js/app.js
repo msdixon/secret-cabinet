@@ -31,7 +31,8 @@ let sessionDate = '';
 let journalList = [];
 let currentEntry = '';
 let pendingRetry = null;
-let lastInterjectText = '';
+let lastFollowUp = null; // { text, addressedTo } — retried by the error banner
+let followUpAddressee = null;
 
 // ── Player-as-member ─────────────────────────────────────────────────────────
 let playerMode = 'none'; // 'none' | 'member' | 'custom' — snapshotted at convene() start
@@ -998,6 +999,7 @@ async function convene() {
   hideSessionControls();
 
   currentSessionId = null;
+  setFollowUpThread([]);
   segmentCount = 0;
   sessionDate = new Date().toISOString().split('T')[0];
   window.LodgeScene?.setPassageCount(0);
@@ -1555,48 +1557,107 @@ async function stirRoom() {
   }
 }
 
-// ── Interject ─────────────────────────────────────────────────────────────────
+// ── Follow-up (#165) ──────────────────────────────────────────────────────────
+// After the meeting, ask one member a direct question. The exchange is a
+// sidecar: it renders into #followup-thread (outside #transcript-content, so
+// exports and annotations never see it) and is stored on session.followUps
+// server-side, not in the record.
 
-function toggleInterjectForm() {
+function followUpCandidates() {
+  return [...activeMembers].filter(id => id !== playerMemberId && MEMBERS.some(m => m.id === id));
+}
+
+function renderFollowUpChips() {
+  const ids = followUpCandidates();
+  if (!ids.includes(followUpAddressee))
+    followUpAddressee = ids.includes(lastSpeakerId) ? lastSpeakerId : ids[0] || null;
+  const wrap = document.getElementById('followup-addressee');
+  wrap.innerHTML = '';
+  ids.forEach(id => {
+    const m = MEMBERS.find(mm => mm.id === id);
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'followup-chip';
+    b.setAttribute('role', 'radio');
+    b.setAttribute('aria-checked', String(id === followUpAddressee));
+    b.textContent = m.name;
+    b.onclick = () => {
+      followUpAddressee = id;
+      renderFollowUpChips();
+    };
+    wrap.appendChild(b);
+  });
+}
+
+function toggleFollowUpForm() {
   const form = document.getElementById('interject-form');
   const showing = form.style.display !== 'none';
   form.style.display = showing ? 'none' : 'flex';
-  if (!showing) document.getElementById('interject-input').focus();
+  if (!showing) {
+    renderFollowUpChips();
+    document.getElementById('interject-input').focus();
+  }
 }
 
-async function interject() {
+function appendFollowUpExchange(thread, { question, name, answer }) {
+  const q = document.createElement('div');
+  q.className = 'followup-q';
+  q.textContent = `You → ${name}: ${question}`;
+  const a = document.createElement('div');
+  a.className = 'followup-a';
+  a.innerHTML = `<div class="speaker-name">${escapeHTML(name)}</div><div class="followup-text"></div>`;
+  a.querySelector('.followup-text').textContent = answer || '';
+  thread.append(q, a);
+  thread.hidden = false;
+  return a.querySelector('.followup-text');
+}
+
+// Re-render a restored session's stored exchanges; also clears the thread
+// for a fresh or reset session (called with an empty list).
+function setFollowUpThread(list) {
+  const thread = document.getElementById('followup-thread');
+  thread.innerHTML = '';
+  thread.hidden = true;
+  (list || []).forEach(f => appendFollowUpExchange(thread, f));
+}
+
+async function askFollowUp() {
   if (!currentSessionId) return;
   const input = document.getElementById('interject-input');
   const text = input.value.trim();
-  if (!text) return;
+  if (!text || !followUpAddressee) return;
   input.value = '';
-  document.getElementById('interject-form').style.display = 'none';
-  lastInterjectText = text;
-
-  addRoundHeader('A Presence Passes Through');
-  window.Witness.liveRoundHeader('A Presence Passes Through');
-  addSpeech('— a voice from elsewhere —', text, true, undefined, undefined);
-  window.Witness.liveSpeech({ speaker: '— a voice from elsewhere —', text, memberId: null });
-  setStatus('The room notices...', true);
-  await sendInterject(text);
+  lastFollowUp = { text, addressedTo: followUpAddressee };
+  await sendFollowUp(lastFollowUp);
 }
 
-async function sendInterject(text) {
-  const s = startStreamEntry();
+async function sendFollowUp({ text, addressedTo }) {
+  const name = MEMBERS.find(m => m.id === addressedTo)?.name || addressedTo;
+  const sendBtn = document.getElementById('followup-send-btn');
+  const thread = document.getElementById('followup-thread');
+  const textEl = appendFollowUpExchange(thread, { question: text, name, answer: '' });
+  sendBtn.disabled = true;
+  setStatus(`${name} considers the question...`, true);
   try {
     const d = await streamPost(
-      '/api/interject',
-      { sessionId: currentSessionId, text },
-      chunk => s.append(chunk),
-      s.onSpeaking,
-      s.onSpeakerDone
+      '/api/followup',
+      { sessionId: currentSessionId, text, addressedTo },
+      chunk => {
+        textEl.textContent += chunk;
+      },
+      memberId => window.LodgeScene?.setSpeaking?.(memberId),
+      settled => window.Witness.liveSpeech({ speaker: settled.name, text: settled.text, memberId: settled.memberId })
     );
-    s.finalize(d.text);
-    lastInterjectText = '';
-    setStatus('The presence withdraws. The room continues.', false);
+    textEl.textContent = d.text;
+    lastFollowUp = null;
+    setStatus(`${name} has answered.`, false);
   } catch (err) {
-    s.abort();
-    setError('The interjection went unheard.', () => sendInterject(lastInterjectText));
+    textEl.parentElement.previousSibling.remove();
+    textEl.parentElement.remove();
+    thread.hidden = !thread.children.length;
+    setError('The question went unheard.', () => sendFollowUp(lastFollowUp));
+  } finally {
+    sendBtn.disabled = false;
   }
 }
 
@@ -1639,6 +1700,7 @@ function reconveneOnCurrentSession() {
   hideSessionControls();
   segmentCount = 0;
   currentSessionId = null;
+  setFollowUpThread([]);
   transcriptText = '';
   // #356: the transcript now on the table hasn't been re-parsed into beats
   // yet, so any citation signal from before belongs to the session just left.
@@ -2157,6 +2219,7 @@ function sessionsDeps() {
     setActiveMembers: set => {
       activeMembers = set;
     },
+    setFollowUpThread,
     resetTranscriptCounters: () => {
       releasePendingLull();
       _entryCounter = 0;
