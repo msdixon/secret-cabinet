@@ -228,7 +228,7 @@ window.Export = (function () {
       const display = document.getElementById('entry-display');
       display.textContent = 'Loading…';
       display.classList.add('placeholder');
-      fetch(`/api/library/${id}`)
+      return fetch(`/api/library/${id}`)
         .then(r => r.json())
         .then(entry => {
           deps.setCurrentEntry(entry.text);
@@ -258,6 +258,19 @@ window.Export = (function () {
     } else if (isPaste) {
       deps.setCurrentEntry('');
     }
+  }
+
+  // #623: pick a library entry as the provocation without a user touching the
+  // dropdown — what a starter card does. Resolves true once the entry's text
+  // is loaded into state, false if the id isn't in the library or the load
+  // failed.
+  async function selectLibraryEntry(id) {
+    await loadSourceOptions();
+    const sel = document.getElementById('source-select');
+    sel.value = `library:${id}`;
+    if (sel.value !== `library:${id}`) return false;
+    await handleSourceChange();
+    return !!deps.getCore().currentEntry;
   }
 
   function getEntry() {
@@ -751,6 +764,7 @@ window.Export = (function () {
     updateExportJournalLabel,
     loadSourceOptions,
     handleSourceChange,
+    selectLibraryEntry,
     filterLibraryOptions,
     getEntry,
     handleFileSelect,

@@ -1,0 +1,65 @@
+{
+  "sitting": null,
+  "starters": [
+    {
+      "id": "expel-a-magician",
+      "libraryId": "crowley-golden-dawn-1900",
+      "hook": "Who gets to expel a magician from an order — and who writes the history of it afterward?",
+      "cast": ["crowley", "waite", "yeats"]
+    },
+    {
+      "id": "energy-and-reason",
+      "libraryId": "blake-voice-of-the-devil-1790",
+      "hook": "Is energy the only life, and reason only its outward bound?",
+      "cast": ["william-blake", "yeats"]
+    },
+    {
+      "id": "prayer-method-or-visit",
+      "libraryId": "teresa-fourth-mansion-1577",
+      "hook": "Is interior prayer something you practise, or something that happens to you?",
+      "cast": ["teresa", "arabi", "hildegard"]
+    },
+    {
+      "id": "the-funny-prophet",
+      "libraryId": "blavatsky-letter-sinnett-1882",
+      "hook": "Can a founder of a mystery religion be this funny in private, and does it cost her anything?",
+      "cast": ["blavatsky", "gurdjieff", "crowley"]
+    },
+    {
+      "id": "telegraph-and-the-cosmos",
+      "libraryId": "warburg-lecture-on-serpent-ritual-1923",
+      "hook": "Does a new technology of distance destroy the sacred, or only the old way of keeping it?",
+      "cast": ["warburg", "adorno", "sun-ra"]
+    },
+    {
+      "id": "whose-dream",
+      "libraryId": "jung-dream-symbolism-1916",
+      "hook": "Whose dream is it: the dreamer's, or the interpreter's?",
+      "cast": ["jung", "corbin", "dion-fortune"]
+    },
+    {
+      "id": "approving-annihilation",
+      "libraryId": "porete-mirror-approbations",
+      "hook": "Who is qualified to approve a book about the annihilation of the self?",
+      "cast": ["porete", "julian", "eckhart"]
+    },
+    {
+      "id": "sorting-people",
+      "libraryId": "adorno-types-syndromes-1950",
+      "hook": "Can you sort a person into a type without erasing the person?",
+      "cast": ["adorno", "jung", "gurdjieff"]
+    },
+    {
+      "id": "after-me-ye",
+      "libraryId": "paracelsus-paragranum-preface-1530",
+      "hook": "Is defying the authorities a method, or only a temperament?",
+      "cast": ["paracelsus", "bruno", "dee"]
+    },
+    {
+      "id": "the-painter-and-the-beast",
+      "libraryId": "frieda-harris-letters-to-crowley-1939-1944",
+      "hook": "What does it take to collaborate for five years with someone you cannot control?",
+      "cast": ["frieda-harris", "crowley", "pixie"]
+    }
+  ]
+}

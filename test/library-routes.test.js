@@ -186,3 +186,36 @@ test('GET /api/library/:id', async t => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 });
+
+test('GET /api/starters (#623)', async t => {
+  await t.test('joins starters to library entries and passes sitting through', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'starters-'));
+    const startersFile = path.join(dir, 'starters.json');
+    fs.writeFileSync(
+      startersFile,
+      JSON.stringify({
+        sitting: 'sess-1',
+        starters: [
+          { id: 's1', libraryId: 'jung-red-book', hook: 'h', cast: ['jung', 'crowley'] },
+          { id: 's2', libraryId: 'missing', hook: 'h', cast: ['jung', 'crowley'] },
+        ],
+      })
+    );
+    const app = fakeApp();
+    registerLibraryRoutes(app, { ...makeDeps(), startersFile });
+    const res = fakeRes();
+    app.routes['GET /api/starters'](fakeReq(), res);
+    assert.equal(res.body.sitting, 'sess-1');
+    assert.equal(res.body.starters.length, 1);
+    assert.equal(res.body.starters[0].title, 'The Red Book');
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  await t.test('returns an empty list when no starters file is configured', () => {
+    const app = fakeApp();
+    registerLibraryRoutes(app, makeDeps());
+    const res = fakeRes();
+    app.routes['GET /api/starters'](fakeReq(), res);
+    assert.deepEqual(res.body, { starters: [], sitting: null });
+  });
+});

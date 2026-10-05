@@ -2220,6 +2220,20 @@ function castingDeps() {
 window.Casting.configure(castingDeps());
 initCastingTriggers();
 
+// window.Starters (#623) drives the same state the normal flow does — it seats
+// a cast, loads a library entry as the provocation, and calls convene().
+function startersDeps() {
+  return {
+    getCore: () => ({ activeMembers, MEMBERS }),
+    renderMembers,
+    setStatus,
+    noteHandCast: () => window.Casting.noteHandCast(),
+    selectLibraryEntry: id => window.Export.selectLibraryEntry(id),
+    convene,
+  };
+}
+window.Starters.configure(startersDeps());
+
 // window.Metrics (#191) reads currentSessionId only for the after-panel's
 // footer button (no-arg toggle()) — the Past Meetings list passes its own
 // session id explicitly and never touches this.
@@ -2263,6 +2277,7 @@ document.addEventListener('keydown', e => {
 fetchMembers().then(() => {
   window.Casting.seatRegulars();
   renderMembers();
+  window.Starters.render();
 });
 window.Export.updateExportJournalLabel();
 handlePlayAsModeChange();

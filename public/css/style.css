@@ -337,6 +337,16 @@ a.lodge-btn { display:inline-block; text-decoration:none; }
 
 /* ─── Transcript — rounds, lulls & message bubbles ─────────────────────── */
 
+.starters { padding:20px 16px; border-bottom:1px solid var(--lodge-border); text-align:center; }
+.stage-record.stage-only .starters, .stage-record.collapsed .starters { display:none; }
+.starters-heading { font-family:'Cinzel',serif; font-size:11px; letter-spacing:0.18em; text-transform:uppercase; color:var(--lodge-amber-dim); margin-bottom:12px; }
+.starters-actions { display:flex; gap:8px; justify-content:center; margin-bottom:14px; }
+.starters-list { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:10px; text-align:left; }
+.starter-card { display:flex; flex-direction:column; gap:6px; padding:12px 14px; background:var(--lodge-surface); border:1px solid var(--lodge-border); color:var(--lodge-cream); font:inherit; cursor:pointer; text-align:left; }
+.starter-card:hover, .starter-card:focus-visible { border-color:var(--lodge-amber-dim); }
+.starter-hook { font-size:14px; line-height:1.45; }
+.starter-source { font-size:12px; color:var(--lodge-ash); }
+.starter-cast { font-size:11px; letter-spacing:0.06em; color:var(--lodge-amber); }
 .transcript-empty { text-align:center; padding:40px 20px; color:var(--lodge-muted); font-family:'IM Fell English',serif; font-style:italic; font-size:15px; line-height:1.8; }
 .transcript-round-header { display:flex; align-items:center; gap:12px; margin:20px 0 14px; }
 .transcript-round-header:first-child { margin-top:0; }

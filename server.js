@@ -538,6 +538,7 @@ registerLibraryRoutes(app, {
   loadArchiveImageIndex,
   parseLibraryFrontmatter: library.parseLibraryFrontmatter,
   libraryDir: LIBRARY_DIR,
+  startersFile: path.join(LIBRARY_DIR, 'starters.json'),
 });
 
 registerGraphRoutes(app, {
