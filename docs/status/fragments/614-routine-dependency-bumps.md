@@ -1,1 +1,0 @@
-Routine dependency bumps: `@anthropic-ai/sdk` 0.127→0.131 (range raised to `^0.131.0`; changelog 0.128–0.131 skimmed, no breaking changes affecting us), plus `@modelcontextprotocol/sdk`, `babylonjs`, `dotenv`, `jsdom`, `prettier` within range; tests and `format:check` green ([#614](https://github.com/msdixon/secret-cabinet/issues/614)).
