@@ -107,6 +107,7 @@ const MODULES = [
   },
   // #623: starters on the empty stage.
   { file: 'starters.js', global: 'Starters', api: ['configure', 'render', 'conveneStarter', 'surprise'] },
+  { file: 'feedback.js', global: 'Feedback', api: ['open', 'close', 'send'] },
 ];
 
 for (const { file, global: globalName, api } of MODULES) {

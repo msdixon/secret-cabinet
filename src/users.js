@@ -129,7 +129,13 @@ function createUserStore(filePath) {
     recordLogin(id) {
       const user = users.find(u => u.id === id);
       if (!user) return;
-      user.lastLoginAt = new Date().toISOString();
+      const now = new Date().toISOString();
+      user.lastLoginAt = now;
+      // #625: distinct sign-in days, for the first-convene funnel's "came
+      // back" stage. Capped so a long-lived account's record stays small.
+      const day = now.slice(0, 10);
+      if (!Array.isArray(user.loginDays)) user.loginDays = [];
+      if (!user.loginDays.includes(day)) user.loginDays = [...user.loginDays, day].slice(-90);
       save();
     },
   };

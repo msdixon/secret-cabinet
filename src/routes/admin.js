@@ -18,6 +18,11 @@ const ADMIN_LINKS = [
     note: 'Who can sign in, last sign-in, and month-to-date Anthropic and voice spend per guest (#594, #624).',
   },
   {
+    href: '/admin/feedback',
+    title: 'Guest notes & funnel',
+    note: 'Notes to the keeper, sittings guests chose to share, and the first-convene funnel (#625).',
+  },
+  {
     href: '/api/admin/visits',
     title: 'Visits',
     note: 'Public-tier and signed-in traffic report (markdown, #422).',

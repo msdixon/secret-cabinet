@@ -753,6 +753,10 @@ async function streamPost(url, body, onChunk, onSpeaking, onSpeakerDone, onObser
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
+  // #625: a lapsed sign-in used to surface as "The fire may be low", which
+  // sent people hunting for a fault that isn't there. Say what happened.
+  if (res.status === 401) throw new Error('Your sign-in has lapsed. Reload the page to sign in again.');
+  if (res.status === 429) throw new Error('The room is catching its breath. Try again in a moment.');
   if (!res.ok) throw new Error(`Server error ${res.status}`);
 
   const reader = res.body.getReader();
@@ -2187,6 +2191,8 @@ window.Export.configure(exportDeps());
 // rather than exposing each one as its own setter.
 function sessionsDeps() {
   return {
+    // #625: set by export.js's applyEnvConfig for signed-in non-admin guests.
+    canShareWithKeeper: () => !!window.__canShareWithKeeper,
     getCore: () => ({
       MEMBERS,
       activeMembers,

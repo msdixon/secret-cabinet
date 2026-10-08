@@ -23,7 +23,7 @@ const { flattenBeatCitations } = require('../citations');
 // the first place, so this is the one place it needs an explicit cleanup.
 const { clearGrounding } = require('../grounding');
 // #595: who may read or change a stored session — see sessions-store.js.
-const { canRead, canWrite, filterReadable } = require('../sessions-store');
+const { canRead, canView, canWrite, filterReadable } = require('../sessions-store');
 
 // #178: validates a requested publishedRounds selection down to the
 // in-bounds integer indices it actually contains, deduped and sorted so
@@ -108,6 +108,7 @@ function registerSessionRoutes(
             parentId: d.parentId || null,
             branchRound: d.branchRound ?? null,
             published: !!d.published,
+            sharedWithKeeper: !!d.sharedWithKeeper,
             _owned: canWrite(d, req.user),
             _entry: (d.entry || '').toLowerCase(),
             _transcript: (d.transcriptText || '').toLowerCase(),
@@ -236,9 +237,10 @@ function registerSessionRoutes(
               rounds: d.rounds?.length || 0,
               members: d.members?.length || 0,
               published: !!d.published,
+              sharedWithKeeper: !!d.sharedWithKeeper,
               publishedAt: d.publishedAt || null,
               errorCount: (d.generationMetrics || []).filter(m => m && m.skipped).length,
-              ...(d.published ? { entry: d.entry?.slice(0, 100) } : {}),
+              ...(d.published || d.sharedWithKeeper ? { entry: d.entry?.slice(0, 100) } : {}),
             };
           } catch (err) {
             return null;
@@ -288,6 +290,25 @@ function registerSessionRoutes(
     }
     saveSession(session);
     res.json({ threadId: session.threadId || null, threadName: session.threadName || null });
+  });
+
+  // PATCH /api/sessions/:id/share-with-keeper — #625's opt-in "share this
+  // sitting with Rachel". Narrower than publish: no public URL, no reading
+  // room, just the admin gaining read access to this one session (canView).
+  // Owner-only; anything else 404s like every other session write.
+  app.patch('/api/sessions/:id/share-with-keeper', (req, res) => {
+    const session = loadWritable(req, res);
+    if (!session) return;
+    if (typeof req.body?.shared !== 'boolean') return res.status(400).json({ error: 'shared must be a boolean' });
+    if (req.body.shared) {
+      session.sharedWithKeeper = true;
+      session.sharedWithKeeperAt = new Date().toISOString();
+    } else {
+      delete session.sharedWithKeeper;
+      delete session.sharedWithKeeperAt;
+    }
+    saveSession(session);
+    res.json({ sharedWithKeeper: !!session.sharedWithKeeper });
   });
 
   // PATCH /api/sessions/:id/annotations — save annotations array
@@ -396,7 +417,7 @@ function registerSessionRoutes(
     // #378: 404 (not 403) for an unpublished session to an unauthenticated
     // caller, matching /reading-room/:id's existing convention — an
     // unpublished session's existence isn't revealed either.
-    if (!canRead(session, req.user)) return res.status(404).json({ error: 'Session not found' });
+    if (!canView(session, req.user)) return res.status(404).json({ error: 'Session not found' });
     res.json(session);
   });
 
@@ -489,7 +510,7 @@ function registerSessionRoutes(
   app.get('/api/sessions/:id/transcript', (req, res) => {
     const session = loadSession(req.params.id);
     // #378: same 404-not-403 gate as GET /api/sessions/:id.
-    if (!canRead(session, req.user)) return res.status(404).json({ error: 'Session not found' });
+    if (!canView(session, req.user)) return res.status(404).json({ error: 'Session not found' });
 
     let transcript = session.transcriptText || '';
 

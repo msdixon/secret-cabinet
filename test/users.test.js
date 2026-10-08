@@ -135,3 +135,15 @@ test('addUser / removeUser', async t => {
     assert.ok(createUserStore(file).findById(admin.id));
   });
 });
+
+// #625: the funnel's "came back on another day" signal.
+test('recordLogin keeps a unique, capped list of login days', () => {
+  const file = tmpFile();
+  const store = createUserStore(file);
+  const admin = store.ensureAdmin({});
+  store.recordLogin(admin.id);
+  store.recordLogin(admin.id);
+  const days = createUserStore(file).findAdmin().loginDays;
+  assert.equal(days.length, 1);
+  assert.match(days[0], /^\d{4}-\d{2}-\d{2}$/);
+});

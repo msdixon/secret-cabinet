@@ -74,6 +74,15 @@ function canRead(session, user) {
   return !!session && (!!session.published || isOwner(session, user));
 }
 
+// #625: the narrow, per-session share. An owner can mark one sitting as
+// shared with the keeper of the lodge (`sharedWithKeeper`); only an admin
+// then gains read access, and only on routes that call canView — canRead (and
+// so the bibliography, manifests and reading room) is unchanged. Everyone
+// else still gets the 404 an unshared session always gave.
+function canView(session, user) {
+  return canRead(session, user) || (!!session && !!session.sharedWithKeeper && !!user && !!user.isAdmin);
+}
+
 function canWrite(session, user) {
   return isOwner(session, user);
 }
@@ -114,6 +123,7 @@ module.exports = {
   LOCAL_USER_ID,
   isOwner,
   canRead,
+  canView,
   canWrite,
   claimOwnerlessSessions,
   filterReadable,

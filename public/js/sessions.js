@@ -179,6 +179,12 @@ window.Sessions = (function () {
         const branchBadge = s.parentId
           ? `<span class="session-branch-badge" title="Branched at pause ${(s.branchRound ?? 0) + 1} of another meeting">⑂ branch</span>`
           : '';
+        // #625: the narrower alternative to publishing — only the keeper (admin)
+        // can read it, and only while this is on. Hidden where there is no
+        // keeper to share with (the admin's own sittings, no sign-in).
+        const shareBtn = deps.canShareWithKeeper?.()
+          ? `<button class="session-share-btn${s.sharedWithKeeper ? ' is-shared' : ''}" onclick="window.Sessions.toggleShareWithKeeper('${s.id}', ${!!s.sharedWithKeeper})" title="${s.sharedWithKeeper ? 'Stop sharing this sitting with Rachel' : 'Let Rachel read this sitting (only her, only until you stop)'}">${s.sharedWithKeeper ? '✓ Shared with Rachel' : 'Share with Rachel'}</button>`
+          : '';
         const publishedBadge = s.published
           ? `<a class="session-published-badge" href="/reading-room/${s.id}" target="_blank" rel="noopener" title="View the public reading-room page">★ Public</a>`
           : '';
@@ -216,6 +222,7 @@ window.Sessions = (function () {
             <button class="session-metrics-btn" onclick="window.Metrics.toggle('${s.id}')" title="Tokens, cost, and the director's casting rationale for this session">⚙ Metrics</button>
             <button class="session-publish-btn${s.published ? ' is-published' : ''}" onclick="window.Sessions.togglePublish('${s.id}', ${!!s.published})" title="${s.published ? 'Unpublish from the public reading room' : 'Publish to the public reading room'}">${s.published ? '★ Unpublish' : '☆ Publish'}</button>
             ${curateBtn}
+            ${shareBtn}
             <button class="session-delete-btn" onclick="window.Sessions.deleteSession('${s.id}', this)" title="Remove this meeting from the record">Delete</button>
           </div>`;
         list.appendChild(el);
@@ -591,6 +598,27 @@ window.Sessions = (function () {
   // than PATCHing straight away, so a subset of passages can be chosen
   // before anything goes public. Unpublishing stays a direct, immediate
   // toggle — nothing to curate on the way back to private.
+  async function toggleShareWithKeeper(id, currentlyShared) {
+    if (
+      !currentlyShared &&
+      !confirm(
+        'Share this sitting with Rachel? She will be able to read the full transcript until you stop sharing. Nobody else can.'
+      )
+    )
+      return;
+    try {
+      const res = await fetch(`/api/sessions/${id}/share-with-keeper`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shared: !currentlyShared }),
+      });
+      if (!res.ok) throw new Error('share failed');
+      await loadSessionsList();
+    } catch (e) {
+      alert('Could not change sharing just now. Try again in a moment.');
+    }
+  }
+
   async function togglePublish(id, currentlyPublished) {
     if (!currentlyPublished) return openPublishModal(id, false);
     if (!confirm('Unpublish this meeting? Its public reading-room page will stop working.')) return;
@@ -989,6 +1017,7 @@ window.Sessions = (function () {
     removeTagById,
     restoreSession,
     togglePublish,
+    toggleShareWithKeeper,
     openPublishModal,
     closePublishModal,
     deleteSession,

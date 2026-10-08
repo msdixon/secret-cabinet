@@ -567,6 +567,20 @@
          (Past Meetings / Lodge Members / Bibliography). -->
     <div class="lodge-footer" id="lodge-footer">
       <button type="button" class="footer-orient-btn" onclick="showPreamble()">What is this? ⓘ</button>
+      <button type="button" class="footer-orient-btn footer-note-btn" style="display:none" onclick="window.Feedback.open('footer')">A note to the keeper</button>
+    </div>
+  </div>
+</div>
+<!-- #625: note to the keeper of the lodge. Plain text, no ratings. -->
+<div class="keeper-note-overlay" id="keeper-note-overlay" style="display:none" onclick="if(event.target===this)window.Feedback.close()">
+  <div class="keeper-note-card" role="dialog" aria-labelledby="keeper-note-title">
+    <div class="keeper-note-title" id="keeper-note-title">A note to the keeper of the lodge</div>
+    <p class="keeper-note-hint">Anything at all: what puzzled you, what pleased you, what broke. It goes to Rachel, who reads every one.</p>
+    <textarea id="keeper-note-text" maxlength="2000" rows="6" placeholder="Write a few words…"></textarea>
+    <div class="keeper-note-status" id="keeper-note-status" aria-live="polite"></div>
+    <div class="keeper-note-actions">
+      <button type="button" class="lodge-btn" onclick="window.Feedback.close()">Close</button>
+      <button type="button" class="lodge-btn" id="keeper-note-send" onclick="window.Feedback.send()">Leave the note</button>
     </div>
   </div>
 </div>
@@ -624,6 +638,7 @@
 <script src="js/casting.js"></script>
 <script src="js/starters.js"></script>
 <script src="js/metrics.js"></script>
+<script src="js/feedback.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>
