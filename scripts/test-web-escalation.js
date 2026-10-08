@@ -9,7 +9,7 @@
 // src/citations.js directly (#598; it used to carry a private copy that would
 // have kept passing against stale logic).
 // No test framework exists in this repo — matches its existing ad hoc
-// script style (see scripts/test-director.js). Run with:
+// script style (see scripts/test-scene-scaffold.js). Run with:
 //   node scripts/test-web-escalation.js
 
 const { escalateCitationToWeb } = require('../src/citations');

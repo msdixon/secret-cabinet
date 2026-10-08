@@ -5,7 +5,7 @@
 // to verify attribution, tune the citation-extraction prompt if needed, and
 // keep a running bibliography of works cited while working on the novel.
 // No test framework/scripts runner exists in this repo — matches its existing
-// ad hoc script style (see scripts/test-director.js). Run with:
+// ad hoc script style (see scripts/test-scene-scaffold.js). Run with:
 //   node scripts/build-citation-manifest.js
 //
 // #355: used to filter to `sessions.filter(s => Array.isArray(s.citationFlags))`

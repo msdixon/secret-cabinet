@@ -11,7 +11,7 @@
 // gets the weaker checkGeneric HTTP-200 check, which a plausible-but-wrong
 // URL can still pass.
 // No test framework exists in this repo — matches its existing ad hoc
-// script style (see scripts/test-director.js). Run with:
+// script style (see scripts/test-scene-scaffold.js). Run with:
 //   node scripts/verify-library-sources.js
 
 const fs = require('fs');
