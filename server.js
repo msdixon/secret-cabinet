@@ -397,6 +397,7 @@ function buildPassagePrompt({
   isFirst,
   artifact = null,
   isTranscriptSource = false,
+  isScenario = false,
   wordsSpent = 0,
 }) {
   return lodgePrompts.buildPassagePrompt({
@@ -405,6 +406,7 @@ function buildPassagePrompt({
     isFirst,
     artifact,
     isTranscriptSource,
+    isScenario,
     roster: ROSTER,
     wordsSpent,
     breathBudget: BREATH_BUDGET_WORDS,

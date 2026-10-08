@@ -63,12 +63,21 @@ function arcNoteForProgress({ wordsSpent = 0, breathBudget } = {}) {
 // note entirely for the whole meeting — same override semantics the old
 // per-round `instructions[index]` had, just collapsed from an array to one
 // free-text field (#194 touchpoint 2).
+// #626: a scenario is a situation the room is in, not a text it has heard.
+// The system prompt's "a document ... has been read aloud" framing still
+// applies to every other session; this per-session preamble is the bounded
+// override for scenario starts, so the cached lodge-context prefix is
+// untouched.
+const SCENARIO_PREAMBLE = entry =>
+  `Nothing has been read aloud tonight. This is not a text and no one wrote it; it is what is happening in the room right now. Take it as the situation you are standing in, and answer it in your own voice, not as an essay to critique:\n\n"${entry}"`;
+
 function buildPassagePrompt({
   entry,
   meetingNote,
   isFirst = false,
   artifact = null,
   isTranscriptSource = false,
+  isScenario = false,
   roster = [],
   wordsSpent = 0,
   breathBudget,
@@ -81,7 +90,9 @@ function buildPassagePrompt({
       : '';
     const preamble = isTranscriptSource
       ? `A record has been passed around the table — minutes of a previous gathering, authorship uncertain, date unclear. The room considers it.\n\n"${entry}"`
-      : `This has just been set before the room:\n\n"${entry}"`;
+      : isScenario
+        ? SCENARIO_PREAMBLE(entry)
+        : `This has just been set before the room:\n\n"${entry}"`;
     return `${preamble}\n\n${instr}${artifactHint}`;
   }
   return instr;

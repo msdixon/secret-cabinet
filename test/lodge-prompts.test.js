@@ -67,6 +67,39 @@ test('buildPassagePrompt', async t => {
     assert.doesNotMatch(prompt, /just been set before the room/);
   });
 
+  await t.test('a scenario first passage frames a situation, not a document or a text to critique (#626)', () => {
+    const prompt = lp.buildPassagePrompt({
+      entry: 'You arrive late; Houdini is mid-argument with Blavatsky.',
+      isFirst: true,
+      isScenario: true,
+      wordsSpent: 0,
+      roster: ROSTER,
+    });
+    assert.match(prompt, /Nothing has been read aloud/);
+    assert.match(prompt, /Houdini is mid-argument/);
+    assert.doesNotMatch(prompt, /just been set before the room/);
+    assert.match(prompt, new RegExp(lp.ARC_NOTES.opening.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  });
+
+  await t.test('a transcript source wins over the scenario flag, and later passages ignore it', () => {
+    const t1 = lp.buildPassagePrompt({
+      entry: 'm',
+      isFirst: true,
+      isTranscriptSource: true,
+      isScenario: true,
+      roster: ROSTER,
+    });
+    assert.match(t1, /minutes of a previous gathering/);
+    const later = lp.buildPassagePrompt({
+      entry: 'm',
+      isFirst: false,
+      isScenario: true,
+      wordsSpent: 0,
+      roster: ROSTER,
+    });
+    assert.equal(later, lp.ARC_NOTES.opening);
+  });
+
   await t.test('the first passage appends an artifact hint when the artifact member resolves', () => {
     const prompt = lp.buildPassagePrompt({
       entry: 'x',
