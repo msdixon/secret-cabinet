@@ -1229,3 +1229,13 @@ a.archival-image-link:hover { border-color:var(--lodge-amber-dim); cursor:pointe
 
   .lodge-page-body { padding:12px 12px 16px; }
 }
+
+/* #625 — note to the keeper, and the share-with-keeper button */
+.keeper-note-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:2000; align-items:center; justify-content:center; padding:16px; }
+.keeper-note-card { background:var(--lodge-bg, #1a1612); border:1px solid var(--lodge-ash); max-width:480px; width:100%; padding:20px; font-family:'IM Fell English',serif; color:var(--lodge-muted); }
+.keeper-note-title { font-size:16px; letter-spacing:1px; margin-bottom:8px; }
+.keeper-note-hint { font-style:italic; font-size:13px; margin:0 0 10px; }
+.keeper-note-card textarea { width:100%; box-sizing:border-box; background:transparent; color:inherit; border:1px solid var(--lodge-ash); font:inherit; padding:8px; resize:vertical; }
+.keeper-note-status { min-height:1.4em; font-style:italic; font-size:13px; margin:6px 0; }
+.keeper-note-actions { display:flex; gap:8px; justify-content:flex-end; }
+.session-share-btn.is-shared { font-style:italic; }

@@ -918,3 +918,52 @@ test('per-user session isolation (#595)', async t => {
     assert.equal(JSON.stringify(res.body).includes('Hello.'), false);
   });
 });
+
+// #625: the narrow, opt-in share — only the keeper (admin) gains read access.
+test('PATCH /api/sessions/:id/share-with-keeper (#625)', async t => {
+  const owner = { id: 'guest1', isAdmin: false };
+  const other = { id: 'guest2', isAdmin: false };
+  const admin = { id: 'admin', isAdmin: true };
+  function setup() {
+    const dir = makeFixtureDir();
+    t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+    store.saveSession(dir, baseSession('s1', { ownerId: owner.id }));
+    const app = fakeApp();
+    registerSessionRoutes(app, makeDeps(dir));
+    return app;
+  }
+  const share = (app, user, shared) => {
+    const res = fakeRes();
+    app.routes['PATCH /api/sessions/:id/share-with-keeper'](
+      fakeReq({ params: { id: 's1' }, body: { shared }, user }),
+      res
+    );
+    return res;
+  };
+  const get = (app, user) => {
+    const res = fakeRes();
+    app.routes['GET /api/sessions/:id'](fakeReq({ params: { id: 's1' }, user }), res);
+    return res;
+  };
+
+  await t.test('not shared: the admin gets 404 like any other non-owner', () => {
+    const app = setup();
+    assert.equal(get(app, admin).statusCode, 404);
+  });
+
+  await t.test('owner shares: admin can read, another guest still 404s; unsharing closes it again', () => {
+    const app = setup();
+    assert.equal(share(app, owner, true).body.sharedWithKeeper, true);
+    assert.notEqual(get(app, admin).statusCode, 404);
+    assert.equal(get(app, other).statusCode, 404);
+    assert.equal(share(app, owner, false).body.sharedWithKeeper, false);
+    assert.equal(get(app, admin).statusCode, 404);
+  });
+
+  await t.test('only the owner can toggle it, and the body must be boolean', () => {
+    const app = setup();
+    assert.equal(share(app, other, true).statusCode, 404);
+    assert.equal(share(app, admin, true).statusCode, 404);
+    assert.equal(share(app, owner, 'yes').statusCode, 400);
+  });
+});

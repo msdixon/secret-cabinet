@@ -61,6 +61,8 @@ const { registerGroundingRoutes } = require('./src/routes/grounding');
 const { registerConveneRoutes } = require('./src/routes/convene');
 const { registerVoiceRoutes } = require('./src/routes/voice');
 const { registerUserAdminRoutes } = require('./src/routes/users');
+const { registerFeedbackRoutes } = require('./src/routes/feedback');
+const { createFeedbackStore } = require('./src/feedback');
 const { createSpendLedger, createBudgetAlert } = require('./src/spend');
 
 // ─── Environment flags ────────────────────────────────────────────────────────
@@ -132,6 +134,8 @@ const USERS_FILE = path.join(DATA_DIR, 'users.json');
 // must not zero the total or re-send the alert.
 const SPEND_FILE = path.join(DATA_DIR, 'spend.jsonl');
 const SPEND_ALERT_FILE = path.join(DATA_DIR, 'spend-alert.json');
+// #625 — guest notes to the keeper (src/feedback.js), append-only JSONL.
+const FEEDBACK_FILE = path.join(DATA_DIR, 'feedback.jsonl');
 
 if (!fs.existsSync(SESSIONS_DIR)) fs.mkdirSync(SESSIONS_DIR, { recursive: true });
 if (!fs.existsSync(RESIDUE_DIR)) fs.mkdirSync(RESIDUE_DIR, { recursive: true });
@@ -239,6 +243,14 @@ registerUserAdminRoutes(app, {
     budgetUsd: MONTHLY_BUDGET_USD,
     elevenlabsUsdPer1kChars: Number(process.env.ELEVENLABS_USD_PER_1K_CHARS) || 0,
   },
+});
+
+// #625: guest notes + the first-convene funnel. /admin/feedback is behind the
+// same /admin/ tier as the guest list; POST /api/feedback needs any sign-in.
+registerFeedbackRoutes(app, {
+  feedback: createFeedbackStore(FEEDBACK_FILE),
+  users,
+  sessionsDir: SESSIONS_DIR,
 });
 
 // #594: carry the signed-in user's id through the rest of the request so

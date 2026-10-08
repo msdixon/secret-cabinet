@@ -729,7 +729,14 @@ window.Export = (function () {
       }
       if (config.signInEnabled && config.authed) {
         document.querySelector('.sign-out-link')?.style.removeProperty('display');
-        if (config.isAdmin) document.querySelector('.guest-list-link')?.style.removeProperty('display');
+        if (config.isAdmin) {
+          document.querySelector('.guest-list-link')?.style.removeProperty('display');
+          document.querySelector('.feedback-admin-link')?.style.removeProperty('display');
+        } else {
+          // #625: guests (not the admin, who is the recipient) get the note link.
+          document.querySelector('.footer-note-btn')?.style.removeProperty('display');
+          window.__canShareWithKeeper = true;
+        }
       }
       return config;
     } catch (_) {
