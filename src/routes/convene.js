@@ -17,6 +17,7 @@
 // bag below: roster-free, stateless constants and pure functions, the same
 // category as `path` in the sibling route modules.
 const record = require('../../public/js/record.js');
+const { FOLLOWUP_HISTORY_MESSAGES, FOLLOWUP_SESSION_CAP } = require('../tuning');
 // #595: session ownership — see sessions-store.js.
 const { canWrite } = require('../sessions-store');
 
@@ -60,6 +61,7 @@ function registerConveneRoutes(
     buildTranscriptHeader,
     isLocal,
     runRound,
+    runFollowUp,
     proposeCast,
   }
 ) {
@@ -486,6 +488,114 @@ function registerConveneRoutes(
     } catch (err) {
       console.error('Interject error:', err);
       res.write(`data: ${JSON.stringify({ error: 'Failed to interject' })}\n\n`);
+    }
+    res.end();
+  });
+
+  // POST /api/followup — #165 Phase 1: after the meeting, the user asks one
+  // member a direct question and gets one direct answer.
+  //
+  // The exchange is recorded as a "Mid-session Chat" segment (see below) but
+  // leaves disposition and residue alone — residue is global per member
+  // (#595), so a follow-up must not colour how that member speaks in anyone
+  // else's room.
+  app.post('/api/followup', async (req, res) => {
+    const { sessionId, text, addressedTo } = req.body;
+    if (!sessionId || !text?.trim() || !addressedTo)
+      return res.status(400).json({ error: 'sessionId, text and addressedTo required' });
+
+    const session = loadSession(sessionId);
+    // #595: only the owner continues a session — 404, not 403, so another
+    // user's session id doesn't confirm it exists.
+    if (!session || !canWrite(session, req.user)) return res.status(404).json({ error: 'Session not found' });
+
+    const member = session.members.includes(addressedTo) ? roster.find(m => m.id === addressedTo) : null;
+    if (!member) return res.status(400).json({ error: 'addressedTo must be a member of this session' });
+
+    const used = (session.rounds || []).filter(r => r.followUp).length;
+    if (used >= FOLLOWUP_SESSION_CAP)
+      return res.status(429).json({
+        error: `This session has reached its ${FOLLOWUP_SESSION_CAP} follow-up questions.`,
+      });
+
+    session.generationMetrics = session.generationMetrics || [];
+    const question = text.trim();
+    const observerName = req.user?.id && req.user.id !== 'local' && req.user.name ? req.user.name : 'Observer';
+
+    openSSE(res);
+    res.write(`data: ${JSON.stringify({ observer: observerName })}\n\n`);
+    try {
+      let exemplar = null;
+      let secondary = [];
+      let residue = '';
+      // Same rule as runRound: a missing library entry or residue file must
+      // never cost the member their answer.
+      try {
+        exemplar = loadVoiceExemplar?.(member.id) || null;
+        secondary = loadSecondaryVoiceExemplars?.(member.id) || [];
+        residue = loadResidue?.(member.id) || '';
+      } catch (err) {
+        console.warn('[followup-context]', member.id, '—', err.message);
+      }
+      let edges = [];
+      try {
+        edges = loadRelationshipEdges?.() || [];
+      } catch (err) {
+        console.warn('[followup-edges]', err.message);
+      }
+
+      const answer = await runFollowUp({
+        client,
+        model,
+        lodgeContext,
+        member,
+        otherPresentMembers: roster.filter(m => session.members.includes(m.id) && m.id !== member.id),
+        loadMemberFile,
+        voiceExemplar: exemplar,
+        secondaryVoiceExemplars: secondary,
+        residue,
+        disposition: session.disposition?.[member.id],
+        relationshipEdges: edges,
+        conversationHistory: (session.conversationHistory || []).slice(-FOLLOWUP_HISTORY_MESSAGES),
+        question,
+        onChunk: chunk => res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`),
+        onSpeakerStart: memberId => res.write(`data: ${JSON.stringify({ speaking: memberId })}\n\n`),
+        onSpeakerEnd: (memberId, name, answerText) =>
+          res.write(`data: ${JSON.stringify({ speakerDone: { memberId, name, text: answerText } })}\n\n`),
+        onMetric: m => session.generationMetrics.push(m),
+      });
+
+      // The exchange joins the record as an interjection-kind segment, headed
+      // "Mid-session Chat" so exports and annotations show plainly that it was
+      // the observer asking one member directly, not the room deliberating.
+      const askerHeader = `${observerName.split(/\s+/)[0]}:`;
+      const label = `Mid-session Chat: ${observerName} → ${member.name}`;
+      const segment = {
+        kind: record.SEGMENT_KIND_INTERJECTION,
+        followUp: member.id,
+        label,
+        text: `${askerHeader}\n${question}\n\n${member.name}\n${answer.text}`,
+        beats: [
+          { memberId: record.PRESENCE_SPEAKER_ID, speakerName: observerName, text: question },
+          { memberId: member.id, speakerName: member.name, text: answer.text },
+        ],
+      };
+      // The room remembers it on the next turn. Disposition and residue are
+      // deliberately untouched: residue is global per member (#595), and one
+      // direct answer isn't a read of the whole room.
+      session.conversationHistory.push({
+        role: 'user',
+        content: `${observerName} asks ${member.name} directly: "${question}"`,
+      });
+      session.conversationHistory.push({ role: 'assistant', content: `${member.name}\n${answer.text}` });
+      segment.historyLength = session.conversationHistory.length;
+      session.rounds.push(segment);
+      session.transcriptText += composeSegmentText(segment);
+      saveSession(session);
+      res.write(`data: ${JSON.stringify({ done: true, text: answer.text })}\n\n`);
+    } catch (err) {
+      console.error('Followup error:', err);
+      res.write(`data: ${JSON.stringify({ error: 'Failed to answer follow-up' })}\n\n`);
     }
     res.end();
   });

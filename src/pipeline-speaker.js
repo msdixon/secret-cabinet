@@ -539,12 +539,14 @@ async function callSpeakerTurn({
   onChunk,
   lodgeContext,
   maxTokens = SPEAKER_MAX_TOKENS,
+  thinking,
 }) {
   const start = Date.now();
   const messages = [...withHistoryCacheControl(conversationHistory), { role: 'user', content: userMessage }];
   const stream = client.messages.stream({
     model,
     max_tokens: maxTokens,
+    ...(thinking ? { thinking } : {}),
     system: buildCachedSystem(system, lodgeContext),
     messages,
   });

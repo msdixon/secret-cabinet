@@ -31,7 +31,8 @@ let sessionDate = '';
 let journalList = [];
 let currentEntry = '';
 let pendingRetry = null;
-let lastInterjectText = '';
+let lastFollowUp = null; // { text, addressedTo } — retried by the error banner
+let followUpAddressee = null;
 
 // ── Player-as-member ─────────────────────────────────────────────────────────
 let playerMode = 'none'; // 'none' | 'member' | 'custom' — snapshotted at convene() start
@@ -746,7 +747,7 @@ function parseAndRenderTranscript(response) {
 // advanceLiveTurnQueue) via the liveTypingStart/liveSpeech calls onSpeaking
 // below already triggers, so it only moves once a turn is actually the one
 // on screen.
-async function streamPost(url, body, onChunk, onSpeaking, onSpeakerDone) {
+async function streamPost(url, body, onChunk, onSpeaking, onSpeakerDone, onObserver) {
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -780,6 +781,8 @@ async function streamPost(url, body, onChunk, onSpeaking, onSpeakerDone) {
           donePayload = data;
         } else if (data.text) {
           onChunk(data.text);
+        } else if (data.observer) {
+          onObserver?.(data.observer);
         } else if (data.speaking) {
           onSpeaking?.(data.speaking);
         } else if (data.speakerDone) {
@@ -1555,48 +1558,131 @@ async function stirRoom() {
   }
 }
 
-// ── Interject ─────────────────────────────────────────────────────────────────
+// ── Follow-up (#165) ──────────────────────────────────────────────────────────
+// Ask one member a direct question. The exchange joins the transcript as a
+// "Mid-session Chat" segment (an interjection-kind segment server-side), so
+// it is part of the record, exports and annotations, and marked as such.
 
-function toggleInterjectForm() {
+function followUpCandidates() {
+  return [...activeMembers].filter(id => id !== playerMemberId && MEMBERS.some(m => m.id === id));
+}
+
+function renderFollowUpChips() {
+  const ids = followUpCandidates();
+  if (!ids.includes(followUpAddressee))
+    followUpAddressee = ids.includes(lastSpeakerId) ? lastSpeakerId : ids[0] || null;
+  const wrap = document.getElementById('followup-addressee');
+  wrap.innerHTML = '';
+  ids.forEach(id => {
+    const m = MEMBERS.find(mm => mm.id === id);
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'followup-chip';
+    b.setAttribute('role', 'radio');
+    b.setAttribute('aria-checked', String(id === followUpAddressee));
+    b.textContent = m.name;
+    b.onclick = () => {
+      followUpAddressee = id;
+      renderFollowUpChips();
+    };
+    wrap.appendChild(b);
+  });
+}
+
+// Mid-session Chat headers already in the transcript — works for live and
+// restored sessions alike, since both render the segment through addRoundHeader.
+function followUpsUsed() {
+  return [...document.querySelectorAll('#transcript-content .round-rule-label')].filter(el =>
+    el.textContent.startsWith('Mid-session Chat')
+  ).length;
+}
+
+let followUpCap = null;
+async function updateFollowUpCounter() {
+  if (followUpCap == null) {
+    try {
+      followUpCap = (await fetch('/api/config').then(r => r.json())).followUpCap ?? null;
+    } catch (e) {
+      /* counter just stays blank */
+    }
+  }
+  const el = document.getElementById('followup-counter');
+  if (followUpCap == null) {
+    el.textContent = '';
+    return;
+  }
+  const used = followUpsUsed();
+  el.textContent =
+    used >= followUpCap
+      ? 'No follow-up questions left this session.'
+      : `${used} of ${followUpCap} follow-up questions used`;
+  document.getElementById('followup-send-btn').disabled = used >= followUpCap;
+}
+
+function toggleFollowUpForm() {
   const form = document.getElementById('interject-form');
   const showing = form.style.display !== 'none';
   form.style.display = showing ? 'none' : 'flex';
-  if (!showing) document.getElementById('interject-input').focus();
+  if (!showing) {
+    renderFollowUpChips();
+    updateFollowUpCounter();
+    document.getElementById('interject-input').focus();
+  }
 }
 
-async function interject() {
+async function askFollowUp() {
   if (!currentSessionId) return;
   const input = document.getElementById('interject-input');
   const text = input.value.trim();
-  if (!text) return;
+  if (!text || !followUpAddressee || document.getElementById('followup-send-btn').disabled) return;
   input.value = '';
-  document.getElementById('interject-form').style.display = 'none';
-  lastInterjectText = text;
-
-  addRoundHeader('A Presence Passes Through');
-  window.Witness.liveRoundHeader('A Presence Passes Through');
-  addSpeech('— a voice from elsewhere —', text, true, undefined, undefined);
-  window.Witness.liveSpeech({ speaker: '— a voice from elsewhere —', text, memberId: null });
-  setStatus('The room notices...', true);
-  await sendInterject(text);
+  lastFollowUp = { text, addressedTo: followUpAddressee };
+  await sendFollowUp(lastFollowUp);
 }
 
-async function sendInterject(text) {
+async function sendFollowUp({ text, addressedTo }) {
+  const name = MEMBERS.find(m => m.id === addressedTo)?.name || addressedTo;
+  const sendBtn = document.getElementById('followup-send-btn');
+  const content = document.getElementById('transcript-content');
+  const nodesBefore = content.children.length;
+  // The server names the asker (their account name, or "Observer") so the
+  // live header matches what a reload will show; the question appears once
+  // it does, i.e. only after the server has accepted the request.
+  const showQuestion = observerName => {
+    const label = `Mid-session Chat: ${observerName} → ${name}`;
+    addRoundHeader(label);
+    window.Witness.liveRoundHeader(label);
+    addSpeech(observerName, text, true, undefined, undefined);
+    window.Witness.liveSpeech({ speaker: observerName, text, memberId: null });
+  };
   const s = startStreamEntry();
+  sendBtn.disabled = true;
+  setStatus(`${name} considers the question...`, true);
   try {
     const d = await streamPost(
-      '/api/interject',
-      { sessionId: currentSessionId, text },
+      '/api/followup',
+      { sessionId: currentSessionId, text, addressedTo },
       chunk => s.append(chunk),
       s.onSpeaking,
-      s.onSpeakerDone
+      s.onSpeakerDone,
+      showQuestion
     );
     s.finalize(d.text);
-    lastInterjectText = '';
-    setStatus('The presence withdraws. The room continues.', false);
+    lastFollowUp = null;
+    setStatus(`${name} has answered.`, false);
   } catch (err) {
     s.abort();
-    setError('The interjection went unheard.', () => sendInterject(lastInterjectText));
+    if (/\b429\b/.test(err.message)) {
+      setStatus('This session has used all its follow-up questions.', false);
+      return;
+    }
+    // Nothing was saved server-side, so don't leave the unanswered question
+    // in the record view; the retry re-renders it.
+    while (content.children.length > nodesBefore) content.lastChild.remove();
+    setError('The question went unheard.', () => sendFollowUp(lastFollowUp));
+  } finally {
+    sendBtn.disabled = false;
+    updateFollowUpCounter();
   }
 }
 

@@ -62,6 +62,7 @@ const GATED_ROUTE_LABELS = [
   ['POST', /^\/api\/cast$/, 'POST /api/cast'],
   ['POST', /^\/api\/round$/, 'POST /api/round'],
   ['POST', /^\/api\/interject$/, 'POST /api/interject'],
+  ['POST', /^\/api\/followup$/, 'POST /api/followup'],
 ];
 
 // The three page-view labels classifyVisit ever returns for a non-`/api/`

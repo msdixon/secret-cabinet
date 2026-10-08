@@ -465,6 +465,14 @@ const CONFESSIONAL_MAX_TOKENS = 1600;
 // (pipeline.js's selectSpeakers mid-passage re-ask). The opening consult of
 // any passage just needs one flat default now, not a per-round taper.
 const DEFAULT_POOL_SIZE = 5;
+// #165: a follow-up is one member answering one question after the meeting,
+// so it gets a conversational ceiling — roughly the room's own, not the
+// confessional's. Window is how many prior conversationHistory messages the
+// answering member sees (the record's tail, same as /api/interject's 6).
+const FOLLOWUP_MAX_TOKENS = 700;
+const FOLLOWUP_HISTORY_MESSAGES = 6;
+// Mid-session Chat exchanges allowed per session — each is a full-prompt API call, so unbounded asking is unbounded spend.
+const FOLLOWUP_SESSION_CAP = 10;
 const INTERJECT_SPEAKER_COUNT = 3; // today's prose only ever suggested "2-3", never enforced — a new explicit assumption
 
 // Multiples of the breath budget (BREATH_BUDGET_WORDS, above) at which the
@@ -520,6 +528,9 @@ module.exports = {
   MAX_GROUNDING_RESULTS_PER_VERIFY_CALL,
   DEFAULT_POOL_SIZE,
   INTERJECT_SPEAKER_COUNT,
+  FOLLOWUP_MAX_TOKENS,
+  FOLLOWUP_HISTORY_MESSAGES,
+  FOLLOWUP_SESSION_CAP,
   ARC_STAGE_BOUNDARIES,
   SPLINTER_EXCHANGE_BEATS,
   MAX_SPLINTERS_PER_PASSAGE,

@@ -33,6 +33,7 @@ const session = require('express-session');
 const FileStore = require('session-file-store')(session);
 
 const dayOne = require('./src/dayone');
+const { runFollowUp } = require('./src/pipeline-followup');
 const { runRound, stripInternalBlankLines, proposeCast, countWords, BREATH_BUDGET_WORDS } = require('./src/pipeline');
 const roster = require('./src/roster');
 const transcriptFormat = require('./src/transcript-format');
@@ -539,7 +540,13 @@ function buildTranscriptHeader(entry, memberIds, date) {
 // whether sign-in exists at all (a passphrase is set), so the guest-list and
 // sign-out links only render where they mean something.
 app.get('/api/config', (req, res) => {
-  res.json({ isLocal: IS_LOCAL, authed: req.authed, isAdmin: req.isAdmin, signInEnabled: !!PASSPHRASE });
+  res.json({
+    isLocal: IS_LOCAL,
+    authed: req.authed,
+    isAdmin: req.isAdmin,
+    signInEnabled: !!PASSPHRASE,
+    followUpCap: require('./src/tuning').FOLLOWUP_SESSION_CAP,
+  });
 });
 
 // GET /api/admin/visits — #422: unauthenticated-visitor traffic to the
@@ -673,6 +680,7 @@ registerConveneRoutes(app, {
   buildTranscriptHeader,
   isLocal: IS_LOCAL,
   runRound,
+  runFollowUp,
   proposeCast,
 });
 

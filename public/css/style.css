@@ -432,7 +432,12 @@ a.lodge-btn { display:inline-block; text-decoration:none; }
 .after-row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
 .after-row + .after-row { margin-top:10px; padding-top:10px; border-top:1px solid var(--lodge-border); }
 .interject-form { display:flex; gap:10px; }
-.interject-row { display:flex; gap:10px; }
+.interject-row { display:flex; gap:10px; flex:1; }
+.followup-form { flex-direction:column; align-items:stretch; }
+.followup-addressee { display:flex; flex-wrap:wrap; gap:6px; }
+.followup-counter { font-family:'Crimson Pro',serif; font-size:13px; color:var(--lodge-ash); }
+.followup-chip { background:transparent; border:1px solid var(--lodge-ash); color:var(--lodge-cream); font-family:'Crimson Pro',serif; font-size:14px; padding:3px 10px; border-radius:2px; cursor:pointer; }
+.followup-chip[aria-checked="true"] { border-color:#a0c8a0; color:#a0c8a0; }
 .interject-input { background:var(--lodge-panel); border:1px solid var(--lodge-ash); border-left:3px solid #a0c8a0; color:var(--lodge-cream); font-family:'Crimson Pro',serif; font-size:15px; font-style:italic; padding:8px 12px; border-radius:0 2px 2px 0; flex:1; }
 .interject-input:focus { outline:none; border-left-color:#c0e0c0; }
 .interject-input::placeholder { color:var(--lodge-ash); }
