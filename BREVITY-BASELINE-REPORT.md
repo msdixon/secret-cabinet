@@ -83,3 +83,17 @@ Two things fall out of this table:
 **Decision:** keep `TYPICAL_TURN_WORDS = 90` (the validated value, not the untested 60). Filed [#561](https://github.com/msdixon/secret-cabinet/issues/561) to carry the residual gap forward as a "what lever, not what number" question, separate from #539 (which asked whether the floor needed fixing at all — answered: yes, partially fixed, remainder tracked separately). Closing #539 on this measured record rather than leaving it open as an indefinite tuning chase.
 
 **Conclusion:** `TANGENT_NUDGE_CHANCE` is not under-tuned — it cuts turn length by roughly half whenever it fires, on the model actually in production today, matching phase 2's original validation. Raising the rate further would be tuning against the wrong variable: the residual essayism the aggregate still shows is downstream of #406's model swap raising the un-nudged floor for *every* turn, nudged or not, not of the coin-flip rate being too low. Closing #513 on this record rather than raising the rate on unmeasured guesswork; the model-verbosity question gets its own follow-up ([#539](https://github.com/msdixon/secret-cabinet/issues/539)) since it's a different variable with a different fix (`SPEAKER_MAX_TOKENS`, length tendencies) than anything #513 was ever scoped to touch.
+---
+
+## Phase 5 — un-nudged floor with the structural levers live (2026-10-07)
+
+[#561](https://github.com/msdixon/secret-cabinet/issues/561) re-measurement on current `main`, after #576 (conviction over proof), #577 (decoupled citation capture), #578 (relational-move scoring) and #579 (confessional beat) shipped. No local sessions postdate #578, so this uses the committed harness `scripts/measure-unnudged-turn-length.js` (phase 3/4's three member/topic pairs, un-nudged, 3 trials each, live `claude-sonnet-5`).
+
+| Case | Words/turn |
+|---|---|
+| Crowley | 105w |
+| Yeats | 147w |
+| Teresa | 144w |
+| **Grand average** | **132w** |
+
+132w is below phase 4's 157w and in line with the 2026-09-30 same-harness control (~124w; `claude-sonnet-5-5` measured the same band). It is still ~1.5x phase 1's 88w, but that baseline came from a different model and prompt and was never validated as the right length; live convenes read fine. Numeric-anchor tuning is exhausted (phase 4), the tangent nudge is not the variable (phase 4), and the structural levers are in. Recommendation: treat ~130w as the realistic un-nudged floor for this model and stop chasing 88w. Re-run the harness after any model or prompt change instead.

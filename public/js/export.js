@@ -729,15 +729,15 @@ window.Export = (function () {
       }
       if (config.signInEnabled && config.authed) {
         document.querySelector('.sign-out-link')?.style.removeProperty('display');
-        if (config.isAdmin) {
-          document.querySelector('.guest-list-link')?.style.removeProperty('display');
-          document.querySelector('.feedback-admin-link')?.style.removeProperty('display');
-        } else {
+        if (!config.isAdmin) {
           // #625: guests (not the admin, who is the recipient) get the note link.
           document.querySelector('.footer-note-btn')?.style.removeProperty('display');
           window.__canShareWithKeeper = true;
         }
       }
+      // #637: local open mode is LOCAL_ADMIN (isAdmin true, signInEnabled
+      // false), and /admin works there, so the link keys on isAdmin alone.
+      if (config.authed && config.isAdmin) document.querySelector('.admin-link')?.style.removeProperty('display');
       return config;
     } catch (_) {
       return null;

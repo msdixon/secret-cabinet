@@ -63,6 +63,7 @@ const { registerVoiceRoutes } = require('./src/routes/voice');
 const { registerUserAdminRoutes } = require('./src/routes/users');
 const { registerFeedbackRoutes } = require('./src/routes/feedback');
 const { createFeedbackStore } = require('./src/feedback');
+const { registerAdminHubRoutes } = require('./src/routes/admin');
 const { createSpendLedger, createBudgetAlert } = require('./src/spend');
 
 // ─── Environment flags ────────────────────────────────────────────────────────
@@ -234,6 +235,7 @@ app.use(auth.createRequireAuth(PASSPHRASE, users));
 
 // Registered after requireAuth so every /admin/ path is behind the admin
 // tier (auth.js's ADMIN_ROUTES) — unlike /login, nothing here is public.
+registerAdminHubRoutes(app);
 registerUserAdminRoutes(app, {
   users,
   mailer,
@@ -407,6 +409,7 @@ function buildPassagePrompt({
   isFirst,
   artifact = null,
   isTranscriptSource = false,
+  isScenario = false,
   wordsSpent = 0,
 }) {
   return lodgePrompts.buildPassagePrompt({
@@ -415,6 +418,7 @@ function buildPassagePrompt({
     isFirst,
     artifact,
     isTranscriptSource,
+    isScenario,
     roster: ROSTER,
     wordsSpent,
     breathBudget: BREATH_BUDGET_WORDS,
