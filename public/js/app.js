@@ -1589,12 +1589,43 @@ function renderFollowUpChips() {
   });
 }
 
+// Mid-session Chat headers already in the transcript — works for live and
+// restored sessions alike, since both render the segment through addRoundHeader.
+function followUpsUsed() {
+  return [...document.querySelectorAll('#transcript-content .round-rule-label')].filter(el =>
+    el.textContent.startsWith('Mid-session Chat')
+  ).length;
+}
+
+let followUpCap = null;
+async function updateFollowUpCounter() {
+  if (followUpCap == null) {
+    try {
+      followUpCap = (await fetch('/api/config').then(r => r.json())).followUpCap ?? null;
+    } catch (e) {
+      /* counter just stays blank */
+    }
+  }
+  const el = document.getElementById('followup-counter');
+  if (followUpCap == null) {
+    el.textContent = '';
+    return;
+  }
+  const used = followUpsUsed();
+  el.textContent =
+    used >= followUpCap
+      ? 'No follow-up questions left this session.'
+      : `${used} of ${followUpCap} follow-up questions used`;
+  document.getElementById('followup-send-btn').disabled = used >= followUpCap;
+}
+
 function toggleFollowUpForm() {
   const form = document.getElementById('interject-form');
   const showing = form.style.display !== 'none';
   form.style.display = showing ? 'none' : 'flex';
   if (!showing) {
     renderFollowUpChips();
+    updateFollowUpCounter();
     document.getElementById('interject-input').focus();
   }
 }
@@ -1603,7 +1634,7 @@ async function askFollowUp() {
   if (!currentSessionId) return;
   const input = document.getElementById('interject-input');
   const text = input.value.trim();
-  if (!text || !followUpAddressee) return;
+  if (!text || !followUpAddressee || document.getElementById('followup-send-btn').disabled) return;
   input.value = '';
   lastFollowUp = { text, addressedTo: followUpAddressee };
   await sendFollowUp(lastFollowUp);
@@ -1651,6 +1682,7 @@ async function sendFollowUp({ text, addressedTo }) {
     setError('The question went unheard.', () => sendFollowUp(lastFollowUp));
   } finally {
     sendBtn.disabled = false;
+    updateFollowUpCounter();
   }
 }
 

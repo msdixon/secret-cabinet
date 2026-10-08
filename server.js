@@ -510,7 +510,13 @@ function buildTranscriptHeader(entry, memberIds, date) {
 // whether sign-in exists at all (a passphrase is set), so the guest-list and
 // sign-out links only render where they mean something.
 app.get('/api/config', (req, res) => {
-  res.json({ isLocal: IS_LOCAL, authed: req.authed, isAdmin: req.isAdmin, signInEnabled: !!PASSPHRASE });
+  res.json({
+    isLocal: IS_LOCAL,
+    authed: req.authed,
+    isAdmin: req.isAdmin,
+    signInEnabled: !!PASSPHRASE,
+    followUpCap: require('./src/tuning').FOLLOWUP_SESSION_CAP,
+  });
 });
 
 // GET /api/admin/visits — #422: unauthenticated-visitor traffic to the
