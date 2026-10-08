@@ -61,8 +61,11 @@ async function runFollowUp({
 
   onSpeakerStart?.(member.id);
   try {
-    const { result, attempts } = await withOneRetry(() =>
-      callSpeakerTurn({
+    // Thinking is off: a short in-voice answer doesn't need it, and adaptive thinking can eat the whole
+    // max_tokens budget and leave no text at all (the #406 failure family). An empty result throws so
+    // withOneRetry retries once and then the route reports failure, instead of storing a blank answer.
+    const { result, attempts } = await withOneRetry(async () => {
+      const r = await callSpeakerTurn({
         client,
         model,
         system,
@@ -71,8 +74,11 @@ async function runFollowUp({
         onChunk,
         lodgeContext,
         maxTokens: FOLLOWUP_MAX_TOKENS,
-      })
-    );
+        thinking: { type: 'disabled' },
+      });
+      if (!r.text) throw new Error('Follow-up produced no text');
+      return r;
+    });
     const text = stripInternalBlankLines(result.text);
     onMetric?.(
       makeMetric('followup', {

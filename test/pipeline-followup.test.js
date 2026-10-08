@@ -75,4 +75,35 @@ test('runFollowUp', async t => {
     assert.equal(metrics.length, 1);
     assert.equal(metrics[0].skipped, true);
   });
+
+  await t.test('disables thinking, and an empty answer is retried then rejected, never returned blank', async () => {
+    const calls = [];
+    const client = {
+      messages: {
+        stream(params) {
+          calls.push(params);
+          return {
+            async *[Symbol.asyncIterator]() {},
+            finalMessage: async () => ({ usage: { input_tokens: 1, output_tokens: 700 } }),
+          };
+        },
+      },
+    };
+    const metrics = [];
+    await assert.rejects(
+      runFollowUp({
+        client,
+        model: 'm',
+        lodgeContext: 'ctx',
+        member,
+        loadMemberFile: () => 'character',
+        question: 'q',
+        onMetric: m => metrics.push(m),
+      }),
+      /no text/
+    );
+    assert.equal(calls.length, 2, 'retried once');
+    assert.deepEqual(calls[0].thinking, { type: 'disabled' });
+    assert.equal(metrics[0].skipped, true);
+  });
 });
