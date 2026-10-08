@@ -61,6 +61,7 @@ const { registerGroundingRoutes } = require('./src/routes/grounding');
 const { registerConveneRoutes } = require('./src/routes/convene');
 const { registerVoiceRoutes } = require('./src/routes/voice');
 const { registerUserAdminRoutes } = require('./src/routes/users');
+const { registerAdminHubRoutes } = require('./src/routes/admin');
 const { createSpendLedger, createBudgetAlert } = require('./src/spend');
 
 // ─── Environment flags ────────────────────────────────────────────────────────
@@ -230,6 +231,7 @@ app.use(auth.createRequireAuth(PASSPHRASE, users));
 
 // Registered after requireAuth so every /admin/ path is behind the admin
 // tier (auth.js's ADMIN_ROUTES) — unlike /login, nothing here is public.
+registerAdminHubRoutes(app);
 registerUserAdminRoutes(app, {
   users,
   mailer,
