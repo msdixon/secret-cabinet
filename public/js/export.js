@@ -729,8 +729,10 @@ window.Export = (function () {
       }
       if (config.signInEnabled && config.authed) {
         document.querySelector('.sign-out-link')?.style.removeProperty('display');
-        if (config.isAdmin) document.querySelector('.guest-list-link')?.style.removeProperty('display');
       }
+      // #637: local open mode is LOCAL_ADMIN (isAdmin true, signInEnabled
+      // false), and /admin works there, so the link keys on isAdmin alone.
+      if (config.authed && config.isAdmin) document.querySelector('.admin-link')?.style.removeProperty('display');
       return config;
     } catch (_) {
       return null;
