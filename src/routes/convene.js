@@ -17,7 +17,7 @@
 // bag below: roster-free, stateless constants and pure functions, the same
 // category as `path` in the sibling route modules.
 const record = require('../../public/js/record.js');
-const { FOLLOWUP_HISTORY_MESSAGES } = require('../tuning');
+const { FOLLOWUP_HISTORY_MESSAGES, FOLLOWUP_SESSION_CAP } = require('../tuning');
 // #595: session ownership — see sessions-store.js.
 const { canWrite } = require('../sessions-store');
 
@@ -512,6 +512,12 @@ function registerConveneRoutes(
     const member = session.members.includes(addressedTo) ? roster.find(m => m.id === addressedTo) : null;
     if (!member) return res.status(400).json({ error: 'addressedTo must be a member of this session' });
 
+    const used = (session.rounds || []).filter(r => r.followUp).length;
+    if (used >= FOLLOWUP_SESSION_CAP)
+      return res.status(429).json({
+        error: `This session has reached its ${FOLLOWUP_SESSION_CAP} follow-up questions.`,
+      });
+
     session.generationMetrics = session.generationMetrics || [];
     const question = text.trim();
     const observerName = req.user?.id && req.user.id !== 'local' && req.user.name ? req.user.name : 'Observer';
@@ -566,6 +572,7 @@ function registerConveneRoutes(
       const label = `Mid-session Chat: ${observerName} → ${member.name}`;
       const segment = {
         kind: record.SEGMENT_KIND_INTERJECTION,
+        followUp: member.id,
         label,
         text: `${askerHeader}\n${question}\n\n${member.name}\n${answer.text}`,
         beats: [

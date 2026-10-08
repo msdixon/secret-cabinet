@@ -663,6 +663,7 @@ test('POST /api/followup', async t => {
       assert.equal(saved.rounds.length, 2);
       const seg = saved.rounds[1];
       assert.equal(seg.kind, 'interjection');
+      assert.equal(seg.followUp, 'crowley');
       assert.match(seg.label, /^Mid-session Chat: .* → /);
       assert.match(seg.text, /\nWhy\?\n\n.*\nre: Why\?$/);
       assert.equal(seg.beats.length, 2);
@@ -674,6 +675,24 @@ test('POST /api/followup', async t => {
       assert.equal(deps.savedResidue.length, 0);
     }
   );
+
+  await t.test('429s once the session has used its follow-up cap, without calling the model', async () => {
+    const app = fakeApp();
+    let called = false;
+    const deps = makeDeps({
+      runFollowUp: async () => {
+        called = true;
+      },
+    });
+    registerConveneRoutes(app, deps);
+    const full = seed();
+    full.rounds = Array.from({ length: 10 }, () => ({ label: 'Mid-session Chat', text: 'x', followUp: 'crowley' }));
+    deps.savedSessions.set('s1', full);
+    const res = fakeJSONRes();
+    await app.routes['POST /api/followup'](fakeReq({ sessionId: 's1', text: 'hi', addressedTo: 'crowley' }), res);
+    assert.equal(res.statusCode, 429);
+    assert.equal(called, false);
+  });
 
   await t.test('a failure streams an error and stores nothing', async () => {
     const app = fakeApp();

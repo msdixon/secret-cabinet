@@ -1641,6 +1641,10 @@ async function sendFollowUp({ text, addressedTo }) {
     setStatus(`${name} has answered.`, false);
   } catch (err) {
     s.abort();
+    if (/\b429\b/.test(err.message)) {
+      setStatus('This session has used all its follow-up questions.', false);
+      return;
+    }
     // Nothing was saved server-side, so don't leave the unanswered question
     // in the record view; the retry re-renders it.
     while (content.children.length > nodesBefore) content.lastChild.remove();
