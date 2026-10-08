@@ -427,10 +427,6 @@ a.lodge-btn { display:inline-block; text-decoration:none; }
 .followup-addressee { display:flex; flex-wrap:wrap; gap:6px; }
 .followup-chip { background:transparent; border:1px solid var(--lodge-ash); color:var(--lodge-cream); font-family:'Crimson Pro',serif; font-size:14px; padding:3px 10px; border-radius:2px; cursor:pointer; }
 .followup-chip[aria-checked="true"] { border-color:#a0c8a0; color:#a0c8a0; }
-.followup-thread { margin:12px 0; padding-left:12px; border-left:3px solid #a0c8a0; font-family:'Crimson Pro',serif; }
-.followup-q { font-style:italic; color:var(--lodge-ash); margin:10px 0 4px; }
-.followup-a .speaker-name { font-size:13px; letter-spacing:.08em; text-transform:uppercase; color:#a0c8a0; }
-.followup-a .followup-text { color:var(--lodge-cream); white-space:pre-wrap; }
 .interject-input { background:var(--lodge-panel); border:1px solid var(--lodge-ash); border-left:3px solid #a0c8a0; color:var(--lodge-cream); font-family:'Crimson Pro',serif; font-size:15px; font-style:italic; padding:8px 12px; border-radius:0 2px 2px 0; flex:1; }
 .interject-input:focus { outline:none; border-left-color:#c0e0c0; }
 .interject-input::placeholder { color:var(--lodge-ash); }

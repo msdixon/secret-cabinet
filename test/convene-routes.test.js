@@ -650,24 +650,30 @@ test('POST /api/followup', async t => {
     assert.equal(res.statusCode, 400);
   });
 
-  await t.test('stores the exchange as a sidecar and leaves the record untouched', async () => {
-    const app = fakeApp();
-    const deps = makeDeps();
-    registerConveneRoutes(app, deps);
-    deps.savedSessions.set('s1', seed());
-    const res = fakeSSERes();
-    await app.routes['POST /api/followup'](fakeReq({ sessionId: 's1', text: ' Why? ', addressedTo: 'crowley' }), res);
-    const saved = deps.savedSessions.get('s1');
-    assert.equal(saved.followUps.length, 1);
-    assert.equal(saved.followUps[0].addressedTo, 'crowley');
-    assert.equal(saved.followUps[0].question, 'Why?');
-    assert.equal(saved.followUps[0].answer, 're: Why?');
-    assert.equal(saved.rounds.length, 1);
-    assert.equal(saved.transcriptText, 'HEADER\n');
-    assert.equal(saved.conversationHistory.length, 1);
-    assert.deepEqual(saved.disposition, { crowley: { text: 'wary' } });
-    assert.equal(deps.savedResidue.length, 0);
-  });
+  await t.test(
+    'records the exchange as a Mid-session Chat segment, leaving disposition and residue alone',
+    async () => {
+      const app = fakeApp();
+      const deps = makeDeps();
+      registerConveneRoutes(app, deps);
+      deps.savedSessions.set('s1', seed());
+      const res = fakeSSERes();
+      await app.routes['POST /api/followup'](fakeReq({ sessionId: 's1', text: ' Why? ', addressedTo: 'crowley' }), res);
+      const saved = deps.savedSessions.get('s1');
+      assert.equal(saved.rounds.length, 2);
+      const seg = saved.rounds[1];
+      assert.equal(seg.kind, 'interjection');
+      assert.match(seg.label, /^Mid-session Chat: .* → /);
+      assert.match(seg.text, /\nWhy\?\n\n.*\nre: Why\?$/);
+      assert.equal(seg.beats.length, 2);
+      assert.equal(seg.beats[1].memberId, 'crowley');
+      assert.equal(seg.historyLength, saved.conversationHistory.length);
+      assert.match(saved.transcriptText, /Mid-session Chat/);
+      assert.equal(saved.conversationHistory.length, 3);
+      assert.deepEqual(saved.disposition, { crowley: { text: 'wary' } });
+      assert.equal(deps.savedResidue.length, 0);
+    }
+  );
 
   await t.test('a failure streams an error and stores nothing', async () => {
     const app = fakeApp();
@@ -680,7 +686,9 @@ test('POST /api/followup', async t => {
     deps.savedSessions.set('s1', seed());
     const res = fakeSSERes();
     await app.routes['POST /api/followup'](fakeReq({ sessionId: 's1', text: 'hi', addressedTo: 'crowley' }), res);
-    assert.equal(deps.savedSessions.get('s1').followUps, undefined);
+    const after = deps.savedSessions.get('s1');
+    assert.equal(after.rounds.length, 1);
+    assert.equal(after.transcriptText, 'HEADER\n');
     assert.match(res.chunks.join(''), /Failed to answer follow-up/);
   });
 });

@@ -72,7 +72,6 @@ function makeDeps(document, calls) {
     setPlayerTurnsRevealed: record('setPlayerTurnsRevealed'),
     setTranscriptText: record('setTranscriptText'),
     setActiveMembers: record('setActiveMembers'),
-    setFollowUpThread: record('setFollowUpThread'),
     restorePlayAsControlDisplay: record('restorePlayAsControlDisplay'),
     renderMembers: record('renderMembers'),
     showSessionControls: record('showSessionControls'),

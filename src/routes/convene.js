@@ -495,11 +495,10 @@ function registerConveneRoutes(
   // POST /api/followup — #165 Phase 1: after the meeting, the user asks one
   // member a direct question and gets one direct answer.
   //
-  // A sidecar, not canon: the exchange lands on session.followUps and
-  // nothing else. rounds, transcriptText, conversationHistory, disposition
-  // and residue are all left exactly as the meeting ended — residue is
-  // global per member (#595), so a follow-up must not be able to colour how
-  // that member speaks in anyone else's room.
+  // The exchange is recorded as a "Mid-session Chat" segment (see below) but
+  // leaves disposition and residue alone — residue is global per member
+  // (#595), so a follow-up must not colour how that member speaks in anyone
+  // else's room.
   app.post('/api/followup', async (req, res) => {
     const { sessionId, text, addressedTo } = req.body;
     if (!sessionId || !text?.trim() || !addressedTo)
@@ -515,8 +514,10 @@ function registerConveneRoutes(
 
     session.generationMetrics = session.generationMetrics || [];
     const question = text.trim();
+    const observerName = req.user?.id && req.user.id !== 'local' && req.user.name ? req.user.name : 'Observer';
 
     openSSE(res);
+    res.write(`data: ${JSON.stringify({ observer: observerName })}\n\n`);
     try {
       let exemplar = null;
       let secondary = [];
@@ -558,14 +559,31 @@ function registerConveneRoutes(
         onMetric: m => session.generationMetrics.push(m),
       });
 
-      session.followUps = session.followUps || [];
-      session.followUps.push({
-        addressedTo: member.id,
-        name: member.name,
-        question,
-        answer: answer.text,
-        at: new Date().toISOString(),
+      // The exchange joins the record as an interjection-kind segment, headed
+      // "Mid-session Chat" so exports and annotations show plainly that it was
+      // the observer asking one member directly, not the room deliberating.
+      const askerHeader = `${observerName.split(/\s+/)[0]}:`;
+      const label = `Mid-session Chat: ${observerName} → ${member.name}`;
+      const segment = {
+        kind: record.SEGMENT_KIND_INTERJECTION,
+        label,
+        text: `${askerHeader}\n${question}\n\n${member.name}\n${answer.text}`,
+        beats: [
+          { memberId: record.PRESENCE_SPEAKER_ID, speakerName: observerName, text: question },
+          { memberId: member.id, speakerName: member.name, text: answer.text },
+        ],
+      };
+      // The room remembers it on the next turn. Disposition and residue are
+      // deliberately untouched: residue is global per member (#595), and one
+      // direct answer isn't a read of the whole room.
+      session.conversationHistory.push({
+        role: 'user',
+        content: `${observerName} asks ${member.name} directly: "${question}"`,
       });
+      session.conversationHistory.push({ role: 'assistant', content: `${member.name}\n${answer.text}` });
+      segment.historyLength = session.conversationHistory.length;
+      session.rounds.push(segment);
+      session.transcriptText += composeSegmentText(segment);
       saveSession(session);
       res.write(`data: ${JSON.stringify({ done: true, text: answer.text })}\n\n`);
     } catch (err) {

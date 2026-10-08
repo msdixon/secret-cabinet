@@ -222,7 +222,7 @@
           <button class="lodge-btn" id="continue-btn" onclick="toggleAfterMenu('continue-menu')">Continue ▾</button>
           <div class="lodge-menu" id="continue-menu">
             <button class="lodge-btn" id="stir-room-btn" onclick="stirRoom()" title="Draw one more passage out of a meeting that already closed">Continue this meeting ↻</button>
-            <button class="lodge-btn" id="interject-toggle-btn" style="border-color:#a0c8a0;color:#a0c8a0;" onclick="toggleFollowUpForm()" title="The meeting is over — ask one member a question directly">Ask the room</button>
+            <button class="lodge-btn" id="interject-toggle-btn" style="border-color:#a0c8a0;color:#a0c8a0;" onclick="toggleFollowUpForm()" title="Ask one member a question directly — it joins the record as a Mid-session Chat">Ask the room</button>
             <button class="lodge-btn" onclick="reconveneOnCurrentSession()" title="Use this transcript as the provocation for a new session">↩ Reconvene</button>
             <button class="lodge-btn" onclick="branchFromLatestLull()" title="Branch from here — explore an alternate path from this point, original stays untouched">⑂ Branch</button>
           </div>
@@ -325,14 +325,10 @@
            it appears only after a completed verify call. -->
       <div class="after-row citation-verify-row" id="citation-verify-result" hidden></div>
 
-      <!-- #165: follow-up conversation. A sidecar to the record: these
-           exchanges render here, outside #transcript-content, so exports and
-           annotations never see them. -->
-      <div class="followup-thread" id="followup-thread" hidden></div>
       <div class="after-row followup-form" id="interject-form" style="display:none;">
         <div class="followup-addressee" id="followup-addressee" role="radiogroup" aria-label="Ask whom"></div>
         <div class="interject-row">
-          <input type="text" class="interject-input" id="interject-input" placeholder="The meeting is over. Ask them something..." onkeydown="if(event.key==='Enter') askFollowUp();" />
+          <input type="text" class="interject-input" id="interject-input" placeholder="Ask them something..." onkeydown="if(event.key==='Enter') askFollowUp();" />
           <button class="lodge-btn" id="followup-send-btn" style="border-color:#a0c8a0;color:#a0c8a0;" onclick="askFollowUp()">Ask</button>
         </div>
       </div>

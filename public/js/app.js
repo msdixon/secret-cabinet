@@ -747,7 +747,7 @@ function parseAndRenderTranscript(response) {
 // advanceLiveTurnQueue) via the liveTypingStart/liveSpeech calls onSpeaking
 // below already triggers, so it only moves once a turn is actually the one
 // on screen.
-async function streamPost(url, body, onChunk, onSpeaking, onSpeakerDone) {
+async function streamPost(url, body, onChunk, onSpeaking, onSpeakerDone, onObserver) {
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -781,6 +781,8 @@ async function streamPost(url, body, onChunk, onSpeaking, onSpeakerDone) {
           donePayload = data;
         } else if (data.text) {
           onChunk(data.text);
+        } else if (data.observer) {
+          onObserver?.(data.observer);
         } else if (data.speaking) {
           onSpeaking?.(data.speaking);
         } else if (data.speakerDone) {
@@ -999,7 +1001,6 @@ async function convene() {
   hideSessionControls();
 
   currentSessionId = null;
-  setFollowUpThread([]);
   segmentCount = 0;
   sessionDate = new Date().toISOString().split('T')[0];
   window.LodgeScene?.setPassageCount(0);
@@ -1558,10 +1559,9 @@ async function stirRoom() {
 }
 
 // ── Follow-up (#165) ──────────────────────────────────────────────────────────
-// After the meeting, ask one member a direct question. The exchange is a
-// sidecar: it renders into #followup-thread (outside #transcript-content, so
-// exports and annotations never see it) and is stored on session.followUps
-// server-side, not in the record.
+// Ask one member a direct question. The exchange joins the transcript as a
+// "Mid-session Chat" segment (an interjection-kind segment server-side), so
+// it is part of the record, exports and annotations, and marked as such.
 
 function followUpCandidates() {
   return [...activeMembers].filter(id => id !== playerMemberId && MEMBERS.some(m => m.id === id));
@@ -1599,28 +1599,6 @@ function toggleFollowUpForm() {
   }
 }
 
-function appendFollowUpExchange(thread, { question, name, answer }) {
-  const q = document.createElement('div');
-  q.className = 'followup-q';
-  q.textContent = `You → ${name}: ${question}`;
-  const a = document.createElement('div');
-  a.className = 'followup-a';
-  a.innerHTML = `<div class="speaker-name">${escapeHTML(name)}</div><div class="followup-text"></div>`;
-  a.querySelector('.followup-text').textContent = answer || '';
-  thread.append(q, a);
-  thread.hidden = false;
-  return a.querySelector('.followup-text');
-}
-
-// Re-render a restored session's stored exchanges; also clears the thread
-// for a fresh or reset session (called with an empty list).
-function setFollowUpThread(list) {
-  const thread = document.getElementById('followup-thread');
-  thread.innerHTML = '';
-  thread.hidden = true;
-  (list || []).forEach(f => appendFollowUpExchange(thread, f));
-}
-
 async function askFollowUp() {
   if (!currentSessionId) return;
   const input = document.getElementById('interject-input');
@@ -1634,27 +1612,38 @@ async function askFollowUp() {
 async function sendFollowUp({ text, addressedTo }) {
   const name = MEMBERS.find(m => m.id === addressedTo)?.name || addressedTo;
   const sendBtn = document.getElementById('followup-send-btn');
-  const thread = document.getElementById('followup-thread');
-  const textEl = appendFollowUpExchange(thread, { question: text, name, answer: '' });
+  const content = document.getElementById('transcript-content');
+  const nodesBefore = content.children.length;
+  // The server names the asker (their account name, or "Observer") so the
+  // live header matches what a reload will show; the question appears once
+  // it does, i.e. only after the server has accepted the request.
+  const showQuestion = observerName => {
+    const label = `Mid-session Chat: ${observerName} → ${name}`;
+    addRoundHeader(label);
+    window.Witness.liveRoundHeader(label);
+    addSpeech(observerName, text, true, undefined, undefined);
+    window.Witness.liveSpeech({ speaker: observerName, text, memberId: null });
+  };
+  const s = startStreamEntry();
   sendBtn.disabled = true;
   setStatus(`${name} considers the question...`, true);
   try {
     const d = await streamPost(
       '/api/followup',
       { sessionId: currentSessionId, text, addressedTo },
-      chunk => {
-        textEl.textContent += chunk;
-      },
-      memberId => window.LodgeScene?.setSpeaking?.(memberId),
-      settled => window.Witness.liveSpeech({ speaker: settled.name, text: settled.text, memberId: settled.memberId })
+      chunk => s.append(chunk),
+      s.onSpeaking,
+      s.onSpeakerDone,
+      showQuestion
     );
-    textEl.textContent = d.text;
+    s.finalize(d.text);
     lastFollowUp = null;
     setStatus(`${name} has answered.`, false);
   } catch (err) {
-    textEl.parentElement.previousSibling.remove();
-    textEl.parentElement.remove();
-    thread.hidden = !thread.children.length;
+    s.abort();
+    // Nothing was saved server-side, so don't leave the unanswered question
+    // in the record view; the retry re-renders it.
+    while (content.children.length > nodesBefore) content.lastChild.remove();
     setError('The question went unheard.', () => sendFollowUp(lastFollowUp));
   } finally {
     sendBtn.disabled = false;
@@ -1700,7 +1689,6 @@ function reconveneOnCurrentSession() {
   hideSessionControls();
   segmentCount = 0;
   currentSessionId = null;
-  setFollowUpThread([]);
   transcriptText = '';
   // #356: the transcript now on the table hasn't been re-parsed into beats
   // yet, so any citation signal from before belongs to the session just left.
@@ -2219,7 +2207,6 @@ function sessionsDeps() {
     setActiveMembers: set => {
       activeMembers = set;
     },
-    setFollowUpThread,
     resetTranscriptCounters: () => {
       releasePendingLull();
       _entryCounter = 0;
