@@ -13,8 +13,23 @@
 
 const fs = require('fs');
 const path = require('path');
+const startersLib = require('../starters');
 
-function registerLibraryRoutes(app, { loadLibraryIndex, loadArchiveImageIndex, parseLibraryFrontmatter, libraryDir }) {
+function registerLibraryRoutes(
+  app,
+  { loadLibraryIndex, loadArchiveImageIndex, parseLibraryFrontmatter, libraryDir, startersFile }
+) {
+  // GET /api/starters — #623, the curated provocations shown on the empty
+  // stage, joined to their library entries' display fields.
+  app.get('/api/starters', (req, res) => {
+    try {
+      if (!startersFile) return res.json({ starters: [], sitting: null });
+      res.json(startersLib.resolveStarters(startersLib.loadStartersFile(startersFile), loadLibraryIndex()));
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to load starters' });
+    }
+  });
+
   // GET /api/library — list all entries (index only, no full text)
   // Optional query params: ?member=crowley, ?theme=schism, ?q=search+terms
   app.get('/api/library', (req, res) => {

@@ -82,7 +82,11 @@ const MODULES = [
       'start',
     ],
   },
-  { file: 'export.js', global: 'Export', api: ['configure', 'buildAnnotatedTranscript', 'exportMd'] },
+  {
+    file: 'export.js',
+    global: 'Export',
+    api: ['configure', 'buildAnnotatedTranscript', 'exportMd', 'selectLibraryEntry'],
+  },
   { file: 'sessions.js', global: 'Sessions', api: ['configure', 'restoreSession', 'collectSessionNotes'] },
   {
     file: 'casting.js',
@@ -101,6 +105,8 @@ const MODULES = [
       'render',
     ],
   },
+  // #623: starters on the empty stage.
+  { file: 'starters.js', global: 'Starters', api: ['configure', 'render', 'conveneStarter', 'surprise'] },
 ];
 
 for (const { file, global: globalName, api } of MODULES) {
