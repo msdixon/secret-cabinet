@@ -90,7 +90,8 @@ function makeDeps(overrides = {}) {
     loadVoiceExemplar: () => null,
     loadResidue: () => '',
     castingRoster: () => [{ id: 'crowley', name: 'Crowley', brief: 'brief' }],
-    buildPassagePrompt: ({ entry, isFirst }) => `PROMPT(${isFirst}): ${entry}`,
+    buildPassagePrompt: ({ entry, isFirst, isScenario }) =>
+      `PROMPT(${isFirst}${isScenario ? ',scenario' : ''}): ${entry}`,
     wordsSpentSoFar: () => 0,
     // #352: the real reduction rather than a stub — it's pure, and the
     // route's only job here is handing runRound the ledger it builds from
@@ -166,6 +167,45 @@ test('POST /api/convene', async t => {
     const res = fakeJSONRes();
     await app.routes['POST /api/convene'](fakeReq({ entry: '' }), res);
     assert.equal(res.statusCode, 400);
+  });
+
+  await t.test('passes occasion: scenario through as the first-passage scenario framing (#626)', async () => {
+    const prompts = [];
+    const app = fakeApp();
+    registerConveneRoutes(
+      app,
+      makeDeps({
+        runRound: async ({ roundPrompt }) => {
+          prompts.push(roundPrompt);
+          return {
+            fullRoundText: 't',
+            speakerOrder: [],
+            disposition: {},
+            residueUpdates: {},
+            beats: [],
+            endedBy: 'budget',
+            lullNote: 'n',
+          };
+        },
+      })
+    );
+    for (const body of [
+      { occasion: 'scenario' },
+      {},
+      { occasion: 'bogus' },
+      { occasion: 'scenario', sourceSessionId: 's1' },
+    ]) {
+      await app.routes['POST /api/convene'](
+        fakeReq({ entry: 'Late arrival', members: ['crowley'], ...body }),
+        fakeSSERes()
+      );
+    }
+    assert.deepEqual(prompts, [
+      'PROMPT(true,scenario): Late arrival',
+      'PROMPT(true): Late arrival',
+      'PROMPT(true): Late arrival',
+      'PROMPT(true): Late arrival',
+    ]);
   });
 
   await t.test('streams speaking/speakerDone/done events and persists a new session', async () => {

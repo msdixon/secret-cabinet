@@ -82,8 +82,11 @@ function registerConveneRoutes(
       playerName,
       playerTurn,
       castMetrics,
+      occasion,
     } = req.body;
     const isTranscriptSource = !!sourceSessionId;
+    // #626: opt-in scenario framing for the first passage; anything else is a document.
+    const isScenario = occasion === 'scenario' && !isTranscriptSource;
     const id = makeSessionId(entry);
     const date = new Date().toISOString().slice(0, 10);
     // #194 touchpoint 2: roundInstructions (array) collapses to meetingNote
@@ -96,6 +99,7 @@ function registerConveneRoutes(
       isFirst: true,
       artifact: artifact || null,
       isTranscriptSource,
+      isScenario,
       wordsSpent: 0,
     });
     // #225 — the pre-convene casting call's usage rides in on the request body
