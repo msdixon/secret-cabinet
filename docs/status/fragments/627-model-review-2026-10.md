@@ -1,0 +1,1 @@
+Quarterly model review ([#627](https://github.com/msdixon/secret-cabinet/issues/627)): recommended staying on `claude-sonnet-5` — `claude-sonnet-5-5` has the same price and no length gain (#561), and swapping needs migrating 6 `thinking: disabled` and 4 forced `tool_choice` call sites that 400 on 5.5. `MODEL` unchanged; logged in `docs/MODEL-REVIEW.md`.
