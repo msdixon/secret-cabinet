@@ -57,8 +57,13 @@ function normalizeWorkKey(work) {
 // that's never been through the deliberate grounding pass still contributes
 // its write-time-captured citations rather than showing up empty.
 function citationsForSession(session, roster) {
-  if (Array.isArray(session.citationFlags)) return session.citationFlags;
-  return flattenBeatCitations(session, roster);
+  const raw = flattenBeatCitations(session, roster);
+  // #580: citationFlags is rebuilt from this same flatten (index-aligned —
+  // verify-grounding already relies on that), but flags saved before
+  // citationKey existed lack it, so borrow the key by position.
+  if (Array.isArray(session.citationFlags))
+    return session.citationFlags.map((f, i) => ({ citationKey: raw[i]?.citationKey, ...f }));
+  return raw;
 }
 
 // Groups a flat list of {work, ...} entries from across every session into
@@ -75,6 +80,7 @@ function groupByWork(sessions, roster, extractFn) {
         ...entry,
         sessionId: session.id,
         date: session.date,
+        citationNotes: session.citationNotes,
         speaker: (entry.speaker || '').replace(/\s*—\s*$/, '').trim(),
       });
     });
@@ -231,7 +237,21 @@ function groundedInHtml(o) {
   return null;
 }
 
-function renderCitationGroupHtml(group) {
+// #580 v1: the researcher's personal note on one citation. Shown, and
+// editable, only for sessions the viewer owns (`editable`) — a published
+// session's notes are the owner's marginalia, so a note never renders for
+// anyone else. Server-renders the note so it reads without JS; the page's
+// inline script (EDITOR_SCRIPT) upgrades the button into an editor.
+function renderCitationNoteHtml(o, editable) {
+  if (!editable || !o.citationKey) return '';
+  const note = o.citationNotes?.[o.citationKey]?.note || '';
+  return `<div class="bib-annot" data-session="${escapeHtml(o.sessionId)}" data-key="${escapeHtml(o.citationKey)}">
+        <p class="bib-annot-text"${note ? '' : ' hidden'}>${escapeHtml(note)}</p>
+        <button type="button" class="bib-annot-btn">${note ? 'Edit note' : 'Add note'}</button>
+      </div>`;
+}
+
+function renderCitationGroupHtml(group, editableIds = new Set()) {
   const n = group.occurrences.length;
   const occurrencesHtml = group.occurrences
     .map(o => {
@@ -254,6 +274,7 @@ function renderCitationGroupHtml(group) {
         <div class="bib-occurrence-meta">${verdictHtml}<span class="bib-source">${escapeHtml(source)}</span><span class="bib-attrib">${escapeHtml(o.speaker)}, session <code>${escapeHtml(o.sessionId)}</code> (${escapeHtml(o.date || '')})</span></div>
         ${o.quote ? `<blockquote class="bib-quote">${escapeHtml(o.quote)}</blockquote>` : ''}
         ${noteLine ? `<p class="bib-note">${noteLine}</p>` : ''}
+        ${renderCitationNoteHtml(o, editableIds.has(o.sessionId))}
       </li>`;
     })
     .join('\n');
@@ -299,13 +320,51 @@ function renderLibraryAppendixHtml(libraryEntries) {
   return `<ul class="bib-library">${items}</ul>`;
 }
 
-function renderBibliographyPage(sessions, roster = [], libraryEntries = []) {
+// #580: the bibliography page's only client JS — turns each owner-visible
+// "Add note" button into a textarea that PATCHes the session's
+// citation-notes route. DOM built with textContent only (a note is user text).
+const EDITOR_SCRIPT = `
+document.addEventListener('click', function (ev) {
+  var btn = ev.target.closest('.bib-annot-btn');
+  if (!btn) return;
+  var box = btn.closest('.bib-annot');
+  var text = box.querySelector('.bib-annot-text');
+  var ta = document.createElement('textarea');
+  ta.className = 'bib-annot-input'; ta.maxLength = 2000; ta.rows = 3; ta.value = text.textContent;
+  ta.setAttribute('aria-label', 'Your note on this citation');
+  var save = document.createElement('button'); save.type = 'button'; save.textContent = 'Save';
+  var cancel = document.createElement('button'); cancel.type = 'button'; cancel.textContent = 'Cancel';
+  var status = document.createElement('span'); status.className = 'bib-annot-status';
+  var row = document.createElement('div'); row.className = 'bib-annot-row';
+  row.append(save, cancel, status);
+  btn.hidden = true; text.hidden = true; box.append(ta, row); ta.focus();
+  function close() { ta.remove(); row.remove(); btn.hidden = false; text.hidden = !text.textContent; }
+  cancel.onclick = close;
+  save.onclick = function () {
+    save.disabled = true; status.textContent = 'Saving…';
+    fetch('/api/sessions/' + encodeURIComponent(box.dataset.session) + '/citation-notes', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: box.dataset.key, note: ta.value })
+    }).then(function (r) {
+      if (r.status === 401) throw new Error('Sign-in lapsed — reload and sign in again.');
+      return r.json().then(function (d) { if (!r.ok) throw new Error(d.error || 'Could not save.'); return d; });
+    }).then(function (d) {
+      text.textContent = d.note; btn.textContent = d.note ? 'Edit note' : 'Add note'; close();
+    }).catch(function (e) { status.textContent = e.message; save.disabled = false; });
+  };
+});
+`;
+
+// opts.canEdit(session) → whether the viewer owns that session (and so sees
+// and edits their own citation notes, #580). Omitted → read-only, no notes.
+function renderBibliographyPage(sessions, roster = [], libraryEntries = [], opts = {}) {
+  const editableIds = new Set(opts.canEdit ? sessions.filter(opts.canEdit).map(s => s.id) : []);
   const withRecord = sessions.filter(s => (s.rounds || []).some(seg => Array.isArray(seg.beats)));
   const citationGroups = groupByWork(sessions, roster, citationsForSession);
   const invokedGroups = groupByWork(sessions, roster, flattenBeatInvokedWorks);
 
   const citedHtml = citationGroups.length
-    ? citationGroups.map(renderCitationGroupHtml).join('\n')
+    ? citationGroups.map(g => renderCitationGroupHtml(g, editableIds)).join('\n')
     : '<p class="bib-empty">No citations captured yet.</p>';
   const referencedHtml = invokedGroups.length
     ? invokedGroups.map(renderInvokedGroupHtml).join('\n')
@@ -373,6 +432,13 @@ function renderBibliographyPage(sessions, roster = [], libraryEntries = []) {
   .bib-source { color: var(--ash); font-style: italic; }
   .bib-quote { margin: 8px 0 4px; padding-left: 12px; border-left: 2px solid var(--amber-dim); font-style: italic; color: var(--cream); }
   .bib-note { margin: 4px 0 0; font-size: 14px; color: var(--muted); }
+  .bib-annot { margin-top: 6px; }
+  .bib-annot-text { margin: 0 0 4px; padding-left: 10px; border-left: 2px solid var(--amber); white-space: pre-wrap; font-size: 15px; }
+  .bib-annot-btn, .bib-annot-row button { font: inherit; font-size: 12px; background: none; border: 1px solid var(--border); color: var(--ash); padding: 1px 8px; cursor: pointer; border-radius: 2px; }
+  .bib-annot-btn:hover, .bib-annot-row button:hover { color: var(--amber); border-color: var(--amber-dim); }
+  .bib-annot-input { display: block; width: 100%; font: inherit; font-size: 15px; background: var(--panel); color: var(--cream); border: 1px solid var(--border); padding: 6px 8px; }
+  .bib-annot-row { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
+  .bib-annot-status { font-size: 12px; color: var(--ash); font-style: italic; }
   .bib-empty { color: var(--ash); font-style: italic; }
   .bib-library { list-style: none; margin: 0; padding: 0; }
   .bib-library li { padding: 8px 0; border-bottom: 1px solid var(--border); }
@@ -414,7 +480,7 @@ function renderBibliographyPage(sessions, roster = [], libraryEntries = []) {
     </section>
 
     <footer class="bib-footer">Compiled from every convened session of The Secret-Cabin-et.<br>An imaginative exercise, not a historical record.</footer>
-  </div>
+  </div>${editableIds.size ? `\n  <script>${EDITOR_SCRIPT}</script>` : ''}
 </body>
 </html>`;
 }

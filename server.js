@@ -647,8 +647,8 @@ registerSessionRoutes(app, {
   loadManifestSessions: citationManifest.loadSessions,
   buildCitationManifest: sessions => citationManifest.buildManifest(sessions, ROSTER),
   buildBibliography: sessions => bibliography.buildBibliography(sessions, ROSTER, loadBibliographyLibraryEntries()),
-  renderBibliographyPage: sessions =>
-    bibliography.renderBibliographyPage(sessions, ROSTER, loadBibliographyLibraryEntries()),
+  renderBibliographyPage: (sessions, opts) =>
+    bibliography.renderBibliographyPage(sessions, ROSTER, loadBibliographyLibraryEntries(), opts),
 });
 
 registerGroundingRoutes(app, {

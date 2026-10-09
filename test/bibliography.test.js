@@ -647,3 +647,33 @@ test('renderBibliographyPage', async t => {
     assert.match(out, /Generated from 1 session on disk, 0 with a turn-level record/);
   });
 });
+
+test('renderBibliographyPage: citation notes (#580)', async t => {
+  const session = {
+    id: 's1',
+    date: '1926-01-01',
+    citationNotes: { '0.0.0': { note: 'my <b>note</b>', updatedAt: 'x' } },
+    rounds: [{ beats: [{ memberId: 'crowley', citations: [{ work: 'Liber AL', quote: 'q', verdict: 'verified' }] }] }],
+  };
+
+  await t.test('shows an escaped note plus the editor to the session owner', () => {
+    const html = renderBibliographyPage([session], ROSTER, [], { canEdit: () => true });
+    assert.match(html, /my &lt;b&gt;note&lt;\/b&gt;/);
+    assert.match(html, /data-session="s1" data-key="0\.0\.0"/);
+    assert.match(html, /<script>/);
+  });
+
+  await t.test('shows no note, editor or script to anyone else', () => {
+    const html = renderBibliographyPage([session], ROSTER, [], { canEdit: () => false });
+    assert.doesNotMatch(html, /my &lt;b&gt;|bib-annot"|<script>/);
+    assert.doesNotMatch(renderBibliographyPage([session], ROSTER, []), /bib-annot"/);
+  });
+
+  await t.test('legacy citationFlags without a key borrow it by position', () => {
+    const flagged = {
+      ...session,
+      citationFlags: [{ work: 'Liber AL', quote: 'q', verdict: 'verified', source: 'library' }],
+    };
+    assert.match(renderBibliographyPage([flagged], ROSTER, [], { canEdit: () => true }), /data-key="0\.0\.0"/);
+  });
+});
