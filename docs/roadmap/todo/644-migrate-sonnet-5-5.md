@@ -1,0 +1,1 @@
+[#644](https://github.com/msdixon/secret-cabinet/issues/644) migrate the default model to claude-sonnet-5-5 — same price; replace `thinking: disabled` (6 sites) and forced `tool_choice` (4 sites) that 400 on 5.5, then voice sign-off and re-run the citation and length evals

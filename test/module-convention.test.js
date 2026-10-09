@@ -106,7 +106,11 @@ const MODULES = [
     ],
   },
   // #623: starters on the empty stage.
-  { file: 'starters.js', global: 'Starters', api: ['configure', 'render', 'conveneStarter', 'surprise'] },
+  {
+    file: 'starters.js',
+    global: 'Starters',
+    api: ['configure', 'render', 'conveneStarter', 'surprise', 'watchSitting', 'forkSitting'],
+  },
   { file: 'feedback.js', global: 'Feedback', api: ['open', 'close', 'send'] },
 ];
 

@@ -92,6 +92,75 @@ window.Starters = (function () {
     }
   }
 
+  // "Show me a sitting": replays a published past sitting on the stage
+  // (zero API cost — same Witness replay as Past Meetings' ◎ Watch), and
+  // offers the fork while it plays. The session is public by definition: the
+  // id in starters.json must name a published one, which /api/sessions/:id
+  // serves without sign-in.
+  let sittingId = null;
+  let sitting = null;
+  let forkWatcher = null;
+
+  function forkButton() {
+    return document.getElementById('sitting-fork-btn');
+  }
+
+  function hideFork() {
+    const btn = forkButton();
+    if (btn) btn.style.display = 'none';
+    if (forkWatcher) forkWatcher.disconnect();
+    forkWatcher = null;
+  }
+
+  async function watchSitting() {
+    if (busy || !sittingId) return;
+    try {
+      const res = await fetch(`/api/sessions/${encodeURIComponent(sittingId)}`);
+      if (!res.ok) throw new Error('not found');
+      sitting = await res.json();
+      await deps.watchSession(sittingId);
+      const btn = forkButton();
+      if (btn) btn.style.display = '';
+      // The fork only makes sense while the replay is on the stage; leaving it
+      // (Exit/Esc) collapses the stage, which is the signal to put it away.
+      const stage = document.getElementById('stage-record');
+      if (stage && !forkWatcher) {
+        forkWatcher = new MutationObserver(() => {
+          if (stage.classList.contains('collapsed')) hideFork();
+        });
+        forkWatcher.observe(stage, { attributes: true, attributeFilter: ['class'] });
+      }
+    } catch (_) {
+      deps.setStatus('That sitting could not be reached.', false);
+    }
+  }
+
+  // Seats the sitting's own room (capped, like starters), puts its source
+  // text in the editable paste box, and convenes live — a new meeting that
+  // starts from the same table but belongs to the visitor.
+  async function forkSitting() {
+    if (busy || !sitting) return;
+    const seated = seatableCast(sitting.members);
+    if (seated.length < 2 || !sitting.entry) {
+      deps.setStatus('That room could not be reassembled.', false);
+      return;
+    }
+    busy = true;
+    try {
+      deps.exitStage();
+      hideFork();
+      const { activeMembers } = deps.getCore();
+      activeMembers.clear();
+      seated.forEach(id => activeMembers.add(id));
+      deps.noteHandCast();
+      deps.renderMembers();
+      deps.setPastedEntry(sitting.entry);
+      await deps.convene();
+    } finally {
+      busy = false;
+    }
+  }
+
   function el(tag, className, text) {
     const node = document.createElement(tag);
     if (className) node.className = className;
@@ -137,14 +206,13 @@ window.Starters = (function () {
     surpriseBtn.type = 'button';
     surpriseBtn.addEventListener('click', surprise);
     actions.appendChild(surpriseBtn);
-    // A published past sitting, read in the public reading room — zero API
-    // cost. Only shown once starters.json names one.
+    // A published past sitting, replayed on the stage — zero API cost. Only shown once starters.json names one.
     if (typeof data.sitting === 'string' && data.sitting) {
-      const sitting = el('a', 'lodge-btn', 'Show me a sitting');
-      sitting.href = `/reading-room/${encodeURIComponent(data.sitting)}`;
-      sitting.target = '_blank';
-      sitting.rel = 'noopener';
-      actions.appendChild(sitting);
+      sittingId = data.sitting;
+      const sittingBtn = el('button', 'lodge-btn', 'Show me a sitting');
+      sittingBtn.type = 'button';
+      sittingBtn.addEventListener('click', watchSitting);
+      actions.appendChild(sittingBtn);
     }
     root.appendChild(actions);
 
@@ -153,5 +221,5 @@ window.Starters = (function () {
     root.appendChild(list);
   }
 
-  return { configure, render, conveneStarter, surprise };
+  return { configure, render, conveneStarter, surprise, watchSitting, forkSitting };
 })();

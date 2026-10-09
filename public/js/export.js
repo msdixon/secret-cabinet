@@ -273,6 +273,16 @@ window.Export = (function () {
     return !!deps.getCore().currentEntry;
   }
 
+  // #623: the "convene your own variation" fork — a past sitting's source
+  // text goes into the paste box (editable, so the variation can change the
+  // provocation) rather than being locked to a library id.
+  function setPastedEntry(text) {
+    const sel = document.getElementById('source-select');
+    sel.value = 'paste';
+    handleSourceChange();
+    document.getElementById('paste-area').value = text;
+  }
+
   function getEntry() {
     return document.getElementById('source-select').value === 'paste'
       ? document.getElementById('paste-area').value.trim()
@@ -772,6 +782,7 @@ window.Export = (function () {
     loadSourceOptions,
     handleSourceChange,
     selectLibraryEntry,
+    setPastedEntry,
     filterLibraryOptions,
     getEntry,
     handleFileSelect,
