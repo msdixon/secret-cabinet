@@ -18,6 +18,7 @@ const record = require('../../public/js/record.js');
 // out of a session — see citations.js's own header for the rest of the
 // module, which this route still uses for the deliberate grounding pass.
 const { flattenBeatCitations } = require('../citations');
+const citationNotes = require('../citation-notes');
 // #514: a deleted session's uploaded grounding material has nowhere left to
 // live — see grounding.js's header for why it's never persisted to disk in
 // the first place, so this is the one place it needs an explicit cleanup.
@@ -266,7 +267,7 @@ function registerSessionRoutes(
   app.get('/bibliography', (req, res) => {
     try {
       const sessions = filterReadable(loadManifestSessions(sessionsDir), req.user);
-      res.send(renderBibliographyPage(sessions));
+      res.send(renderBibliographyPage(sessions, { canEdit: session => canWrite(session, req.user) }));
     } catch (err) {
       res.status(500).send('Failed to build bibliography.');
     }
@@ -320,6 +321,28 @@ function registerSessionRoutes(
     session.annotations = annotations;
     saveSession(session);
     res.json({ count: annotations.length });
+  });
+
+  // PATCH /api/sessions/:id/citation-notes — #580 v1: set (or, with an empty
+  // note, clear) the owner's personal note on one citation. One citation per
+  // call, so two tabs editing different citations never overwrite each other
+  // the way the whole-array annotations route can. Owner-only via
+  // loadWritable's 404; the key must name a citation that actually exists.
+  app.patch('/api/sessions/:id/citation-notes', (req, res) => {
+    const { key, note } = req.body || {};
+    if (!citationNotes.isValidKey(key)) return res.status(400).json({ error: 'key must look like "0.3.1"' });
+    if (note != null && typeof note !== 'string') return res.status(400).json({ error: 'note must be a string' });
+    if ((note || '').length > citationNotes.MAX_NOTE_LENGTH)
+      return res.status(400).json({ error: `note must be ${citationNotes.MAX_NOTE_LENGTH} characters or fewer` });
+    const session = loadWritable(req, res);
+    if (!session) return;
+    if (!flattenBeatCitations(session, roster).some(c => c.citationKey === key))
+      return res.status(400).json({ error: 'No such citation in this session' });
+    const next = citationNotes.applyNote(session.citationNotes, key, note);
+    if (next) session.citationNotes = next;
+    else delete session.citationNotes;
+    saveSession(session);
+    res.json({ key, note: next?.[key]?.note || '' });
   });
 
   // POST /api/sessions/:id/verify-citations — ground & judge the citations
@@ -418,7 +441,8 @@ function registerSessionRoutes(
     // caller, matching /reading-room/:id's existing convention — an
     // unpublished session's existence isn't revealed either.
     if (!canView(session, req.user)) return res.status(404).json({ error: 'Session not found' });
-    res.json(session);
+    // #580: citation notes are the owner's marginalia, never a reader's.
+    res.json(canWrite(session, req.user) ? session : citationNotes.withoutCitationNotes(session));
   });
 
   // POST /api/sessions/:id/close — the user chose "Let it end" at a lull (#245)

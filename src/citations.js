@@ -337,12 +337,25 @@ function computeBeatSpeakerIndex(session) {
 function flattenBeatCitations(session, roster = []) {
   const flat = [];
   const beatIndex = computeBeatSpeakerIndex(session);
-  (session.rounds || []).forEach(segment => {
-    (segment.beats || []).forEach(beat => {
+  (session.rounds || []).forEach((segment, segIdx) => {
+    (segment.beats || []).forEach((beat, beatIdx) => {
       if (beat.failed || !Array.isArray(beat.citations) || !beat.citations.length) return;
       const speaker = roster.find(m => m.id === beat.memberId)?.name || beat.speakerName || beat.memberId;
       const speakerEntryIndex = beatIndex.get(beat);
-      beat.citations.forEach(c => flat.push({ ...c, speaker, memberId: beat.memberId, speakerEntryIndex }));
+      beat.citations.forEach((c, citIdx) =>
+        flat.push({
+          ...c,
+          speaker,
+          memberId: beat.memberId,
+          speakerEntryIndex,
+          // #580: a citation has no id of its own, so a researcher's note
+          // anchors to its position in the raw capture. Beats and
+          // beat.citations are append-only after write time and Verify
+          // Citations never rewrites them (it only rebuilds citationFlags
+          // from this same flatten), so the position outlives re-verification.
+          citationKey: `${segIdx}.${beatIdx}.${citIdx}`,
+        })
+      );
     });
   });
   return flat;

@@ -385,6 +385,67 @@ test('PATCH /api/sessions/:id/annotations', async t => {
   });
 });
 
+test('PATCH /api/sessions/:id/citation-notes (#580)', async t => {
+  const withCitation = (id, extra = {}) =>
+    baseSession(id, {
+      ownerId: 'u1',
+      published: true,
+      rounds: [
+        { label: 'M', text: 'x', beats: [{ memberId: 'crowley', citations: [{ work: 'Liber AL', quote: 'q' }] }] },
+      ],
+      ...extra,
+    });
+  const setup = (tt, session) => {
+    const dir = makeFixtureDir();
+    tt.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+    store.saveSession(dir, session);
+    const app = fakeApp();
+    registerSessionRoutes(app, makeDeps(dir));
+    return { dir, app };
+  };
+  const patch = (app, user, body) => {
+    const res = fakeRes();
+    app.routes['PATCH /api/sessions/:id/citation-notes'](fakeReq({ params: { id: 's1' }, body, user }), res);
+    return res;
+  };
+  const owner = { id: 'u1' };
+
+  await t.test('owner saves a note on an existing citation, and an empty note clears it', () => {
+    const { dir, app } = setup(t, withCitation('s1'));
+    const res = patch(app, owner, { key: '0.0.0', note: '  check the 1938 edition  ' });
+    assert.deepEqual(res.body, { key: '0.0.0', note: 'check the 1938 edition' });
+    assert.equal(store.loadSession(dir, 's1').citationNotes['0.0.0'].note, 'check the 1938 edition');
+    patch(app, owner, { key: '0.0.0', note: '' });
+    assert.equal('citationNotes' in store.loadSession(dir, 's1'), false);
+  });
+
+  await t.test('404s for a non-owner even on a published session', () => {
+    const { app } = setup(t, withCitation('s1'));
+    assert.equal(patch(app, { id: 'u2' }, { key: '0.0.0', note: 'x' }).statusCode, 404);
+  });
+
+  await t.test('400s on a malformed key, a missing citation, or an over-long note', () => {
+    const { app } = setup(t, withCitation('s1'));
+    assert.equal(patch(app, owner, { key: 'abc', note: 'x' }).statusCode, 400);
+    assert.equal(patch(app, owner, { key: '0.0.5', note: 'x' }).statusCode, 400);
+    assert.equal(patch(app, owner, { key: '0.0.0', note: 'x'.repeat(2001) }).statusCode, 400);
+  });
+
+  await t.test('GET /api/sessions/:id strips notes for a reader but not the owner', () => {
+    const { app } = setup(
+      t,
+      withCitation('s1', { citationNotes: { '0.0.0': { note: 'private', updatedAt: 'then' } } })
+    );
+    const get = user => {
+      const res = fakeRes();
+      app.routes['GET /api/sessions/:id'](fakeReq({ params: { id: 's1' }, user }), res);
+      return res.body;
+    };
+    assert.ok(get(owner).citationNotes);
+    assert.equal('citationNotes' in get({ id: 'u2' }), false);
+  });
+});
+
 test('PATCH /api/sessions/:id/tags', async t => {
   await t.test('trims and drops empty tags', () => {
     const dir = makeFixtureDir();
