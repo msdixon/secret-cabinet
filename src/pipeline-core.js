@@ -152,8 +152,16 @@ async function withOneRetry(fn) {
   }
 }
 
+// #644: claude-sonnet-5-5 rejects forced tool_choice ({type:'tool'}) with a
+// 400, so tool-only calls use `auto` and this suffix tells the model to answer
+// by calling the tool (no prose). Callers still tolerate a missing tool_use block.
+function toolCallInstruction(toolName) {
+  return `\n\nRespond only by calling the \`${toolName}\` tool. Do not reply with plain text.`;
+}
+
 module.exports = {
   makeMetric,
+  toolCallInstruction,
   buildCachedSystem,
   withHistoryCacheControl,
   withOneRetry,

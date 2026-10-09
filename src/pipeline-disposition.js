@@ -27,6 +27,7 @@
 // pipeline-speaker.js's pickNextSpeaker for the consumer.
 
 const { RESIDUE_NOTE_MAX_CHARS } = require('./pipeline-speaker');
+const { toolCallInstruction } = require('./pipeline-core');
 const {
   MAX_CITATIONS_PER_BEAT,
   CITATION_QUOTE_MAX_CHARS,
@@ -274,11 +275,12 @@ async function callDispositionUpdate({ client, model, system, userMessage, prese
     // #406: disabled explicitly, same reasoning as callDirector — this call's
     // tool-only output has no use for adaptive thinking, and disabling it
     // removes any risk of the reasoning budget eating into max_tokens.
-    thinking: { type: 'disabled' },
+    thinking: { type: 'between_tools' },
     system,
-    messages: [{ role: 'user', content: userMessage }],
+    messages: [{ role: 'user', content: userMessage + toolCallInstruction(tool.name) }],
     tools: [tool],
-    tool_choice: { type: 'tool', name: tool.name },
+    // #644: forced tool_choice 400s on claude-sonnet-5-5; auto + instruction.
+    tool_choice: { type: 'auto' },
   });
   const latencyMs = Date.now() - start;
   const block = response.content.find(b => b.type === 'tool_use');

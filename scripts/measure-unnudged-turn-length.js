@@ -10,7 +10,7 @@
 // changes and models.
 //
 // Calls the live API (credit-metered) — run manually, never from tests:
-//   ANTHROPIC_API_KEY=... [MODEL=claude-sonnet-5] [TRIALS=3] \
+//   ANTHROPIC_API_KEY=... [MODEL=claude-sonnet-5-5] [TRIALS=3] \
 //     node scripts/measure-unnudged-turn-length.js
 //
 // Absolute numbers from this harness are not comparable to phase 1's 88w
@@ -85,7 +85,7 @@ async function run({ model, trials }) {
 }
 
 if (require.main === module) {
-  const model = process.env.MODEL || 'claude-sonnet-5';
+  const model = process.env.MODEL || 'claude-sonnet-5-5';
   const trials = Number(process.env.TRIALS) || 3;
   run({ model, trials })
     .then(results => {

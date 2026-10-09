@@ -485,7 +485,7 @@ test('POST /api/members', async t => {
     );
     const res = fakeRes();
     await app.routes['POST /api/members'](fakeReq({ body: { name: 'Thoughtful Member', bio: 'bio' } }), res);
-    assert.deepEqual(capturedParams.thinking, { type: 'disabled' });
+    assert.deepEqual(capturedParams.thinking, { type: 'between_tools' });
     fs.rmSync(dir, { recursive: true, force: true });
   });
 

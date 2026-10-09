@@ -99,7 +99,7 @@ test('groundAgainstLibraryText', async t => {
     const citationsList = [{ libraryMatch: 'e1', work: 'Some Work', quote: 'a quote' }];
     const lookup = { e1: { title: 'T', source: 'S', text: 'The excerpt text.' } };
     await c.groundAgainstLibraryText(fakeClient, 'test-model', citationsList, lookup);
-    assert.deepEqual(capturedParams.thinking, { type: 'disabled' });
+    assert.deepEqual(capturedParams.thinking, { type: 'between_tools' });
   });
 
   // #225 — generationMetrics didn't cover this call at all; onMetric is how
