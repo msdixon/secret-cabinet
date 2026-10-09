@@ -177,7 +177,7 @@ if (require.main === module) {
 
     const Anthropic = require('@anthropic-ai/sdk');
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-    const model = process.env.MODEL || 'claude-sonnet-5';
+    const model = process.env.MODEL || 'claude-sonnet-5-5';
 
     const goldenSet = loadGoldenSet();
     const libraryLookup = loadLibraryCitationLookup(LIBRARY_DIR, LIBRARY_FILE);

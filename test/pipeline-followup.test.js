@@ -103,7 +103,7 @@ test('runFollowUp', async t => {
       /no text/
     );
     assert.equal(calls.length, 2, 'retried once');
-    assert.deepEqual(calls[0].thinking, { type: 'disabled' });
+    assert.deepEqual(calls[0].thinking, { type: 'between_tools' });
     assert.equal(metrics[0].skipped, true);
   });
 });

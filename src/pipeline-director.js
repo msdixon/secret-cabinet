@@ -2,7 +2,7 @@
 
 // #284 seam-map, module 2 of 6 — director selection.
 
-const { makeMetric, buildCachedSystem, withHistoryCacheControl } = require('./pipeline-core');
+const { makeMetric, buildCachedSystem, withHistoryCacheControl, toolCallInstruction } = require('./pipeline-core');
 
 // #164: the director no longer casts an exact, ordered roster for the whole
 // round. It proposes a candidate POOL — between minCount and maxCount present
@@ -185,18 +185,23 @@ async function callDirector({
 }) {
   const schema = tool || buildDirectorToolSchema(presentIds, minCount, maxCount);
   const start = Date.now();
-  const messages = [...withHistoryCacheControl(conversationHistory), { role: 'user', content: userMessage }];
+  const messages = [
+    ...withHistoryCacheControl(conversationHistory),
+    { role: 'user', content: userMessage + toolCallInstruction(schema.name) },
+  ];
   const response = await client.messages.create({
     model,
     max_tokens: 500,
-    // #406: adaptive thinking (on by default for claude-sonnet-5 when
+    // #406: adaptive thinking (on by default when
     // `thinking` is omitted) needs headroom this call's 500-token budget
-    // doesn't have to spare.
-    thinking: { type: 'disabled' },
+    // doesn't have to spare. `between_tools` (not `disabled`, a 400 on
+    // claude-sonnet-5-5) is the thinking-off form; forced tool_choice is also
+    // a 400 there, so `auto` + toolCallInstruction() in the user message (#644).
+    thinking: { type: 'between_tools' },
     system: buildCachedSystem(system, lodgeContext),
     messages,
     tools: [schema],
-    tool_choice: { type: 'tool', name: schema.name },
+    tool_choice: { type: 'auto' },
   });
   const latencyMs = Date.now() - start;
   const block = response.content.find(b => b.type === 'tool_use');

@@ -68,7 +68,7 @@ const { createSpendLedger, createBudgetAlert } = require('./src/spend');
 
 // ─── Environment flags ────────────────────────────────────────────────────────
 const IS_LOCAL = process.env.LOCAL === 'true' || process.env.NODE_ENV !== 'production';
-const MODEL = process.env.MODEL || 'claude-sonnet-5';
+const MODEL = process.env.MODEL || 'claude-sonnet-5-5';
 // #29 (ElevenLabs pass) — unset by default, which is what keeps the feature
 // entirely off (routes/voice.js's /api/voice/config reports `available:
 // false` and voice.js falls back to the Web Speech API, same as before this

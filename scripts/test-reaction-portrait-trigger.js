@@ -23,7 +23,7 @@ const {
 
 const ROOT = path.join(__dirname, '..');
 const ROSTER = JSON.parse(fs.readFileSync(path.join(ROOT, 'prompts/members/roster.json'), 'utf8'));
-const MODEL = process.env.MODEL || 'claude-sonnet-5';
+const MODEL = process.env.MODEL || 'claude-sonnet-5-5';
 const CANDIDATES_DIR = path.join(ROOT, 'public', 'portraits', 'candidates');
 const PORTRAITS_DIR = path.join(ROOT, 'public', 'portraits');
 

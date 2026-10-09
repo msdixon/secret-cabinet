@@ -1,6 +1,7 @@
 'use strict';
 
 const { makeMetric } = require('./pipeline');
+const { toolCallInstruction } = require('./pipeline-core');
 
 // #193 seam-map, module 5 of 8 — citation verification (#153).
 //
@@ -53,9 +54,9 @@ For each numbered item, judge whether its "Transcript quote" is genuinely consis
     // tool-only output has no use for adaptive thinking, and disabling it
     // removes any risk of the reasoning budget eating into max_tokens.
     // Flagged as a likely sibling gap in #436, not itself reproduced live.
-    thinking: { type: 'disabled' },
+    thinking: { type: 'between_tools' },
     system,
-    messages: [{ role: 'user', content: itemsText }],
+    messages: [{ role: 'user', content: itemsText + toolCallInstruction('report_grounded_verdicts') }],
     tools: [
       {
         name: 'report_grounded_verdicts',
@@ -80,7 +81,8 @@ For each numbered item, judge whether its "Transcript quote" is genuinely consis
         },
       },
     ],
-    tool_choice: { type: 'tool', name: 'report_grounded_verdicts' },
+    // #644: forced tool_choice 400s on claude-sonnet-5-5; auto + instruction.
+    tool_choice: { type: 'auto' },
   });
   const latencyMs = Date.now() - start;
   onMetric?.(makeMetric('citation-grounding', { usage: response.usage, latencyMs }));

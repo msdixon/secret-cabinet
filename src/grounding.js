@@ -39,6 +39,7 @@ const {
   MAX_GROUNDING_RESULTS_PER_VERIFY_CALL,
 } = require('./tuning');
 const { makeMetric } = require('./pipeline');
+const { toolCallInstruction } = require('./pipeline-core');
 
 const store = new Map();
 
@@ -310,9 +311,9 @@ For each numbered item, judge whether its "Transcript quote" is addressed by its
   const response = await client.messages.create({
     model,
     max_tokens: 2000,
-    thinking: { type: 'disabled' },
+    thinking: { type: 'between_tools' },
     system,
-    messages: [{ role: 'user', content: itemsText }],
+    messages: [{ role: 'user', content: itemsText + toolCallInstruction('report_grounding_verdicts') }],
     tools: [
       {
         name: 'report_grounding_verdicts',
@@ -337,7 +338,8 @@ For each numbered item, judge whether its "Transcript quote" is addressed by its
         },
       },
     ],
-    tool_choice: { type: 'tool', name: 'report_grounding_verdicts' },
+    // #644: forced tool_choice 400s on claude-sonnet-5-5; auto + instruction.
+    tool_choice: { type: 'auto' },
   });
   const latencyMs = Date.now() - start;
   onMetric?.(makeMetric('grounding-verify', { usage: response.usage, latencyMs }));

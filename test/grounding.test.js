@@ -230,7 +230,9 @@ test('verifyClaimsAgainstGrounding', async t => {
       citations: citationsList,
     });
 
-    assert.equal(capturedParams.thinking.type, 'disabled');
+    assert.equal(capturedParams.thinking.type, 'between_tools');
+    assert.deepEqual(capturedParams.tool_choice, { type: 'auto' });
+    assert.match(capturedParams.messages[0].content, /calling the .report_grounding_verdicts. tool/);
     assert.equal(result.get(0).verdict, 'verified');
     assert.equal(result.get(0).source, 'user-grounding');
     assert.equal(result.has(1), false);

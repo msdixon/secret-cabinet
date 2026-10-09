@@ -140,7 +140,7 @@ ${relationships || '(not specified — infer from historical record)'}`;
         // reproduction with a short paraphrased prompt produced a full text
         // response using under 10% of the budget, so there's no evidence
         // this drafting task's quality depends on adaptive reasoning.
-        thinking: { type: 'disabled' },
+        thinking: { type: 'between_tools' },
         system: systemPrompt,
         messages: [{ role: 'user', content: userMessage }],
       });
@@ -323,7 +323,7 @@ ${bio}`;
     // too, and its empty result short-circuits the `portraitPromptText`
     // check downstream, silently skipping both baseline and reaction image
     // generation with no error logged.
-    thinking: { type: 'disabled' },
+    thinking: { type: 'between_tools' },
     system: systemPrompt,
     messages: [{ role: 'user', content: userMessage }],
   });
