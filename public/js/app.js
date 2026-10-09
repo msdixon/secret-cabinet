@@ -2321,6 +2321,9 @@ function startersDeps() {
     setStatus,
     noteHandCast: () => window.Casting.noteHandCast(),
     selectLibraryEntry: id => window.Export.selectLibraryEntry(id),
+    setPastedEntry: text => window.Export.setPastedEntry(text),
+    watchSession: id => startWitnessFromSession(id),
+    exitStage: () => window.Witness.exitClicked(),
     convene,
   };
 }

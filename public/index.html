@@ -113,6 +113,9 @@
                spoken yet. -->
           <button class="witness-recap-btn" id="witness-recap-back-btn" onclick="window.Witness.recapBack()" title="Previous turn — click to step back one turn at a time">⏮ Prev turn</button>
           <button class="witness-recap-btn" id="witness-recap-fwd-btn" onclick="window.Witness.recapForward()" title="Next turn — click to step forward one turn at a time, back toward live">Next turn ⏭</button>
+          <!-- #623: shown only while a starters "Show me a sitting" replay is on
+               the stage (public/js/starters.js). -->
+          <button class="witness-exit-btn" id="sitting-fork-btn" onclick="window.Starters.forkSitting()" style="display:none;" title="Seat this room and convene it live on the same document">✦ Convene your own variation</button>
           <button class="witness-exit-btn" id="witness-exit-btn" onclick="window.Witness.exitClicked()" style="display:none;">✕ Exit</button>
         </div>
         <div class="witness-stage" id="witness-stage" onclick="window.Witness.advance()"></div>
