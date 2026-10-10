@@ -1,0 +1,1 @@
+Guest feedback loop second cut: guests get an "✎ Note to the keeper" button in the after-passage panel (the note carries `passage:<sessionId>`), and sign-in/convene/abort error wording now says what happened and what to do instead of "the fire may be low". [#625](https://github.com/msdixon/secret-cabinet/issues/625) stays open for any further wording found in guest sittings.

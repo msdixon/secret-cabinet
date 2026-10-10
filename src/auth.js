@@ -105,8 +105,8 @@ ${inner}
 
 const LOGIN_ERRORS = {
   rate: 'Too many attempts. Try again later.',
-  passphrase: 'Incorrect passphrase.',
-  code: 'That code is wrong or has expired.',
+  passphrase: 'Incorrect passphrase. Check it and try again.',
+  code: 'That code is wrong or has expired. Use the link below to ask for a new one.',
   email: 'Enter a valid email address.',
 };
 

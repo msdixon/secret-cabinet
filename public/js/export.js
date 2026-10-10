@@ -741,7 +741,7 @@ window.Export = (function () {
         document.querySelector('.sign-out-link')?.style.removeProperty('display');
         if (!config.isAdmin) {
           // #625: guests (not the admin, who is the recipient) get the note link.
-          document.querySelector('.footer-note-btn')?.style.removeProperty('display');
+          document.querySelectorAll('.footer-note-btn').forEach(el => el.style.removeProperty('display'));
           window.__canShareWithKeeper = true;
         }
       }
