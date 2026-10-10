@@ -7,10 +7,6 @@ window.Feedback = (function () {
 
   function open(from) {
     page = from || '';
-    // A note from the end of a passage carries the sitting it is about.
-    if (from === 'passage' && typeof currentSessionId !== 'undefined' && currentSessionId) {
-      page = 'passage:' + currentSessionId;
-    }
     $('keeper-note-status').textContent = '';
     $('keeper-note-send').disabled = false;
     $('keeper-note-overlay').style.display = 'flex';
