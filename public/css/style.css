@@ -339,6 +339,9 @@ a.lodge-btn { display:inline-block; text-decoration:none; }
 
 .starters { padding:20px 16px; border-bottom:1px solid var(--lodge-border); text-align:center; }
 .stage-record.stage-only .starters, .stage-record.collapsed .starters { display:none; }
+.starters:empty { display:none; }
+.scenarios { border-top:0; }
+.scenario-text { font-size:13px; line-height:1.45; color:var(--lodge-ash); font-style:italic; }
 .starters-heading { font-family:'Cinzel',serif; font-size:11px; letter-spacing:0.18em; text-transform:uppercase; color:var(--lodge-amber-dim); margin-bottom:12px; }
 .starters-actions { display:flex; gap:8px; justify-content:center; margin-bottom:14px; }
 .starters-list { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:10px; text-align:left; }

@@ -1069,6 +1069,7 @@ async function convene() {
           playerName,
           playerTurn: playerTurn1 || undefined,
           castMetrics: window.Casting.consumeMetrics(),
+          occasion: window.Scenarios.occasion(),
         },
         chunk => s1.append(chunk),
         s1.onSpeaking,
@@ -2329,6 +2330,21 @@ function startersDeps() {
 }
 window.Starters.configure(startersDeps());
 
+// window.Scenarios (#626) — situations the room is placed in, not texts it reads.
+function scenariosDeps() {
+  return {
+    getCore: () => ({ activeMembers, MEMBERS }),
+    renderMembers,
+    setStatus,
+    noteHandCast: () => window.Casting.noteHandCast(),
+    setPastedEntry: text => window.Export.setPastedEntry(text),
+    getEntry: () => window.Export.getEntry(),
+    handlePlayAsModeChange,
+    convene,
+  };
+}
+window.Scenarios.configure(scenariosDeps());
+
 // window.Metrics (#191) reads currentSessionId only for the after-panel's
 // footer button (no-arg toggle()) — the Past Meetings list passes its own
 // session id explicitly and never touches this.
@@ -2373,6 +2389,7 @@ fetchMembers().then(() => {
   window.Casting.seatRegulars();
   renderMembers();
   window.Starters.render();
+  window.Scenarios.render();
 });
 window.Export.updateExportJournalLabel();
 handlePlayAsModeChange();
