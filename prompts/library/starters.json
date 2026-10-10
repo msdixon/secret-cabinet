@@ -61,5 +61,37 @@
       "hook": "What does it take to collaborate for five years with someone you cannot control?",
       "cast": ["frieda-harris", "crowley", "pixie"]
     }
+  ],
+  "scenarios": [
+    {
+      "id": "the-expulsion",
+      "label": "The vote",
+      "text": "The Order meets tonight to vote on whether to expel a member who has published its rituals. He is in the next room, waiting to be called. The vote is yours to cast.",
+      "cast": ["crowley", "waite", "yeats"],
+      "setup": "you"
+    },
+    {
+      "id": "the-stranger-at-the-door",
+      "label": "A knock at midnight",
+      "text": "Someone has come to the door in the middle of the night asking to be taught. They will not say who sent them, and they are visibly frightened. What do you do?",
+      "cast": ["teresa", "arabi", "blavatsky"],
+      "setup": "artifact",
+      "artifact": {
+        "memberId": "teresa",
+        "text": "A folded note, pushed under the door before the knocking began: \"I was told you would not turn me away.\" No signature."
+      }
+    },
+    {
+      "id": "the-treasurer",
+      "label": "The treasurer",
+      "text": "A small esoteric society discovers that its treasurer has been quietly selling members' confession letters to a newspaper. The members are divided. Some want him prosecuted; others want the matter kept inside the society.",
+      "cast": ["crowley", "teresa", "sun-ra"]
+    },
+    {
+      "id": "ten-years",
+      "label": "Ten years in",
+      "text": "A student has practised for ten years and has made little progress. Should the teacher tell them the truth, even if it discourages them?",
+      "cast": ["gurdjieff", "blavatsky", "adorno"]
+    }
   ]
 }

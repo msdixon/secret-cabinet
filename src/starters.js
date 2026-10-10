@@ -37,7 +37,23 @@ function resolveStarters(file, libraryIndex) {
       };
     })
     .filter(Boolean);
-  return { starters, sitting: file.sitting || null };
+  return { starters, scenarios: resolveScenarios(file), sitting: file.sitting || null };
+}
+
+// #626 — scenarios are situations, not texts: no library entry, no join. They
+// only need to be well-formed enough to render; test/starters.test.js checks
+// the casts and artifact targets against the real roster.
+function resolveScenarios(file) {
+  return (file.scenarios || [])
+    .filter(s => s && s.id && s.label && s.text && Array.isArray(s.cast))
+    .map(s => ({
+      id: s.id,
+      label: s.label,
+      text: s.text,
+      cast: s.cast,
+      setup: s.setup === 'you' || s.setup === 'artifact' ? s.setup : null,
+      artifact: s.setup === 'artifact' && s.artifact ? s.artifact : null,
+    }));
 }
 
 module.exports = { loadStartersFile, resolveStarters, MAX_CAST, MIN_CAST };

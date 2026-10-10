@@ -165,6 +165,8 @@
            display:none until a meeting exists; .stage-only (live convene) and
            .collapsed (restored session) both hide them via style.css. -->
       <div class="starters" id="starters"></div>
+      <!-- #626: scenario starters (public/js/scenarios.js fills this); same hiding rules as .starters. -->
+      <div class="starters scenarios" id="scenarios"></div>
       <button class="stage-collapsed-bar" id="stage-collapsed-bar" onclick="window.Witness.reopenStage()">▲ The Stage</button>
 
       <div class="transcript-panel record-pane" id="transcript-panel">
@@ -640,6 +642,7 @@
 <script src="js/sessions.js"></script>
 <script src="js/casting.js"></script>
 <script src="js/starters.js"></script>
+<script src="js/scenarios.js"></script>
 <script src="js/metrics.js"></script>
 <script src="js/feedback.js"></script>
 <script src="js/app.js"></script>

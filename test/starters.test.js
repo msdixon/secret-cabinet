@@ -66,3 +66,75 @@ test('resolveStarters', async t => {
     assert.equal(out.sitting, null);
   });
 });
+
+test('scenarios in starters.json (#626)', async t => {
+  const scenarios = file.scenarios || [];
+
+  await t.test('are present, with unique ids, labels and text', () => {
+    assert.ok(scenarios.length >= 1);
+    assert.equal(new Set(scenarios.map(s => s.id)).size, scenarios.length);
+    for (const s of scenarios) assert.ok(s.label && s.text, `${s.id} needs a label and text`);
+  });
+
+  await t.test('every cast is 2-3 distinct, real roster members', () => {
+    for (const s of scenarios) {
+      assert.ok(s.cast.length >= MIN_CAST && s.cast.length <= MAX_CAST, `${s.id} cast size ${s.cast.length}`);
+      assert.equal(new Set(s.cast).size, s.cast.length, `${s.id} repeats a member`);
+      assert.deepEqual(
+        s.cast.filter(id => !rosterIds.has(id)),
+        [],
+        `${s.id} casts unknown members`
+      );
+    }
+  });
+
+  await t.test('an artifact scenario names text and a member who is in its cast', () => {
+    for (const s of scenarios.filter(x => x.setup === 'artifact')) {
+      assert.ok(s.artifact && s.artifact.text, `${s.id} has no artifact text`);
+      assert.ok(s.cast.includes(s.artifact.memberId), `${s.id} shows its artifact to someone not seated`);
+    }
+  });
+
+  await t.test('setup is absent, "you" or "artifact"', () => {
+    for (const s of scenarios) assert.ok([undefined, 'you', 'artifact'].includes(s.setup), `${s.id}: ${s.setup}`);
+  });
+
+  await t.test('at least one scenario opens each way into the room (You, artifact)', () => {
+    assert.ok(scenarios.some(s => s.setup === 'you'));
+    assert.ok(scenarios.some(s => s.setup === 'artifact'));
+  });
+});
+
+test('resolveScenarios via resolveStarters (#626)', async t => {
+  await t.test('passes scenarios through, normalising setup and dropping malformed ones', () => {
+    const out = resolveStarters(
+      {
+        scenarios: [
+          { id: 'a', label: 'A', text: 't', cast: ['x', 'y'], setup: 'bogus' },
+          {
+            id: 'b',
+            label: 'B',
+            text: 't',
+            cast: ['x', 'y'],
+            setup: 'artifact',
+            artifact: { memberId: 'x', text: 'n' },
+          },
+          { id: 'c', text: 'no label', cast: ['x', 'y'] },
+        ],
+      },
+      library
+    );
+    assert.deepEqual(
+      out.scenarios.map(s => [s.id, s.setup]),
+      [
+        ['a', null],
+        ['b', 'artifact'],
+      ]
+    );
+    assert.equal(out.scenarios[1].artifact.memberId, 'x');
+  });
+
+  await t.test('a file with no scenarios yields an empty list', () => {
+    assert.deepEqual(resolveStarters({ starters: [] }, library).scenarios, []);
+  });
+});
