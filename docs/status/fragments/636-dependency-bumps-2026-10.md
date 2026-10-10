@@ -1,0 +1,1 @@
+Routine in-range dependency refresh: @modelcontextprotocol/sdk 1.32.0→1.32.1, eslint 10.11.0→10.12.0, globals 17.12.0→17.13.0, jsdom 30.1.1→30.1.2 (lockfile only; transitive deps also re-deduped). Tests, lint, and format:check pass. [#636](https://github.com/msdixon/secret-cabinet/issues/636)
