@@ -259,6 +259,9 @@
           </div>
         </div>
 
+        <!-- #625: end-of-passage note to the keeper; guests only (export.js
+             reveals .footer-note-btn). Lives here, not in app.js (#632). -->
+        <button class="lodge-btn footer-note-btn" style="display:none;border-color:var(--lodge-ash);color:var(--lodge-ash);" onclick="window.Feedback.open('passage:' + (currentSessionId || ''))" title="Tell the keeper how this passage landed">✎ Note to the keeper</button>
         <button class="lodge-btn" style="border-color:var(--lodge-ash);color:var(--lodge-ash);" onclick="startWitness()" title="Replay this meeting again from the start, paced by reading time">◎ Watch Again</button>
         <button class="lodge-btn" style="border-color:var(--lodge-ash);color:var(--lodge-ash);" onclick="window.Metrics.toggle()" title="Tokens, cost, and the director's casting rationale for this session">⚙ Metrics</button>
 

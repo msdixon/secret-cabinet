@@ -1090,7 +1090,7 @@ async function convene() {
       const msg =
         err.message && !err.message.startsWith('Server error')
           ? err.message
-          : 'The room could not begin. The fire may be low.';
+          : 'The room could not begin just now. Try again; if it keeps happening, leave the keeper a note.';
       setError(msg, convene);
       return;
     }
@@ -1169,7 +1169,9 @@ async function runPassage(lullNote) {
     s.abort();
     transcriptText = txtBefore;
     showSessionControls();
-    setError('The room could not go on.', () => resumeMeeting(lullNote));
+    setError('The room could not go on just now. Try again to pick up where it stopped.', () =>
+      resumeMeeting(lullNote)
+    );
     return null;
   }
 }
@@ -1557,7 +1559,7 @@ async function stirRoom() {
   } catch (err) {
     s.abort();
     transcriptText = txtBefore;
-    setError('The room could not be stirred.', stirRoom);
+    setError('The room could not be stirred just now. Try again in a moment.', stirRoom);
   } finally {
     btn.disabled = false;
   }
@@ -1684,7 +1686,7 @@ async function sendFollowUp({ text, addressedTo }) {
     // Nothing was saved server-side, so don't leave the unanswered question
     // in the record view; the retry re-renders it.
     while (content.children.length > nodesBefore) content.lastChild.remove();
-    setError('The question went unheard.', () => sendFollowUp(lastFollowUp));
+    setError('The question went unheard just now. Try again in a moment.', () => sendFollowUp(lastFollowUp));
   } finally {
     sendBtn.disabled = false;
     updateFollowUpCounter();
