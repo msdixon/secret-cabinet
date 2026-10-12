@@ -86,6 +86,8 @@ This is written-principles-only, for now. It does not yet include the code-level
 
 **Portfolio modifier (same shape as Principle 1's):** a codebase shown as a portfolio artifact needs to hold up to a technical reviewer, not just run correctly — raises the bar on this principle exactly when purpose #2 is in play, same as Principle 1.
 
+**Front-end module discipline ([#632](https://github.com/msdixon/secret-cabinet/issues/632)):** new first-run, guest, or onboarding UI ships as its own `public/js/<name>.js` module (`window.X` IIFE; `configure(deps)` if it needs anything from `app.js`'s core state — see `starters.js`, `feedback.js`) rather than as additions to `app.js`. When a PR touches a cohesive region of `app.js`, extract it in a move-only commit first, as #142/#272 did. Baseline at 2026-10-12: `app.js` 2,410 lines, `witness.js` 1,744; re-measure at each `/cabinet-review` and escalate to a dedicated refactor only if `app.js` keeps growing despite this.
+
 ---
 
 ## Principle 6 — Diegetic Over Control-Panel
