@@ -647,11 +647,16 @@ async function saveAnnotation(textarea) {
       note: e.querySelector('.annotation-input')?.value.trim() || '',
     }))
     .filter(a => a.note);
-  await fetch(`/api/sessions/${currentSessionId}/annotations`, {
+  const saved = await fetch(`/api/sessions/${currentSessionId}/annotations`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ annotations: all }),
-  }).catch(() => {});
+  })
+    .then(r => r.ok)
+    .catch(() => false);
+  if (!saved) {
+    setStatus("Your margin note didn't reach the archive. It's still on the page; try again in a moment.", false);
+  }
   window.Export.updateScholarlyExportButton();
 }
 
@@ -1858,7 +1863,7 @@ async function startWitnessFromSession(id) {
     window.Sessions.closeSessionsDrawer();
     await window.Witness.start(session, witnessDeps());
   } catch (e) {
-    alert('Could not load session for playback.');
+    setStatus("That sitting couldn't be opened for playback. Try again in a moment.", false);
   }
 }
 
