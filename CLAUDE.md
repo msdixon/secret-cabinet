@@ -12,6 +12,10 @@ Standing instructions for any Claude Code session working in this repo. See [PRO
 
 **Keep the entry itself to 1–3 sentences plus the PR/issue link.** The PR body is where the reasoning, alternatives, and verification steps belong — it's attached to the diff permanently, so restating it in STATUS.md is pure duplication. Entries drifted to ~4x their intended length between 2026-07 and 2026-08 (see [#275](https://github.com/msdixon/secret-cabinet/issues/275)), pushing the file to 139KB in 12 days at one point; it's read into context at the start of most sessions, so length there is a recurring cost, not a one-time one. STATUS.md's own header carries the same rule and the size-triggered archive convention (`docs/status/ARCHIVE-<range>.md` once the file crosses ~60KB) — this is a second reminder, not a separate rule.
 
+## Front-end module discipline
+
+New first-run/guest/onboarding UI goes in its own `public/js/<name>.js` module (`window.X` IIFE + `configure(deps)`, like `starters.js` and `feedback.js`) — not into `public/js/app.js`. If a PR touches a cohesive region of `app.js`, extract it in a move-only commit first. Details and line-count baseline: Principle 5 in [docs/PRINCIPLES.md](docs/PRINCIPLES.md), from [#632](https://github.com/msdixon/secret-cabinet/issues/632).
+
 ## Updating PROJECT.md's Todo section
 
 PROJECT.md's "What needs to happen to get there" section has two parts that are kept current two different ways — don't hand-edit either inline per-PR.
