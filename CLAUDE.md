@@ -39,6 +39,8 @@ New items land in whatever Status the project's default assigns (observed as **B
 
 **Why:** confirmed 2026-09-08 when a web session filed four dependency-bump issues (#553–#556) through GitHub MCP tools with no `gh` CLI in the environment. It flagged the gap to the user instead of either failing the whole request or leaving the issues off the board unremarked.
 
+**A weekly sweep now backstops this gap.** The two local scheduled tasks `secret-cabinet-staff-engineer-checkin` (Sundays) and `secret-cabinet-project-doc-checkin` (Mondays, Step 3b) each add any open issue missing from the board (`gh project item-add` only, never status/fields). The cloud-run `Dependency update check` routine has no `gh`, so it files issues and relies on this sweep instead of asking for a manual step. A `gh`-less session should still say which issues it filed, but the board add will usually happen within a week without anyone doing it by hand. Verified 2026-10-13: a deliberately unboarded test issue (#659) was added by the staff-engineer run. The task files live outside the repo, in `~/.claude/scheduled-tasks/`.
+
 ## Worktree hygiene
 
 This project accumulates a git worktree per task under `.claude/worktrees/`. Left alone, they silently pile up — some have sat for months with real uncommitted work nobody circled back to.
