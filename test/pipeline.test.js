@@ -97,6 +97,15 @@ const {
 // reduction and the draw it feeds are measured together.
 const { turnsSoFar } = require('../src/lodge-prompts.js');
 
+const {
+  clampedAt,
+  textStream,
+  failingStream,
+  fakeToolCallClient,
+  fakeStreamingClient,
+  fakeConsultClient,
+} = require('./helpers/fake-anthropic.js');
+
 // pickNextSpeaker is weighted-random. Rather than seed a PRNG, sweep rng
 // deterministically across [0,1) and count outcomes -- the resulting share
 // per member IS the weight distribution, so these assertions describe the
@@ -1293,27 +1302,12 @@ test('buildDispositionUserMessage', async t => {
   });
 });
 
-// #203: the disposition update is now a forced tool call (reflection prose
-// + a structured waitingOnMemberId), not a plain text response — see the
-// disposition scratchpad section's comment for why free text turned out to
-// be the wrong thing to key scheduling off of.
-function fakeDispositionClient(input) {
-  return {
-    messages: {
-      create: async () => ({
-        content: [{ type: 'tool_use', input }],
-        usage: { input_tokens: 10, output_tokens: 10 },
-      }),
-    },
-  };
-}
-
 test('callDispositionUpdate', async t => {
   await t.test(
     'hard-truncates the reflection to DISPOSITION_MAX_CHARS regardless of what the model returns',
     async () => {
       const overlong = 'x'.repeat(DISPOSITION_MAX_CHARS + 200);
-      const fakeClient = fakeDispositionClient({ reflection: overlong, waitingOnMemberId: 'none' });
+      const fakeClient = fakeToolCallClient({ reflection: overlong, waitingOnMemberId: 'none' });
       const { text } = await callDispositionUpdate({
         client: fakeClient,
         model: 'test-model',
@@ -1337,7 +1331,7 @@ test('callDispositionUpdate', async t => {
   });
 
   await t.test('resolves a valid, present waitingOnMemberId', async () => {
-    const fakeClient = fakeDispositionClient({ reflection: 'Still turning this over.', waitingOnMemberId: 'waite' });
+    const fakeClient = fakeToolCallClient({ reflection: 'Still turning this over.', waitingOnMemberId: 'waite' });
     const { waitingOnMemberId } = await callDispositionUpdate({
       client: fakeClient,
       model: 'test-model',
@@ -1349,7 +1343,7 @@ test('callDispositionUpdate', async t => {
   });
 
   await t.test('treats the "none" sentinel as null', async () => {
-    const fakeClient = fakeDispositionClient({ reflection: 'Nothing pending.', waitingOnMemberId: 'none' });
+    const fakeClient = fakeToolCallClient({ reflection: 'Nothing pending.', waitingOnMemberId: 'none' });
     const { waitingOnMemberId } = await callDispositionUpdate({
       client: fakeClient,
       model: 'test-model',
@@ -1362,7 +1356,7 @@ test('callDispositionUpdate', async t => {
 
   // #449 SPIKE
   await t.test('passes through a valid reaction tag', async () => {
-    const fakeClient = fakeDispositionClient({
+    const fakeClient = fakeToolCallClient({
       reflection: 'Something has shifted.',
       waitingOnMemberId: 'none',
       reaction: 'angry',
@@ -1379,7 +1373,7 @@ test('callDispositionUpdate', async t => {
   });
 
   await t.test('fails closed to "none" on an unrecognized or missing reaction tag', async () => {
-    const fakeClient = fakeDispositionClient({
+    const fakeClient = fakeToolCallClient({
       reflection: 'Something has shifted.',
       waitingOnMemberId: 'none',
       reaction: 'ecstatic',
@@ -1397,7 +1391,7 @@ test('callDispositionUpdate', async t => {
   await t.test(
     'ignores a target that is not in presentIds — a hallucinated or stale id must not silently pass through',
     async () => {
-      const fakeClient = fakeDispositionClient({
+      const fakeClient = fakeToolCallClient({
         reflection: 'Still turning this over.',
         waitingOnMemberId: 'not-present-tonight',
       });
@@ -1426,7 +1420,7 @@ test('callDispositionUpdate', async t => {
 
   // #166 — the optional residueNote field, piggybacked on this same call.
   await t.test('returns an empty residueNote when the model leaves the field out — the common case', async () => {
-    const fakeClient = fakeDispositionClient({ reflection: 'Still turning this over.', waitingOnMemberId: 'none' });
+    const fakeClient = fakeToolCallClient({ reflection: 'Still turning this over.', waitingOnMemberId: 'none' });
     const { residueNote } = await callDispositionUpdate({
       client: fakeClient,
       model: 'test-model',
@@ -1438,7 +1432,7 @@ test('callDispositionUpdate', async t => {
   });
 
   await t.test('trims and returns a residueNote when the model writes one', async () => {
-    const fakeClient = fakeDispositionClient({
+    const fakeClient = fakeToolCallClient({
       reflection: 'Still turning this over.',
       waitingOnMemberId: 'none',
       residueNote: '  Grew certain of it.  ',
@@ -1457,7 +1451,7 @@ test('callDispositionUpdate', async t => {
     'hard-truncates residueNote to RESIDUE_NOTE_MAX_CHARS regardless of what the model returns',
     async () => {
       const overlong = 'x'.repeat(RESIDUE_NOTE_MAX_CHARS + 200);
-      const fakeClient = fakeDispositionClient({ reflection: 'ok', waitingOnMemberId: 'none', residueNote: overlong });
+      const fakeClient = fakeToolCallClient({ reflection: 'ok', waitingOnMemberId: 'none', residueNote: overlong });
       const { residueNote } = await callDispositionUpdate({
         client: fakeClient,
         model: 'test-model',
@@ -1473,7 +1467,7 @@ test('callDispositionUpdate', async t => {
   // and residueNote already are: a tool call is a request, not a guarantee,
   // and this is written straight into the permanent record.
   await t.test('returns an empty citations array when the model leaves the field out — the common case', async () => {
-    const fakeClient = fakeDispositionClient({ reflection: 'Nothing to add.', waitingOnMemberId: 'none' });
+    const fakeClient = fakeToolCallClient({ reflection: 'Nothing to add.', waitingOnMemberId: 'none' });
     const { citations } = await callDispositionUpdate({
       client: fakeClient,
       model: 'test-model',
@@ -1485,7 +1479,7 @@ test('callDispositionUpdate', async t => {
   });
 
   await t.test('passes through a well-formed citation', async () => {
-    const fakeClient = fakeDispositionClient({
+    const fakeClient = fakeToolCallClient({
       reflection: 'ok',
       waitingOnMemberId: 'none',
       citations: [{ quote: 'a real quote', work: 'The Book of the Law', verdict: 'verified', note: 'It exists.' }],
@@ -1504,7 +1498,7 @@ test('callDispositionUpdate', async t => {
   });
 
   await t.test('drops a citation with no usable quote or work rather than keeping it blank', async () => {
-    const fakeClient = fakeDispositionClient({
+    const fakeClient = fakeToolCallClient({
       reflection: 'ok',
       waitingOnMemberId: 'none',
       citations: [
@@ -1525,7 +1519,7 @@ test('callDispositionUpdate', async t => {
   await t.test(
     'downgrades an unrecognized verdict to "uncertain" rather than passing it through unchecked',
     async () => {
-      const fakeClient = fakeDispositionClient({
+      const fakeClient = fakeToolCallClient({
         reflection: 'ok',
         waitingOnMemberId: 'none',
         citations: [{ quote: 'q', work: 'W', verdict: 'definitely-true', note: 'n' }],
@@ -1544,7 +1538,7 @@ test('callDispositionUpdate', async t => {
   await t.test(
     'nulls out a libraryMatch not present in libraryIds — a hallucinated or stale id must not silently pass through',
     async () => {
-      const fakeClient = fakeDispositionClient({
+      const fakeClient = fakeToolCallClient({
         reflection: 'ok',
         waitingOnMemberId: 'none',
         citations: [{ quote: 'q', work: 'W', verdict: 'verified', note: 'n', libraryMatch: 'not-a-real-entry' }],
@@ -1562,7 +1556,7 @@ test('callDispositionUpdate', async t => {
   );
 
   await t.test('keeps a libraryMatch that is present in libraryIds', async () => {
-    const fakeClient = fakeDispositionClient({
+    const fakeClient = fakeToolCallClient({
       reflection: 'ok',
       waitingOnMemberId: 'none',
       citations: [{ quote: 'q', work: 'W', verdict: 'verified', note: 'n', libraryMatch: 'waite-tarot' }],
@@ -1585,7 +1579,7 @@ test('callDispositionUpdate', async t => {
       verdict: 'verified',
       note: 'n',
     }));
-    const fakeClient = fakeDispositionClient({ reflection: 'ok', waitingOnMemberId: 'none', citations: overlong });
+    const fakeClient = fakeToolCallClient({ reflection: 'ok', waitingOnMemberId: 'none', citations: overlong });
     const { citations } = await callDispositionUpdate({
       client: fakeClient,
       model: 'test-model',
@@ -1597,7 +1591,7 @@ test('callDispositionUpdate', async t => {
   });
 
   await t.test('hard-truncates quote/work/note regardless of what the model returns', async () => {
-    const fakeClient = fakeDispositionClient({
+    const fakeClient = fakeToolCallClient({
       reflection: 'ok',
       waitingOnMemberId: 'none',
       citations: [
@@ -1639,7 +1633,7 @@ test('callDispositionUpdate', async t => {
   await t.test(
     'returns an empty invokedWorks array when the model leaves the field out — the common case',
     async () => {
-      const fakeClient = fakeDispositionClient({ reflection: 'Nothing to add.', waitingOnMemberId: 'none' });
+      const fakeClient = fakeToolCallClient({ reflection: 'Nothing to add.', waitingOnMemberId: 'none' });
       const { invokedWorks } = await callDispositionUpdate({
         client: fakeClient,
         model: 'test-model',
@@ -1652,7 +1646,7 @@ test('callDispositionUpdate', async t => {
   );
 
   await t.test('passes through a well-formed invoked work', async () => {
-    const fakeClient = fakeDispositionClient({
+    const fakeClient = fakeToolCallClient({
       reflection: 'ok',
       waitingOnMemberId: 'none',
       invokedWorks: [{ work: "Corbin's reading of Ibn Arabi", note: 'named in passing' }],
@@ -1670,7 +1664,7 @@ test('callDispositionUpdate', async t => {
   });
 
   await t.test('drops an invoked work with no usable `work` field', async () => {
-    const fakeClient = fakeDispositionClient({
+    const fakeClient = fakeToolCallClient({
       reflection: 'ok',
       waitingOnMemberId: 'none',
       invokedWorks: [{ note: 'orphaned note, no work named' }],
@@ -1687,7 +1681,7 @@ test('callDispositionUpdate', async t => {
 
   await t.test('caps the invokedWorks array at MAX_INVOKED_PER_BEAT', async () => {
     const overlong = Array.from({ length: MAX_INVOKED_PER_BEAT + 5 }, (_, i) => ({ work: `Work ${i}` }));
-    const fakeClient = fakeDispositionClient({ reflection: 'ok', waitingOnMemberId: 'none', invokedWorks: overlong });
+    const fakeClient = fakeToolCallClient({ reflection: 'ok', waitingOnMemberId: 'none', invokedWorks: overlong });
     const { invokedWorks } = await callDispositionUpdate({
       client: fakeClient,
       model: 'test-model',
@@ -1699,7 +1693,7 @@ test('callDispositionUpdate', async t => {
   });
 
   await t.test('hard-truncates invokedWorks fields to their max lengths', async () => {
-    const fakeClient = fakeDispositionClient({
+    const fakeClient = fakeToolCallClient({
       reflection: 'ok',
       waitingOnMemberId: 'none',
       invokedWorks: [{ work: 'w'.repeat(INVOKED_WORK_MAX_CHARS + 50), note: 'n'.repeat(INVOKED_NOTE_MAX_CHARS + 50) }],
@@ -2299,26 +2293,6 @@ const ROSTER = [
   { id: 'scholem', name: 'Scholem', brief: 'Historian of Jewish mysticism.' },
 ];
 
-// A client that answers the casting tool call with whatever ids the test
-// wants, and records what it was asked.
-function fakeCastingClient(reply) {
-  const asked = [];
-  return {
-    asked,
-    messages: {
-      create: async req => {
-        asked.push(req);
-        const r = typeof reply === 'function' ? reply(asked.length) : reply;
-        if (r instanceof Error) throw r;
-        return {
-          content: [{ type: 'tool_use', input: r }],
-          usage: { input_tokens: 100, output_tokens: 20 },
-        };
-      },
-    },
-  };
-}
-
 test('buildCastingToolSchema', async t => {
   await t.test('constrains the enum to the candidates, not the whole roster', () => {
     const schema = buildCastingToolSchema(['jung', 'scholem'], 1, 2);
@@ -2404,7 +2378,7 @@ test('buildCastingPrompt', async t => {
 
 test('proposeCast', async t => {
   await t.test("returns regulars first, then the model's additions in its own order", async () => {
-    const client = fakeCastingClient({ speakers: ['scholem', 'jung'], reasoning: 'Both would dispute it.' });
+    const client = fakeToolCallClient({ speakers: ['scholem', 'jung'], reasoning: 'Both would dispute it.' });
     const result = await proposeCast({
       client,
       model: 'test-model',
@@ -2421,7 +2395,7 @@ test('proposeCast', async t => {
   });
 
   await t.test('asks only for the seats the regulars leave open', async () => {
-    const client = fakeCastingClient({ speakers: ['jung'], reasoning: 'r' });
+    const client = fakeToolCallClient({ speakers: ['jung'], reasoning: 'r' });
     await proposeCast({
       client,
       model: 'test-model',
@@ -2439,7 +2413,7 @@ test('proposeCast', async t => {
   });
 
   await t.test('spends no call at all when the regulars already fill the room', async () => {
-    const client = fakeCastingClient({ speakers: ['jung'], reasoning: 'r' });
+    const client = fakeToolCallClient({ speakers: ['jung'], reasoning: 'r' });
     const result = await proposeCast({
       client,
       model: 'test-model',
@@ -2458,7 +2432,7 @@ test('proposeCast', async t => {
   });
 
   await t.test('never returns more than the target, however many regulars there are', async () => {
-    const client = fakeCastingClient({ speakers: ['scholem'], reasoning: 'r' });
+    const client = fakeToolCallClient({ speakers: ['scholem'], reasoning: 'r' });
     const result = await proposeCast({
       client,
       model: 'test-model',
@@ -2473,7 +2447,7 @@ test('proposeCast', async t => {
   });
 
   await t.test('retries once on an out-of-range answer, then keeps the valid one', async () => {
-    const client = fakeCastingClient(n =>
+    const client = fakeToolCallClient(n =>
       n === 1
         ? { speakers: ['jung', 'scholem', 'crowley'], reasoning: 'too many, and one is a regular' }
         : { speakers: ['jung'], reasoning: 'better' }
@@ -2494,7 +2468,7 @@ test('proposeCast', async t => {
   });
 
   await t.test('falls back to a real room rather than nothing when the call fails twice', async () => {
-    const client = fakeCastingClient(new Error('the fire is low'));
+    const client = fakeToolCallClient(new Error('the fire is low'));
     const metrics = [];
     const result = await proposeCast({
       client,
@@ -2515,7 +2489,7 @@ test('proposeCast', async t => {
   });
 
   await t.test('ignores an unknown regular id instead of casting a ghost', async () => {
-    const client = fakeCastingClient({ speakers: ['jung', 'scholem'], reasoning: 'r' });
+    const client = fakeToolCallClient({ speakers: ['jung', 'scholem'], reasoning: 'r' });
     const result = await proposeCast({
       client,
       model: 'test-model',
@@ -2594,21 +2568,6 @@ test('withHistoryCacheControl', async t => {
   });
 });
 
-// Mirrors fakeCastingClient's "record what it was asked" pattern, generic
-// enough for callDirector's tool-call shape.
-function fakeToolCallClient(reply) {
-  const asked = [];
-  return {
-    asked,
-    messages: {
-      create: async req => {
-        asked.push(req);
-        return { content: [{ type: 'tool_use', input: reply }], usage: { input_tokens: 100, output_tokens: 20 } };
-      },
-    },
-  };
-}
-
 test('callDirector — cache_control wiring', async t => {
   await t.test('caches the lodge-context prefix of the system prompt', async () => {
     const client = fakeToolCallClient({ speakers: ['crowley'], reasoning: 'r' });
@@ -2653,27 +2612,6 @@ test('callDirector — cache_control wiring', async t => {
     assert.deepEqual(history[1], { role: 'assistant', content: 'prior text' }, "the caller's history is untouched");
   });
 });
-
-// Minimal fake streaming client for callSpeakerTurn — one text delta plus a
-// finalMessage() carrying usage, which is all callSpeakerTurn reads besides
-// the deltas it forwards live.
-function fakeStreamingClient({ text = 'a turn', usage = { input_tokens: 50, output_tokens: 10 } } = {}) {
-  const asked = [];
-  return {
-    asked,
-    messages: {
-      stream: req => {
-        asked.push(req);
-        return {
-          [Symbol.asyncIterator]: async function* () {
-            yield { type: 'content_block_delta', delta: { type: 'text_delta', text } };
-          },
-          finalMessage: async () => ({ usage }),
-        };
-      },
-    },
-  };
-}
 
 test('callSpeakerTurn — cache_control wiring', async t => {
   await t.test('caches the lodge-context prefix of the speaker system prompt', async () => {
@@ -2754,51 +2692,6 @@ test('pickStockLullNote', async t => {
   });
 });
 
-// Handles both director consult calls (tool: select_speakers) and
-// disposition calls (tool: update_disposition) via messages.create, plus
-// speaker turns via messages.stream — enough surface for runRound's full
-// beat loop. `windingDownOnConsult` is the pattern of `true`/`false`
-// returned across successive select_speakers calls (initial pool first,
-// then each re-consult); it runs out, later calls repeat the last entry.
-function fakePassageClient({ speakerText = 'A turn.', windingDownOnConsult = [false], lullNote = null } = {}) {
-  let selectCalls = 0;
-  const asked = [];
-  return {
-    asked,
-    messages: {
-      create: async req => {
-        asked.push(req);
-        const toolName = req.tools?.[0]?.name;
-        if (toolName === 'select_speakers') {
-          const i = Math.min(selectCalls, windingDownOnConsult.length - 1);
-          const windingDown = windingDownOnConsult[i];
-          selectCalls++;
-          return {
-            content: [
-              {
-                type: 'tool_use',
-                input: { speakers: ['crowley'], reasoning: 'r', windingDown, lullNote: windingDown ? lullNote : null },
-              },
-            ],
-            usage: { input_tokens: 10, output_tokens: 5 },
-          };
-        }
-        // update_disposition
-        return {
-          content: [{ type: 'tool_use', input: { reflection: 'Considering.', waitingOnMemberId: 'none' } }],
-          usage: { input_tokens: 8, output_tokens: 4 },
-        };
-      },
-      stream: () => ({
-        [Symbol.asyncIterator]: async function* () {
-          yield { type: 'content_block_delta', delta: { type: 'text_delta', text: speakerText } };
-        },
-        finalMessage: async () => ({ usage: { input_tokens: 20, output_tokens: 10 } }),
-      }),
-    },
-  };
-}
-
 const SINGLE_MEMBER_ROSTER = [{ id: 'crowley', name: 'Crowley', file: 'crowley.md' }];
 const loadMemberFile = () => "Crowley's character file.";
 
@@ -2829,7 +2722,7 @@ test('runRound — passage end-causes and beats (#244)', async t => {
       // Single-member pool exhausts deterministically after 2 beats
       // (MAX_TURNS_PER_POOL_MEMBER), forcing exactly one re-consult — which
       // this fake answers with windingDown: true.
-      const client = fakePassageClient({
+      const client = fakeConsultClient({
         windingDownOnConsult: [false, true],
         lullNote: 'The fire settles; Yeats refills his glass.',
       });
@@ -2849,7 +2742,7 @@ test('runRound — passage end-causes and beats (#244)', async t => {
   );
 
   await t.test('falls back to a stock lull note when the director judges winding down but writes nothing', async () => {
-    const client = fakePassageClient({ windingDownOnConsult: [false, true], lullNote: null });
+    const client = fakeConsultClient({ windingDownOnConsult: [false, true], lullNote: null });
     const result = await runRound({ ...RUNROUND_BASE_ARGS, client });
     assert.equal(result.endedBy, 'lull');
     assert.ok(STOCK_LULL_NOTES.includes(result.lullNote));
@@ -2858,7 +2751,7 @@ test('runRound — passage end-causes and beats (#244)', async t => {
   await t.test(
     'defaults to endedBy "budget" (with a resolved stock lull note) when the director never judges a wind-down',
     async () => {
-      const client = fakePassageClient({ windingDownOnConsult: [false] });
+      const client = fakeConsultClient({ windingDownOnConsult: [false] });
       const result = await runRound({ ...RUNROUND_BASE_ARGS, client });
       // Short fixed speaker turns never spend BREATH_BUDGET_WORDS, so the
       // MAX_TOTAL_BEATS safety net is what actually ends this passage —
@@ -2870,7 +2763,7 @@ test('runRound — passage end-causes and beats (#244)', async t => {
   );
 
   await t.test("includes the player's preceding turn as a beat under a stable identity (#354)", async () => {
-    const client = fakePassageClient({ windingDownOnConsult: [true] });
+    const client = fakeConsultClient({ windingDownOnConsult: [true] });
     const result = await runRound({
       ...RUNROUND_BASE_ARGS,
       client,
@@ -2888,7 +2781,7 @@ test('runRound — passage end-causes and beats (#244)', async t => {
   });
 
   await t.test('a precedingTurn with no memberId falls back to the non-roster sentinel, not null (#354)', async () => {
-    const client = fakePassageClient({ windingDownOnConsult: [true] });
+    const client = fakeConsultClient({ windingDownOnConsult: [true] });
     const result = await runRound({
       ...RUNROUND_BASE_ARGS,
       client,
@@ -2904,7 +2797,7 @@ test('runRound — passage end-causes and beats (#244)', async t => {
       // beat under that member's real roster id -- exactly the case where,
       // without this marker, a misquote would read back indistinguishable
       // from the member's own words.
-      const client = fakePassageClient({ windingDownOnConsult: [true] });
+      const client = fakeConsultClient({ windingDownOnConsult: [true] });
       const result = await runRound({
         ...RUNROUND_BASE_ARGS,
         client,
@@ -2916,7 +2809,7 @@ test('runRound — passage end-causes and beats (#244)', async t => {
   );
 
   await t.test('records a failed speaker turn as a beat with no text rather than dropping it (#354)', async () => {
-    const client = fakePassageClient({ windingDownOnConsult: [false, true] });
+    const client = fakeConsultClient({ windingDownOnConsult: [false, true] });
     let streamCalls = 0;
     const originalStream = client.messages.stream;
     // withOneRetry makes 2 stream() calls for a beat that fails outright —
@@ -2958,7 +2851,7 @@ test('runRound — passage end-causes and beats (#244)', async t => {
   // #362: a member who declines the turn via the room's own action-only
   // idiom is recorded distinctly from both a spoken turn and a failed one.
   await t.test('records a passed turn as a distinct beat, not a failure, and keeps it in the transcript', async () => {
-    const client = fakePassageClient({ speakerText: '*lets the silence sit.*', windingDownOnConsult: [false] });
+    const client = fakeConsultClient({ speakerText: '*lets the silence sit.*', windingDownOnConsult: [false] });
     const result = await runRound({ ...RUNROUND_BASE_ARGS, client });
     assert.equal(result.beats[0].memberId, 'crowley');
     assert.equal(result.beats[0].text, '*lets the silence sit.*');
@@ -2969,7 +2862,7 @@ test('runRound — passage end-causes and beats (#244)', async t => {
   });
 
   await t.test('a turn with an action and real speech is not treated as a pass (#362)', async () => {
-    const client = fakePassageClient({
+    const client = fakeConsultClient({
       speakerText: '*leans forward.*\nI have a great deal to say about this.',
       windingDownOnConsult: [false],
     });
@@ -3018,54 +2911,10 @@ test('runRound — a retried speaker turn streams corrupted content to onChunk (
       const retryText =
         "Word for word, the true account is this: the wanga is neither purely African nor purely Christian in Hesketh-Bell's telling -- it is the argument itself, staged as an object.";
 
-      let streamCalls = 0;
-      const client = {
-        messages: {
-          create: async req => {
-            const toolName = req.tools?.[0]?.name;
-            if (toolName === 'select_speakers') {
-              return {
-                content: [
-                  {
-                    type: 'tool_use',
-                    input: { speakers: ['crowley'], reasoning: 'r', windingDown: true, lullNote: null },
-                  },
-                ],
-                usage: { input_tokens: 10, output_tokens: 5 },
-              };
-            }
-            return {
-              content: [{ type: 'tool_use', input: { reflection: 'Considering.', waitingOnMemberId: 'none' } }],
-              usage: { input_tokens: 8, output_tokens: 4 },
-            };
-          },
-          stream: () => {
-            streamCalls++;
-            if (streamCalls === 1) {
-              // First attempt: streams a real chunk (reaching onChunk, and
-              // so the client's live buffer) before the connection dies --
-              // not the zero-chunks-ever-sent case the existing retry test
-              // covers.
-              return {
-                [Symbol.asyncIterator]: async function* () {
-                  yield { type: 'content_block_delta', delta: { type: 'text_delta', text: abandonedFirstAttempt } };
-                  throw new Error('connection reset mid-stream');
-                },
-                finalMessage: async () => {
-                  throw new Error('connection reset mid-stream');
-                },
-              };
-            }
-            // Retry: succeeds outright.
-            return {
-              [Symbol.asyncIterator]: async function* () {
-                yield { type: 'content_block_delta', delta: { type: 'text_delta', text: retryText } };
-              },
-              finalMessage: async () => ({ usage: { input_tokens: 20, output_tokens: 10 } }),
-            };
-          },
-        },
-      };
+      const client = fakeConsultClient({
+        windingDownOnConsult: [true],
+        stream: (_req, n) => (n === 1 ? failingStream(abandonedFirstAttempt) : textStream(retryText)),
+      });
 
       const chunks = [];
       const result = await runRound({ ...RUNROUND_BASE_ARGS, client, onChunk: chunk => chunks.push(chunk) });
@@ -3132,49 +2981,10 @@ test('runRound — onSpeakerStart re-fires before a retry attempt, not just once
       // BREATH_BUDGET_WORDS (1000) below MIN_WORDS_FOR_ANOTHER_BEAT (40) in one
       // beat instead, so the round ends right after the retried beat resolves.
       const retriedText = `Retried.${' word'.repeat(965)}`;
-      let streamCalls = 0;
-      const client = {
-        messages: {
-          create: async req => {
-            const toolName = req.tools?.[0]?.name;
-            if (toolName === 'select_speakers') {
-              return {
-                content: [
-                  {
-                    type: 'tool_use',
-                    input: { speakers: ['crowley'], reasoning: 'r', windingDown: true, lullNote: null },
-                  },
-                ],
-                usage: { input_tokens: 10, output_tokens: 5 },
-              };
-            }
-            return {
-              content: [{ type: 'tool_use', input: { reflection: 'Considering.', waitingOnMemberId: 'none' } }],
-              usage: { input_tokens: 8, output_tokens: 4 },
-            };
-          },
-          stream: () => {
-            streamCalls++;
-            if (streamCalls === 1) {
-              return {
-                [Symbol.asyncIterator]: async function* () {
-                  yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'Abandoned.' } };
-                  throw new Error('connection reset mid-stream');
-                },
-                finalMessage: async () => {
-                  throw new Error('connection reset mid-stream');
-                },
-              };
-            }
-            return {
-              [Symbol.asyncIterator]: async function* () {
-                yield { type: 'content_block_delta', delta: { type: 'text_delta', text: retriedText } };
-              },
-              finalMessage: async () => ({ usage: { input_tokens: 20, output_tokens: 10 } }),
-            };
-          },
-        },
-      };
+      const client = fakeConsultClient({
+        windingDownOnConsult: [true],
+        stream: (_req, n) => (n === 1 ? failingStream('Abandoned.') : textStream(retriedText)),
+      });
 
       const events = []; // interleaved log of both callbacks, in call order
       const result = await runRound({
@@ -3205,43 +3015,12 @@ test('runRound — onSpeakerStart re-fires before a retry attempt, not just once
   );
 });
 
-// #355 — always-on citation capture, piggybacked on the same disposition
-// call runRound already makes after every successful beat. A dedicated fake
-// client (rather than fakePassageClient) so the disposition tool_use input
-// is configurable per test.
-function fakeCitationPassageClient({ dispositionInput }) {
-  return {
-    messages: {
-      create: async req => {
-        const toolName = req.tools?.[0]?.name;
-        if (toolName === 'select_speakers') {
-          return {
-            content: [
-              { type: 'tool_use', input: { speakers: ['crowley'], reasoning: 'r', windingDown: true, lullNote: null } },
-            ],
-            usage: { input_tokens: 10, output_tokens: 5 },
-          };
-        }
-        return {
-          content: [{ type: 'tool_use', input: dispositionInput }],
-          usage: { input_tokens: 8, output_tokens: 4 },
-        };
-      },
-      stream: () => ({
-        [Symbol.asyncIterator]: async function* () {
-          yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'A turn.' } };
-        },
-        finalMessage: async () => ({ usage: { input_tokens: 20, output_tokens: 10 } }),
-      }),
-    },
-  };
-}
-
 test('runRound — citation capture piggybacked on the disposition call (#355)', async t => {
   const baseArgs = RUNROUND_BASE_ARGS;
 
   await t.test('attaches citations from the disposition call onto the beat that earned them', async () => {
-    const client = fakeCitationPassageClient({
+    const client = fakeConsultClient({
+      windingDownOnConsult: [true],
       dispositionInput: {
         reflection: 'Considering.',
         waitingOnMemberId: 'none',
@@ -3254,7 +3033,8 @@ test('runRound — citation capture piggybacked on the disposition call (#355)',
   });
 
   await t.test('omits `citations` entirely from a beat that cited nothing — the common case', async () => {
-    const client = fakeCitationPassageClient({
+    const client = fakeConsultClient({
+      windingDownOnConsult: [true],
       dispositionInput: { reflection: 'Considering.', waitingOnMemberId: 'none' },
     });
     const result = await runRound({ ...baseArgs, client });
@@ -3264,7 +3044,8 @@ test('runRound — citation capture piggybacked on the disposition call (#355)',
   await t.test(
     'validates a returned libraryMatch against loadLibraryCitationLookup, keeping a real match',
     async () => {
-      const client = fakeCitationPassageClient({
+      const client = fakeConsultClient({
+        windingDownOnConsult: [true],
         dispositionInput: {
           reflection: 'Considering.',
           waitingOnMemberId: 'none',
@@ -3281,7 +3062,8 @@ test('runRound — citation capture piggybacked on the disposition call (#355)',
   );
 
   await t.test('nulls out a libraryMatch the injected library does not actually have', async () => {
-    const client = fakeCitationPassageClient({
+    const client = fakeConsultClient({
+      windingDownOnConsult: [true],
       dispositionInput: {
         reflection: 'Considering.',
         waitingOnMemberId: 'none',
@@ -3299,7 +3081,8 @@ test('runRound — citation capture piggybacked on the disposition call (#355)',
   await t.test(
     'degrades to no library context (never throws) when loadLibraryCitationLookup is not given',
     async () => {
-      const client = fakeCitationPassageClient({
+      const client = fakeConsultClient({
+        windingDownOnConsult: [true],
         dispositionInput: {
           reflection: 'Considering.',
           waitingOnMemberId: 'none',
@@ -3312,7 +3095,8 @@ test('runRound — citation capture piggybacked on the disposition call (#355)',
   );
 
   await t.test('degrades to no library context when loadLibraryCitationLookup itself throws', async () => {
-    const client = fakeCitationPassageClient({
+    const client = fakeConsultClient({
+      windingDownOnConsult: [true],
       dispositionInput: {
         reflection: 'Considering.',
         waitingOnMemberId: 'none',
@@ -3331,7 +3115,8 @@ test('runRound — citation capture piggybacked on the disposition call (#355)',
 
   // #356 — the weaker invoked-works tier, piggybacked on the same call.
   await t.test('attaches invokedWorks from the disposition call onto the beat that earned them', async () => {
-    const client = fakeCitationPassageClient({
+    const client = fakeConsultClient({
+      windingDownOnConsult: [true],
       dispositionInput: {
         reflection: 'Considering.',
         waitingOnMemberId: 'none',
@@ -3344,7 +3129,8 @@ test('runRound — citation capture piggybacked on the disposition call (#355)',
   });
 
   await t.test('omits `invokedWorks` entirely from a beat that invoked nothing — the common case', async () => {
-    const client = fakeCitationPassageClient({
+    const client = fakeConsultClient({
+      windingDownOnConsult: [true],
       dispositionInput: { reflection: 'Considering.', waitingOnMemberId: 'none' },
     });
     const result = await runRound({ ...baseArgs, client });
@@ -3361,7 +3147,7 @@ test('runRound — per-member cache loaders degrade to no data rather than costi
   const baseArgs = RUNROUND_BASE_ARGS;
 
   await t.test('loadVoiceExemplar throwing does not fail the beat', async () => {
-    const client = fakePassageClient({ windingDownOnConsult: [false, true] });
+    const client = fakeConsultClient({ windingDownOnConsult: [false, true] });
     const result = await runRound({
       ...baseArgs,
       client,
@@ -3374,7 +3160,7 @@ test('runRound — per-member cache loaders degrade to no data rather than costi
   });
 
   await t.test('loadSecondaryVoiceExemplars throwing does not fail the beat', async () => {
-    const client = fakePassageClient({ windingDownOnConsult: [false, true] });
+    const client = fakeConsultClient({ windingDownOnConsult: [false, true] });
     const result = await runRound({
       ...baseArgs,
       client,
@@ -3387,7 +3173,7 @@ test('runRound — per-member cache loaders degrade to no data rather than costi
   });
 
   await t.test('loadResidue throwing does not fail the beat', async () => {
-    const client = fakePassageClient({ windingDownOnConsult: [false, true] });
+    const client = fakeConsultClient({ windingDownOnConsult: [false, true] });
     const result = await runRound({
       ...baseArgs,
       client,
@@ -3400,7 +3186,7 @@ test('runRound — per-member cache loaders degrade to no data rather than costi
   });
 
   await t.test('loadRelationshipEdges throwing does not fail the beat', async () => {
-    const client = fakePassageClient({ windingDownOnConsult: [false, true] });
+    const client = fakeConsultClient({ windingDownOnConsult: [false, true] });
     const result = await runRound({
       ...baseArgs,
       client,
@@ -3426,7 +3212,8 @@ test('runRound — disposition-call observability and best-effort residue merge 
     'emits speaker and disposition metrics, and merges a returned residueNote into residueUpdates',
     async () => {
       const metrics = [];
-      const client = fakeCitationPassageClient({
+      const client = fakeConsultClient({
+        windingDownOnConsult: [true],
         dispositionInput: {
           reflection: 'Considering.',
           waitingOnMemberId: 'none',
@@ -3450,7 +3237,7 @@ test('runRound — disposition-call observability and best-effort residue merge 
 
   await t.test('a speaker call that fails after its retry emits a skipped metric with the error', async () => {
     const metrics = [];
-    const client = fakePassageClient({ windingDownOnConsult: [false, true] });
+    const client = fakeConsultClient({ windingDownOnConsult: [false, true] });
     let streamCalls = 0;
     const originalStream = client.messages.stream;
     // Same technique as the "records a failed speaker turn" test above: fail
@@ -3482,31 +3269,10 @@ test('runRound — disposition-call observability and best-effort residue merge 
   await t.test(
     'a disposition call that throws is swallowed — the beat still succeeds and the member carries their prior disposition forward',
     async () => {
-      const client = {
-        messages: {
-          create: async req => {
-            const toolName = req.tools?.[0]?.name;
-            if (toolName === 'select_speakers') {
-              return {
-                content: [
-                  {
-                    type: 'tool_use',
-                    input: { speakers: ['crowley'], reasoning: 'r', windingDown: true, lullNote: null },
-                  },
-                ],
-                usage: { input_tokens: 10, output_tokens: 5 },
-              };
-            }
-            throw new Error('disposition call failed');
-          },
-          stream: () => ({
-            [Symbol.asyncIterator]: async function* () {
-              yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'A turn.' } };
-            },
-            finalMessage: async () => ({ usage: { input_tokens: 20, output_tokens: 10 } }),
-          }),
-        },
-      };
+      const client = fakeConsultClient({
+        windingDownOnConsult: [true],
+        dispositionError: new Error('disposition call failed'),
+      });
       const metrics = [];
       const result = await runRound({ ...baseArgs, client, onMetric: m => metrics.push(m) });
 
@@ -3527,7 +3293,7 @@ test('runRound — disposition-call observability and best-effort residue merge 
 // individual-beat resilience the tests above cover, is reachable.
 test('runRound — every speaker failing the round throws rather than saving an empty passage (#445)', async t => {
   await t.test('throws when every beat in the round fails', async () => {
-    const client = fakePassageClient({ windingDownOnConsult: [false, true] });
+    const client = fakeConsultClient({ windingDownOnConsult: [false, true] });
     // Unlike the single-failed-beat tests above, every stream() attempt
     // fails here — both beats a single-member pool gets before
     // MAX_TURNS_PER_POOL_MEMBER forces the re-consult that (per
@@ -3771,51 +3537,6 @@ const SPLINTER_ROSTER = [
 ];
 const loadSplinterMemberFile = () => 'A character file.';
 
-// select_speakers always offers both; windingDown flips true on the 2nd
-// consult so the passage ends deterministically right after the scenario
-// below plays out. update_disposition always answers 'none' — the interrupt
-// signal that triggers the splinter is seeded directly via runRound's own
-// `disposition` param instead, so no live call needs to "decide" to
-// interrupt.
-function fakeSplinterClient() {
-  let selectCalls = 0;
-  return {
-    messages: {
-      create: async req => {
-        const toolName = req.tools?.[0]?.name;
-        if (toolName === 'select_speakers') {
-          selectCalls++;
-          const windingDown = selectCalls >= 2;
-          return {
-            content: [
-              {
-                type: 'tool_use',
-                input: {
-                  speakers: ['crowley', 'scholem'],
-                  reasoning: 'r',
-                  windingDown,
-                  lullNote: windingDown ? 'A note.' : null,
-                },
-              },
-            ],
-            usage: { input_tokens: 10, output_tokens: 5 },
-          };
-        }
-        return {
-          content: [{ type: 'tool_use', input: { reflection: 'Considering.', waitingOnMemberId: 'none' } }],
-          usage: { input_tokens: 8, output_tokens: 4 },
-        };
-      },
-      stream: () => ({
-        [Symbol.asyncIterator]: async function* () {
-          yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'A turn.' } };
-        },
-        finalMessage: async () => ({ usage: { input_tokens: 20, output_tokens: 10 } }),
-      }),
-    },
-  };
-}
-
 test('runRound — a splinter exchange interleaves into the passage record (#196)', async t => {
   await t.test('two members granted a private exchange, folded into the record and the rolled-up text', async () => {
     // rng script: pick crowley (beat 1, roll 0 → first candidate), #513's
@@ -3828,7 +3549,11 @@ test('runRound — a splinter exchange interleaves into the passage record (#196
     // scholem again (beat 4 — crowley is at cap by then, so this is
     // deterministic regardless of the roll's value) and its own
     // tangent-nudge roll.
-    const client = fakeSplinterClient();
+    const client = fakeConsultClient({
+      speakers: ['crowley', 'scholem'],
+      windingDownOnConsult: [false, true],
+      lullNote: 'A note.',
+    });
     const result = await withScriptedRandom([0, 0.9, 0.5, 0.01, 0.5, 0.9], () =>
       runRound({
         client,
@@ -3885,7 +3610,11 @@ test('runRound — a splinter exchange interleaves into the passage record (#196
       // Same seeded disposition, but scholem is never picked first (rng: 0
       // always favors the rank-0 candidate, crowley) — confirms the null
       // lastSpeakerId guard rather than assuming it from the happy path above.
-      const client = fakeSplinterClient();
+      const client = fakeConsultClient({
+        speakers: ['crowley', 'scholem'],
+        windingDownOnConsult: [false, true],
+        lullNote: 'A note.',
+      });
       const result = await withScriptedRandom([0], () =>
         runRound({
           client,
@@ -3908,55 +3637,16 @@ test('runRound — a splinter exchange interleaves into the passage record (#196
   );
 });
 
-// #458 — director-initiated splinters: the second trigger #196's own header
-// named as deferred. Extends fakeSplinterClient's shape with a
-// director-proposed splinterPair on the select_speakers response, indexed
-// per consult call the same way fakePassageClient's windingDownOnConsult
-// already works above (index clamps to the array's last entry once it runs
-// out) — so a test can put the proposed pair on the opening consult, on a
-// mid-passage re-consult, or on neither.
-function fakeDirectorSplinterClient({ splinterPairOnConsult = [], windingDownOnConsult = [false, true] } = {}) {
-  let selectCalls = 0;
-  return {
-    messages: {
-      create: async req => {
-        const toolName = req.tools?.[0]?.name;
-        if (toolName === 'select_speakers') {
-          const windingDownIndex = Math.min(selectCalls, windingDownOnConsult.length - 1);
-          const windingDown = windingDownOnConsult[windingDownIndex];
-          const pairIndex = Math.min(selectCalls, splinterPairOnConsult.length - 1);
-          const splinterPair = pairIndex >= 0 ? (splinterPairOnConsult[pairIndex] ?? null) : null;
-          selectCalls++;
-          return {
-            content: [
-              {
-                type: 'tool_use',
-                input: {
-                  speakers: ['crowley', 'scholem'],
-                  reasoning: 'r',
-                  windingDown,
-                  lullNote: windingDown ? 'A note.' : null,
-                  splinterPair,
-                },
-              },
-            ],
-            usage: { input_tokens: 10, output_tokens: 5 },
-          };
-        }
-        return {
-          content: [{ type: 'tool_use', input: { reflection: 'Considering.', waitingOnMemberId: 'none' } }],
-          usage: { input_tokens: 8, output_tokens: 4 },
-        };
-      },
-      stream: () => ({
-        [Symbol.asyncIterator]: async function* () {
-          yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'A turn.' } };
-        },
-        finalMessage: async () => ({ usage: { input_tokens: 20, output_tokens: 10 } }),
-      }),
-    },
-  };
-}
+// #458 — director-proposed splinters: `splinterPairOnConsult` puts a pair on
+// the opening consult, a mid-passage re-consult, or neither (indexed per
+// select_speakers call, clamping to the last entry like windingDownOnConsult).
+const fakeDirectorSplinterClient = ({ splinterPairOnConsult = [], windingDownOnConsult = [false, true] } = {}) =>
+  fakeConsultClient({
+    speakers: ['crowley', 'scholem'],
+    windingDownOnConsult,
+    lullNote: 'A note.',
+    consultExtras: i => ({ splinterPair: clampedAt(splinterPairOnConsult, i) ?? null }),
+  });
 
 test('runRound — a director-proposed splinter opens the passage before anyone in the room has spoken (#458)', async t => {
   await t.test("the opening consult's pair resolves as the passage's first move, then the room continues", async () => {
@@ -4149,54 +3839,20 @@ test('buildDirectorPrompt — offers the confessional option (#579)', () => {
   assert.match(prompt.system, /you may name a confessional/);
 });
 
-// Same shape as fakeDirectorSplinterClient, with a per-consult confessional
-// instead of a splinterPair, and recording each speaker stream's max_tokens
-// so the larger confessional ceiling is observable.
+// #579 — per-consult confessional on the select_speakers response; also
+// exposes each speaker stream's max_tokens so the larger confessional
+// ceiling is observable.
 function fakeDirectorConfessionalClient({ confessionalOnConsult = [], windingDownOnConsult = [false, true] } = {}) {
-  let selectCalls = 0;
-  const streamMaxTokens = [];
-  const client = {
-    messages: {
-      create: async req => {
-        const toolName = req.tools?.[0]?.name;
-        if (toolName === 'select_speakers') {
-          const windingDown = windingDownOnConsult[Math.min(selectCalls, windingDownOnConsult.length - 1)];
-          const idx = Math.min(selectCalls, confessionalOnConsult.length - 1);
-          const confessional = idx >= 0 ? (confessionalOnConsult[idx] ?? undefined) : undefined;
-          selectCalls++;
-          return {
-            content: [
-              {
-                type: 'tool_use',
-                input: {
-                  speakers: ['crowley', 'scholem'],
-                  reasoning: 'r',
-                  windingDown,
-                  lullNote: windingDown ? 'A note.' : null,
-                  ...(confessional ? { confessional } : {}),
-                },
-              },
-            ],
-            usage: { input_tokens: 10, output_tokens: 5 },
-          };
-        }
-        return {
-          content: [{ type: 'tool_use', input: { reflection: 'Considering.', waitingOnMemberId: 'none' } }],
-          usage: { input_tokens: 8, output_tokens: 4 },
-        };
-      },
-      stream: req => {
-        streamMaxTokens.push(req.max_tokens);
-        return {
-          [Symbol.asyncIterator]: async function* () {
-            yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'A turn.' } };
-          },
-          finalMessage: async () => ({ usage: { input_tokens: 20, output_tokens: 10 } }),
-        };
-      },
+  const client = fakeConsultClient({
+    speakers: ['crowley', 'scholem'],
+    windingDownOnConsult,
+    lullNote: 'A note.',
+    consultExtras: i => {
+      const confessional = clampedAt(confessionalOnConsult, i);
+      return confessional ? { confessional } : {};
     },
-  };
-  return { client, streamMaxTokens };
+  });
+  return { client, streamMaxTokens: client.streamMaxTokens };
 }
 
 function confessionalRound(client, extra = {}) {
