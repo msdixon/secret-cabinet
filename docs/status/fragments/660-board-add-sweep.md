@@ -1,0 +1,1 @@
+Staff-engineer and doc-checkin scheduled tasks now sweep for open issues missing from board #2 and add them, so issues filed by the `gh`-less cloud dependency routine reach the board without a manual step; CLAUDE.md documents it. Verified with test issue #659. [PR #660](https://github.com/msdixon/secret-cabinet/pull/660)
