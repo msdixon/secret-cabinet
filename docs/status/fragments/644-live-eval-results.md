@@ -1,1 +1,0 @@
-Ran the live evals for [#644](https://github.com/msdixon/secret-cabinet/issues/644) on `claude-sonnet-5-5`: citation grounding 13/18 (all 5 misses are uncertain→unverified, no false verifications) and un-nudged length 137w/turn, logged in `docs/MODEL-REVIEW.md`. Convened voice sign-off is still pending, so the issue stays open.
