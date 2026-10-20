@@ -1,0 +1,20 @@
+name: Add issues to project board
+
+# Adds every newly opened issue to the "Secret-Cabin-et Roadmap" board (#2) at
+# creation time, so sessions without `gh` (Claude Code on the web, cloud
+# routines) don't leave issues off the board. Needs a repo secret
+# PROJECT_TOKEN: a PAT with `project` + `repo` scopes (GITHUB_TOKEN can't write
+# to user-owned Projects v2). Without it the job fails visibly, and the weekly
+# sweep described in CLAUDE.md still backstops.
+on:
+  issues:
+    types: [opened, transferred]
+
+jobs:
+  add-to-project:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/add-to-project@v1.0.2
+        with:
+          project-url: https://github.com/users/msdixon/projects/2
+          github-token: ${{ secrets.PROJECT_TOKEN }}
