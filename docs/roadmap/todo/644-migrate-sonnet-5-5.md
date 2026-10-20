@@ -1,1 +1,0 @@
-[#644](https://github.com/msdixon/secret-cabinet/issues/644) claude-sonnet-5-5 migration — code and live evals done; only Rachel's convened voice sign-off (Sun Ra, Gurdjieff, Adorno) remains before closing
