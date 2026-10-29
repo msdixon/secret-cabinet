@@ -65,6 +65,7 @@ const { registerFeedbackRoutes } = require('./src/routes/feedback');
 const { createFeedbackStore } = require('./src/feedback');
 const { registerAdminHubRoutes } = require('./src/routes/admin');
 const { createSpendLedger, createBudgetAlert } = require('./src/spend');
+const { authConfigError, listenHost } = require('./src/startup-checks');
 
 // ─── Environment flags ────────────────────────────────────────────────────────
 const IS_LOCAL = process.env.LOCAL === 'true' || process.env.NODE_ENV !== 'production';
@@ -164,6 +165,12 @@ if (!IS_LOCAL && PASSPHRASE && !process.env.SESSION_SECRET) {
     'SESSION_SECRET must be set when PASSPHRASE is set on a deployed instance. ' +
       "Generate one with: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\""
   );
+  process.exit(1);
+}
+
+const authError = authConfigError(process.env, IS_LOCAL);
+if (authError) {
+  console.error(authError);
   process.exit(1);
 }
 
@@ -709,8 +716,9 @@ registerConveneRoutes(app, {
 const MAX_PORT_ATTEMPTS = 10;
 
 function startServer(port, attemptsLeft) {
-  const server = app.listen(port, '0.0.0.0', () => {
-    console.log(`The Secret-Cabin-et is open at http://localhost:${port}`);
+  const host = listenHost(process.env, IS_LOCAL);
+  const server = app.listen(port, host, () => {
+    console.log(`The Secret-Cabin-et is open at http://localhost:${port} (listening on ${host})`);
   });
   server.on('error', err => {
     if (IS_LOCAL && err.code === 'EADDRINUSE' && attemptsLeft > 0) {
