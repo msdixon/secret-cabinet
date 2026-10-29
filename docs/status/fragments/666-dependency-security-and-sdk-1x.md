@@ -1,1 +1,0 @@
-Cleared all 6 `npm audit` findings (multer 2.5.0 plus transitive undici/zod/fast-uri/ip-address), applied the routine in-range bumps, and moved `@anthropic-ai/sdk` from 0.131 to 1.3.0 (now sends API version 2026-10-21); closes #666, #661, #653, #667 ([#668](https://github.com/msdixon/secret-cabinet/pull/668)).
