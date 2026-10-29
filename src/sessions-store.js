@@ -41,12 +41,30 @@ function makeBranchId(parent, roundIndex) {
   return `${date}-${slug}-branch-${hash}`;
 }
 
-function saveSession(sessionsDir, session) {
-  fs.writeFileSync(path.join(sessionsDir, `${session.id}.json`), JSON.stringify(session, null, 2));
+// A session id becomes a file name, and ids arrive from URLs and request
+// bodies, so only plain names are allowed: every id makeSessionId and
+// makeBranchId mint (lowercase letters, digits, dashes), plus uppercase and
+// underscores for older files. No "/" or ".", so an id like "../users" can
+// never reach a file outside sessionsDir.
+const SESSION_ID_PATTERN = /^[A-Za-z0-9_-]{1,200}$/;
+
+function isValidSessionId(id) {
+  return typeof id === 'string' && SESSION_ID_PATTERN.test(id);
 }
 
+function sessionFilePath(sessionsDir, id) {
+  if (!isValidSessionId(id)) throw new Error(`Invalid session id: ${JSON.stringify(id)}`);
+  return path.join(sessionsDir, `${id}.json`);
+}
+
+function saveSession(sessionsDir, session) {
+  fs.writeFileSync(sessionFilePath(sessionsDir, session.id), JSON.stringify(session, null, 2));
+}
+
+// An invalid id reads as "no such session", so routes answer 404 as usual.
 function loadSession(sessionsDir, id) {
-  const p = path.join(sessionsDir, `${id}.json`);
+  if (!isValidSessionId(id)) return null;
+  const p = sessionFilePath(sessionsDir, id);
   return fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, 'utf8')) : null;
 }
 
@@ -129,6 +147,8 @@ module.exports = {
   filterReadable,
   makeSessionId,
   makeBranchId,
+  isValidSessionId,
+  sessionFilePath,
   saveSession,
   loadSession,
 };

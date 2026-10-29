@@ -501,6 +501,22 @@ test('DELETE /api/sessions/:id', async t => {
     assert.equal(res.statusCode, 500);
     assert.deepEqual(res.body, { error: 'Failed to delete session' });
   });
+
+  await t.test('a traversal id is 404 and leaves files outside sessionsDir alone, even for the open-mode owner', () => {
+    const root = makeFixtureDir();
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const dir = path.join(root, 'sessions');
+    fs.mkdirSync(dir);
+    const victim = path.join(root, 'users.json');
+    fs.writeFileSync(victim, JSON.stringify({ users: [] }));
+    const app = fakeApp();
+    registerSessionRoutes(app, makeDeps(dir));
+    const res = fakeRes();
+    // Express decodes %2F in params, so /api/sessions/..%2Fusers arrives as this.
+    app.routes['DELETE /api/sessions/:id'](fakeReq({ params: { id: '../users' } }), res);
+    assert.equal(res.statusCode, 404);
+    assert.equal(fs.existsSync(victim), true);
+  });
 });
 
 test('GET /api/sessions/:id', async t => {

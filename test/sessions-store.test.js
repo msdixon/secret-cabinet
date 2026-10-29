@@ -83,6 +83,62 @@ test('saveSession / loadSession', async t => {
 });
 
 // #595 — ownership predicates and the ownerless-session migration.
+test('session ids never leave sessionsDir', async t => {
+  await t.test('accepts every id the app mints, plus older plain-name ids', () => {
+    for (const id of [
+      store.makeSessionId('The Rite of Spring, considered anew'),
+      store.makeBranchId({ id: 'p', entry: 'An entry' }, 2),
+      's1',
+      'Legacy_ID-01',
+    ]) {
+      assert.ok(store.isValidSessionId(id), id);
+    }
+  });
+
+  await t.test('rejects anything that could name a different path', () => {
+    for (const id of [
+      '../users',
+      '..',
+      '.',
+      'a/b',
+      'a\\b',
+      'x.json',
+      '',
+      ' s1',
+      'a'.repeat(201),
+      null,
+      undefined,
+      42,
+      ['s1'],
+    ]) {
+      assert.equal(store.isValidSessionId(id), false, JSON.stringify(id));
+    }
+  });
+
+  await t.test('loadSession returns null for a traversal id even when the target file exists', () => {
+    const root = makeFixtureDir();
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const dir = path.join(root, 'sessions');
+    fs.mkdirSync(dir);
+    fs.writeFileSync(path.join(root, 'users.json'), JSON.stringify({ secret: true }));
+    assert.equal(store.loadSession(dir, '../users'), null);
+  });
+
+  await t.test('saveSession refuses a traversal id and writes nothing', () => {
+    const root = makeFixtureDir();
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const dir = path.join(root, 'sessions');
+    fs.mkdirSync(dir);
+    assert.throws(() => store.saveSession(dir, { id: '../escaped' }), /Invalid session id/);
+    assert.equal(fs.existsSync(path.join(root, 'escaped.json')), false);
+  });
+
+  await t.test('sessionFilePath throws for an invalid id', () => {
+    assert.throws(() => store.sessionFilePath('/tmp/x', '../../etc/passwd'), /Invalid session id/);
+    assert.equal(store.sessionFilePath('/tmp/x', 's1'), path.join('/tmp/x', 's1.json'));
+  });
+});
+
 test('ownership (#595)', async t => {
   const alice = { id: 'alice' };
   const bob = { id: 'bob' };

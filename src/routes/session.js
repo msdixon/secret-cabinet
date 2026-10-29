@@ -24,7 +24,7 @@ const citationNotes = require('../citation-notes');
 // the first place, so this is the one place it needs an explicit cleanup.
 const { clearGrounding } = require('../grounding');
 // #595: who may read or change a stored session — see sessions-store.js.
-const { canRead, canView, canWrite, filterReadable } = require('../sessions-store');
+const { canRead, canView, canWrite, filterReadable, sessionFilePath } = require('../sessions-store');
 
 // #178: validates a requested publishedRounds selection down to the
 // in-bounds integer indices it actually contains, deduped and sorted so
@@ -424,9 +424,8 @@ function registerSessionRoutes(
   app.delete('/api/sessions/:id', (req, res) => {
     const session = loadWritable(req, res);
     if (!session) return;
-    const p = path.join(sessionsDir, `${req.params.id}.json`);
     try {
-      fs.unlinkSync(p);
+      fs.unlinkSync(sessionFilePath(sessionsDir, req.params.id));
       clearGrounding(req.params.id);
       res.json({ success: true });
     } catch (err) {
