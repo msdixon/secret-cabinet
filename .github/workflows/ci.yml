@@ -23,11 +23,10 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          # Bumped from 20 with #137's suite: jsdom 29 requires ^20.19 || ^22.13
-          # || >=24, so a bare `20` would have depended on setup-node happening
-          # to resolve a late-enough 20.x. 22 is current LTS and closer to the
-          # Node the app is actually developed against.
-          node-version: 22
+          # Same major as production (nixpacks.toml). Node 20 is end-of-life,
+          # and deps now need more than it offers (pdf2json >=22.23.2 at runtime,
+          # jsdom's undici >=22.19 in tests), so CI and Railway both run Node 24 LTS.
+          node-version: 24
           cache: npm
 
       - run: npm ci

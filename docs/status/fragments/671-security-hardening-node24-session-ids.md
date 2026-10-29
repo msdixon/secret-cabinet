@@ -1,0 +1,1 @@
+Security hardening: production and CI moved to Node 24 LTS (Railway was on end-of-life Node 20, below `pdf2json`'s floor), session ids that could name a path outside `sessions/` are now rejected, a deploy without `PASSPHRASE` refuses to start, and local dev listens on localhost only ([#671](https://github.com/msdixon/secret-cabinet/pull/671)).

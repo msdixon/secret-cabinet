@@ -1,5 +1,7 @@
 [phases.setup]
-nixPkgs = ["nodejs_20"]
+# Node 24 LTS, matching CI. Node 20 is end-of-life and below what pdf2json
+# (>=22.23.2) requires.
+nixPkgs = ["nodejs_24"]
 
 [phases.install]
 cmds = ["npm ci --omit=dev"]
