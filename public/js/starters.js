@@ -199,7 +199,7 @@ window.Starters = (function () {
     const nameOf = id => MEMBERS.find(m => m.id === id)?.name || id;
 
     root.innerHTML = '';
-    root.appendChild(el('div', 'starters-heading', 'Or begin with one of these'));
+    root.appendChild(el('div', 'starters-heading', 'Witness a session — choose a provocation'));
 
     const actions = el('div', 'starters-actions');
     const surpriseBtn = el('button', 'lodge-btn', '✦ Surprise me');

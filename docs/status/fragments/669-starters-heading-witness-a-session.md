@@ -1,0 +1,1 @@
+Reworded the starter-cards heading from "Or begin with one of these" (no antecedent under the stage) to "Witness a session — choose a provocation", naming what the cards do. The sibling "Or step into a situation" heading in `scenarios.js` is unchanged. [#669](https://github.com/msdixon/secret-cabinet/pull/669)
