@@ -1,5 +1,9 @@
 [build]
-builder = "nixpacks"
+# Railpack, matching the builder already set in the Railway dashboard. It
+# installs Node through mise, so engines.node in package.json (">=24") gets the
+# newest 24.x patch release on every build; Nixpacks (now in maintenance mode)
+# could only offer the Node in its pinned Nix snapshot (24.10.0).
+builder = "RAILPACK"
 
 [deploy]
 startCommand = "node server.js"
