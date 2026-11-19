@@ -1,0 +1,1 @@
+Routine dependency bumps, lockfile-only and within existing ranges: babylonjs 9.32.1 → 9.37.1, globals 17.13.0 → 17.14.0, pdf2json 4.1.0 → 4.1.1, prettier 3.9.10 → 3.10.1 (eslint's half of #673 already shipped as 10.15.0 in #678). Closes [#673](https://github.com/msdixon/secret-cabinet/issues/673) and [#676](https://github.com/msdixon/secret-cabinet/issues/676).
