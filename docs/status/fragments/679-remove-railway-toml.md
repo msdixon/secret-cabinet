@@ -1,0 +1,1 @@
+Moved the Railway service's start command, healthcheck and restart policy into the dashboard and deleted `railway.toml`, ahead of Railway's 2026-12-01 Config-as-Code cutoff ([#679](https://github.com/msdixon/secret-cabinet/issues/679)).
