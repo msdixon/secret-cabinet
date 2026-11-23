@@ -1,0 +1,1 @@
+Dependencies: jsdom 30.1.3 → 31.0.1 (major, test-only; `package.json` range raised to `^31.0.1`), @anthropic-ai/sdk 1.3.0 → 1.10.0, dotenv 18.0.9 → 18.0.10 — the full test suite passes unchanged on jsdom 31. Closes [#674](https://github.com/msdixon/secret-cabinet/issues/674).
